@@ -38,9 +38,9 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    # num_strands = 10
+    num_strands = 10
     # num_strands = 100
-    num_strands = 355
+    # num_strands = 355
 
     strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
     # strands = [dc.Strand([f's{i}', f'w{i}']) for i in range(num_strands)]

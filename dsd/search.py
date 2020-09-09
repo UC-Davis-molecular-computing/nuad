@@ -841,6 +841,9 @@ def search_for_dna_sequences(*, design: dc.Design,
         Integer given as a random seed to the numpy random number generator, used for
         all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
     """
+    if not os.path.exists(directory_output_files):
+        os.makedirs(directory_output_files)
+
     debug_file_handler = logging.FileHandler(os.path.join(directory_output_files, '_debug.log'))
     info_file_handler = logging.FileHandler(os.path.join(directory_output_files, '_info.log'))
     debug_file_handler.setLevel(logging.DEBUG)
@@ -854,9 +857,6 @@ def search_for_dna_sequences(*, design: dc.Design,
         sequences_filename_no_ext = f'{script_name_no_ext()}_sequences'
     if report_filename_no_ext is None:
         report_filename_no_ext = f'{script_name_no_ext()}_report'
-
-    if not os.path.exists(directory_output_files):
-        os.makedirs(directory_output_files)
 
     if random_seed is not None:
         rng = np.random.default_rng(random_seed)
