@@ -110,7 +110,7 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     # When porting the code from python2 to python3 we found an issue with sub.Popen().
     # Passing either of the keyword arguments universal_newlines=True or encoding='utf8'
     # solves the problem for python3.6. For python3.7 (but not 3.6) one can use text=True
-    # FIXME: Then why are none of those keyword arguments being used here??
+    # XXX: Then why are none of those keyword arguments being used here??
     p: Optional[sub.Popen] = None
     try:
         with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as p:
@@ -179,8 +179,6 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                    if `negate` is ``True`` then the return value will be positive)
     :return: list of free energies, in the same order as `seq_pairs`
     """
-    # TODO: figure out if RNAduplex can do constraints like RNAfold
-
     # print(f'rna_duplex_multiple.lru_cache = {rna_duplex_multiple.cache_info()}')
 
     # NB: the string NA_parameter_set needs to be exactly the intended filename; 
@@ -524,7 +522,7 @@ def domain_concatenated_no_4g_or_4c(seq: str, seqs: Sequence[str]) -> bool:
 #     for i in range(len(seq) - 2 * stem_length - 3):
 #         subseq = seq[i:i + stem_length]
 #         sub_wc = wc(subseq)
-#         #FIXME: this doesn't seem right; seq[i + stem_length + 3] is a single character
+#         #XXX: this doesn't seem right; seq[i + stem_length + 3] is a single character
 #         if sub_wc in seq[i + stem_length + 3]:
 #             return True
 #     return False
@@ -551,7 +549,7 @@ def domain_concatenated_no_4g_or_4c(seq: str, seqs: Sequence[str]) -> bool:
 #     pairs_head = pairs[:, :-hairpin]
 #     pairsWC_tail = pairsWC[:, hairpin:]
 #     toeplitz = dsd.create_toeplitz(pairs_head.shape[1], hairpin)
-#     # TODO: think more carefully about this algorithm
+#     # XXX: think more carefully about this algorithm
 #     raise NotImplementedError()
 #     return True
 
@@ -562,7 +560,7 @@ def domain_concatenated_no_4g_or_4c(seq: str, seqs: Sequence[str]) -> bool:
 #         sys.stdout.flush()
 
 
-# # FIXME: this function signature is terrble; redo it with keyword arguments, or an encapsulating object
+# # XXX: this function signature is terrble; redo it with keyword arguments, or an encapsulating object
 # def nextseq(init_seqs, new_seqs, iterator, temperature, low, high, individual,
 #             orthogonality, concat, orthogonality_ave, concat_ave,
 #             prevent_4gc, prevent_4g_4c, threaded=True):

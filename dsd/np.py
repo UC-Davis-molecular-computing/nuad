@@ -603,7 +603,7 @@ class DNASeqList:
         distances = np.sum(np.bitwise_xor(self.seqarr, arr) != 0, axis=1)
         return np.min(distances)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_energy(self, low: float, high: float, temperature: float) -> 'DNASeqList':
         """Return new DNASeqList with seqs whose wc complement energy is within
         the given range."""
@@ -633,7 +633,7 @@ class DNASeqList:
     #     new_seqarr = self.seqarr[within_range]
     #     return DNASeqList(seqarr=new_seqarr)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_end_gc(self) -> 'DNASeqList':
         """Remove any sequence with A or T on the end. Also remove domains that
         do not have an A or T either next to that base, or one away. Otherwise
@@ -656,7 +656,7 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_end_at(self, gc_near_end: bool = False) -> 'DNASeqList':
         """Remove any sequence with C or G on the end. Also, if gc_near_end is True,
         remove domains that do not have an C or G either next to that base,
@@ -679,14 +679,14 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_base_nowhere(self, base: str) -> 'DNASeqList':
         """Remove any sequence that has given base anywhere."""
         good = (self.seqarr != base2bits[base]).all(axis=1)
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_base_count(self, base: str, low: int, high: int) -> 'DNASeqList':
         """Remove any sequence not satisfying low <= #base <= high."""
         sumarr = np.sum(self.seqarr == base2bits[base], axis=1)
@@ -694,7 +694,7 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_base_at_pos(self, pos: int, base: str) -> 'DNASeqList':
         """Remove any sequence that does not have given base at position pos."""
         mid = self.seqarr[:, pos]
@@ -702,7 +702,7 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_substring(self, subs: Sequence[str]) -> 'DNASeqList':
         """Remove any sequence with any elements from subs as a substring."""
         if len(set([len(sub) for sub in subs])) != 1:
@@ -720,12 +720,12 @@ class DNASeqList:
         seqarrpass = self.seqarr[passall]
         return DNASeqList(seqarr=seqarrpass)
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_seqs_by_g_quad(self) -> 'DNASeqList':
         """Removes any sticky ends with 4 G's in a row (a G-quadruplex)."""
         return self.filter_substring(['GGGG'])
 
-    # TODO: remove string quotes on forward annotation for Python 3.7
+    # remove quotes when Py3.6 support dropped
     def filter_seqs_by_g_quad_c_quad(self) -> 'DNASeqList':
         """Removes any sticky ends with 4 G's or C's in a row (a quadruplex)."""
         return self.filter_substring(['GGGG', 'CCCC'])

@@ -1085,8 +1085,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
 
-        # FIXME: enforce that domain names cannot change after Strand is instantiated (e.g., make Strand
-        #  frozen and provide setters for other fields)
         self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
 

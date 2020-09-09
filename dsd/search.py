@@ -748,20 +748,6 @@ Report on constraints
             file.write(report)
 
 
-# TODO: write output for sequences/dsd.constraints.Design in JSON to make it easier to reload, or interact
-#  with third-party analysis code
-
-# TODO: add keyboard interaction to let the user pause, exit, reload from latest sequence assignment.
-
-# TODO: use curses library to write output to screen without generating a huge history of text
-#  https://docs.python.org/3/howto/curses.html
-
-# TODO: make default to create two log files, one at debug level and the other at info level; by default
-#  do not log to screen, and make it mutually exclusive to log to the screen or use curses, or figure
-#  out how to combine printing/logging with curses, e.g.:
-#  https://stackoverflow.com/questions/14010073/print-to-standard-console-in-curses
-#  https://stackoverflow.com/questions/27774093/how-to-manage-logging-in-curses
-
 def search_for_dna_sequences(*, design: dc.Design,
                              probability_of_keeping_change: Optional[Callable[[float], float]] = None,
                              random_seed: Optional[int] = None,
