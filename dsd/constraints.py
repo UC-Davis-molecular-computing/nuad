@@ -1994,17 +1994,17 @@ _no_summary_string = f"No summary for this constraint. " \
 class DomainConstraint(Constraint[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
 
-    check: Callable[[Domain], bool] = lambda _: True
+    eval: Callable[[Domain], float] = lambda _: 0.0
 
     summary: Callable[[Domain], str] = lambda _: _no_summary_string
 
     threaded: bool = False
 
-    def __call__(self, domain: Domain) -> bool:
+    def __call__(self, domain: Domain) -> float:
         # The strand line breaks are because PyCharm finds a static analysis warning on the first line
         # and mypy finds it on the second line; this lets us ignore both of them.
-        check_callback = cast(Callable[[Domain], bool],  # noqa
-                              self.check)  # type: ignore
+        check_callback = cast(Callable[[Domain], float],  # noqa
+                              self.eval)  # type: ignore
         return check_callback(domain)
 
     def generate_summary(self, domain: Domain) -> str:
@@ -2017,17 +2017,17 @@ class DomainConstraint(Constraint[Domain]):
 class StrandConstraint(Constraint[Strand]):
     """Constraint that applies to a single :any:`Strand`."""
 
-    check: Callable[[Strand], bool] = lambda _: True
+    eval: Callable[[Strand], float] = lambda _: 0.0
 
     summary: Callable[[Strand], str] = lambda _: _no_summary_string
 
     threaded: bool = False
 
-    def __call__(self, strand: Strand) -> bool:
+    def __call__(self, strand: Strand) -> float:
         # The strand line breaks are because PyCharm finds a static analysis warning on the first line
         # and mypy finds it on the second line; this lets us ignore both of them.
-        check_callback = cast(Callable[[Strand], bool],  # noqa
-                              self.check)  # type: ignore
+        check_callback = cast(Callable[[Strand], float],  # noqa
+                              self.eval)  # type: ignore
         return check_callback(strand)
 
     def generate_summary(self, strand: Strand) -> str:
@@ -2066,7 +2066,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     """Constraint that applies to a pair of :any:`Domain`'s."""
 
-    check: Callable[[Domain, Domain], bool] = lambda _, __: True
+    eval: Callable[[Domain, Domain], float] = lambda _, __: 0.0
     """
     Pairwise check to perform on :any:`Domain`'s. 
     Returns True if and only if the pair satisfies the constraint.
@@ -2076,10 +2076,10 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
 
     threaded: bool = False
 
-    def __call__(self, domain_pair: Tuple[Domain, Domain]) -> bool:
+    def __call__(self, domain_pair: Tuple[Domain, Domain]) -> float:
         domain1, domain2 = domain_pair
-        check_callback = cast(Callable[[Domain, Domain], bool],  # noqa
-                              self.check)  # type: ignore
+        check_callback = cast(Callable[[Domain, Domain], float],  # noqa
+                              self.eval)  # type: ignore
         return check_callback(domain1, domain2)
 
     def generate_summary(self, domain_pair: Tuple[Domain, Domain]) -> str:
@@ -2093,20 +2093,21 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
 class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     """Constraint that applies to a pair of :any:`Strand`'s."""
 
-    check: Callable[[Strand, Strand], bool] = lambda _, __: True
+    eval: Callable[[Strand, Strand], float] = lambda _, __: 0.0
     """
-    Pairwise check to perform on :any:`Strand`'s. 
-    Returns True if and only if the pair satisfies the constraint.
+    Pairwise evaluation to perform on :any:`Strand`'s. 
+    Returns float indicating how much the constraint is violated,  
+    or 0.0 if the constraint is satisfied.
     """
 
     summary: Callable[[Strand, Strand], str] = lambda _, __: _no_summary_string
 
     threaded: bool = False
 
-    def __call__(self, strand_pair: Tuple[Strand, Strand]) -> bool:
+    def __call__(self, strand_pair: Tuple[Strand, Strand]) -> float:
         strand1, strand2 = strand_pair
-        check_callback = cast(Callable[[Strand, Strand], bool],  # noqa
-                              self.check)  # type: ignore
+        check_callback = cast(Callable[[Strand, Strand], float],  # noqa
+                              self.eval)  # type: ignore
         return check_callback(strand1, strand2)
 
     def generate_summary(self, strand_pair: Tuple[Strand, Strand]) -> str:
@@ -2359,14 +2360,17 @@ def nupack_strand_secondary_structure_constraint(
     :return: constraint
     """
 
-    def check(strand: Strand) -> bool:
+    def eval(strand: Strand) -> float:
         threshold_value = convert_threshold(threshold, strand.group)
         energy = dv.secondary_structure_single_strand(strand.sequence(), temperature, negate)
-        violated = (negate and energy > threshold_value) or (not negate and energy < threshold_value)
         logger.debug(
             f'strand ss threshold: {threshold_value:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
-        return not violated
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        violated = excess > 0
+        return excess if violated else 0.0
 
     def summary(strand: Strand) -> str:
         energy = dv.secondary_structure_single_strand(strand.sequence(), temperature, negate)
@@ -2386,7 +2390,7 @@ def nupack_strand_secondary_structure_constraint(
     return StrandConstraint(description=description,
                             short_description=short_description,
                             weight=weight,
-                            check=check,
+                            eval=eval,
                             threaded=threaded,
                             summary=summary)
 
@@ -2449,7 +2453,7 @@ def nupack_domain_pair_constraint(
     def binding_closure(seq_pair: Tuple[str, str]) -> float:
         return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
 
-    def check(domain1: Domain, domain2: Domain) -> bool:
+    def eval(domain1: Domain, domain2: Domain) -> float:
         threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
         seq_pairs, name_pairs = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
 
@@ -2462,15 +2466,18 @@ def nupack_domain_pair_constraint(
                 energy = dv.binding(seq1, seq2, temperature, negate)
                 energies.append(energy)
 
+        excesses: List[float] = []
         for energy, (name1, name2) in zip(energies, name_pairs):
-            violated = (negate and energy > threshold_value) or (not negate and energy < threshold_value)
             logger.debug(
                 f'domain pair threshold: {threshold_value:6.2f} '
                 f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
-            if violated:
-                return False
-
-        return True
+            excess = threshold_value - energy
+            if negate:
+                excess = -excess
+            excesses.append(excess)
+            
+        max_excess = max(excesses)
+        return max(0.0, max_excess)
 
     def summary(domain1: Domain, domain2: Domain) -> str:
         seq_pairs, domain_name_pairs = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
@@ -2488,7 +2495,7 @@ def nupack_domain_pair_constraint(
     return DomainPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
-                                check=check,
+                                eval=eval,
                                 summary=summary,
                                 threaded=threaded)
 
@@ -2543,14 +2550,17 @@ def nupack_strand_pair_constraint(
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
 
-    def check(strand1: Strand, strand2: Strand) -> bool:
+    def eval(strand1: Strand, strand2: Strand) -> float:
         threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
         energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
-        violated = (negate and energy > threshold_value) or (not negate and energy < threshold_value)
         logger.debug(
             f'strand pair threshold: {threshold_value:6.2f} '
             f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
-        return not violated
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        violated = excess > 0
+        return excess if violated else 0.0
 
     def summary(strand1: Strand, strand2: Strand) -> str:
         energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
@@ -2564,7 +2574,7 @@ def nupack_strand_pair_constraint(
                                 weight=weight,
                                 threaded=threaded,
                                 pairs=pairs,
-                                check=check,
+                                eval=eval,
                                 summary=summary)
 
 
