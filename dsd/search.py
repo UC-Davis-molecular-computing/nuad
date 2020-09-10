@@ -714,8 +714,8 @@ def _write_sequences(design: Design, directory: str,
             file.write(content_fragile_format)
 
 
-def _write_design_json(design: Design, directory: str,
-                       filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
+def _write_dsd_design_json(design: Design, directory: str,
+                           filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
     json_str = design.to_json()
     for filename in [filename_with_iteration_no_ext, filename_final_no_ext]:
         filename += '.json'
@@ -756,6 +756,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                              design_filename_no_ext: Optional[str] = None,
                              sequences_filename_no_ext: Optional[str] = None,
                              report_filename_no_ext: Optional[str] = None,
+                             on_improved_design: Callable[[int], None] = lambda: None,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -840,6 +841,9 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param random_seed:
         Integer given as a random seed to the numpy random number generator, used for
         all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
+    :param on_improved_design:
+        Function to call whenever the design improves. Takes an integer as input indicating the number
+        of times the design has improved.
     """
     if not os.path.exists(directory_output_files):
         os.makedirs(directory_output_files)
@@ -884,10 +888,10 @@ def search_for_dna_sequences(*, design: dc.Design,
             design, never_increase_weight=never_increase_weight)
 
         # write initial sequences and report
-        _write_design_json(design,
-                           directory=directory_output_files,
-                           filename_with_iteration_no_ext=f'{design_filename_no_ext}-0',
-                           filename_final_no_ext=f'_final-{design_filename_no_ext}')
+        _write_dsd_design_json(design,
+                               directory=directory_output_files,
+                               filename_with_iteration_no_ext=f'{design_filename_no_ext}-0',
+                               filename_final_no_ext=f'_final-{design_filename_no_ext}')
         _write_sequences(design,
                          directory=directory_output_files,
                          filename_with_iteration=f'{sequences_filename_no_ext}-0.txt',
@@ -950,11 +954,11 @@ def search_for_dna_sequences(*, design: dc.Design,
                     # put leading 0s on sequential filenames 
                     str_num_new_optimal_with_leading_zeros = '0' * (
                             2 - int(math.log(max(num_new_optimal, 1), 10))) + str(num_new_optimal)
-                    _write_design_json(design,
-                                       directory=directory_output_files,
-                                       # filename_with_iteration_no_ext=f'{design_filename_no_ext}-{num_new_optimal}',
-                                       filename_with_iteration_no_ext=f'{design_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros,
-                                       filename_final_no_ext=f'_final-{design_filename_no_ext}')
+                    _write_dsd_design_json(design,
+                                           directory=directory_output_files,
+                                           # filename_with_iteration_no_ext=f'{design_filename_no_ext}-{num_new_optimal}',
+                                           filename_with_iteration_no_ext=f'{design_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros,
+                                           filename_final_no_ext=f'_final-{design_filename_no_ext}')
                     _write_sequences(design,
                                      directory=directory_output_files,
                                      # filename_with_iteration=f'{sequences_filename_no_ext}-{num_new_optimal}.txt',
@@ -965,6 +969,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                                   # filename_with_iteration=f'{report_filename_no_ext}-{num_new_optimal}.txt',
                                   filename_with_iteration=f'{report_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
                                   filename_final=f'_final-{report_filename_no_ext}.txt')
+                    on_improved_design(num_new_optimal)
 
             iteration += 1
 
@@ -972,10 +977,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                                 violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
-    except KeyboardInterrupt:
-        _pfunc_killall()
-        raise
     finally:
+        _pfunc_killall()
         _thread_pool.close()  # noqa
         _thread_pool.terminate()
 

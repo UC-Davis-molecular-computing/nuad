@@ -1910,7 +1910,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 domain_sequence = sc_domain_sequence
                 # but let's make sure dsd didn't actually change that sequence; it should have been fixed
                 dsd_domain_sequence = dsd_domain.get_sequence(starred)
-                assert domain_sequence == dsd_domain_sequence
+                if domain_sequence != dsd_domain_sequence:
+                    raise AssertionError(f'\n    domain_sequence = {domain_sequence} is unequal to\n'
+                                         f'dsd_domain_sequence = {dsd_domain_sequence}')
             sequence_list.append(domain_sequence)
         strand_sequence = ''.join(sequence_list)
         sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False,
@@ -1942,7 +1944,7 @@ DesignPart = TypeVar('DesignPart',
                      Design)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class Constraint(ABC, Generic[DesignPart]):
     description: str
     """Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol'."""
@@ -1966,14 +1968,6 @@ class Constraint(ABC, Generic[DesignPart]):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-    def __hash__(self) -> int:
-        return super().__hash__()
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Constraint):
-            return False
-        return self is other
-
     @abstractmethod
     def generate_summary(self, design_part: DesignPart) -> str:
         """
@@ -1996,7 +1990,7 @@ _no_summary_string = f"No summary for this constraint. " \
                      f"summary when creating the Constraint."
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class DomainConstraint(Constraint[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
 
@@ -2019,7 +2013,7 @@ class DomainConstraint(Constraint[Domain]):
         return summary_callback(domain)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class StrandConstraint(Constraint[Strand]):
     """Constraint that applies to a single :any:`Strand`."""
 
@@ -2041,8 +2035,12 @@ class StrandConstraint(Constraint[Strand]):
                                 self.summary)  # type: ignore
         return summary_callback(strand)
 
+    # def __hash__(self) -> int:
+    #     print('hash of StrandConstraint')
+    #     return super().__hash__()
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, eq=False)
 class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):
     pairs: Optional[Tuple[Tuple[Domain, Domain], ...]] = None
     """
@@ -2053,7 +2051,7 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
     pairs: Optional[Tuple[Tuple[Strand, Strand], ...]] = None
     """
@@ -2064,7 +2062,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     """Constraint that applies to a pair of :any:`Domain`'s."""
 
@@ -2091,7 +2089,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
         return summary_callback(domain1, domain2)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     """Constraint that applies to a pair of :any:`Strand`'s."""
 
@@ -2118,7 +2116,7 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
         return summary_callback(strand1, strand2)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Domain]]]):
     """
     Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
@@ -2143,7 +2141,7 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
         return summary_callback(domain_pairs)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Strand]]]):
     """
     Similar to :any:`StrandsConstraint` but operates on a specified list of pairs of :any:`Strand`'s.
@@ -2168,7 +2166,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
         return summary_callback(strand_pairs)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class DomainsConstraint(Constraint[Iterable[Domain]]):
     """
     Constraint that applies to a several :any:`Domain`'s. The difference with :any:`DomainConstraint` is that
@@ -2202,7 +2200,7 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
         return summary_callback(domains)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class StrandsConstraint(Constraint[Iterable[Strand]]):
     """
     Constraint that applies to a several :any:`Strand`'s. The difference with :any:`StrandConstraint` is that
@@ -2236,7 +2234,7 @@ class StrandsConstraint(Constraint[Iterable[Strand]]):
         return summary_callback(strands)
 
 
-@dataclass(frozen=True)  # type: ignore
+@dataclass(frozen=True, eq=False)  # type: ignore
 class DesignConstraint(Constraint[Design]):
     """
     Constraint that applies to the entire :any:`Design`. This is used for any :any:`Constraint` that
