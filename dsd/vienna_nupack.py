@@ -47,7 +47,7 @@ def _dg_adjust(temperature: float, num_seqs: int) -> float:
     return adjust * (num_seqs - 1)
 
 
-@lru_cache(maxsize=100000)
+@lru_cache(maxsize=1_000_000)
 def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           adjust: bool = True,

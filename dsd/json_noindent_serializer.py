@@ -24,9 +24,9 @@ def json_encode(obj: JSONSerializable, suppress_indent: bool = True) -> str:
 
 
 class SuppressableIndentEncoder(json.JSONEncoder):
-    def __init__(self, *args: str, **kwargs: str) -> None:
+    def __init__(self, *args: list, **kwargs: dict) -> None:
         self.unique_id = 0
-        super(SuppressableIndentEncoder, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)  # type: ignore
         self.kwargs = dict(kwargs)
         del self.kwargs['indent']
         self._replacement_map: dict = {}
@@ -36,7 +36,8 @@ class SuppressableIndentEncoder(json.JSONEncoder):
             # key = uuid.uuid1().hex # this caused problems with Brython.
             key = self.unique_id
             self.unique_id += 1
-            self._replacement_map[key] = json.dumps(obj.value, **self.kwargs)
+            value_str: str = json.dumps(obj.value, **self.kwargs)  # type: ignore
+            self._replacement_map[key] = value_str
             return f"@@{key}@@"
         else:
             return super().default(obj)

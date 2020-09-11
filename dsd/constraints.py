@@ -115,7 +115,8 @@ def all_pairs_iterator(values: Iterable[T],
         Predicate indicating whether to include a specific pair.
     :return:
         Iterator of all pairs of values from `iterable`.
-        Unlike :py:meth:`all_pairs`, which returns a list, the iterator returned may be iterated over only ONCE.
+        Unlike :py:meth:`all_pairs`, which returns a list,
+        the iterator returned may be iterated over only ONCE.
     """
     it = cast(Iterator[Tuple[T, T]], filter(where, itertools.combinations(values, 2)))  # noqa
     return it
@@ -771,14 +772,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             raise ValueError('Domain name cannot end with *\n'
                              f'domain name = {self.name}')
 
-    def to_json(self) -> str:
-        """
-        :return:
-            JSON string representing this :any:`Domain`.
-        """
-        dct = self.to_json_serializable()
-        return json.dumps(dct, indent=2)
-
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
         :return:
@@ -792,11 +785,15 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             dct[sequence_key] = self.sequence_
             if self.fixed:
                 dct[fixed_key] = True
+        if self.label is not None:
+            dct[label_key] = self.label
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
-                               pool_with_name: Optional[Dict[str, DomainPool]]) -> 'Domain':
+                               pool_with_name: Optional[Dict[str, DomainPool]],
+                               label_decoder: Callable[[Any], DomainLabel] = lambda label: label) \
+            -> 'Domain[DomainLabel]':
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -805,6 +802,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
+        :param label_decoder:
+            Function transforming object deserialized from JSON  (e.g, dict, list, string) into an object
+            of type :any:`DomainLabel`.
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
@@ -812,7 +812,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         name: str = mandatory_field(Domain, json_map, name_key)
         sequence: Optional[str] = json_map.get(sequence_key)
         fixed: bool = json_map.get(fixed_key, False)
-        label: Any = json_map.get(label_key)
+
+        label_json: Any = json_map.get(label_key)
+        label = label_decoder(label_json)
 
         pool: Optional[DomainPool]
         pool_map: Optional[Dict[str, Any]] = json_map.get(domain_pool_key)
@@ -829,7 +831,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         else:
             pool = None
 
-        return Domain(name=name, sequence_=sequence, fixed=fixed, pool_=pool, label=label)
+        domain: Domain[DomainLabel] = Domain(
+            name=name, sequence_=sequence, fixed=fixed, pool_=pool, label=label)
+        return domain
 
     def __hash__(self) -> int:
         return hash(self.name)
@@ -1132,12 +1136,17 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         dct[starred_domain_indices_key] = NoIndent(starred_domain_indices_list) if suppress_indent \
             else starred_domain_indices_list
 
+        if self.label is not None:
+            dct[label_key] = NoIndent(self.label) if suppress_indent else self.label
+
         return dct
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
                                domain_with_name: Dict[str, Domain[DomainLabel]],
-                               group_with_name: Optional[Dict[str, StrandGroup]]) -> 'Strand':
+                               group_with_name: Optional[Dict[str, StrandGroup]],
+                               label_decoder: Callable[[Any], StrandLabel] = (lambda label: label),
+                               ) -> 'Strand[StrandLabel, DomainLabel]':
         """
         :return:
             :any:`Strand` represented by dict `json_map`, assuming it was created by
@@ -1145,13 +1154,19 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         name: str = mandatory_field(str, json_map, name_key)
         domain_names_json = mandatory_field(Strand, json_map, domain_names_key)
-        domains: List[Domain] = [domain_with_name[name] for name in domain_names_json]
+        domains: List[Domain[DomainLabel]] = [domain_with_name[name] for name in domain_names_json]
         starred_domain_indices = mandatory_field(Strand, json_map, starred_domain_indices_key)
 
         group_name = mandatory_field(Strand, json_map, group_name_key)
         group = group_with_name[group_name] if group_with_name is not None else StrandGroup(group_name)
 
-        return Strand(domains=domains, starred_domain_indices=starred_domain_indices, group=group, name=name)
+        label_json = json_map.get(label_key)
+        label = label_decoder(label_json)
+
+        strand: Strand[StrandLabel, DomainLabel] = Strand(
+            domains=domains, starred_domain_indices=starred_domain_indices,
+            group=group, name=name, label=label)
+        return strand
 
     def __repr__(self) -> str:
         return self.name
@@ -1352,21 +1367,40 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             JSON string representing this :any:`Design`.
         """
         return json_encode(self, suppress_indent=True)
-        # dct = self.to_json_serializable(suppress_indent=True)
-        # return json.dumps(dct, indent=2)
 
     @staticmethod
-    def from_json(json_str: str) -> 'Design':
+    def from_json(json_str: str,
+                  group_with_name: Optional[Dict[str, StrandGroup]] = None,
+                  pool_with_name: Optional[Dict[str, DomainPool]] = None,
+                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                  ) \
+            -> 'Design[StrandLabel, DomainLabel]':
         """
+        :param json_str:
+            The string representing the :any:`Design` as a JSON object.
+        :param group_with_name:
+            If specified should map a name to the :any:`StrandGroup` with that name.
+        :param pool_with_name:
+            If specified should map a name to the :any:`DomainPool` with that name.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
         :return:
             :any:`Design` described by this JSON string, assuming it was created using
             :py:meth`Design.to_json`.
         """
         json_map = json.loads(json_str)
-        return Design.from_json_serializable(json_map)
+        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
+            json_map, group_with_name=group_with_name, pool_with_name=pool_with_name,
+            domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
+        return design
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         """
+        :param suppress_indent:
+            Whether to suppress indentation of some objects using the :any:`NoIndent` object.
         :return:
             Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
@@ -1379,7 +1413,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
                                group_with_name: Optional[Dict[str, StrandGroup]] = None,
-                               pool_with_name: Optional[Dict[str, DomainPool]] = None) -> 'Design':
+                               pool_with_name: Optional[Dict[str, DomainPool]] = None,
+                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                               ) -> 'Design[StrandLabel, DomainLabel]':
         """
         :param json_map:
             JSON serializable object encoding this :any:`Design`, as returned by
@@ -1391,19 +1428,25 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
         :return:
             :any:`Design` represented by dict `json_map`, assuming it was created by
             :py:meth:`Design.to_json_serializable`. No constraints are populated.
         """
         domains_json = mandatory_field(Design, json_map, domains_key)
         domains: List[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
+            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
+                                          label_decoder=domain_label_decoder)
             for domain_json in domains_json]
         domain_with_name = {domain.name: domain for domain in domains}
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [Strand.from_json_serializable(
-            json_map=strand_json, domain_with_name=domain_with_name, group_with_name=group_with_name)
+            json_map=strand_json, domain_with_name=domain_with_name, group_with_name=group_with_name,
+            label_decoder=strand_label_decoder)
             for strand_json in strands_json]
 
         return Design(strands=strands)
@@ -1591,7 +1634,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         domains_lines: List[str] = []
         for fixed_domain in domains:
             summary = constraint.generate_summary(fixed_domain)
-            passed = constraint(fixed_domain)
+            passed = constraint(fixed_domain) <= 0.0
             line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
                    f'{summary} ' \
                    f'{"" if passed else " **violation**"}'
@@ -1606,7 +1649,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         strands_lines: List[str] = []
         for fixed_strand in strands:
             summary = constraint.generate_summary(fixed_strand)
-            passed = constraint(fixed_strand)
+            passed = constraint(fixed_strand) <= 0.0
             line = f'strand {fixed_strand.name:{max_strand_name_length}}: ' \
                    f'{summary} ' \
                    f'{"" if passed else " **violation**"}'
@@ -1623,7 +1666,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                  f'{domain1.name:{max_domain_name_length}}, '
                  f'{domain2.name:{max_domain_name_length}}: '
                  f'{constraint.generate_summary((domain1, domain2))}'
-                 f'{"" if constraint((domain1, domain2)) else "  **violation**"}'
+                 f'{"" if constraint((domain1, domain2)) <= 0.0 else "  **violation**"}'
                  for domain1, domain2 in pairs_to_check]
 
         lines_joined = '\n'.join(lines)
@@ -1640,7 +1683,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                  f'{strand1.name:{max_strand_name_length}}, '
                  f'{strand2.name:{max_strand_name_length}}: '
                  f'{constraint.generate_summary((strand1, strand2))}'
-                 f'{"" if constraint((strand1, strand2)) else "  **violation**"}'
+                 f'{"" if constraint((strand1, strand2)) <= 0.0 else "  **violation**"}'
                  for strand1, strand2 in pairs_to_check]
 
         lines_joined = '\n'.join(lines)
@@ -2627,7 +2670,7 @@ def cpu_count(logical: bool = False) -> int:
     """
     count: Optional[int]
     try:
-        import psutil  # noqa
+        import psutil  # type: ignore
         count = psutil.cpu_count(logical=logical)
     except ModuleNotFoundError:
         logger.warning('''\
@@ -2729,6 +2772,7 @@ def rna_duplex_strand_pairs_constraint(
 
         for (strand1, strand2), energy in zip(strand_pairs, energies):
             excess = energy_excess(energy, threshold, negate, strand1, strand2)
+            # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')
             if excess > 0.0:
                 domain_set_weights = (set(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
                 domain_sets_weights.append(domain_set_weights)
@@ -2753,7 +2797,7 @@ def rna_duplex_strand_pairs_constraint(
                  f'{strand1.name:{max_name_length}}, '
                  f'{strand2.name:{max_name_length}}: '
                  f'{energy:6.2f} kcal/mol'
-                 f'{"  **violation**" if energy_excess(energy, threshold, negate, strand1, strand2) else ""}'
+                 f'{"  **violation**" if energy_excess(energy, threshold, negate, strand1, strand2) > 0.0 else ""}'
                  for (strand1, strand2), energy in strand_pairs_energies]
         return '\n'.join(lines)
 
