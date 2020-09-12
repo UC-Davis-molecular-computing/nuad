@@ -103,10 +103,11 @@ def main() -> None:
         for domain in strand.domains:
             domain.pool = domain_pool
 
+    output_dir = os.path.join('output', 'many_strands_no_common_domains')
     ds.search_for_dna_sequences(design=design,
                                 never_increase_weight=never_increase_weight,
                                 random_seed=random_seed,
-                                directory_output_files=f'output/many_strands_no_common_domains')
+                                directory_output_files=output_dir)
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callab
 import statistics
 import textwrap
 import time
+import re
 
 import numpy as np  # noqa
 
@@ -745,27 +746,29 @@ def _sequences_fragile_format_output_to_file(design: Design,
         f'{strand.sequence(spaces_between_domains=True)}' for strand in design.strands)
 
 
-def _write_sequences(design: Design, directory: str,
+def _write_sequences(design: Design, directory_intermediate: str, directory_final: str,
                      filename_with_iteration: str, filename_final: str,
                      include_group: bool = True) -> None:
     content_fragile_format = _sequences_fragile_format_output_to_file(design, include_group)
-    for filename in [filename_with_iteration, filename_final]:
+    for directory, filename in zip([directory_intermediate, directory_final],
+                                   [filename_with_iteration, filename_final]):
         path = os.path.join(directory, filename)
         with open(path, 'w') as file:
             file.write(content_fragile_format)
 
 
-def _write_dsd_design_json(design: Design, directory: str,
+def _write_dsd_design_json(design: Design, directory_intermediate: str, directory_final: str,
                            filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
     json_str = design.to_json()
-    for filename in [filename_with_iteration_no_ext, filename_final_no_ext]:
+    for directory, filename in zip([directory_intermediate, directory_final],
+                                   [filename_with_iteration_no_ext, filename_final_no_ext]):
         filename += '.json'
         path = os.path.join(directory, filename)
         with open(path, 'w') as file:
             file.write(json_str)
 
 
-def _write_report(design: Design, directory: str,
+def _write_report(design: Design, directory_intermediate: str, directory_final: str,
                   filename_with_iteration: str, filename_final: str) -> None:
     sequences = _sequences_fragile_format_output_to_file(design, include_group=True)
     sequences_content = f'''\
@@ -782,11 +785,14 @@ Report on constraints
 {report_str}
 '''
 
-    for filename in [filename_with_iteration, filename_final]:
+    for directory, filename in zip([directory_intermediate, directory_final],
+                                   [filename_with_iteration, filename_final]):
         path = os.path.join(directory, filename)
         with open(path, 'w') as file:
             file.write(sequences_content)
             file.write(report)
+
+
 
 
 def search_for_dna_sequences(*, design: dc.Design,
@@ -794,11 +800,9 @@ def search_for_dna_sequences(*, design: dc.Design,
                              random_seed: Optional[int] = None,
                              never_increase_weight: Optional[bool] = None,
                              directory_output_files: str = '.',
-                             design_filename_no_ext: Optional[str] = None,
-                             sequences_filename_no_ext: Optional[str] = None,
-                             report_filename_no_ext: Optional[str] = None,
                              weigh_constraint_violations_equally: bool = False,
                              on_improved_design: Callable[[int], None] = lambda _: None,
+                             restart: bool,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -842,6 +846,11 @@ def search_for_dna_sequences(*, design: dc.Design,
     every time a new improve assignment is found. This re-evaluates the entire design, so can be expensive,
     but in practice the design is strictly improved many fewer times than total iterations.
 
+    Whenever a new optimal sequence assignment is found, the following are written to files:
+    - DNA sequences of each strand are written to a text file .
+    - the whole dsd design
+    - a report on the DNA sequences indicating how well they do on constraints.
+
     :param design:
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
@@ -866,20 +875,6 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param directory_output_files:
         Directory in which to write output files (report on constraint violations and DNA sequences)
         whenever a new optimal sequence assignment is found.
-    :param sequences_filename_no_ext:
-        DNA sequences of each strand are written to a text file whenever
-        a new optimal sequence assignment is found. No extension should be given. The filename will be
-        `sequences_filename_no_ext-<i>.txt`, where i is the number of times the optimal solution
-        has changed (so there will be a record of all optimal solutions recorded).
-    :param design_filename_no_ext:
-        The whole design is written to a JSON file whenever
-        a new optimal sequence assignment is found. No extension should be given. The filename will be
-        `design_filename_no_ext-<i>.txt`, where i is the number of times the optimal solution
-        has changed (so there will be a record of all optimal solutions recorded).
-    :param report_filename_no_ext:
-        A report on the DNA sequences is written to a file when
-        all constraints are satisfied. The method :py:meth:`constraints.Constraint.generate_summary` is
-        called for each :any:`Constraint` in order to generate this report.
     :param random_seed:
         Integer given as a random seed to the numpy random number generator, used for
         all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
@@ -899,23 +894,35 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param on_improved_design:
         Function to call whenever the design improves. Takes an integer as input indicating the number
         of times the design has improved.
+    :param restart:
+        If this function was previous called and placed files in `directory_output_files`, calling with this
+        parameter True will re-start the search at that point.
     """
     if not os.path.exists(directory_output_files):
         os.makedirs(directory_output_files)
 
-    debug_file_handler = logging.FileHandler(os.path.join(directory_output_files, '_debug.log'))
-    info_file_handler = logging.FileHandler(os.path.join(directory_output_files, '_info.log'))
+    dsd_design_subdirectory = 'dsd_designs'
+    report_subdirectory = 'reports'
+    sequence_subdirectory = 'sequences'
+    dsd_design_filename_no_ext = 'design'
+    sequences_filename_no_ext = 'sequences'
+    report_filename_no_ext = 'report'
+
+    dsd_design_directory = os.path.join(directory_output_files, dsd_design_subdirectory)
+    report_directory = os.path.join(directory_output_files, report_subdirectory)
+    sequence_directory = os.path.join(directory_output_files, sequence_subdirectory)
+    for subdir in [dsd_design_directory, report_directory, sequence_directory]:
+        if not os.path.exists(subdir):
+            os.makedirs(subdir)
+
+    debug_file_handler = logging.FileHandler(os.path.join(directory_output_files, 'log_debug.log'))
+    info_file_handler = logging.FileHandler(os.path.join(directory_output_files, 'log_info.log'))
     debug_file_handler.setLevel(logging.DEBUG)
     info_file_handler.setLevel(logging.INFO)
     dc.logger.addHandler(debug_file_handler)
     dc.logger.addHandler(info_file_handler)
 
-    if design_filename_no_ext is None:
-        design_filename_no_ext = f'design'
-    if sequences_filename_no_ext is None:
-        sequences_filename_no_ext = f'sequences'
-    if report_filename_no_ext is None:
-        report_filename_no_ext = f'report'
+
 
     if random_seed is not None:
         rng = np.random.default_rng(random_seed)
@@ -935,33 +942,35 @@ def search_for_dna_sequences(*, design: dc.Design,
     logger.info(f'number of processes in system: {cpu_count}')
 
     try:
-        assign_sequences_to_domains_randomly_from_pools(design=design,
-                                                        rng=rng,
-                                                        overwrite_existing_sequences=False)
+        if not restart:
+            assign_sequences_to_domains_randomly_from_pools(design=design,
+                                                            rng=rng,
+                                                            overwrite_existing_sequences=False)
+            num_new_optimal = 0
+        else:
+            num_new_optimal = _restart_from_directory(directory_output_files, design, dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
             design=design, weigh_constraint_violations_equally=weigh_constraint_violations_equally,
             never_increase_weight=never_increase_weight)
 
-        # write initial sequences and report
-        _write_dsd_design_json(design,
-                               directory=directory_output_files,
-                               filename_with_iteration_no_ext=f'{design_filename_no_ext}-0',
-                               filename_final_no_ext=f'_final-{design_filename_no_ext}')
-        _write_sequences(design,
-                         directory=directory_output_files,
-                         filename_with_iteration=f'{sequences_filename_no_ext}-0.txt',
-                         filename_final=f'_final-{sequences_filename_no_ext}.txt')
-        _write_report(design,
-                      directory=directory_output_files,
-                      filename_with_iteration=f'{report_filename_no_ext}-0.txt',
-                      filename_final=f'_final-{report_filename_no_ext}.txt')
+        if not restart:
+            # write initial sequences and report
+            _write_intermediate_files(design=design,
+                                      num_new_optimal=0,
+                                      write_report=True,
+                                      design_filename_no_ext=dsd_design_filename_no_ext,
+                                      directory_output_files=directory_output_files,
+                                      report_directory=report_directory,
+                                      sequence_directory=sequence_directory,
+                                      dsd_design_directory=dsd_design_directory,
+                                      report_filename_no_ext=report_filename_no_ext,
+                                      sequences_filename_no_ext=sequences_filename_no_ext)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
 
         iteration = 0
-        num_new_optimal = 0
         time_of_last_improvement: float = -1.0
         while len(violation_set_opt.all_violations) > 0:
             if cpu_count != dc.cpu_count():
@@ -1017,12 +1026,15 @@ def search_for_dna_sequences(*, design: dc.Design,
                     if time_of_last_improvement < 0 or current_time - time_of_last_improvement >= 60:
                         time_of_last_improvement = current_time
                         write_report = True
-                    # put leading 0s on sequential filenames 
+
                     _write_intermediate_files(design=design,
                                               num_new_optimal=num_new_optimal,
                                               write_report=write_report,
-                                              design_filename_no_ext=design_filename_no_ext,
+                                              design_filename_no_ext=dsd_design_filename_no_ext,
                                               directory_output_files=directory_output_files,
+                                              report_directory=report_directory,
+                                              sequence_directory=sequence_directory,
+                                              dsd_design_directory=dsd_design_directory,
                                               report_filename_no_ext=report_filename_no_ext,
                                               sequences_filename_no_ext=sequences_filename_no_ext)
 
@@ -1041,27 +1053,80 @@ def search_for_dna_sequences(*, design: dc.Design,
     dc.logger.removeHandler(info_file_handler)
 
 
+def _restart_from_directory(directory: str, design: dc.Design, dsd_design_subdirectory: str) -> int:
+    # returns highest index found
+    design_filename, num_new_optimal = _find_latest_design_filename(directory, dsd_design_subdirectory)
+    with open(design_filename, 'r') as file:
+        design_json_str: str = file.read()
+    design_with_sequences = dc.Design.from_json(design_json_str)
+
+    # dc.verify_designs_match(design_from_sc, initial_design, check_fixed=False)
+    domains_with_seq = [domain for domain in design_with_sequences.domains if not domain.fixed]
+    domains = [domain for domain in design.domains if not domain.fixed]
+    domains_with_seq.sort(key=lambda domain: domain.name)
+    domains.sort(key=lambda domain: domain.name)
+
+    for domain_with_seq, domain in zip(domains_with_seq, domains):
+        domain.sequence = domain_with_seq.sequence
+
+    return num_new_optimal
+
+
+def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -> Tuple[str, int]:
+    # return filename with latest new optimal sequences (and index)
+    dsd_design_directory = os.path.join(directory, dsd_design_subdirectory)
+    filenames = [filename
+                 for filename in os.listdir(dsd_design_directory)
+                 if os.path.isfile(os.path.join(dsd_design_directory, filename))]
+
+    pattern = re.compile(r'-(\d+)\.json')
+    filenames_matching = [filename for filename in filenames if pattern.search(filename)]
+
+    if len(filenames_matching) == 0:
+        raise ValueError(f'no files in directory "{dsd_design_directory}" '
+                         f'match the pattern "*-<index>.json";\n'
+                         f'files:\n'
+                         f'{filenames}')
+
+    max_filename = filenames_matching[0]
+    max_index_str = pattern.search(max_filename).group(1)
+    max_index = int(max_index_str)
+    for filename in filenames_matching:
+        index_str = pattern.search(filename).group(1)
+        index = int(index_str)
+        if max_index < index:
+            max_index = index
+            max_filename = filename
+
+    full_filename = os.path.join(directory, dsd_design_subdirectory, max_filename)
+    return full_filename, max_index
+
+
 def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
                               design_filename_no_ext: str, directory_output_files: str,
+                              report_directory: str, sequence_directory: str, dsd_design_directory: str,
                               report_filename_no_ext: str, sequences_filename_no_ext: str):
     str_num_new_optimal_with_leading_zeros = '0' * (
             2 - int(math.log(max(num_new_optimal, 1), 10))) + str(num_new_optimal)
     _write_dsd_design_json(design,
-                           directory=directory_output_files,
+                           directory_intermediate=dsd_design_directory,
+                           directory_final=directory_output_files,
                            # filename_with_iteration_no_ext=f'{design_filename_no_ext}-{num_new_optimal}',
                            filename_with_iteration_no_ext=f'{design_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros,
-                           filename_final_no_ext=f'_final-{design_filename_no_ext}')
+                           filename_final_no_ext=f'current-best-{design_filename_no_ext}')
     _write_sequences(design,
-                     directory=directory_output_files,
+                     directory_intermediate=sequence_directory,
+                     directory_final=directory_output_files,
                      # filename_with_iteration=f'{sequences_filename_no_ext}-{num_new_optimal}.txt',
                      filename_with_iteration=f'{sequences_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
-                     filename_final=f'_final-{sequences_filename_no_ext}.txt')
+                     filename_final=f'current-best-{sequences_filename_no_ext}.txt')
     if write_report:
         _write_report(design,
-                      directory=directory_output_files,
+                      directory_intermediate=report_directory,
+                      directory_final=directory_output_files,
                       # filename_with_iteration=f'{report_filename_no_ext}-{num_new_optimal}.txt',
                       filename_with_iteration=f'{report_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
-                      filename_final=f'_final-{report_filename_no_ext}.txt')
+                      filename_final=f'current-best-{report_filename_no_ext}.txt')
 
 
 def _pfunc_killall() -> None:

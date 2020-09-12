@@ -157,7 +157,7 @@ def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str
     return seqs_list, seq_orders
 
 
-@lru_cache(maxsize=100000)
+# @lru_cache(maxsize=100000)
 def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
