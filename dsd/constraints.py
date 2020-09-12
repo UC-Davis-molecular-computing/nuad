@@ -2766,10 +2766,9 @@ def rna_duplex_strand_pairs_constraint(
         # stopwatch = None  # uncomment to not log time
 
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        domain_sets_weights: List[Tuple[Set[Domain], float]] = []
-
         energies = calculate_energies(sequence_pairs)
 
+        domain_sets_weights: List[Tuple[Set[Domain], float]] = []
         for (strand1, strand2), energy in zip(strand_pairs, energies):
             excess = energy_excess(energy, threshold, negate, strand1, strand2)
             # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')

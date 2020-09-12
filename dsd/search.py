@@ -793,8 +793,6 @@ Report on constraints
             file.write(report)
 
 
-
-
 def search_for_dna_sequences(*, design: dc.Design,
                              probability_of_keeping_change: Optional[Callable[[float], float]] = None,
                              random_seed: Optional[int] = None,
@@ -921,8 +919,6 @@ def search_for_dna_sequences(*, design: dc.Design,
     info_file_handler.setLevel(logging.INFO)
     dc.logger.addHandler(debug_file_handler)
     dc.logger.addHandler(info_file_handler)
-
-
 
     if random_seed is not None:
         rng = np.random.default_rng(random_seed)
