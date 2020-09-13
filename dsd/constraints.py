@@ -804,7 +804,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             found in the JSON.
         :param label_decoder:
             Function transforming object deserialized from JSON  (e.g, dict, list, string) into an object
-            of type :any:`DomainLabel`.
+            of type DomainLabel.
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
@@ -954,9 +954,9 @@ _domains_interned: Dict[str, Domain] = {}
 
 
 # remove quotes when Python 3.6 support dropped
-def domains_not_substrings_of_each_other_domain_pair_constraint(check_complements: bool = True,
-                                                                short_description: str = 'dom neq',
-                                                                weight: float = 1.0) -> 'DomainPairConstraint':
+def domains_not_substrings_of_each_other_domain_pair_constraint(
+        check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0) \
+        -> 'DomainPairConstraint':
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -968,7 +968,7 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(check_complement
              (in particular, if they are equal length, then they are not the same domain)
     """
 
-    def domains_not_substrings_of_each_other(domain1: Domain, domain2: Domain) -> bool:
+    def domains_not_substrings_of_each_other(domain1: Domain, domain2: Domain) -> float:
         s1 = domain1.sequence
         s2 = domain2.sequence
         if len(s1) > len(s2):
@@ -977,14 +977,36 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(check_complement
             c1 = dv.wc(s1)
             # by symmetry, only need to check c1 versus s2 for WC complement, since
             # (s1 not in s2 <==> c1 in c2) and (c1 in s2 <==> s1 in c2)
-            return (s1 not in s2) and (c1 not in s2)
+            return 1.0 if s1 in s2 or c1 in s2 else 0.0
         else:
-            return s1 not in s2
+            return 1.0 if s1 in s2 else 0.0
+
+    def summary(domain1: Domain, domain2: Domain) -> str:
+        s1 = domain1.sequence
+        s2 = domain2.sequence
+        if len(s1) > len(s2):
+            s1, s2 = s2, s1
+        passed = True
+        result = 'nothing to report'
+        if s1 in s2:
+            result = f'{s1} is a substring of {s2}'
+            passed = False
+        if check_complements:
+            c1 = dv.wc(s1)
+            if c1 in s2:
+                msg = f'{c1} is a substring of {s2}'
+                if not passed:
+                    result += f'; {msg}'
+                else:
+                    result = msg
+                # passed = False
+        return result
 
     return DomainPairConstraint(description='domains not substrings of each other',
                                 short_description=short_description,
                                 weight=weight,
-                                evaluate=domains_not_substrings_of_each_other)
+                                evaluate=domains_not_substrings_of_each_other,
+                                summary=summary)
 
 
 default_strand_group_name = 'default_strand_group'
@@ -1400,7 +1422,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         """
         :param suppress_indent:
-            Whether to suppress indentation of some objects using the :any:`NoIndent` object.
+            Whether to suppress indentation of some objects using the NoIndent object.
         :return:
             Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
@@ -2029,8 +2051,8 @@ class Constraint(ABC, Generic[DesignPart]):
 
 
 _no_summary_string = f"No summary for this constraint. " \
-                     f"To generate one, pass a function as the field " \
-                     f"summary when creating the Constraint."
+                     f"To generate one, pass a function as the parameter named " \
+                     f'"summary" when creating the Constraint.'
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2046,9 +2068,9 @@ class DomainConstraint(Constraint[Domain]):
     def __call__(self, domain: Domain) -> float:
         # The strand line breaks are because PyCharm finds a static analysis warning on the first line
         # and mypy finds it on the second line; this lets us ignore both of them.
-        check_callback = cast(Callable[[Domain], float],  # noqa
-                              self.evaluate)  # type: ignore
-        return check_callback(domain)
+        evaluate_callback = cast(Callable[[Domain], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(domain)
 
     def generate_summary(self, domain: Domain) -> str:
         summary_callback = cast(Callable[[Domain], str],  # noqa
@@ -2069,9 +2091,9 @@ class StrandConstraint(Constraint[Strand]):
     def __call__(self, strand: Strand) -> float:
         # The strand line breaks are because PyCharm finds a static analysis warning on the first line
         # and mypy finds it on the second line; this lets us ignore both of them.
-        check_callback = cast(Callable[[Strand], float],  # noqa
-                              self.evaluate)  # type: ignore
-        return check_callback(strand)
+        evaluate_callback = cast(Callable[[Strand], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(strand)
 
     def generate_summary(self, strand: Strand) -> str:
         summary_callback = cast(Callable[[Strand], str],  # noqa
@@ -2121,9 +2143,9 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
 
     def __call__(self, domain_pair: Tuple[Domain, Domain]) -> float:
         domain1, domain2 = domain_pair
-        check_callback = cast(Callable[[Domain, Domain], float],  # noqa
-                              self.evaluate)  # type: ignore
-        return check_callback(domain1, domain2)
+        evaluate_callback = cast(Callable[[Domain, Domain], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(domain1, domain2)
 
     def generate_summary(self, domain_pair: Tuple[Domain, Domain]) -> str:
         domain1, domain2 = domain_pair
@@ -2149,9 +2171,9 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
     def __call__(self, strand_pair: Tuple[Strand, Strand]) -> float:
         strand1, strand2 = strand_pair
-        check_callback = cast(Callable[[Strand, Strand], float],  # noqa
-                              self.evaluate)  # type: ignore
-        return check_callback(strand1, strand2)
+        evaluate_callback = cast(Callable[[Strand, Strand], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(strand1, strand2)
 
     def generate_summary(self, strand_pair: Tuple[Strand, Strand]) -> str:
         strand1, strand2 = strand_pair
@@ -2175,10 +2197,10 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     summary: Callable[[Iterable[Tuple[Domain, Domain]]], str] = lambda _: _no_summary_string
 
     def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[Set[Domain], float]]:
-        eval_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
-                                      List[Tuple[Set[Domain], float]]],  # noqa
-                             self.evaluate)  # type: ignore
-        return eval_callback(domain_pairs)
+        evaluate_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
+                                          List[Tuple[Set[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(domain_pairs)
 
     def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) -> str:
         summary_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]], str],  # noqa
@@ -2201,10 +2223,10 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     summary: Callable[[Iterable[Tuple[Strand, Strand]]], str] = lambda _: _no_summary_string
 
     def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[Set[Domain], float]]:
-        eval_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
-                                      List[Tuple[Set[Domain], float]]],  # noqa
-                             self.evaluate)  # type: ignore
-        return eval_callback(strand_pairs)
+        evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
+                                          List[Tuple[Set[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(strand_pairs)
 
     def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) -> str:
         summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]], str],  # noqa
@@ -2236,9 +2258,9 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
     summary: Callable[[Iterable[Domain]], str] = lambda _: _no_summary_string
 
     def __call__(self, domains: Iterable[Domain]) -> List[Tuple[Set[Domain], float]]:
-        eval_callback = cast(Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
-                             self.evaluate)  # type: ignore
-        return eval_callback(domains)
+        evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(domains)
 
     def generate_summary(self, domains: Iterable[Domain]) -> str:
         summary_callback = cast(Callable[[Iterable[Domain]], str],  # noqa
@@ -2270,9 +2292,9 @@ class StrandsConstraint(Constraint[Iterable[Strand]]):
     summary: Callable[[Iterable[Strand]], str] = lambda _: _no_summary_string
 
     def __call__(self, strands: Iterable[Strand]) -> List[Tuple[Set[Domain], float]]:
-        eval_callback = cast(Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]],  # noqa
-                             self.evaluate)  # type: ignore
-        return eval_callback(strands)
+        evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        return evaluate_callback(strands)
 
     def generate_summary(self, strands: Iterable[Strand]) -> str:
         summary_callback = cast(Callable[[Iterable[Strand]], str],  # noqa

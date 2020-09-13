@@ -107,7 +107,7 @@ def main() -> None:
     ds.search_for_dna_sequences(design=design,
                                 never_increase_weight=never_increase_weight,
                                 random_seed=random_seed,
-                                directory_output_files=output_dir)
+                                out_directory=output_dir)
 
 
 if __name__ == '__main__':

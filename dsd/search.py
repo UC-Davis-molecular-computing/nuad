@@ -5,6 +5,7 @@ Stochastic local search for finding DNA sequences to assign to
 
 import itertools
 import os
+import shutil
 import sys
 import logging
 import math
@@ -18,7 +19,9 @@ import statistics
 import textwrap
 import time
 import re
+import datetime
 
+from ordered_set import OrderedSet
 import numpy as np  # noqa
 
 import dsd.np as dn
@@ -48,6 +51,10 @@ _thread_pool = ThreadPool(processes=dc.cpu_count())
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
+
+
+def default_output_directory() -> str:
+    return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
 @dataclass(frozen=True)
@@ -93,13 +100,13 @@ class _ViolationSet:
     only those violations of :any:`Constraint`'s that could have been affected by the changed :any:`Domain`.
     """
 
-    all_violations: Set[_Violation] = field(default_factory=set)
+    all_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
     """Set of all :any:`Violation`'s."""
 
     domain_to_violations: Dict[Domain, Set[_Violation]] = field(default_factory=lambda: defaultdict(set))
     """Dict mapping each :any:`Domain` to the set of all :any:`Violation`'s for which it is blamed."""
 
-    def update(self, new_violations: Dict[Domain, Set[_Violation]]) -> None:
+    def update(self, new_violations: Dict[Domain, OrderedSet[_Violation]]) -> None:
         """
         Update this :any:`ViolationSet` by merging in new violations from `new_violations`.
 
@@ -126,7 +133,7 @@ class _ViolationSet:
         domain_to_violations_deep_copy = defaultdict(set, self.domain_to_violations)
         for domain, violations in domain_to_violations_deep_copy.items():
             domain_to_violations_deep_copy[domain] = set(violations)
-        return _ViolationSet(set(self.all_violations), domain_to_violations_deep_copy)
+        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy)
 
     def remove_violations_of_domain(self, domain: Domain) -> None:
         """
@@ -423,8 +430,8 @@ def _strands_containing_domain(domain: Optional[Domain], strands: List[Strand]) 
 
 def _convert_sets_of_violating_domains_to_violations(
         constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[Set[Domain], float]],
-        weigh_constraint_violations_equally: bool) -> Dict[Domain, Set[_Violation]]:
-    domains_violations: Dict[Domain, Set[_Violation]] = defaultdict(set)
+        weigh_constraint_violations_equally: bool) -> Dict[Domain, OrderedSet[_Violation]]:
+    domains_violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     for domain_set, weight in sets_of_violating_domains:
         weight_to_use = 1.0 if weigh_constraint_violations_equally else weight
         violation = _Violation(constraint, domain_set, weight_to_use)
@@ -435,6 +442,7 @@ def _convert_sets_of_violating_domains_to_violations(
 
 
 _empty_frozen_set: FrozenSet = frozenset()
+_empty_ordered_set: OrderedSet = OrderedSet()
 
 
 # XXX: Although this is written very generally for multiple domains; for most iterationg only one domain
@@ -443,8 +451,8 @@ _empty_frozen_set: FrozenSet = frozenset()
 def _violations_of_domain_constraint(domains: Iterable[Domain],
                                      constraint: DomainConstraint,
                                      weigh_constraint_violations_equally: bool,
-                                     ) -> Dict[Domain, Set[_Violation]]:
-    violations: Dict[Domain, Set[_Violation]] = defaultdict(set)
+                                     ) -> Dict[Domain, OrderedSet[_Violation]]:
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     unfixed_domains = [domain for domain in domains if not domain.fixed]
     violating_domains_weights: List[Optional[Tuple[Domain, float]]] = []
 
@@ -489,10 +497,10 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                                      constraint: StrandConstraint,
                                      current_weight_gap: Optional[float],
                                      weigh_constraint_violations_equally: bool,
-                                     ) -> Dict[Domain, Set[_Violation]]:
-    violations: Dict[Domain, Set[_Violation]] = defaultdict(set)
+                                     ) -> Dict[Domain, OrderedSet[_Violation]]:
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     unfixed_strands = [strand for strand in strands if not strand.fixed]
-    sets_of_violating_domains_weights: List[Tuple[FrozenSet[Domain], float]] = []
+    sets_of_violating_domains_weights: List[Tuple[OrderedSet[Domain], float]] = []
 
     weight_discovered_here: float = 0.0
 
@@ -511,7 +519,7 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
         for strand in unfixed_strands:
             weight: float = constraint(strand)
             if weight > 0.0:
-                set_of_violating_domains_weight = frozenset(strand.unfixed_domains())
+                set_of_violating_domains_weight = OrderedSet(strand.unfixed_domains())
                 sets_of_violating_domains_weights.append((set_of_violating_domains_weight, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
@@ -520,13 +528,13 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
     else:
         logger.debug(f'using threading for strand constraint {constraint.description}')
 
-        def strand_to_unfixed_domains_set(strand: Strand) -> Tuple[FrozenSet[Domain], float]:
+        def strand_to_unfixed_domains_set(strand: Strand) -> Tuple[OrderedSet[Domain], float]:
             # return unfixed domains on strand if strand violates the constraint, else empty set
             weight_: float = constraint(strand)
             if weight_ > 0.0:
-                return frozenset(strand.unfixed_domains()), weight_
+                return OrderedSet(strand.unfixed_domains()), weight_
             else:
-                return _empty_frozen_set, 0.0
+                return _empty_ordered_set, 0.0
 
         if current_weight_gap is None:
             sets_of_violating_domains_weights = _thread_pool.map(strand_to_unfixed_domains_set,
@@ -544,6 +552,7 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                 if weight_discovered_here > current_weight_gap:
                     break
 
+    # print(f'{[domains for domains,_ in sets_of_violating_domains_weights]}')
     for set_of_violating_domains_weight, weight in sets_of_violating_domains_weights:
         if len(set_of_violating_domains_weight) > 0:
             weight_to_use = 1.0 if weigh_constraint_violations_equally else weight
@@ -566,7 +575,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                                           domain_changed: Optional[Domain],
                                           current_weight_gap: Optional[float],
                                           weigh_constraint_violations_equally: bool,
-                                          ) -> Dict[Domain, Set[_Violation]]:
+                                          ) -> Dict[Domain, OrderedSet[_Violation]]:
     # If specified, current_weight_gap is the current difference between the weight of violated constraints
     # that have been found so far in the current iteration, compared to the total weight of violated
     # constraints in the optimal solution so far. It is positive
@@ -637,7 +646,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                 if weight_discovered_here > current_weight_gap:
                     break
 
-    violations: Dict[Domain, Set[_Violation]] = defaultdict(set)
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     violating_domain_pair_weight: Optional[Tuple[Domain, Domain, float]]
     for violating_domain_pair_weight in violating_domain_pairs_weights:
         if violating_domain_pair_weight is not None:
@@ -662,7 +671,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                                           domain_changed: Optional[Domain],
                                           current_weight_gap: Optional[float],
                                           weigh_constraint_violations_equally: bool,
-                                          ) -> Dict[Domain, Set[_Violation]]:
+                                          ) -> Dict[Domain, OrderedSet[_Violation]]:
     strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = \
         _determine_strand_pairs_to_check(strands, domain_changed, constraint)
 
@@ -724,7 +733,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                 if weight_discovered_here > current_weight_gap:
                     break
 
-    violations: Dict[Domain, Set[_Violation]] = defaultdict(set)
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     violating_strand_pair_weight: Optional[Tuple[Strand, Strand, float]]
     for violating_strand_pair_weight in violating_strand_pairs_weights:
         if violating_strand_pair_weight is not None:
@@ -793,14 +802,51 @@ Report on constraints
             file.write(report)
 
 
+def _clear_directory(directory: str, force_overwrite: bool) -> None:
+    files_relative = os.listdir(directory)
+    files_and_directories = [os.path.join(directory, file) for file in files_relative]
+
+    if len(files_and_directories) > 0 and not force_overwrite:
+        warning = f'''\
+The directory {directory} 
+is not empty. Its files and subdirectories will be deleted before continuing. 
+To restart a previously cancelled run starting from the files currently in 
+{directory}, 
+call search_for_dna_sequences with the parameter restart=True.
+'''
+        print(warning)
+        done = False
+        while not done:
+            ans = input('Are you sure you wish to proceed? [n]/y ')
+            ans = ans.strip().lower()
+            if ans in ['n', '']:
+                print('No problem! Exiting...')
+                sys.exit(0)
+            if ans == 'y':
+                done = True
+            else:
+                print(f'I don\'t understand the response "{ans}". Please respond n or y.')
+
+    files = [file for file in files_and_directories if os.path.isfile(file)]
+    subdirs = [subdir for subdir in files_and_directories if not os.path.isfile(subdir)]
+    for file in files:
+        logger.info(f'deleting file {file}')
+        os.remove(file)
+    for sub in subdirs:
+        logger.info(f'deleting subdirectory {sub}')
+        shutil.rmtree(sub)
+
+
 def search_for_dna_sequences(*, design: dc.Design,
                              probability_of_keeping_change: Optional[Callable[[float], float]] = None,
                              random_seed: Optional[int] = None,
                              never_increase_weight: Optional[bool] = None,
-                             directory_output_files: str = '.',
-                             weigh_constraint_violations_equally: bool = False,
+                             out_directory: Optional[str] = None,
+                             weigh_violations_equally: bool = False,
+                             report_delay: float = 60.0,
                              on_improved_design: Callable[[int], None] = lambda _: None,
-                             restart: bool,
+                             restart: bool = False,
+                             force_overwrite: bool = False,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -870,34 +916,59 @@ def search_for_dna_sequences(*, design: dc.Design,
         `never_increase_weight` is set to False. If both are specified and `never_increase_weight` is set to
         True, then take caution that `probability_of_keeping_change` really has the property that it never
         goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
-    :param directory_output_files:
+    :param out_directory:
         Directory in which to write output files (report on constraint violations and DNA sequences)
         whenever a new optimal sequence assignment is found.
     :param random_seed:
         Integer given as a random seed to the numpy random number generator, used for
         all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
-    :param weigh_constraint_violations_equally:
+    :param weigh_violations_equally:
         Constraints, when checking a Domain, Strand, pair of Strands, etc., return a nonnegative float whose
         interpretation is "how bad was the violation" if positive, and "constraint passed" if 0.0.
         The total weight assigned to the violation is then this value times :py:data:`Constraint.weight`.
-        If `weigh_constraint_violations_equally` is True, then all positive values are treated as though
-        they are equal to 1.0, so all are assigned a weight of :py:data:`Constraint.weight`.
+        If `weigh_violations_equally` is True, then all positive values are treated as though
+        they are equal to 1.0, so all are assigned a weight of :py:data:`constraints.Constraint.weight`.
         For example, with a :any:`StrandConstraint` checking that energy is above -2.0, an energy of
         -2.01 and -8.0 would be weighted the same if `weigh_constraint_violations_equally` is True,
         but the latter weighted 6 (compared to 0.01 for the former) if `weigh_constraint_violations_equally`
         is False.
+
+        Note that this does **NOT** mean "*weigh all types of constraints equally*"; the value
+        :py:data:`constraints.Constraint.weight` is still used.
+        But if `weigh_violations_equally` is True,
+        then the value returned when calling the :any:`Constraint` is converted to 1.0 if it is positive,
+        before being multiplied by :py:data:`constraints.Constraint.weight`.
+
         The idea behind the default of False is that there is a "smoother gradient" to try to descend
         if violations are weighted by "how bad" they are.
         However, in practice, it can sometimes find a solution faster if all violations are treated the same.
+    :param report_delay:
+        Every time the design improves, a report on the constraints is written, as long as it has been as
+        `report_delay` seconds since the last report was written. Since writing a report requires evaluating
+        all constraints, it requires more time than a single iteration, which requires evaluating only those
+        constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
+        Thus the default value of 60 seconds avoids spending too much time writing reports, since the
+        search finds many new improved designs frequently at the start of the search.
+        By setting this to 0, a new report will be written every time the design improves.
     :param on_improved_design:
         Function to call whenever the design improves. Takes an integer as input indicating the number
         of times the design has improved.
     :param restart:
-        If this function was previous called and placed files in `directory_output_files`, calling with this
+        If this function was previous called and placed files in `out_directory`, calling with this
         parameter True will re-start the search at that point.
+    :param force_overwrite:
+        If `restart` is False and there are files/subdirectories in `out_directory`,
+        then the user will be prompted to confirm that they want to delete these, UNLESS force_overwrite
+        is True.
     """
-    if not os.path.exists(directory_output_files):
-        os.makedirs(directory_output_files)
+    if out_directory is None:
+        out_directory = default_output_directory()
+
+    if not os.path.exists(out_directory):
+        os.makedirs(out_directory)
+
+    if not restart:
+        _clear_directory(out_directory, force_overwrite)
 
     dsd_design_subdirectory = 'dsd_designs'
     report_subdirectory = 'reports'
@@ -906,15 +977,15 @@ def search_for_dna_sequences(*, design: dc.Design,
     sequences_filename_no_ext = 'sequences'
     report_filename_no_ext = 'report'
 
-    dsd_design_directory = os.path.join(directory_output_files, dsd_design_subdirectory)
-    report_directory = os.path.join(directory_output_files, report_subdirectory)
-    sequence_directory = os.path.join(directory_output_files, sequence_subdirectory)
+    dsd_design_directory = os.path.join(out_directory, dsd_design_subdirectory)
+    report_directory = os.path.join(out_directory, report_subdirectory)
+    sequence_directory = os.path.join(out_directory, sequence_subdirectory)
     for subdir in [dsd_design_directory, report_directory, sequence_directory]:
         if not os.path.exists(subdir):
             os.makedirs(subdir)
 
-    debug_file_handler = logging.FileHandler(os.path.join(directory_output_files, 'log_debug.log'))
-    info_file_handler = logging.FileHandler(os.path.join(directory_output_files, 'log_info.log'))
+    debug_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_debug.log'))
+    info_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_info.log'))
     debug_file_handler.setLevel(logging.DEBUG)
     info_file_handler.setLevel(logging.INFO)
     dc.logger.addHandler(debug_file_handler)
@@ -944,10 +1015,10 @@ def search_for_dna_sequences(*, design: dc.Design,
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal = _restart_from_directory(directory_output_files, design, dsd_design_subdirectory)
+            num_new_optimal = _restart_from_directory(out_directory, design, dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
-            design=design, weigh_constraint_violations_equally=weigh_constraint_violations_equally,
+            design=design, weigh_constraint_violations_equally=weigh_violations_equally,
             never_increase_weight=never_increase_weight)
 
         if not restart:
@@ -956,7 +1027,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                                       num_new_optimal=0,
                                       write_report=True,
                                       design_filename_no_ext=dsd_design_filename_no_ext,
-                                      directory_output_files=directory_output_files,
+                                      directory_output_files=out_directory,
                                       report_directory=report_directory,
                                       sequence_directory=sequence_directory,
                                       dsd_design_directory=dsd_design_directory,
@@ -983,6 +1054,7 @@ def search_for_dna_sequences(*, design: dc.Design,
             probs_opt = np.asarray(weights_opt)
             probs_opt /= probs_opt.sum()
             domain_changed: Domain = rng.choice(a=domains_opt, p=probs_opt)
+            # print(f'rng state after choosing domain  = {rng.__getstate__()["state"]["state"]}')
             assert not domain_changed.fixed  # fixed Domains should never be blamed for constraint violation
 
             # set sequence of domain_changed to random new sequence from its DomainPool
@@ -991,7 +1063,7 @@ def search_for_dna_sequences(*, design: dc.Design,
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
-                design=design, weigh_constraint_violations_equally=weigh_constraint_violations_equally,
+                design=design, weigh_constraint_violations_equally=weigh_violations_equally,
                 domain_changed=domain_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight)
 
@@ -1019,7 +1091,13 @@ def search_for_dna_sequences(*, design: dc.Design,
 
                     current_time: float = time.time()
                     write_report = False
-                    if time_of_last_improvement < 0 or current_time - time_of_last_improvement >= 60:
+                    # don't write report unless it is
+                    #   the first iteration (time_of_last_improvement < 0 ),
+                    #   the last iteration (len(violation_set_opt.all_violations) == 0), or
+                    #   it has been more than report_delay seconds since writing the last report
+                    if (time_of_last_improvement < 0
+                            or len(violation_set_opt.all_violations) == 0
+                            or current_time - time_of_last_improvement >= report_delay):
                         time_of_last_improvement = current_time
                         write_report = True
 
@@ -1027,7 +1105,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                                               num_new_optimal=num_new_optimal,
                                               write_report=write_report,
                                               design_filename_no_ext=dsd_design_filename_no_ext,
-                                              directory_output_files=directory_output_files,
+                                              directory_output_files=out_directory,
                                               report_directory=report_directory,
                                               sequence_directory=sequence_directory,
                                               dsd_design_directory=dsd_design_directory,
@@ -1041,12 +1119,30 @@ def search_for_dna_sequences(*, design: dc.Design,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
     finally:
-        _pfunc_killall()
+        if sys.platform != 'win32':
+            _pfunc_killall()
         _thread_pool.close()  # noqa
         _thread_pool.terminate()
 
     dc.logger.removeHandler(debug_file_handler)
     dc.logger.removeHandler(info_file_handler)
+
+
+def script_name_no_ext() -> str:
+    """
+    :return: Name of the Python script currently running, without the .py extension.
+    """
+    script_name = os.path.basename(sys.argv[0])
+    last_dot_idx = script_name.rfind('.')
+    if last_dot_idx >= 0:
+        script_name = script_name[:last_dot_idx]
+    return script_name
+
+
+def timestamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    time_str = now.strftime("%Y-%m-%dT%H.%M.%S")
+    return time_str
 
 
 def _restart_from_directory(directory: str, design: dc.Design, dsd_design_subdirectory: str) -> int:
@@ -1169,17 +1265,6 @@ def _log_time(stopwatch: Stopwatch) -> None:
         time_last_n_calls_available = True
 
 
-def script_name_no_ext() -> str:
-    """
-    :return: Name of the Python script currently running, without the .py extension.
-    """
-    script_name = os.path.basename(sys.argv[0])
-    last_dot_idx = script_name.rfind('.')
-    if last_dot_idx >= 0:
-        script_name = script_name[:last_dot_idx]
-    return script_name
-
-
 def _find_violations_and_weigh(design: Design,
                                weigh_constraint_violations_equally: bool,
                                domain_changed: Optional[Domain] = None,
@@ -1209,6 +1294,7 @@ def _find_violations_and_weigh(design: Design,
     violation_set: _ViolationSet = _violations_of_constraints(
         design, never_increase_weight, domain_changed, violation_set_old, weigh_constraint_violations_equally)
     # violation_set: _ViolationSet = _violations_of_constraints(design) # uncomment to recompute all violations
+
     domain_to_weights: Dict[Domain, float] = {
         domain: sum(violation.constraint.weight for violation in domain_violations)
         for domain, domain_violations in violation_set.domain_to_violations.items()
