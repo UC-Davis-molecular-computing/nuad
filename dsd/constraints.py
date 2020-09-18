@@ -1277,6 +1277,36 @@ def remove_duplicates(lst: Iterable[T]) -> List[T]:
 
 
 @dataclass
+class ConstraintReport:
+    """
+    Represents a report on how well a design did on a constraint.
+    """
+
+    constraint: Optional['Constraint']
+    """
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available 
+    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be 
+    automatically inserted by the report generating code."""
+
+    content: str
+    """
+    Summary of constraint information on the :any:`Design`.
+    """
+
+    num_violations: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    violated the constraint.
+    """
+
+    num_checks: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    were checked against the constraint.
+    """
+
+
+@dataclass
 class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
     Represents a complete design, i.e., a set of DNA strands with domains, and constraints on sequences
@@ -1543,65 +1573,80 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         constraints.extend(self.design_constraints)
         return constraints
 
-    def summary_of_constraints(self) -> str:
+    def summary_of_constraints(self, report_only_violations: bool) -> str:
         summaries: List[str] = []
         # domain pool constraints
         for domain_pool, domains_in_pool in self.domain_pools.items():
             for domain_constraint in domain_pool.domain_constraints:
-                content = self.summary_of_domain_constraint(domain_constraint, domains_in_pool)
-                summary = add_header_to_content_of_summary(domain_constraint, content)
+                report = self.summary_of_domain_constraint(domain_constraint, report_only_violations,
+                                                           domains_in_pool)
+                report.constraint = domain_constraint
+                summary = add_header_to_content_of_summary(report)
                 summaries.append(summary)
 
         # strand group constraints
         for strand_group, strands_in_group in self.strand_groups.items():
             for strand_constraint in strand_group.strand_constraints:
-                content = self.summary_of_strand_constraint(strand_constraint, strands_in_group)
-                summary = add_header_to_content_of_summary(strand_constraint, content)
+                report = self.summary_of_strand_constraint(strand_constraint, report_only_violations,
+                                                           strands_in_group)
+                report.constraint = strand_constraint
+                summary = add_header_to_content_of_summary(report)
                 summaries.append(summary)
 
         # other constraints
         for constraint in self.all_constraints_outside_domain_pools_and_strand_groups():
-            summary = self.summary_of_constraint(constraint)
+            summary = self.summary_of_constraint(constraint, report_only_violations)
             summaries.append(summary)
 
         return '\n'.join(summaries)
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_constraint(self, constraint: 'Constraint') -> str:
+    def summary_of_constraint(self, constraint: 'Constraint', report_only_violations: bool) -> str:
         # summary of constraint only if not a DomainConstraint in a DomainPool
         # or a StrandConstraint in a StrandGroup
+        report: ConstraintReport
         content: str
+        num_violations: int
+        num_checks: int
         if isinstance(constraint, DomainConstraint):
-            content = self.summary_of_domain_constraint(constraint)
+            report = self.summary_of_domain_constraint(constraint, report_only_violations)
         elif isinstance(constraint, StrandConstraint):
-            content = self.summary_of_strand_constraint(constraint)
+            report = self.summary_of_strand_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DomainPairConstraint):
-            content = self.summary_of_domain_pair_constraint(constraint)
+            report = self.summary_of_domain_pair_constraint(constraint, report_only_violations)
         elif isinstance(constraint, StrandPairConstraint):
-            content = self.summary_of_strand_pair_constraint(constraint)
+            report = self.summary_of_strand_pair_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DomainsConstraint):
-            content = self.summary_of_domains_constraint(constraint)
+            report = self.summary_of_domains_constraint(constraint, report_only_violations)
         elif isinstance(constraint, StrandsConstraint):
-            content = self.summary_of_strands_constraint(constraint)
+            report = self.summary_of_strands_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DomainPairsConstraint):
-            content = self.summary_of_domain_pairs_constraint(constraint)
+            report = self.summary_of_domain_pairs_constraint(constraint, report_only_violations)
         elif isinstance(constraint, StrandPairsConstraint):
-            content = self.summary_of_strand_pairs_constraint(constraint)
+            report = self.summary_of_strand_pairs_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DesignConstraint):
-            content = self.summary_of_design_constraint(constraint)
+            report = self.summary_of_design_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
                       f'unrecognized type {type(constraint)}'
+            report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
 
-        if _no_summary_string in content:
-            content = _no_summary_string
+        report.constraint = constraint
 
-        summary = add_header_to_content_of_summary(constraint, content)
+        if _no_summary_string in report.content:
+            report = ConstraintReport(constraint=constraint, content=_no_summary_string,
+                                      num_violations=0, num_checks=0)
+
+        summary = add_header_to_content_of_summary(report)
         return summary
 
     # remove quotes when Python 3.6 support dropped
     def summary_of_domain_constraint(self, constraint: 'DomainConstraint',
-                                     domains_to_check: Optional[Iterable[Domain[DomainLabel]]] = None) -> str:
+                                     report_only_violations: bool,
+                                     domains_to_check: Optional[Iterable[Domain[DomainLabel]]] = None) \
+            -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
         if domains_to_check is None:
             domains_to_check = self.domains
         fixed_domains = [domain for domain in domains_to_check if domain.fixed]
@@ -1610,23 +1655,35 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         max_domain_name_length = max(len(domain.name) for domain in domains_to_check)
 
         if len(fixed_domains) > 0:
-            fixed_domains_lines_joined = self._summary_of_domains_in_domain_constraint(
-                constraint, fixed_domains, max_domain_name_length)
-            fixed_domains_summary = f'fixed domains\n{fixed_domains_lines_joined}\n'
+            fixed_report = self._summary_of_domains_in_domain_constraint(
+                constraint, report_only_violations, fixed_domains, max_domain_name_length)
+            fixed_domains_summary = f'fixed domains\n{fixed_report.content}\n'
+            num_violations += fixed_report.num_violations
+            num_checks += fixed_report.num_checks
         else:
             fixed_domains_summary = ''
 
-        unfixed_domains_lines_joined = self._summary_of_domains_in_domain_constraint(
-            constraint, unfixed_domains, max_domain_name_length)
+        unfixed_report = self._summary_of_domains_in_domain_constraint(
+            constraint, report_only_violations, unfixed_domains, max_domain_name_length)
+        num_violations += unfixed_report.num_violations
+        num_checks += unfixed_report.num_checks
 
         unfixed_domains_header = "unfixed domains\n" if len(fixed_domains) > 0 else ""
-        unfixed_domains_summary = f'{unfixed_domains_header}{unfixed_domains_lines_joined}'
-        return fixed_domains_summary + unfixed_domains_summary
+        unfixed_domains_summary = f'{unfixed_domains_header}{unfixed_report.content}'
+
+        content = fixed_domains_summary + unfixed_domains_summary
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # remove quotes when Python 3.6 support dropped
     def summary_of_strand_constraint(self, constraint: 'StrandConstraint',
+                                     report_only_violations: bool,
                                      strands_to_check: Optional[
-                                         Iterable[Strand[StrandLabel, DomainLabel]]] = None) -> str:
+                                         Iterable[Strand[StrandLabel, DomainLabel]]] = None) \
+            -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
         if strands_to_check is None:
             strands_to_check = self.strands
         fixed_strands = [strand for strand in strands_to_check if strand.fixed]
@@ -1635,116 +1692,190 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         max_strand_name_length = max(len(strand.name) for strand in strands_to_check)
 
         if len(fixed_strands) > 0:
-            fixed_strands_lines_joined = self._summary_of_strands_in_strand_constraint(
-                constraint, fixed_strands, max_strand_name_length)
-            fixed_strands_summary = f'fixed domains\n{fixed_strands_lines_joined}\n'
+            fixed_report = self._summary_of_strands_in_strand_constraint(
+                constraint, report_only_violations, fixed_strands, max_strand_name_length)
+            fixed_strands_summary = f'fixed domains\n{fixed_report.content}\n'
+            num_violations += fixed_report.num_violations
+            num_checks += fixed_report.num_checks
         else:
             fixed_strands_summary = ''
 
-        unfixed_strands_lines_joined = self._summary_of_strands_in_strand_constraint(
-            constraint, unfixed_strands, max_strand_name_length)
+        unfixed_report = self._summary_of_strands_in_strand_constraint(
+            constraint, report_only_violations, unfixed_strands, max_strand_name_length)
+        num_violations += unfixed_report.num_violations
+        num_checks += unfixed_report.num_checks
 
         unfixed_domains_header = "unfixed strands\n" if len(fixed_strands) > 0 else ""
-        unfixed_strands_summary = f'{unfixed_domains_header}{unfixed_strands_lines_joined}'
-        return fixed_strands_summary + unfixed_strands_summary
+        unfixed_strands_summary = f'{unfixed_domains_header}{unfixed_report.content}'
+
+        content = fixed_strands_summary + unfixed_strands_summary
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # this function reuses code between summarizing fixed and unfixed domains
     @staticmethod
     def _summary_of_domains_in_domain_constraint(constraint: 'DomainConstraint',
+                                                 report_only_violations: bool,
                                                  domains: Iterable[Domain[DomainLabel]],
-                                                 max_domain_name_length: int) -> str:
-        domains_lines: List[str] = []
+                                                 max_domain_name_length: int) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
         for fixed_domain in domains:
-            summary = constraint.generate_summary(fixed_domain)
+            num_checks += 1
+            summary = constraint.generate_summary(fixed_domain, False)
             passed = constraint(fixed_domain) <= 0.0
-            line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
-                   f'{summary} ' \
-                   f'{"" if passed else " **violation**"}'
-            domains_lines.append(line)
-        return '\n'.join(domains_lines)
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
+                lines.append(line)
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # this function reuses code between summarizing fixed and unfixed strands
     @staticmethod
     def _summary_of_strands_in_strand_constraint(constraint: 'StrandConstraint',
+                                                 report_only_violations: bool,
                                                  strands: Iterable[Strand[StrandLabel, DomainLabel]],
-                                                 max_strand_name_length: int) -> str:
-        strands_lines: List[str] = []
-        for fixed_strand in strands:
-            summary = constraint.generate_summary(fixed_strand)
-            passed = constraint(fixed_strand) <= 0.0
-            line = f'strand {fixed_strand.name:{max_strand_name_length}}: ' \
-                   f'{summary} ' \
-                   f'{"" if passed else " **violation**"}'
-            strands_lines.append(line)
-        return '\n'.join(strands_lines)
+                                                 max_strand_name_length: int) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
+        for strand in strands:
+            num_checks += 1
+            summary = constraint.generate_summary(strand, False)
+            passed = constraint(strand) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = f'strand {strand.name:{max_strand_name_length}}: ' \
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
+                lines.append(line)
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pair_constraint(self, constraint: 'DomainPairConstraint') -> str:
+    def summary_of_domain_pair_constraint(self, constraint: 'DomainPairConstraint',
+                                          report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
 
         max_domain_name_length = max(len(domain.name) for domain in _flatten(pairs_to_check))
 
-        lines = [f'domains '
-                 f'{domain1.name:{max_domain_name_length}}, '
-                 f'{domain2.name:{max_domain_name_length}}: '
-                 f'{constraint.generate_summary((domain1, domain2))}'
-                 f'{"" if constraint((domain1, domain2)) <= 0.0 else "  **violation**"}'
-                 for domain1, domain2 in pairs_to_check]
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
+        for domain1, domain2 in pairs_to_check:
+            num_checks += 1
+            summary = constraint.generate_summary((domain1, domain2), False)
+            passed = constraint((domain1, domain2)) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'domains '
+                        f'{domain1.name:{max_domain_name_length}}, '
+                        f'{domain2.name:{max_domain_name_length}}: '
+                        f'{summary}'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
 
-        lines_joined = '\n'.join(lines)
-        summary = f'domain pairs\n{lines_joined}'
-        return summary
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pair_constraint(self, constraint: 'StrandPairConstraint') -> str:
+    def summary_of_strand_pair_constraint(self, constraint: 'StrandPairConstraint',
+                                          report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
 
         max_strand_name_length = max(len(strand.name) for strand in _flatten(pairs_to_check))
 
-        lines = [f'strands '
-                 f'{strand1.name:{max_strand_name_length}}, '
-                 f'{strand2.name:{max_strand_name_length}}: '
-                 f'{constraint.generate_summary((strand1, strand2))}'
-                 f'{"" if constraint((strand1, strand2)) <= 0.0 else "  **violation**"}'
-                 for strand1, strand2 in pairs_to_check]
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
+        for strand1, strand2 in pairs_to_check:
+            num_checks += 1
+            summary = constraint.generate_summary((strand1, strand2), False)
+            passed = constraint((strand1, strand2)) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'strands '
+                        f'{strand1.name:{max_strand_name_length}}, '
+                        f'{strand2.name:{max_strand_name_length}}: '
+                        f'{summary}'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
 
-        lines_joined = '\n'.join(lines)
-        summary = lines_joined  # f'strand pairs\n{lines_joined}'
-        return summary
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_domains_constraint(self, constraint: 'DomainsConstraint') -> str:
+    def summary_of_domains_constraint(self, constraint: 'DomainsConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
         # summary = f'domains\n{constraint.generate_summary(self.domains)}'
-        summary = constraint.generate_summary(self.domains)
-        return summary
+        report = constraint.generate_summary(self.domains, report_only_violations)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_strands_constraint(self, constraint: 'StrandsConstraint') -> str:
+    def summary_of_strands_constraint(self, constraint: 'StrandsConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
         # summary = f'strands\n{constraint.generate_summary(self.strands)}'
-        summary = constraint.generate_summary(self.strands)
-        return summary
+        report = constraint.generate_summary(self.strands, report_only_violations)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pairs_constraint(self, constraint: 'DomainPairsConstraint') -> str:
+    def summary_of_domain_pairs_constraint(self, constraint: 'DomainPairsConstraint',
+                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
         # summary = f'domain pairs\n{constraint.generate_summary(pairs_to_check)}'
-        summary = constraint.generate_summary(pairs_to_check) if len(pairs_to_check) > 0 \
-            else 'constraint.pairs is empty; nothing to report'
-        return summary
+        report = constraint.generate_summary(pairs_to_check, report_only_violations) \
+            if len(pairs_to_check) > 0 \
+            else ConstraintReport(constraint=constraint,
+                                  content='constraint.pairs is empty; nothing to report',
+                                  num_violations=0, num_checks=0)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pairs_constraint(self, constraint: 'StrandPairsConstraint') -> str:
+    def summary_of_strand_pairs_constraint(self, constraint: 'StrandPairsConstraint',
+                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
-        # summary = f'strand pairs\n{constraint.generate_summary(pairs_to_check)}'
-        summary = constraint.generate_summary(pairs_to_check) if len(pairs_to_check) > 0 \
-            else 'constraint.pairs is empty; nothing to report'
-        return summary
+        report = constraint.generate_summary(pairs_to_check, report_only_violations) \
+            if len(pairs_to_check) > 0 \
+            else ConstraintReport(constraint=constraint,
+                                  content='constraint.pairs is empty; nothing to report',
+                                  num_violations=0, num_checks=0)
+        return report
 
     # remove quotes when Python 3.6 support dropped
-    def summary_of_design_constraint(self, constraint: 'DesignConstraint') -> str:
+    def summary_of_design_constraint(self, constraint: 'DesignConstraint',
+                                     report_only_violations: bool) -> ConstraintReport:
         # summary = f'design\n{constraint.generate_summary(self)}'
-        summary = constraint.generate_summary(self)
-        return summary
+        report = constraint.generate_summary(self, report_only_violations)
+        return report
 
     # remove quotes when Python 3.6 support dropped
     @staticmethod
@@ -1985,12 +2116,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
 
 # remove quotes when Python 3.6 support dropped
-def add_header_to_content_of_summary(constraint: 'Constraint', content: str) -> str:
-    indented_content = textwrap.indent(content, '  ')
+def add_header_to_content_of_summary(report: ConstraintReport) -> str:
+    indented_content = textwrap.indent(report.content, '  ')
     delim = '*' * 80
     summary = f'''
 {delim}
-* {constraint.description}
+* {report.constraint.description}
+* checks:     {report.num_checks}
+* violations: {report.num_violations}  
 {indented_content}'''
     return summary
 
@@ -2034,18 +2167,23 @@ class Constraint(ABC, Generic[DesignPart]):
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
     @abstractmethod
-    def generate_summary(self, design_part: DesignPart) -> str:
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> ConstraintReport:
         """
         Method that helps to give a summary of how well parts of the :any:`Design` are performing in
         satisfying this constraint. For example, useful for generating a report after assigning sequences
         to a :any:`Design`.
 
-        :param design_part: part of :any:`Design` that this :any:`Constraint` references
-        :return: summary of how well `design_part` "performs" for :any:`Constraint`.
-                 For example, a :any:`StrandConstraint` checking the partition function energy of a single
-                 :any:`Strand` may return a string such as "strand secondary structure: -2.3 kcal/mol".
-                 A :any:`StrandPairsConstraint` checking all pairs of :any:`Strand`'s may return a longer
-                 string reporting on every pair.
+        :param design_part:
+            part of :any:`Design` that this :any:`Constraint` references
+        :param report_only_violations:
+            Whether to report only violations of constraints, or all evaluations of constraints, including
+            those that passed.
+        :return:
+            :any:`ConstraintReport` summarizing of how well `design_part` "performs" for :any:`Constraint`.
+            For example, a :any:`StrandConstraint` checking the partition function energy of a single
+            :any:`Strand` may return a string such as "strand secondary structure: -2.3 kcal/mol".
+            A :any:`StrandPairsConstraint` checking all pairs of :any:`Strand`'s may return a longer
+            string reporting on every pair.
         """
         pass
 
@@ -2072,7 +2210,7 @@ class DomainConstraint(Constraint[Domain]):
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domain)
 
-    def generate_summary(self, domain: Domain) -> str:
+    def generate_summary(self, domain: Domain, report_only_violations: bool) -> str:
         summary_callback = cast(Callable[[Domain], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(domain)
@@ -2095,14 +2233,10 @@ class StrandConstraint(Constraint[Strand]):
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strand)
 
-    def generate_summary(self, strand: Strand) -> str:
+    def generate_summary(self, strand: Strand, report_only_violations: bool) -> str:
         summary_callback = cast(Callable[[Strand], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand)
-
-    # def __hash__(self) -> int:
-    #     print('hash of StrandConstraint')
-    #     return super().__hash__()
 
 
 @dataclass(frozen=True, eq=False)
@@ -2112,7 +2246,7 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):
     List of pairs of :any:`Domain`'s to check; if not specified, all pairs in :any:`Design` are checked.
     """
 
-    def generate_summary(self, design_part: DesignPart) -> str:
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
@@ -2123,7 +2257,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
     List of pairs of :any:`Strand`'s to check; if not specified, all pairs in :any:`Design` are checked.
     """
 
-    def generate_summary(self, design_part: DesignPart) -> str:
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
@@ -2147,7 +2281,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domain1, domain2)
 
-    def generate_summary(self, domain_pair: Tuple[Domain, Domain]) -> str:
+    def generate_summary(self, domain_pair: Tuple[Domain, Domain], report_only_violations: bool) -> str:
         domain1, domain2 = domain_pair
         summary_callback = cast(Callable[[Domain, Domain], str],  # noqa
                                 self.summary)  # type: ignore
@@ -2175,7 +2309,7 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strand1, strand2)
 
-    def generate_summary(self, strand_pair: Tuple[Strand, Strand]) -> str:
+    def generate_summary(self, strand_pair: Tuple[Strand, Strand], report_only_violations: bool) -> str:
         strand1, strand2 = strand_pair
         summary_callback = cast(Callable[[Strand, Strand], str],  # noqa
                                 self.summary)  # type: ignore
@@ -2194,7 +2328,8 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
-    summary: Callable[[Iterable[Tuple[Domain, Domain]]], str] = lambda _: _no_summary_string
+    summary: Callable[[Iterable[Tuple[Domain, Domain]], bool], ConstraintReport] = \
+        lambda _: _no_summary_string
 
     def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[Set[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
@@ -2202,10 +2337,11 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domain_pairs)
 
-    def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) -> str:
-        summary_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]], str],  # noqa
+    def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]],
+                         report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
-        return summary_callback(domain_pairs)
+        return summary_callback(domain_pairs, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2220,7 +2356,8 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
-    summary: Callable[[Iterable[Tuple[Strand, Strand]]], str] = lambda _: _no_summary_string
+    summary: Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport] = \
+        lambda _: _no_summary_string
 
     def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[Set[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
@@ -2228,10 +2365,11 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strand_pairs)
 
-    def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) -> str:
-        summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]], str],  # noqa
+    def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]],
+                         report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
-        return summary_callback(strand_pairs)
+        return summary_callback(strand_pairs, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2255,17 +2393,17 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
 
     evaluate: Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]] = lambda _: []
 
-    summary: Callable[[Iterable[Domain]], str] = lambda _: _no_summary_string
+    summary: Callable[[Iterable[Domain], bool], ConstraintReport] = lambda _: _no_summary_string
 
     def __call__(self, domains: Iterable[Domain]) -> List[Tuple[Set[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domains)
 
-    def generate_summary(self, domains: Iterable[Domain]) -> str:
-        summary_callback = cast(Callable[[Iterable[Domain]], str],  # noqa
+    def generate_summary(self, domains: Iterable[Domain], report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Domain], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
-        return summary_callback(domains)
+        return summary_callback(domains, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2289,17 +2427,17 @@ class StrandsConstraint(Constraint[Iterable[Strand]]):
 
     evaluate: Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]] = lambda _: []
 
-    summary: Callable[[Iterable[Strand]], str] = lambda _: _no_summary_string
+    summary: Callable[[Iterable[Strand], bool], ConstraintReport] = lambda _: _no_summary_string
 
     def __call__(self, strands: Iterable[Strand]) -> List[Tuple[Set[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strands)
 
-    def generate_summary(self, strands: Iterable[Strand]) -> str:
-        summary_callback = cast(Callable[[Iterable[Strand]], str],  # noqa
+    def generate_summary(self, strands: Iterable[Strand], report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Strand], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
-        return summary_callback(strands)
+        return summary_callback(strands, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2323,17 +2461,17 @@ class DesignConstraint(Constraint[Design]):
 
     evaluate: Callable[[Design, Optional[Domain]], List[Tuple[Set[Domain], float]]] = lambda _, __: []
 
-    summary: Callable[[Design], str] = lambda _: _no_summary_string
+    summary: Callable[[Design, bool], ConstraintReport] = lambda _: _no_summary_string
 
     def __call__(self, design: Design, domain_changed: Optional[Domain]) -> List[Tuple[Set[Domain], float]]:
         eval_callback = cast(Callable[[Design, Optional[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
                              self.evaluate)  # type: ignore
         return eval_callback(design, domain_changed)
 
-    def generate_summary(self, design: Design) -> str:
-        summary_callback = cast(Callable[[Design], str],  # noqa
+    def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Design, bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
-        return summary_callback(design)
+        return summary_callback(design, report_only_violations)
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:
@@ -2521,7 +2659,7 @@ def nupack_domain_pair_constraint(
 
     def evaluate(domain1: Domain, domain2: Domain) -> float:
         threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
-        seq_pairs, name_pairs = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+        seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
 
         energies: List[float]
         if threaded4:
@@ -2546,7 +2684,7 @@ def nupack_domain_pair_constraint(
         return max(0.0, max_excess)
 
     def summary(domain1: Domain, domain2: Domain) -> str:
-        seq_pairs, domain_name_pairs = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
         energies = []
         for seq1, seq2 in seq_pairs:
             energy = dv.binding(seq1, seq2, temperature, negate)
@@ -2808,19 +2946,36 @@ def rna_duplex_strand_pairs_constraint(
 
         return domain_sets_weights
 
-    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> str:
+    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
+                report_only_violations: bool) -> ConstraintReport:
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
         energies = calculate_energies(sequence_pairs)
         max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
+
         strand_pairs_energies = zip(strand_pairs, energies)
 
-        lines = [f'strands '
-                 f'{strand1.name:{max_name_length}}, '
-                 f'{strand2.name:{max_name_length}}: '
-                 f'{energy:6.2f} kcal/mol'
-                 f'{"  **violation**" if energy_excess(energy, threshold, negate, strand1, strand2) > 0.0 else ""}'
-                 for (strand1, strand2), energy in strand_pairs_energies]
-        return '\n'.join(lines)
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (strand1, strand2), energy in strand_pairs_energies:
+            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'strands '
+                        f'{strand1.name:{max_name_length}}, '
+                        f'{strand2.name:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=None, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     pairs_tuple = None
     if pairs is not None:
@@ -2841,6 +2996,20 @@ def energy_excess(energy: float, threshold: Union[float, Dict[Tuple[StrandGroup,
         threshold_value = threshold
     elif isinstance(threshold, dict):
         threshold_value = threshold[(strand1.group, strand2.group)]
+    excess = threshold_value - energy
+    if negate:
+        excess = -excess
+    return excess
+
+
+def energy_excess_domains(energy: float,
+                          threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
+                          negate: bool, domain1: Domain, domain2: Domain) -> float:
+    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
+    if isinstance(threshold, Number):
+        threshold_value = threshold
+    elif isinstance(threshold, dict):
+        threshold_value = threshold[(domain1.pool, domain2.pool)]
     excess = threshold_value - energy
     if negate:
         excess = -excess
@@ -2946,19 +3115,33 @@ def rna_cofold_strand_pairs_constraint(
 
         return domain_sets_weights
 
-    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> str:
+    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
+                report_only_violations: bool) -> ConstraintReport:
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
         energies = calculate_energies(sequence_pairs)
         max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
         strand_pairs_energies = zip(strand_pairs, energies)
 
-        lines = [f'strands '
-                 f'{strand1.name:{max_name_length}}, '
-                 f'{strand2.name:{max_name_length}}: '
-                 f'{energy:6.2f} kcal/mol'
-                 f'{"  **violation**" if energy_excess(energy, threshold, negate, strand1, strand2) else ""}'
-                 for (strand1, strand2), energy in strand_pairs_energies]
-        return '\n'.join(lines)
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (strand1, strand2), energy in strand_pairs_energies:
+            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'strands '
+                        f'{strand1.name:{max_name_length}}, '
+                        f'{strand2.name:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        return ConstraintReport(constraint=None, content='\n'.join(lines),
+                                num_violations=num_violations, num_checks=num_checks)
 
     pairs_tuple = None
     if pairs is not None:
@@ -2973,9 +3156,20 @@ def rna_cofold_strand_pairs_constraint(
 
 
 def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
-        -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+        -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
+    """
+    :param domain_pairs:
+        Domain pairs.
+    :return:
+        pair consisting of two lists, each of length 4 times as long as `domain_pairs`.
+        Each pair in `domain_pairs` is associated to the 4 combinations of WC complementing (or not)
+        the sequences of each Domain.
+        - sequence_pairs: the sequences (appropriated complemented or not)
+        - names: the names (appropriately *'d or not)
+    """
     sequence_pairs: List[Tuple[str, str]] = []
     names: List[Tuple[str, str]] = []
+    domains: List[Tuple[Domain, Domain]] = []
     for d1, d2 in domain_pairs:
         for starred1, starred2 in itertools.product([False, True], repeat=2):
             seq1 = d1.get_sequence(starred1)
@@ -2984,7 +3178,8 @@ def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Dom
             name2 = d2.get_name(starred2)
             sequence_pairs.append((seq1, seq2))
             names.append((name1, name2))
-    return sequence_pairs, names
+            domains.append((d1, d2))
+    return sequence_pairs, names, domains
 
 
 def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
@@ -3021,7 +3216,7 @@ def rna_duplex_domain_pairs_constraint(
     def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[Set[Domain], float]]:
         if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
             raise ValueError('cannot evaluate domains unless they have sequences assigned')
-        sequence_pairs, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
+        sequence_pairs, _, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
         domain_sets_weights: List[Tuple[Set[Domain], float]] = []
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
         for (domain1, domain2), energy in zip(domain_pairs, energies):
@@ -3033,13 +3228,34 @@ def rna_duplex_domain_pairs_constraint(
                 domain_sets_weights.append(domain_set_weights)
         return domain_sets_weights
 
-    def summary(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> str:
-        sequence_pairs, domain_name_pairs = _all_pairs_domain_sequences_and_complements(domain_pairs)
+    def summary(domain_pairs: Iterable[Tuple[Domain, Domain]],
+                report_only_violations: bool) -> ConstraintReport:
+        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_and_complements(domain_pairs)
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
-        lines = [f'domains {name1:{max_name_length}}, {name2:{max_name_length}}: {energy:6.2f} kcal/mol'
-                 for (name1, name2), energy in zip(domain_name_pairs, energies)]
-        return '\n'.join(lines)
+
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (domain1, domain2), (name1, name2), energy in zip(domains, domain_name_pairs, energies):
+            passed = energy_excess_domains(energy, threshold, negate, domain1, domain2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'domains '
+                        f'{name1:{max_name_length}}, '
+                        f'{name2:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=None, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     pairs_tuple = None
     if pairs is not None:
@@ -3051,26 +3267,3 @@ def rna_duplex_domain_pairs_constraint(
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
-
-# def domain_pair_constraint_to_all_pairs(
-#         domain_pair_constraint: DomainPairConstraint,
-#         description: str,
-#         short_description: str = '',
-#         weight: float = 1.0) -> DomainsConstraint:
-#     """
-#     :param domain_pair_constraint: a :any:`DomainPairConstraint`
-#     :param description: description of constraint
-#     :param short_description: short description of constraint suitable for logging to stdout
-#     :param weight: weight to assign this constraint
-#     :return: a :any:`DomainsConstraint` (which takes as input an Iterable of :any:`Domain`'s),
-#              that applies `domain_pair_constraint` to all pairs of :any:`Domain`'s in the iterable
-#     """
-#
-#     def all_pairs_check(domains: Iterable[Domain]) -> List[Set[Domain]]:
-#         violators: List[Set[Domain]] = []
-#         for domain1, domain2 in all_pairs(domains):
-#             if not domain_pair_constraint(domain1, domain2):
-#                 violators.append({domain1, domain2})
-#         return violators
-#
-#     return DomainsConstraint(description, short_description, weight, all_pairs_check)

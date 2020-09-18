@@ -208,7 +208,8 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
         logger.warning('error from RNAduplex: ', error)
         if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
             raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
-                             'is a different error that I don\'t know how to handled. Exiting.')
+                             'is a different error that I don\'t know how to handle. Exiting...'
+                             f'\nerror:\n{error}')
 
     dg_list: List[float] = []
     lines = output.split('\n')

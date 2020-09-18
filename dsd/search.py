@@ -103,7 +103,8 @@ class _ViolationSet:
     all_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
     """Set of all :any:`Violation`'s."""
 
-    domain_to_violations: Dict[Domain, Set[_Violation]] = field(default_factory=lambda: defaultdict(set))
+    domain_to_violations: Dict[Domain, OrderedSet[_Violation]] = field(
+        default_factory=lambda: defaultdict(OrderedSet))
     """Dict mapping each :any:`Domain` to the set of all :any:`Violation`'s for which it is blamed."""
 
     def update(self, new_violations: Dict[Domain, OrderedSet[_Violation]]) -> None:
@@ -130,9 +131,9 @@ class _ViolationSet:
 
         :return: A deep-ish copy of this :any:`ViolationSet`.
         """
-        domain_to_violations_deep_copy = defaultdict(set, self.domain_to_violations)
+        domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
         for domain, violations in domain_to_violations_deep_copy.items():
-            domain_to_violations_deep_copy[domain] = set(violations)
+            domain_to_violations_deep_copy[domain] = OrderedSet(violations)
         return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy)
 
     def remove_violations_of_domain(self, domain: Domain) -> None:
@@ -154,12 +155,18 @@ class _ViolationSet:
         """
         return sum(violation.weight for violation in self.all_violations)
 
+    def num_violations(self) -> float:
+        """
+        :return: Total number of violations.
+        """
+        return len(self.all_violations)
+
 
 def _violations_of_constraints(design: Design,
                                never_increase_weight: bool,
                                domain_changed: Optional[Domain],
                                violation_set_old: Optional[_ViolationSet],
-                               weigh_constraint_violations_equally: bool) -> _ViolationSet:
+                               weigh_violations_equally: bool) -> _ViolationSet:
     """
     :param design:
         The :any:`Design` for which to find DNA sequences.
@@ -175,6 +182,8 @@ def _violations_of_constraints(design: Design,
         solution. In later stages of the search, when the optimal solution so far has very few violated
         constraints, this vastly speeds up the search by allowing most of the constraint checking to be
         skipping for most choices of DNA sequences to `domain_changed`.
+    :param weigh_violations_equally:
+        See other functions with this parameter.
     :return:
         dict mapping each :any:`Domain` to the list of constraints it violated
     """
@@ -202,7 +211,7 @@ def _violations_of_constraints(design: Design,
             domains = domains_in_pool if domain_changed is None else [domain_changed]
             domain_violations_pool = _violations_of_domain_constraint(
                 domains=domains, constraint=domain_constraint_pool,
-                weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+                weigh_constraint_violations_equally=weigh_violations_equally)
             violation_set.update(domain_violations_pool)
 
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -216,7 +225,7 @@ def _violations_of_constraints(design: Design,
             strands = _strands_containing_domain(domain_changed, strands)
             strand_violations_pool = _violations_of_strand_constraint(
                 strands=strands, constraint=strand_constraint_pool, current_weight_gap=current_weight_gap,
-                weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+                weigh_constraint_violations_equally=weigh_violations_equally)
             violation_set.update(strand_violations_pool)
 
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -231,7 +240,7 @@ def _violations_of_constraints(design: Design,
             domains_to_check = [domain_changed]
         domain_violations = _violations_of_domain_constraint(
             domains=domains_to_check, constraint=domain_constraint,
-            weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+            weigh_constraint_violations_equally=weigh_violations_equally)
         violation_set.update(domain_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -244,7 +253,7 @@ def _violations_of_constraints(design: Design,
         strands = _strands_containing_domain(domain_changed, design.strands)
         strand_violations = _violations_of_strand_constraint(
             strands=strands, constraint=strand_constraint, current_weight_gap=current_weight_gap,
-            weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+            weigh_constraint_violations_equally=weigh_violations_equally)
         violation_set.update(strand_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -257,7 +266,7 @@ def _violations_of_constraints(design: Design,
         domain_pair_violations = _violations_of_domain_pair_constraint(
             domains=design.domains, constraint=domain_pair_constraint, domain_changed=domain_changed,
             current_weight_gap=current_weight_gap,
-            weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+            weigh_constraint_violations_equally=weigh_violations_equally)
         violation_set.update(domain_pair_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -270,7 +279,7 @@ def _violations_of_constraints(design: Design,
         strand_pair_violations = _violations_of_strand_pair_constraint(
             strands=design.strands, constraint=strand_pair_constraint, domain_changed=domain_changed,
             current_weight_gap=current_weight_gap,
-            weigh_constraint_violations_equally=weigh_constraint_violations_equally)
+            weigh_constraint_violations_equally=weigh_violations_equally)
         violation_set.update(strand_pair_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -287,7 +296,7 @@ def _violations_of_constraints(design: Design,
 
         sets_of_violating_domains_weights = domains_constraint(domains)
         domains_violations = _convert_sets_of_violating_domains_to_violations(
-            domains_constraint, sets_of_violating_domains_weights, weigh_constraint_violations_equally)
+            domains_constraint, sets_of_violating_domains_weights, weigh_violations_equally)
         violation_set.update(domains_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -305,7 +314,7 @@ def _violations_of_constraints(design: Design,
         if len(strands) > 0:
             sets_of_violating_domains_weights = strands_constraint(strands)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
-                strands_constraint, sets_of_violating_domains_weights, weigh_constraint_violations_equally)
+                strands_constraint, sets_of_violating_domains_weights, weigh_violations_equally)
             violation_set.update(domains_violations)
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
                 return violation_set
@@ -324,7 +333,7 @@ def _violations_of_constraints(design: Design,
             sets_of_violating_domains_weights = domain_pairs_constraint(domain_pairs_to_check)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
                 domain_pairs_constraint, sets_of_violating_domains_weights,
-                weigh_constraint_violations_equally)
+                weigh_violations_equally)
             violation_set.update(domains_violations)
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
                 return violation_set
@@ -343,7 +352,7 @@ def _violations_of_constraints(design: Design,
             sets_of_violating_domains_weights = strand_pairs_constraint(strand_pairs_to_check)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
                 strand_pairs_constraint, sets_of_violating_domains_weights,
-                weigh_constraint_violations_equally)
+                weigh_violations_equally)
             violation_set.update(domains_violations)
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
                 return violation_set
@@ -353,7 +362,7 @@ def _violations_of_constraints(design: Design,
     for design_constraint in design.design_constraints:
         sets_of_violating_domains_weights = design_constraint(design, domain_changed)
         domains_violations = _convert_sets_of_violating_domains_to_violations(
-            design_constraint, sets_of_violating_domains_weights, weigh_constraint_violations_equally)
+            design_constraint, sets_of_violating_domains_weights, weigh_violations_equally)
         violation_set.update(domains_violations)
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
             return violation_set
@@ -778,16 +787,17 @@ def _write_dsd_design_json(design: Design, directory_intermediate: str, director
 
 
 def _write_report(design: Design, directory_intermediate: str, directory_final: str,
-                  filename_with_iteration: str, filename_final: str) -> None:
-    sequences = _sequences_fragile_format_output_to_file(design, include_group=True)
-    sequences_content = f'''\
-Design
-======
-{sequences}
+                  filename_with_iteration: str, filename_final: str,
+                  report_only_violations: bool) -> None:
+    #     sequences = _sequences_fragile_format_output_to_file(design, include_group=True)
+    #     sequences_content = f'''\
+    # Design
+    # ======
+    # {sequences}
+    #
+    # '''
 
-'''
-
-    report_str = design.summary_of_constraints()
+    report_str = design.summary_of_constraints(report_only_violations)
     report = f'''\
 Report on constraints
 =====================
@@ -798,7 +808,7 @@ Report on constraints
                                    [filename_with_iteration, filename_final]):
         path = os.path.join(directory, filename)
         with open(path, 'w') as file:
-            file.write(sequences_content)
+            # file.write(sequences_content)
             file.write(report)
 
 
@@ -817,7 +827,8 @@ call search_for_dna_sequences with the parameter restart=True.
         print(warning)
         done = False
         while not done:
-            ans = input('Are you sure you wish to proceed? [n]/y ')
+            ans = input(f'Are you sure you wish to proceed with deleting the contents of '
+                        f'{directory}? [n]/y ')
             ans = ans.strip().lower()
             if ans in ['n', '']:
                 print('No problem! Exiting...')
@@ -847,6 +858,9 @@ def search_for_dna_sequences(*, design: dc.Design,
                              on_improved_design: Callable[[int], None] = lambda _: None,
                              restart: bool = False,
                              force_overwrite: bool = False,
+                             debug_log_file: bool = False,
+                             info_log_file: bool = False,
+                             report_only_violations: bool = True,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -960,6 +974,15 @@ def search_for_dna_sequences(*, design: dc.Design,
         If `restart` is False and there are files/subdirectories in `out_directory`,
         then the user will be prompted to confirm that they want to delete these, UNLESS force_overwrite
         is True.
+    :param debug_log_file:
+        If True, a very detailed log of events is written to the file debug.log in the directory
+        `out_directory`. If run for several hours, this file can grow to hundreds of megabytes.
+    :param info_log_file:
+        By default, the text written to the screen through logger.info (on the logger instance used in
+        dsd.constraints) is written to the file log_info.log in the directory `out_directory`.
+    :param report_only_violations:
+        If True, does not give report on each constraint that was satisfied; only reports violations
+        and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     """
     if out_directory is None:
         out_directory = default_output_directory()
@@ -984,12 +1007,15 @@ def search_for_dna_sequences(*, design: dc.Design,
         if not os.path.exists(subdir):
             os.makedirs(subdir)
 
-    debug_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_debug.log'))
-    info_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_info.log'))
-    debug_file_handler.setLevel(logging.DEBUG)
-    info_file_handler.setLevel(logging.INFO)
-    dc.logger.addHandler(debug_file_handler)
-    dc.logger.addHandler(info_file_handler)
+    if debug_log_file:
+        debug_file_handler = logging.FileHandler(os.path.join(out_directory, 'Log_debug.log'))
+        debug_file_handler.setLevel(logging.DEBUG)
+        dc.logger.addHandler(debug_file_handler)
+
+    if info_log_file:
+        info_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_info.log'))
+        info_file_handler.setLevel(logging.INFO)
+        dc.logger.addHandler(info_file_handler)
 
     if random_seed is not None:
         rng = np.random.default_rng(random_seed)
@@ -1018,7 +1044,7 @@ def search_for_dna_sequences(*, design: dc.Design,
             num_new_optimal = _restart_from_directory(out_directory, design, dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
-            design=design, weigh_constraint_violations_equally=weigh_violations_equally,
+            design=design, weigh_violations_equally=weigh_violations_equally,
             never_increase_weight=never_increase_weight)
 
         if not restart:
@@ -1032,7 +1058,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                                       sequence_directory=sequence_directory,
                                       dsd_design_directory=dsd_design_directory,
                                       report_filename_no_ext=report_filename_no_ext,
-                                      sequences_filename_no_ext=sequences_filename_no_ext)
+                                      sequences_filename_no_ext=sequences_filename_no_ext,
+                                      report_only_violations=report_only_violations)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
@@ -1063,7 +1090,7 @@ def search_for_dna_sequences(*, design: dc.Design,
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
-                design=design, weigh_constraint_violations_equally=weigh_violations_equally,
+                design=design, weigh_violations_equally=weigh_violations_equally,
                 domain_changed=domain_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight)
 
@@ -1110,7 +1137,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                                               sequence_directory=sequence_directory,
                                               dsd_design_directory=dsd_design_directory,
                                               report_filename_no_ext=report_filename_no_ext,
-                                              sequences_filename_no_ext=sequences_filename_no_ext)
+                                              sequences_filename_no_ext=sequences_filename_no_ext,
+                                              report_only_violations=report_only_violations)
 
             iteration += 1
 
@@ -1124,8 +1152,11 @@ def search_for_dna_sequences(*, design: dc.Design,
         _thread_pool.close()  # noqa
         _thread_pool.terminate()
 
-    dc.logger.removeHandler(debug_file_handler)
-    dc.logger.removeHandler(info_file_handler)
+    if debug_log_file:
+        dc.logger.removeHandler(debug_file_handler)  # noqa
+
+    if info_log_file:
+        dc.logger.removeHandler(info_file_handler)  # noqa
 
 
 def script_name_no_ext() -> str:
@@ -1197,7 +1228,8 @@ def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -
 def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
                               design_filename_no_ext: str, directory_output_files: str,
                               report_directory: str, sequence_directory: str, dsd_design_directory: str,
-                              report_filename_no_ext: str, sequences_filename_no_ext: str):
+                              report_filename_no_ext: str, sequences_filename_no_ext: str,
+                              report_only_violations: bool):
     str_num_new_optimal_with_leading_zeros = '0' * (
             2 - int(math.log(max(num_new_optimal, 1), 10))) + str(num_new_optimal)
     _write_dsd_design_json(design,
@@ -1218,7 +1250,8 @@ def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_
                       directory_final=directory_output_files,
                       # filename_with_iteration=f'{report_filename_no_ext}-{num_new_optimal}.txt',
                       filename_with_iteration=f'{report_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
-                      filename_final=f'current-best-{report_filename_no_ext}.txt')
+                      filename_final=f'current-best-{report_filename_no_ext}.txt',
+                      report_only_violations=report_only_violations)
 
 
 def _pfunc_killall() -> None:
@@ -1266,7 +1299,7 @@ def _log_time(stopwatch: Stopwatch) -> None:
 
 
 def _find_violations_and_weigh(design: Design,
-                               weigh_constraint_violations_equally: bool,
+                               weigh_violations_equally: bool,
                                domain_changed: Optional[Domain] = None,
                                violation_set_old: Optional[_ViolationSet] = None,
                                never_increase_weight: bool = False) \
@@ -1292,7 +1325,7 @@ def _find_violations_and_weigh(design: Design,
     stopwatch = Stopwatch()
 
     violation_set: _ViolationSet = _violations_of_constraints(
-        design, never_increase_weight, domain_changed, violation_set_old, weigh_constraint_violations_equally)
+        design, never_increase_weight, domain_changed, violation_set_old, weigh_violations_equally)
     # violation_set: _ViolationSet = _violations_of_constraints(design) # uncomment to recompute all violations
 
     domain_to_weights: Dict[Domain, float] = {
@@ -1319,9 +1352,6 @@ def _log_constraint_summary(*, design: Design,
                             violation_set_new: _ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    total_count_new = len(violation_set_new.all_violations)
-    total_count_opt = len(violation_set_opt.all_violations)
-
     all_constraints = design.all_constraints()
     all_violation_descriptions = [
         violation.constraint.short_description for violation in violation_set_new.all_violations]
@@ -1335,8 +1365,10 @@ def _log_constraint_summary(*, design: Design,
     logger.info('-' * header_width + '\n' + header)
 
     weight_str = f'{iteration:9}|{num_new_optimal:8}|' \
-                 f'{violation_set_opt.total_weight():10.1f}|{violation_set_new.total_weight():10.1f}|' \
-                 f'{total_count_opt:9}|{total_count_new:9}||'
+                 f'{violation_set_opt.total_weight():10.1f}|' \
+                 f'{violation_set_new.total_weight():10.1f}|' \
+                 f'{violation_set_opt.num_violations():9}|' \
+                 f'{violation_set_new.num_violations():9}||'
     all_constraints_str = '|'.join(
         f'{violation_description_counts[constraint.short_description]:{len(constraint.short_description)}}'
         for constraint in all_constraints)
