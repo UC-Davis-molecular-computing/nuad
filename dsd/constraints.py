@@ -26,6 +26,7 @@ from multiprocessing.pool import ThreadPool
 from numbers import Number
 
 import numpy as np  # noqa
+from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
 
@@ -1089,7 +1090,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
         elif domain_names is not None:
             domains = []
-            starred_domain_indices = set()
+            starred_domain_indices = OrderedSet()
             for idx, domain_name in enumerate(domain_names):
                 is_starred = domain_name.endswith('*')
                 if is_starred:
@@ -1146,10 +1147,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             Dictionary ``d`` representing this :any:`Strand` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
-        dct: Dict[str, Any] = {}
-        if self._name is not None:
-            dct[name_key] = self._name
-        dct[group_name_key] = self.group.name
+        dct: Dict[str, Any] = {name_key: self.name, group_name_key: self.group.name}
 
         domains_list = [domain.name for domain in self.domains]
         dct[domain_names_key] = NoIndent(domains_list) if suppress_indent else domains_list
@@ -1174,7 +1172,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             :any:`Strand` represented by dict `json_map`, assuming it was created by
             :py:meth:`Strand.to_json_serializable`.
         """
-        name: str = mandatory_field(str, json_map, name_key)
+        name: str = mandatory_field(Strand, json_map, name_key)
         domain_names_json = mandatory_field(Strand, json_map, domain_names_key)
         domains: List[Domain[DomainLabel]] = [domain_with_name[name] for name in domain_names_json]
         starred_domain_indices = mandatory_field(Strand, json_map, starred_domain_indices_key)
@@ -1207,17 +1205,17 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return [domain for idx, domain in enumerate(self.domains) if idx in self.starred_domain_indices]
 
-    def unstarred_domains_set(self) -> Set[Domain[DomainLabel]]:
+    def unstarred_domains_set(self) -> OrderedSet[Domain[DomainLabel]]:
         """
         :return: set of unstarred :any:`Domain`'s in this :any:`Strand`
         """
-        return set(self.unstarred_domains())
+        return OrderedSet(self.unstarred_domains())
 
-    def starred_domains_set(self) -> Set[Domain[DomainLabel]]:
+    def starred_domains_set(self) -> OrderedSet[Domain[DomainLabel]]:
         """
         :return: set of starred :any:`Domain`'s in this :any:`Strand`
         """
-        return set(self.starred_domains())
+        return OrderedSet(self.starred_domains())
 
     def sequence(self, spaces_between_domains: bool = False) -> str:
         """
@@ -2322,7 +2320,8 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
     """
 
-    evaluate: Callable[[Iterable[Tuple[Domain, Domain]]], List[Tuple[Set[Domain], float]]] = lambda _: []
+    evaluate: Callable[[Iterable[Tuple[Domain, Domain]]], List[Tuple[OrderedSet[Domain], float]]] = lambda \
+        _: []
     """
     Pairwise check to perform on :any:`Domain`'s. 
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
@@ -2331,9 +2330,10 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     summary: Callable[[Iterable[Tuple[Domain, Domain]], bool], ConstraintReport] = \
         lambda _: _no_summary_string
 
-    def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[Set[Domain], float]]:
+    def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
-                                          List[Tuple[Set[Domain], float]]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domain_pairs)
 
@@ -2350,7 +2350,8 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     Similar to :any:`StrandsConstraint` but operates on a specified list of pairs of :any:`Strand`'s.
     """
 
-    evaluate: Callable[[Iterable[Tuple[Strand, Strand]]], List[Tuple[Set[Domain], float]]] = lambda _: []
+    evaluate: Callable[[Iterable[Tuple[Strand, Strand]]], List[Tuple[OrderedSet[Domain], float]]] = \
+        lambda _: []
     """
     Pairwise check to perform on :any:`Strand`'s. 
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
@@ -2359,9 +2360,10 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     summary: Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport] = \
         lambda _: _no_summary_string
 
-    def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[Set[Domain], float]]:
+    def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
-                                          List[Tuple[Set[Domain], float]]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strand_pairs)
 
@@ -2391,12 +2393,12 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
     ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
 
-    evaluate: Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]] = lambda _: []
+    evaluate: Callable[[Iterable[Domain]], List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
 
     summary: Callable[[Iterable[Domain], bool], ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, domains: Iterable[Domain]) -> List[Tuple[Set[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
+    def __call__(self, domains: Iterable[Domain]) -> List[Tuple[OrderedSet[Domain], float]]:
+        evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(domains)
 
@@ -2425,12 +2427,12 @@ class StrandsConstraint(Constraint[Iterable[Strand]]):
     ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
 
-    evaluate: Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]] = lambda _: []
+    evaluate: Callable[[Iterable[Strand]], List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
 
     summary: Callable[[Iterable[Strand], bool], ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, strands: Iterable[Strand]) -> List[Tuple[Set[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[Set[Domain], float]]],  # noqa
+    def __call__(self, strands: Iterable[Strand]) -> List[Tuple[OrderedSet[Domain], float]]:
+        evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         return evaluate_callback(strands)
 
@@ -2459,12 +2461,14 @@ class DesignConstraint(Constraint[Design]):
     ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
 
-    evaluate: Callable[[Design, Optional[Domain]], List[Tuple[Set[Domain], float]]] = lambda _, __: []
+    evaluate: Callable[[Design, Optional[Domain]], List[Tuple[OrderedSet[Domain], float]]] = lambda _, __: []
 
     summary: Callable[[Design, bool], ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, design: Design, domain_changed: Optional[Domain]) -> List[Tuple[Set[Domain], float]]:
-        eval_callback = cast(Callable[[Design, Optional[Domain]], List[Tuple[Set[Domain], float]]],  # noqa
+    def __call__(self, design: Design, domain_changed: Optional[Domain]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
+        eval_callback = cast(Callable[[Design, Optional[Domain]],  # noqa
+                                      List[Tuple[OrderedSet[Domain], float]]],  # noqa
                              self.evaluate)  # type: ignore
         return eval_callback(design, domain_changed)
 
@@ -2921,19 +2925,20 @@ def rna_duplex_strand_pairs_constraint(
             energies = calculate_energies_unthreaded(sequence_pairs)
         return energies
 
-    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[Set[Domain], float]]:
+    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
         stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
         # stopwatch = None  # uncomment to not log time
 
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
         energies = calculate_energies(sequence_pairs)
 
-        domain_sets_weights: List[Tuple[Set[Domain], float]] = []
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         for (strand1, strand2), energy in zip(strand_pairs, energies):
             excess = energy_excess(energy, threshold, negate, strand1, strand2)
             # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')
             if excess > 0.0:
-                domain_set_weights = (set(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
+                domain_set_weights = (
+                    OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
                 domain_sets_weights.append(domain_set_weights)
 
         if stopwatch is not None:
@@ -3089,20 +3094,21 @@ def rna_cofold_strand_pairs_constraint(
             energies = calculate_energies_unthreaded(sequence_pairs)
         return energies
 
-    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[Set[Domain], float]]:
+    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
         stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
         # stopwatch = None  # uncomment to not log time
 
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        domain_sets_weights: List[Tuple[Set[Domain], float]] = []
-        # domain_sets_weights: List[Tuple[Set[Domain], float]] = []
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+        # domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
 
         energies = calculate_energies(sequence_pairs)
 
         for (strand1, strand2), energy in zip(strand_pairs, energies):
             excess = energy_excess(energy, threshold, negate, strand1, strand2)
             if excess > 0.0:
-                domain_set_weights = (set(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
+                domain_set_weights = (OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()),
+                                      excess)
                 domain_sets_weights.append(domain_set_weights)
 
         if stopwatch is not None:
@@ -3213,18 +3219,18 @@ def rna_duplex_domain_pairs_constraint(
     :return: constraint
     """
 
-    def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[Set[Domain], float]]:
+    def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[OrderedSet[Domain], float]]:
         if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
             raise ValueError('cannot evaluate domains unless they have sequences assigned')
         sequence_pairs, _, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
-        domain_sets_weights: List[Tuple[Set[Domain], float]] = []
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
         for (domain1, domain2), energy in zip(domain_pairs, energies):
             excess = threshold - energy
             if negate:
                 excess = -excess
             if excess > 0.0:
-                domain_set_weights = ({domain1, domain2}, excess)
+                domain_set_weights = (OrderedSet([domain1, domain2]), excess)
                 domain_sets_weights.append(domain_set_weights)
         return domain_sets_weights
 

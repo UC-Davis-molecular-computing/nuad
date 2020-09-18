@@ -20,6 +20,7 @@ import textwrap
 import time
 import re
 import datetime
+from pprint import pprint
 
 from ordered_set import OrderedSet
 import numpy as np  # noqa
@@ -87,8 +88,11 @@ class _Violation(Generic[DesignPart]):
     def weight(self) -> float:
         return self.constraint.weight * self._weight
 
+    def __repr__(self) -> str:
+        return f'Violation({self.constraint.short_description}, weight={self._weight:.2f})'
+
     def __str__(self) -> str:
-        return f'Violation({self.constraint.short_description}, weight={self._weight})'
+        return repr(self)
 
 
 @dataclass
@@ -106,6 +110,13 @@ class _ViolationSet:
     domain_to_violations: Dict[Domain, OrderedSet[_Violation]] = field(
         default_factory=lambda: defaultdict(OrderedSet))
     """Dict mapping each :any:`Domain` to the set of all :any:`Violation`'s for which it is blamed."""
+
+    def __repr__(self):
+        lines = "\n  ".join(map(str, self.all_violations))
+        return f'ViolationSet(\n  {lines})'
+
+    def __str__(self):
+        return repr(self)
 
     def update(self, new_violations: Dict[Domain, OrderedSet[_Violation]]) -> None:
         """
@@ -145,8 +156,22 @@ class _ViolationSet:
         # (values in self.domain_to_violations)
         violations_of_domain = set(self.domain_to_violations[domain])
         self.all_violations -= violations_of_domain
+
+        # print('v'*79)
+        # print(f'violations_of_domain: {violations_of_domain}')
         for violations_of_other_domain in self.domain_to_violations.values():
+            # msg = []
+            # num_violations_before = len(violations_of_other_domain)
+            # msg.append(f'violations_of_other_domain before: {violations_of_other_domain}')
+
             violations_of_other_domain -= violations_of_domain
+
+            # num_violations_after = len(violations_of_other_domain)
+            # if num_violations_after != num_violations_before and num_violations_after > 0:
+            #     msg.append(f'violations_of_other_domain after:  {violations_of_other_domain}')
+            #     print('\n'.join(msg))
+
+        # print('^'*79)
         assert len(self.domain_to_violations[domain]) == 0
 
     def total_weight(self) -> float:
@@ -200,6 +225,8 @@ def _violations_of_constraints(design: Design,
     else:
         assert violation_set_old is not None
         assert not domain_changed.fixed
+        # print(f'violation_set_old.domain_to_violations = ')
+        # pprint(violation_set_old.domain_to_violations)
         violation_set = violation_set_old.clone()
         violation_set.remove_violations_of_domain(domain_changed)
 
@@ -342,7 +369,6 @@ def _violations_of_constraints(design: Design,
     for strand_pairs_constraint in design.strand_pairs_constraints:
         strand_pairs_to_check = _determine_strand_pairs_to_check(design.strands, domain_changed,
                                                                  strand_pairs_constraint)
-
         if log_names_of_domains_and_strands_checked:
             logger.debug(f'$ for strand pairs constraint {strand_pairs_constraint.description}, '
                          f'checking these strand pairs:\n'
@@ -367,6 +393,8 @@ def _violations_of_constraints(design: Design,
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
             return violation_set
 
+    # print('violation_set.domain_to_violations:')
+    # pprint(violation_set.domain_to_violations)
     return violation_set
 
 
@@ -827,7 +855,7 @@ call search_for_dna_sequences with the parameter restart=True.
         print(warning)
         done = False
         while not done:
-            ans = input(f'Are you sure you wish to proceed with deleting the contents of '
+            ans = input(f'Are you sure you wish to proceed with deleting the contents of\n'
                         f'{directory}? [n]/y ')
             ans = ans.strip().lower()
             if ans in ['n', '']:
@@ -836,7 +864,8 @@ call search_for_dna_sequences with the parameter restart=True.
             if ans == 'y':
                 done = True
             else:
-                print(f'I don\'t understand the response "{ans}". Please respond n or y.')
+                print(f'I don\'t understand the response "{ans}". '
+                      f'Please respond n (for no) or y (for yes).')
 
     files = [file for file in files_and_directories if os.path.isfile(file)]
     subdirs = [subdir for subdir in files_and_directories if not os.path.isfile(subdir)]
@@ -972,8 +1001,8 @@ def search_for_dna_sequences(*, design: dc.Design,
         parameter True will re-start the search at that point.
     :param force_overwrite:
         If `restart` is False and there are files/subdirectories in `out_directory`,
-        then the user will be prompted to confirm that they want to delete these, UNLESS force_overwrite
-        is True.
+        then the user will be prompted to confirm that they want to delete these,
+        UNLESS force_overwrite is True.
     :param debug_log_file:
         If True, a very detailed log of events is written to the file debug.log in the directory
         `out_directory`. If run for several hours, this file can grow to hundreds of megabytes.
@@ -1077,10 +1106,12 @@ def search_for_dna_sequences(*, design: dc.Design,
                 _thread_pool = ThreadPool(processes=cpu_count)
 
             # pick domain to change, with probability proportional to total weight of constraints it violates
-            # domain_changed: Domain = random.choices(domains_opt, weights_opt)[0]
             probs_opt = np.asarray(weights_opt)
             probs_opt /= probs_opt.sum()
+            # print(f'rng state before choosing domain = {rng.__getstate__()["state"]["state"]}')
+            # print(f'domains_opt = {domains_opt}')
             domain_changed: Domain = rng.choice(a=domains_opt, p=probs_opt)
+            # print(f'domain chosen  = {domain_changed}')
             # print(f'rng state after choosing domain  = {rng.__getstate__()["state"]["state"]}')
             assert not domain_changed.fixed  # fixed Domains should never be blamed for constraint violation
 

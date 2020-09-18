@@ -1,4 +1,5 @@
-import sys
+from typing import NamedTuple, Optional
+import argparse
 import os
 import logging
 from typing import List
@@ -9,7 +10,51 @@ import dsd.search as ds  # type: ignore
 from dsd.constraints import NumpyConstraint, SequenceConstraint
 
 
+# command-line arguments
+class CLArgs(NamedTuple):
+    directory: str
+    initial_design_filename: Optional[str]
+    weigh_constraint_violations_equally: bool
+    restart: bool
+
+
+def parse_command_line_arguments() -> CLArgs:
+    default_directory = os.path.join('output', ds.script_name_no_ext())
+
+    parser = argparse.ArgumentParser(  # noqa
+        description='Small example design for testing.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-o', '--output-dir', type=str, default=default_directory,
+                        help='directory in which to place output files')
+    parser.add_argument('-we', '--weigh_violations_equally', action='store_true',
+                        help='Weigh violations of each constraint equally (only pay attention to whether '
+                             'constraint returns 0.0 or a positive value, converting all positive values '
+                             'to 1.0).')
+    parser.add_argument('-r', '--restart', action='store_true',
+                        help='If true, then assumes output directory contains output of search that was '
+                             'cancelled, to restart '
+                             'from. Similar to -i option, but will automatically find the most recent design '
+                             '(assuming they are numbered with a number such as -84), and will start the '
+                             'numbering from there (i.e., the next files to be written upon improving the '
+                             'design will have -85).')
+    parser.add_argument('-i', '--initial_design', type=str, default=None,
+                        help='(Probably you don\'t want this option, and would prefer -r/--restart.)'
+                             'name of JSON filename of initial design. If specified, then the DNA sequences '
+                             'of domains will start equal to what they are in the design. This is useful, '
+                             'for instance, when starting a DNA sequence design search from a sequence '
+                             'assignment that was saved during a prior execution of the dsd sequence '
+                             'designer. The strands and domains of the saved design will be compared to '
+                             'the scadnano design (though not the DNA sequences).')
+
+    args = parser.parse_args()
+
+    return CLArgs(directory=args.output_dir, initial_design_filename=args.initial_design,
+                  weigh_constraint_violations_equally=args.weigh_violations_equally, restart=args.restart)
+
+
 def main() -> None:
+    args: CLArgs = parse_command_line_arguments()
+
     # dc.logger.setLevel(logging.DEBUG)
     dc.logger.setLevel(logging.INFO)
 
@@ -103,11 +148,16 @@ def main() -> None:
         for domain in strand.domains:
             domain.pool = domain_pool
 
-    output_dir = os.path.join('output', 'many_strands_no_common_domains')
+
     ds.search_for_dna_sequences(design=design,
-                                never_increase_weight=never_increase_weight,
+                                # weigh_violations_equally=True,
+                                report_delay=0.0,
+                                out_directory=args.directory,
+                                restart=args.restart,
+                                force_overwrite=True,
+                                report_only_violations=False,
                                 random_seed=random_seed,
-                                out_directory=output_dir)
+                                )
 
 
 if __name__ == '__main__':
