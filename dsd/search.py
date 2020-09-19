@@ -58,7 +58,7 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-@dataclass(frozen=True)
+@dataclass
 class _Violation(Generic[DesignPart]):
     """
     Represents a violation of a single :any:`Constraint` in a :any:`Design`. The "part" of the :any:`Design`
@@ -93,6 +93,14 @@ class _Violation(Generic[DesignPart]):
 
     def __str__(self) -> str:
         return repr(self)
+
+    # _Violation equality based on identity; different Violations in memory are considered different,
+    # even if all data between them matches. Don't create the same Violation twice!
+    def __hash__(self):
+        return super().__hash__()
+
+    def __eq__(self, other):
+        return self is other
 
 
 @dataclass
@@ -156,22 +164,8 @@ class _ViolationSet:
         # (values in self.domain_to_violations)
         violations_of_domain = set(self.domain_to_violations[domain])
         self.all_violations -= violations_of_domain
-
-        # print('v'*79)
-        # print(f'violations_of_domain: {violations_of_domain}')
         for violations_of_other_domain in self.domain_to_violations.values():
-            # msg = []
-            # num_violations_before = len(violations_of_other_domain)
-            # msg.append(f'violations_of_other_domain before: {violations_of_other_domain}')
-
             violations_of_other_domain -= violations_of_domain
-
-            # num_violations_after = len(violations_of_other_domain)
-            # if num_violations_after != num_violations_before and num_violations_after > 0:
-            #     msg.append(f'violations_of_other_domain after:  {violations_of_other_domain}')
-            #     print('\n'.join(msg))
-
-        # print('^'*79)
         assert len(self.domain_to_violations[domain]) == 0
 
     def total_weight(self) -> float:
@@ -466,7 +460,7 @@ def _strands_containing_domain(domain: Optional[Domain], strands: List[Strand]) 
 
 
 def _convert_sets_of_violating_domains_to_violations(
-        constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[Set[Domain], float]],
+        constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]],
         weigh_constraint_violations_equally: bool) -> Dict[Domain, OrderedSet[_Violation]]:
     domains_violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     for domain_set, weight in sets_of_violating_domains:
@@ -582,9 +576,9 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                                                                             strand_chunk)
                 sets_of_violating_domains_weights.extend(sets_of_violating_domains_excesses_chunk)
 
-                # quit early if possible
-                total_weight_chunk = sum(
-                    weight_chunk for _, weight_chunk in sets_of_violating_domains_weights)
+                # quit early if possible; check weights of violations we just added
+                total_weight_chunk = sum(weight_chunk
+                                         for _, weight_chunk in sets_of_violating_domains_excesses_chunk)
                 weight_discovered_here += constraint.weight * total_weight_chunk
                 if weight_discovered_here > current_weight_gap:
                     break
@@ -890,6 +884,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                              debug_log_file: bool = False,
                              info_log_file: bool = False,
                              report_only_violations: bool = True,
+                             max_iterations: Optional[int] = None,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -1012,6 +1007,8 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param report_only_violations:
         If True, does not give report on each constraint that was satisfied; only reports violations
         and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
+    :param max_iterations:
+        Maximum number of iterations of search to perform.
     """
     if out_directory is None:
         out_directory = default_output_directory()
@@ -1063,6 +1060,9 @@ def search_for_dna_sequences(*, design: dc.Design,
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
 
+    if random_seed is not None:
+        logger.info(f'using random seed of {random_seed}; use this same seed to reproduce this run')
+
     try:
         if not restart:
             assign_sequences_to_domains_randomly_from_pools(design=design,
@@ -1095,7 +1095,9 @@ def search_for_dna_sequences(*, design: dc.Design,
 
         iteration = 0
         time_of_last_improvement: float = -1.0
-        while len(violation_set_opt.all_violations) > 0:
+
+        while len(violation_set_opt.all_violations) > 0 and \
+                (max_iterations is None or iteration < max_iterations):
             if cpu_count != dc.cpu_count():
                 logger.info(f'number of processes in system changed from {cpu_count} to {dc.cpu_count()}'
                             f'\nallocating new ThreadPool')
@@ -1124,6 +1126,9 @@ def search_for_dna_sequences(*, design: dc.Design,
                 design=design, weigh_violations_equally=weigh_violations_equally,
                 domain_changed=domain_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight)
+
+            # _double_check_violations_from_scratch(design, iteration, never_increase_weight, violation_set_new,
+            #                                       violation_set_opt, weigh_violations_equally)
 
             _log_constraint_summary(design=design,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
@@ -1188,6 +1193,31 @@ def search_for_dna_sequences(*, design: dc.Design,
 
     if info_log_file:
         dc.logger.removeHandler(info_file_handler)  # noqa
+
+
+# used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
+# to think a new assignment was better than the optimal so far, but a mistake in weight accounting
+# from quitting early meant we had simply stopped looking for violations too soon.
+def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_weight: bool,
+                                          violation_set_new: _ViolationSet, violation_set_opt: _ViolationSet,
+                                          weigh_violations_equally: bool):
+    violation_set_new_fs, domains_new_fs, weights_new_fs = _find_violations_and_weigh(
+        design=design, weigh_violations_equally=weigh_violations_equally,
+        never_increase_weight=never_increase_weight)
+    if (violation_set_new_fs.total_weight()
+        > violation_set_opt.total_weight()
+        >= violation_set_new.total_weight()) or \
+            (violation_set_new_fs.total_weight()
+             <= violation_set_opt.total_weight()
+             < violation_set_new.total_weight()):
+        logger.warning(f'WARNING! There is a bug in dsd.')
+        logger.warning(f'total weight opt = {violation_set_opt.total_weight()}')
+        logger.warning(f'from scratch, we found {violation_set_new_fs.total_weight()} total weight.')
+        logger.warning(f'iteratively, we found  {violation_set_new.total_weight()} total weight.')
+        logger.warning(f'This means the iterative search is saying something different about '
+                       f'quitting early than the full search. It indicates a bug in dsd.')
+        logger.warning(f'This happened on iteration {iteration}.')
+        sys.exit(-1)
 
 
 def script_name_no_ext() -> str:
@@ -1395,9 +1425,12 @@ def _log_constraint_summary(*, design: Design,
     header_width = len(header)
     logger.info('-' * header_width + '\n' + header)
 
+    weight_opt = violation_set_opt.total_weight()
+    weight_new = violation_set_new.total_weight()
+    weight_decimals = 2 if weight_opt < 10 else 1
     weight_str = f'{iteration:9}|{num_new_optimal:8}|' \
-                 f'{violation_set_opt.total_weight():10.1f}|' \
-                 f'{violation_set_new.total_weight():10.1f}|' \
+                 f'{weight_opt :10.{weight_decimals}f}|' \
+                 f'{weight_new :10.{weight_decimals}f}|' \
                  f'{violation_set_opt.num_violations():9}|' \
                  f'{violation_set_new.num_violations():9}||'
     all_constraints_str = '|'.join(
