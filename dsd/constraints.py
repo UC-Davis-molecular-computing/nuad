@@ -757,6 +757,15 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     search algorithm :py:meth:`search.search_for_dna_sequences`.
     """
 
+    independent: bool = True
+    """
+    Whether this :any:`Domain`'s DNA sequence is independent of all others. Usually this is the case.
+    However, if using a :any:`StrandPool`, which assigns a DNA sequence to a whole :any:`Strand`, then
+    this will be marked as False. Such a :any:`Domain` is not fixed, since its DNA sequence can change,
+    but it is not independent, since it must be set along with other :any;`Domain`'s in the same 
+    :any:`Strand`.
+    """
+
     label: Optional[DomainLabel] = None
     """
     Optional generic "label" object to associate to this :any:`Domain`.
@@ -2465,12 +2474,12 @@ class DesignConstraint(Constraint[Design]):
 
     summary: Callable[[Design, bool], ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, design: Design, domain_changed: Optional[Domain]) \
+    def __call__(self, design: Design, domains_changed: Optional[Iterable[Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        eval_callback = cast(Callable[[Design, Optional[Domain]],  # noqa
+        eval_callback = cast(Callable[[Design, Optional[Iterable[Domain]]],  # noqa
                                       List[Tuple[OrderedSet[Domain], float]]],  # noqa
                              self.evaluate)  # type: ignore
-        return eval_callback(design, domain_changed)
+        return eval_callback(design, domains_changed)
 
     def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
         summary_callback = cast(Callable[[Design, bool], ConstraintReport],  # noqa
@@ -2913,8 +2922,7 @@ def rna_duplex_strand_pairs_constraint(
     thread_pool = ThreadPool(processes=num_threads)
 
     def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        sequence_pairs_tuple = tuple(sequence_pairs)
-        return dv.rna_duplex_multiple(sequence_pairs_tuple, logger, temperature, negate, parameters_filename)
+        return dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
         if threaded and len(sequence_pairs) > 1:
@@ -3083,7 +3091,7 @@ def rna_cofold_strand_pairs_constraint(
 
     def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
         sequence_pairs_tuple = tuple(sequence_pairs)
-        return dv.rna_duplex_multiple(sequence_pairs_tuple, logger, temperature, negate, parameters_filename)
+        return dv.rna_cofold_multiple(sequence_pairs_tuple, logger, temperature, negate, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
         if threaded and len(sequence_pairs) > 1:
