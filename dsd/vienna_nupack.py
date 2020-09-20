@@ -157,12 +157,36 @@ def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str
     return seqs_list, seq_orders
 
 
-# @lru_cache(maxsize=100000)
+# https://github.com/python/cpython/blob/42336def77f53861284336b3335098a1b9b8cab2/Lib/functools.py#L485
+_sentinel = object()
+_max_size = 1_000_000
+_hits = 0
+_misses = 0
+_rna_duplex_cache: Dict[Tuple[str, str], float] = {}
+
+
+def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float, negate: bool,
+                                 parameters_filename: str) -> Optional[float]:
+    # return None if arguments are not in _rna_duplex_cache,
+    # otherwise return cached energy in _rna_duplex_cache
+    global _hits
+    global _misses
+    key = (seq_pair, temperature, negate, parameters_filename)
+    result = _rna_duplex_cache.get(key, _sentinel)
+    if result is _sentinel:
+        _misses += 1
+        return None
+    else:
+        _hits += 1
+        return result
+
+
 def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
                         negate: bool = False,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
+                        cache: bool = False,
                         ) -> List[float]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
@@ -174,10 +198,13 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     :param seq_pairs: sequence (list or tuple) of pairs of DNA sequences
     :param logger: logger to use for printing error messages
     :param temperature: temperature in Celsius
-    :param parameters_filename:
     :param negate: whether to negate the standard free energy (typically free energies are negative;
                    if `negate` is ``True`` then the return value will be positive)
-    :return: list of free energies, in the same order as `seq_pairs`
+    :param parameters_filename:
+    :param cache:
+        Whether to cache results to save on number of sequences to give to RNAduplex.
+    :return:
+        list of free energies, in the same order as `seq_pairs`
     """
     # print(f'rna_duplex_multiple.lru_cache = {rna_duplex_multiple.cache_info()}')
 
@@ -189,6 +216,17 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # WARNING: stacking enthalpies not symmetric
 
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
+
+    # fill in cached energies and determine which indices still need to have their energies calculated
+    if cache:
+        energies = [_rna_duplex_single_cacheable(seq_pair, temperature, negate, parameters_filename)
+                    for seq_pair in seq_pairs]
+    else:
+        energies = [None] * len(seq_pairs)
+    idxs_to_calculate = [i for i, energy in enumerate(energies) if energy is None]
+    idxs_to_calculate_set = set(idxs_to_calculate)
+    seq_pairs_to_calculate = [seq_pair for i, seq_pair in enumerate(seq_pairs) if i in idxs_to_calculate_set]
+
     full_parameters_filename = os.path.join(os.path.dirname(__file__),
                                             parameter_set_directory, parameters_filename)
 
@@ -200,7 +238,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
         ['RNAduplex', '-P', full_parameters_filename, '-T', str(temperature), '--noGU', '−−noconv'])
 
     # DNA sequences to type after RNAduplex starts up
-    user_input = '\n'.join(f'{seq_pair[0]}\n{seq_pair[1]}' for seq_pair in seq_pairs) + '\n@\n'
+    user_input = '\n'.join(f'{seq_pair[0]}\n{seq_pair[1]}' for seq_pair in seq_pairs_to_calculate) + '\n@\n'
 
     output, error = call_subprocess(command_strs, user_input)
 
@@ -211,19 +249,31 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                              'is a different error that I don\'t know how to handle. Exiting...'
                              f'\nerror:\n{error}')
 
-    dg_list: List[float] = []
+    energies_to_calculate: List[float] = []
     lines = output.split('\n')
     for line in lines[:-1]:
-        dg_list.append(float(line.split(':')[1].split('(')[1].split(')')[0]))
-    if len(lines) - 1 != len(seq_pairs):
+        energies_to_calculate.append(float(line.split(':')[1].split('(')[1].split(')')[0]))
+    if len(lines) - 1 != len(seq_pairs_to_calculate):
         raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}')
 
-    assert len(dg_list) == len(seq_pairs)
+    assert len(energies_to_calculate) == len(seq_pairs_to_calculate)
 
     if negate:
-        dg_list = [-dg for dg in dg_list]
+        energies_to_calculate = [-dg for dg in energies_to_calculate]
 
-    return dg_list
+    # put calculated energies into list to return alongside cached energies
+    assert len(idxs_to_calculate) == len(energies_to_calculate)
+    for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
+        energies[i] = energy
+        if cache:
+            if _misses < _max_size:
+                key = (seq_pair, temperature, negate, parameters_filename)
+                _rna_duplex_cache[key] = energy
+            else:
+                logger.warning(f'WARNING: cache size {_max_size} exceeded; '
+                               f'not storing RNAduplex energies in cache anymore.')
+
+    return energies
 
 
 def _fix_filename_windows(parameters_filename: str) -> str:
