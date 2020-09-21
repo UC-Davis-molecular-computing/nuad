@@ -14,7 +14,7 @@ from collections import Counter, defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
 from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Generic, Any, \
-    Deque, TypeVar
+    Deque, TypeVar, NamedTuple
 import statistics
 import textwrap
 import time
@@ -915,6 +915,40 @@ call search_for_dna_sequences with the parameter restart=True.
         shutil.rmtree(sub)
 
 
+@dataclass
+class Directories:
+    # Container for various directories and files associated with output from the search.
+    # Easier than passing around several strings as parameters/return values.
+    out: str
+    dsd_design: str = field(init=False)
+    report: str = field(init=False)
+    sequence: str = field(init=False)
+    dsd_design_subdirectory: str = field(init=False, default='dsd_designs')
+    report_subdirectory: str = field(init=False, default='reports')
+    sequence_subdirectory: str = field(init=False, default='sequences')
+    dsd_design_filename_no_ext: str = field(init=False, default='design')
+    sequences_filename_no_ext: str = field(init=False, default='sequences')
+    report_filename_no_ext: str = field(init=False, default='report')
+    debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
+    info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
+
+    def __init__(self, out: str, debug: bool, info: bool) -> None:
+        self.out = out
+        self.dsd_design = os.path.join(self.out, self.dsd_design_subdirectory)
+        self.report = os.path.join(self.out, self.report_subdirectory)
+        self.sequence = os.path.join(self.out, self.sequence_subdirectory)
+
+        if debug:
+            self.debug_file_handler = logging.FileHandler(os.path.join(self.out, 'log_debug.log'))
+            self.debug_file_handler.setLevel(logging.DEBUG)
+            dc.logger.addHandler(self.debug_file_handler)
+
+        if info:
+            self.info_file_handler = logging.FileHandler(os.path.join(self.out, 'log_info.log'))
+            self.info_file_handler.setLevel(logging.INFO)
+            dc.logger.addHandler(self.info_file_handler)
+
+
 def search_for_dna_sequences(*, design: dc.Design,
                              probability_of_keeping_change: Optional[Callable[[float], float]] = None,
                              random_seed: Optional[int] = None,
@@ -1060,38 +1094,9 @@ def search_for_dna_sequences(*, design: dc.Design,
         :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraint.Constraint`'s
         that they violated.
     """
-    if out_directory is None:
-        out_directory = default_output_directory()
-
-    if not os.path.exists(out_directory):
-        os.makedirs(out_directory)
-
-    if not restart:
-        _clear_directory(out_directory, force_overwrite)
-
-    dsd_design_subdirectory = 'dsd_designs'
-    report_subdirectory = 'reports'
-    sequence_subdirectory = 'sequences'
-    dsd_design_filename_no_ext = 'design'
-    sequences_filename_no_ext = 'sequences'
-    report_filename_no_ext = 'report'
-
-    dsd_design_directory = os.path.join(out_directory, dsd_design_subdirectory)
-    report_directory = os.path.join(out_directory, report_subdirectory)
-    sequence_directory = os.path.join(out_directory, sequence_subdirectory)
-    for subdir in [dsd_design_directory, report_directory, sequence_directory]:
-        if not os.path.exists(subdir):
-            os.makedirs(subdir)
-
-    if debug_log_file:
-        debug_file_handler = logging.FileHandler(os.path.join(out_directory, 'Log_debug.log'))
-        debug_file_handler.setLevel(logging.DEBUG)
-        dc.logger.addHandler(debug_file_handler)
-
-    if info_log_file:
-        info_file_handler = logging.FileHandler(os.path.join(out_directory, 'log_info.log'))
-        info_file_handler.setLevel(logging.INFO)
-        dc.logger.addHandler(info_file_handler)
+    directories = _setup_directories(
+        debug=debug_log_file, info=info_log_file, force_overwrite=force_overwrite,
+        restart=restart, out_directory=out_directory)
 
     if random_seed is not None:
         rng = np.random.default_rng(random_seed)
@@ -1120,7 +1125,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal = _restart_from_directory(out_directory, design, dsd_design_subdirectory)
+            num_new_optimal = _restart_from_directory(directories.out, design,
+                                                      directories.dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
             design=design, weigh_violations_equally=weigh_violations_equally,
@@ -1131,13 +1137,13 @@ def search_for_dna_sequences(*, design: dc.Design,
             _write_intermediate_files(design=design,
                                       num_new_optimal=0,
                                       write_report=True,
-                                      design_filename_no_ext=dsd_design_filename_no_ext,
-                                      directory_output_files=out_directory,
-                                      report_directory=report_directory,
-                                      sequence_directory=sequence_directory,
-                                      dsd_design_directory=dsd_design_directory,
-                                      report_filename_no_ext=report_filename_no_ext,
-                                      sequences_filename_no_ext=sequences_filename_no_ext,
+                                      design_filename_no_ext=directories.dsd_design_filename_no_ext,
+                                      directory_output_files=directories.out,
+                                      report_directory=directories.report,
+                                      sequence_directory=directories.sequence,
+                                      dsd_design_directory=directories.dsd_design,
+                                      report_filename_no_ext=directories.report_filename_no_ext,
+                                      sequences_filename_no_ext=directories.sequences_filename_no_ext,
                                       report_only_violations=report_only_violations)
 
         # this helps with logging if we execute no iterations
@@ -1148,33 +1154,10 @@ def search_for_dna_sequences(*, design: dc.Design,
 
         while len(violation_set_opt.all_violations) > 0 and \
                 (max_iterations is None or iteration < max_iterations):
-            if cpu_count != dc.cpu_count():
-                logger.info(f'number of processes in system changed from {cpu_count} to {dc.cpu_count()}'
-                            f'\nallocating new ThreadPool')
-                cpu_count = dc.cpu_count()
-                global _thread_pool
-                _thread_pool.close()
-                _thread_pool.terminate()
-                _thread_pool = ThreadPool(processes=cpu_count)
+            _check_cpu_count(cpu_count)
 
-            # pick domain to change, with probability proportional to total weight of constraints it violates
-            probs_opt = np.asarray(weights_opt)
-            probs_opt /= probs_opt.sum()
-            num_domains_to_change = rng.choice(a=range(1, max_domains_to_change+1))
-            domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
-                                                            size=num_domains_to_change))
-            # domain_changed: Domain = rng.choice(a=domains_opt, p=probs_opt)
-            # fixed Domains should never be blamed for constraint violation
-            assert all(not domain_changed.fixed for domain_changed in domains_changed)
-
-            original_sequences: Dict[Domain, str] = {}
-            for domain_changed in domains_changed:
-                if domain_changed.independent:
-                    # set sequence of domain_changed to random new sequence from its DomainPool
-                    original_sequences[domain_changed] = domain_changed.sequence
-                    domain_changed.sequence = domain_changed.pool.generate_sequence()
-                else:
-                    raise NotImplementedError()
+            domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
+                                                                    max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
@@ -1196,12 +1179,7 @@ def search_for_dna_sequences(*, design: dc.Design,
             keep_change = rng.random() < prob_keep_change
 
             if not keep_change:
-                for domain_changed in domains_changed:
-                    if domain_changed.independent:
-                        # set back to old sequence
-                        domain_changed.sequence = original_sequences[domain_changed]
-                    else:
-                        raise NotImplementedError()
+                _unassign_domains(domains_changed, original_sequences)
             else:
                 # keep new sequence and update information about optimal solution so far
                 domains_opt = domains_new
@@ -1226,13 +1204,13 @@ def search_for_dna_sequences(*, design: dc.Design,
                     _write_intermediate_files(design=design,
                                               num_new_optimal=num_new_optimal,
                                               write_report=write_report,
-                                              design_filename_no_ext=dsd_design_filename_no_ext,
-                                              directory_output_files=out_directory,
-                                              report_directory=report_directory,
-                                              sequence_directory=sequence_directory,
-                                              dsd_design_directory=dsd_design_directory,
-                                              report_filename_no_ext=report_filename_no_ext,
-                                              sequences_filename_no_ext=sequences_filename_no_ext,
+                                              design_filename_no_ext=directories.dsd_design_filename_no_ext,
+                                              directory_output_files=directories.out,
+                                              report_directory=directories.report,
+                                              sequence_directory=directories.sequence,
+                                              dsd_design_directory=directories.dsd_design,
+                                              report_filename_no_ext=directories.report_filename_no_ext,
+                                              sequences_filename_no_ext=directories.sequences_filename_no_ext,
                                               report_only_violations=report_only_violations)
 
             iteration += 1
@@ -1247,11 +1225,70 @@ def search_for_dna_sequences(*, design: dc.Design,
         _thread_pool.close()  # noqa
         _thread_pool.terminate()
 
-    if debug_log_file:
-        dc.logger.removeHandler(debug_file_handler)  # noqa
+    if directories.debug_file_handler is not None:
+        dc.logger.removeHandler(directories.debug_file_handler)  # noqa
 
-    if info_log_file:
-        dc.logger.removeHandler(info_file_handler)  # noqa
+    if directories.info_file_handler is not None:
+        dc.logger.removeHandler(directories.info_file_handler)  # noqa
+
+
+def _check_cpu_count(cpu_count: int) -> None:
+    # alters number of threads in ThreadPool if cpu count changed. (Lets us hot-swap CPUs, e.g.,
+    # in Amazon web services, without stopping the program.)
+    if cpu_count != dc.cpu_count():
+        logger.info(f'number of processes in system changed from {cpu_count} to {dc.cpu_count()}'
+                    f'\nallocating new ThreadPool')
+        cpu_count = dc.cpu_count()
+        global _thread_pool
+        _thread_pool.close()
+        _thread_pool.terminate()
+        _thread_pool = ThreadPool(processes=cpu_count)
+
+
+def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
+                       out_directory: str) -> Directories:
+    if out_directory is None:
+        out_directory = default_output_directory()
+    directories = Directories(out=out_directory, debug=debug, info=info)
+    if not os.path.exists(directories.out):
+        os.makedirs(directories.out)
+    if not restart:
+        _clear_directory(directories.out, force_overwrite)
+    for subdir in [directories.dsd_design, directories.report, directories.sequence]:
+        if not os.path.exists(subdir):
+            os.makedirs(subdir)
+    return directories
+
+
+def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_domains_to_change: int,
+                      rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
+    # pick domain to change, with probability proportional to total weight of constraints it violates
+    probs_opt = np.asarray(weights_opt)
+    probs_opt /= probs_opt.sum()
+    num_domains_to_change = rng.choice(a=range(1, max_domains_to_change + 1))
+    domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
+                                                    size=num_domains_to_change))
+    # domain_changed: Domain = rng.choice(a=domains_opt, p=probs_opt)
+    # fixed Domains should never be blamed for constraint violation
+    assert all(not domain_changed.fixed for domain_changed in domains_changed)
+    original_sequences: Dict[Domain, str] = {}
+    for domain_changed in domains_changed:
+        if domain_changed.independent:
+            # set sequence of domain_changed to random new sequence from its DomainPool
+            original_sequences[domain_changed] = domain_changed.sequence
+            domain_changed.sequence = domain_changed.pool.generate_sequence()
+        else:
+            raise NotImplementedError()
+    return domains_changed, original_sequences
+
+
+def _unassign_domains(domains_changed, original_sequences):
+    for domain_changed in domains_changed:
+        if domain_changed.independent:
+            # set back to old sequence
+            domain_changed.sequence = original_sequences[domain_changed]
+        else:
+            raise NotImplementedError()
 
 
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
