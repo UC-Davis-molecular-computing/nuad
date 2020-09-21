@@ -237,9 +237,8 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     if os_is_windows:
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
-    command_strs: List[str] = ['wsl.exe', '-e'] if os_is_windows else []
-    command_strs.extend(
-        ['RNAduplex', '-P', full_parameters_filename, '-T', str(temperature), '--noGU', '−−noconv'])
+    command_strs: List[str] = ['RNAduplex', '-P', full_parameters_filename, '-T', str(temperature),
+                               '--noGU', '−−noconv']
 
     # DNA sequences to type after RNAduplex starts up
     user_input = '\n'.join(f'{seq_pair[0]}\n{seq_pair[1]}' for seq_pair in seq_pairs_to_calculate) + '\n@\n'
@@ -330,9 +329,8 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # DNA sequences to type after RNAcofold starts up
     user_input = '\n'.join(seqpair[0] + '&' + seqpair[1] for seqpair in seq_pairs) + '\n@\n'
 
-    command_strs: List[str] = ['wsl.exe', '-e'] if os_is_windows else []
-    command_strs.extend(
-        ['RNAcofold', '-P', full_parameters_filename, '-T', str(temperature), '--noGU', '−−noconv', '-p'])
+    command_strs: List[str] = ['RNAcofold', '-P', full_parameters_filename, '-T', str(temperature),
+                               '--noGU', '−−noconv', '-p']
 
     output, stderr = call_subprocess(command_strs, user_input)
 

@@ -948,6 +948,45 @@ class Directories:
             dc.logger.addHandler(self.info_file_handler)
 
 
+def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
+    # verify design is legal, and also build map of non-independent domains to the strand that contains them,
+    # to help when changing DNA sequences for those Domains.
+
+    domain_to_strand: Dict[dc.Domain, dc.Strand] = {}
+
+    for strand in design.strands:
+        if strand.pool is not None:
+            for domain in strand.domains:
+                if not domain.independent:
+                    raise ValueError(f'for strand {strand.name}, Strand.pool is not None, but it has a '
+                                     f'domain {domain.name} that is not set to independent. '
+                                     f'If a Domain appears on a Strand with a StrandPool, the Domain must be '
+                                     f'marked as independent.')
+                if domain.fixed:
+                    raise ValueError(f'for strand {strand.name}, Strand.pool is not None, but it has a '
+                                     f'domain {domain.name} that is fixed. None of the domains can be '
+                                     f'fixed on a strand with a StrandPool.')
+                if domain in domain_to_strand.keys():
+                    other_strand = domain_to_strand[domain]
+                    raise ValueError(f'strand {strand.name}, which has a StrandPool, has domain {domain}. '
+                                     f'But another strand {other_strand.name} also has a StrandPool, and it '
+                                     f'shares the domain. A strand with a StrandPool may only share domains '
+                                     f'with strands have have no StrandPool.')
+                domain_to_strand[domain] = strand
+        else:
+            for domain in strand.domains:
+                if domain.pool_ is None:
+                    raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
+                                     f'domain {domain.name} with a DomainPool set to None. '
+                                     f'Exactly one of these must be None, and the other not None.')
+                elif domain.fixed:
+                    raise ValueError(f'for strand {strand.name}, it has a '
+                                     f'domain {domain.name} that is fixed, even though that Domain has a '
+                                     f'DomainPool. A Domain cannot be fixed and have a DomainPool.')
+
+    return domain_to_strand
+
+
 def search_for_dna_sequences(*, design: dc.Design,
                              probability_of_keeping_change: Optional[Callable[[float], float]] = None,
                              random_seed: Optional[int] = None,
@@ -1107,6 +1146,10 @@ def search_for_dna_sequences(*, design: dc.Design,
         i.e., using leading zeros to have exactly 3 digits,
         until the integers are sufficiently large that more digits are required.
     """
+    # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
+    # StrandPool that contains them.
+    domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
+
     directories = _setup_directories(
         debug=debug_log_file, info=info_log_file, force_overwrite=force_overwrite,
         restart=restart, out_directory=out_directory)
@@ -1133,8 +1176,8 @@ def search_for_dna_sequences(*, design: dc.Design,
 
     try:
         if not restart:
-            assign_sequences_to_domains_randomly_from_pools(design=design, rng=rng,
-                                                            overwrite_existing_sequences=False)
+            assign_sequences_to_domains_randomly_from_pools(design=design, domain_to_strand=domain_to_strand,
+                                                            rng=rng, overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
             num_new_optimal = _restart_from_directory(directories.out, design,
@@ -1265,27 +1308,29 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
     num_domains_to_change = rng.choice(a=range(1, max_domains_to_change + 1))
     domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
                                                     size=num_domains_to_change))
-    # domain_changed: Domain = rng.choice(a=domains_opt, p=probs_opt)
+
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
+
+
     original_sequences: Dict[Domain, str] = {}
     for domain_changed in domains_changed:
-        if domain_changed.independent:
+        if not domain_changed.independent:
             # set sequence of domain_changed to random new sequence from its DomainPool
             original_sequences[domain_changed] = domain_changed.sequence
             domain_changed.sequence = domain_changed.pool.generate_sequence()
         else:
+            # TODO: find Strand with StrandPool to assign all domains in that Strand, but update
+            #  original_sequences the same as above, so _unassign_domains can set them back
             raise NotImplementedError()
+
+
     return domains_changed, original_sequences
 
 
 def _unassign_domains(domains_changed, original_sequences):
     for domain_changed in domains_changed:
-        if domain_changed.independent:
-            # set back to old sequence
-            domain_changed.sequence = original_sequences[domain_changed]
-        else:
-            raise NotImplementedError()
+        domain_changed.sequence = original_sequences[domain_changed]
 
 
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
@@ -1382,14 +1427,14 @@ def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -
 def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
                               directories: Directories, report_only_violations: bool,
                               num_digits_update: Optional[int]) -> None:
-    num_new_optimal_padded = f'{num_new_optimal:0{num_digits_update}d}' if num_digits_update is not None \
-        else f'{num_new_optimal}'
+    num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
+        else f'{num_new_optimal:0{num_digits_update}d}'
     _write_dsd_design_json(design,
                            directory_intermediate=directories.dsd_design,
                            directory_final=directories.out,
                            filename_with_iteration_no_ext=f'{directories.dsd_design_filename_no_ext}'
                                                           f'-{num_new_optimal_padded}',
-                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}',)
+                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}', )
     _write_sequences(design,
                      directory_intermediate=directories.sequence,
                      directory_final=directories.out,
@@ -1530,7 +1575,16 @@ def _log_constraint_summary(*, design: Design,
     logger.info(weight_str + all_constraints_str)
 
 
-def assign_sequences_to_domains_randomly_from_pools(design: Design,
+def assign_strand_with_independent_domain(domain: Domain, domain_to_strand: Dict[Domain, Strand],
+                                          rng: np.random.Generator = dn.default_rng) -> None:
+    strand = domain_to_strand[domain]
+    pool = strand.pool
+    assert pool is not None
+    sequence = pool.generate_sequence(rng)
+    raise NotImplementedError()
+
+
+def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_strand: Dict[Domain, Strand],
                                                     rng: np.random.Generator = dn.default_rng,
                                                     overwrite_existing_sequences: bool = False) -> None:
     """
@@ -1551,28 +1605,31 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         are subject to change by the subsequent search algorithm.
     """
     for domain in design.domains:
-        skip_fixed_msg = skip_nonfixed_msg = None
-        if domain.has_sequence():
-            skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                             f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
-                             f'which the search will attempt to replace.'
-            skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                                f'That domain has a FIXED sequence {domain.sequence}.'
-        if overwrite_existing_sequences:
-            if not domain.fixed:
-                domain.sequence = domain.pool.generate_sequence(rng)
-                assert len(domain.sequence) == domain.pool.length
-            else:
-                logger.info(skip_fixed_msg)
+        if domain.independent:
+            assign_strand_with_independent_domain(domain, domain_to_strand, rng)
         else:
-            if not domain.has_sequence():
-                domain.sequence = domain.pool.generate_sequence(rng)
-                assert len(domain.sequence) == domain.pool.length
-            else:
-                if domain.fixed:
-                    logger.info(skip_nonfixed_msg)
+            skip_fixed_msg = skip_nonfixed_msg = None
+            if domain.has_sequence():
+                skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
+                                 f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
+                                 f'which the search will attempt to replace.'
+                skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
+                                    f'That domain has a FIXED sequence {domain.sequence}.'
+            if overwrite_existing_sequences:
+                if not domain.fixed:
+                    domain.sequence = domain.pool.generate_sequence(rng)
+                    assert len(domain.sequence) == domain.pool.length
                 else:
                     logger.info(skip_fixed_msg)
+            else:
+                if not domain.has_sequence():
+                    domain.sequence = domain.pool.generate_sequence(rng)
+                    assert len(domain.sequence) == domain.pool.length
+                else:
+                    if domain.fixed:
+                        logger.info(skip_nonfixed_msg)
+                    else:
+                        logger.info(skip_fixed_msg)
 
 
 _sentinel = object()
