@@ -8,13 +8,12 @@ import os
 import shutil
 import sys
 import logging
-import math
 import pprint
 from collections import Counter, defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
 from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Generic, Any, \
-    Deque, TypeVar, NamedTuple
+    Deque, TypeVar
 import statistics
 import textwrap
 import time
@@ -964,6 +963,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                              report_only_violations: bool = True,
                              max_iterations: Optional[int] = None,
                              max_domains_to_change: int = 1,
+                             num_digits_update: Optional[int] = None,
                              ) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -1093,6 +1093,19 @@ def search_for_dna_sequences(*, design: dc.Design,
         `max_domains_to_change` is selected uniformly at random, and then that many
         :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraint.Constraint`'s
         that they violated.
+    :param num_digits_update:
+        Number of digits to use when writing update number in filenames. By default,
+        they will be written using just enough digits for each integer,
+        (for example, for sequences)
+        sequences-0.txt, sequences-1.txt, ...,
+        sequences-9.txt, sequences-10.txt, ...
+        If -nd 3 is specified, for instance, they will be written
+        sequences-000.txt, sequences-001.txt, ...,
+        sequences-009.txt, sequences-010.txt, ...,
+        sequences-099.txt, sequences-100.txt, ...,
+        sequences-999.txt, sequences-1000.txt, ...,
+        i.e., using leading zeros to have exactly 3 digits,
+        until the integers are sufficiently large that more digits are required.
     """
     directories = _setup_directories(
         debug=debug_log_file, info=info_log_file, force_overwrite=force_overwrite,
@@ -1120,8 +1133,7 @@ def search_for_dna_sequences(*, design: dc.Design,
 
     try:
         if not restart:
-            assign_sequences_to_domains_randomly_from_pools(design=design,
-                                                            rng=rng,
+            assign_sequences_to_domains_randomly_from_pools(design=design, rng=rng,
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
@@ -1134,17 +1146,9 @@ def search_for_dna_sequences(*, design: dc.Design,
 
         if not restart:
             # write initial sequences and report
-            _write_intermediate_files(design=design,
-                                      num_new_optimal=0,
-                                      write_report=True,
-                                      design_filename_no_ext=directories.dsd_design_filename_no_ext,
-                                      directory_output_files=directories.out,
-                                      report_directory=directories.report,
-                                      sequence_directory=directories.sequence,
-                                      dsd_design_directory=directories.dsd_design,
-                                      report_filename_no_ext=directories.report_filename_no_ext,
-                                      sequences_filename_no_ext=directories.sequences_filename_no_ext,
-                                      report_only_violations=report_only_violations)
+            _write_intermediate_files(design=design, num_new_optimal=0, write_report=True,
+                                      directories=directories, report_only_violations=report_only_violations,
+                                      num_digits_update=num_digits_update)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
@@ -1201,17 +1205,10 @@ def search_for_dna_sequences(*, design: dc.Design,
                         time_of_last_improvement = current_time
                         write_report = True
 
-                    _write_intermediate_files(design=design,
-                                              num_new_optimal=num_new_optimal,
-                                              write_report=write_report,
-                                              design_filename_no_ext=directories.dsd_design_filename_no_ext,
-                                              directory_output_files=directories.out,
-                                              report_directory=directories.report,
-                                              sequence_directory=directories.sequence,
-                                              dsd_design_directory=directories.dsd_design,
-                                              report_filename_no_ext=directories.report_filename_no_ext,
-                                              sequences_filename_no_ext=directories.sequences_filename_no_ext,
-                                              report_only_violations=report_only_violations)
+                    _write_intermediate_files(design=design, num_new_optimal=num_new_optimal,
+                                              write_report=write_report, directories=directories,
+                                              report_only_violations=report_only_violations,
+                                              num_digits_update=num_digits_update)
 
             iteration += 1
 
@@ -1383,31 +1380,29 @@ def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -
 
 
 def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
-                              design_filename_no_ext: str, directory_output_files: str,
-                              report_directory: str, sequence_directory: str, dsd_design_directory: str,
-                              report_filename_no_ext: str, sequences_filename_no_ext: str,
-                              report_only_violations: bool):
-    str_num_new_optimal_with_leading_zeros = '0' * (
-            2 - int(math.log(max(num_new_optimal, 1), 10))) + str(num_new_optimal)
+                              directories: Directories, report_only_violations: bool,
+                              num_digits_update: Optional[int]) -> None:
+    num_new_optimal_padded = f'{num_new_optimal:0{num_digits_update}d}' if num_digits_update is not None \
+        else f'{num_new_optimal}'
     _write_dsd_design_json(design,
-                           directory_intermediate=dsd_design_directory,
-                           directory_final=directory_output_files,
-                           # filename_with_iteration_no_ext=f'{design_filename_no_ext}-{num_new_optimal}',
-                           filename_with_iteration_no_ext=f'{design_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros,
-                           filename_final_no_ext=f'current-best-{design_filename_no_ext}')
+                           directory_intermediate=directories.dsd_design,
+                           directory_final=directories.out,
+                           filename_with_iteration_no_ext=f'{directories.dsd_design_filename_no_ext}'
+                                                          f'-{num_new_optimal_padded}',
+                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}',)
     _write_sequences(design,
-                     directory_intermediate=sequence_directory,
-                     directory_final=directory_output_files,
-                     # filename_with_iteration=f'{sequences_filename_no_ext}-{num_new_optimal}.txt',
-                     filename_with_iteration=f'{sequences_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
-                     filename_final=f'current-best-{sequences_filename_no_ext}.txt')
+                     directory_intermediate=directories.sequence,
+                     directory_final=directories.out,
+                     filename_with_iteration=f'{directories.sequences_filename_no_ext}'
+                                             f'-{num_new_optimal_padded}.txt',
+                     filename_final=f'current-best-{directories.sequences_filename_no_ext}.txt')
     if write_report:
         _write_report(design,
-                      directory_intermediate=report_directory,
-                      directory_final=directory_output_files,
-                      # filename_with_iteration=f'{report_filename_no_ext}-{num_new_optimal}.txt',
-                      filename_with_iteration=f'{report_filename_no_ext}-' + str_num_new_optimal_with_leading_zeros + '.txt',
-                      filename_final=f'current-best-{report_filename_no_ext}.txt',
+                      directory_intermediate=directories.report,
+                      directory_final=directories.out,
+                      filename_with_iteration=f'{directories.report_filename_no_ext}'
+                                              f'-{num_new_optimal_padded}.txt',
+                      filename_final=f'current-best-{directories.report_filename_no_ext}.txt',
                       report_only_violations=report_only_violations)
 
 

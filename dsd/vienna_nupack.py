@@ -74,8 +74,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
 {seqs_on_separate_lines}
 {permutation}'''
 
-    command_strs = ((['wsl.exe', '-e'] if os_is_windows else []) +
-                    ['pfunc', '-T', str(temperature), '-multi', '-material', 'dna'])
+    command_strs = ['pfunc', '-T', str(temperature), '-multi', '-material', 'dna']
 
     output, _ = call_subprocess(command_strs, user_input)
 
@@ -97,7 +96,11 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
 
 def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]:
     """
-    Calls system command through a subprocess.
+    Calls system command through a subprocess. Assumes running on a POSIX operating system.
+
+    If running on Windows, automatically appends "wsl -e" to start of command to call command
+    through Windows subsystem for Linux, so wsl must be installed for this to work:
+    `https://docs.microsoft.com/en-us/windows/wsl/install-win10 <https://docs.microsoft.com/en-us/windows/wsl/install-win10>`_
 
     :param command_strs:
         List of command and command line arguments, i.e., to call ``ls -l -a``,
@@ -112,6 +115,7 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     # solves the problem for python3.6. For python3.7 (but not 3.6) one can use text=True
     # XXX: Then why are none of those keyword arguments being used here??
     p: Optional[sub.Popen] = None
+    command_strs = (['wsl.exe', '-e'] if os_is_windows else []) + command_strs
     try:
         with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as p:
             output, stderr = p.communicate(user_input.encode())
