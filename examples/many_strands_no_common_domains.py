@@ -52,7 +52,7 @@ def parse_command_line_arguments() -> CLArgs:
                   weigh_constraint_violations_equally=args.weigh_violations_equally, restart=args.restart)
 
 
-def main() -> None: 
+def main() -> None:
     args: CLArgs = parse_command_line_arguments()
 
     # dc.logger.setLevel(logging.DEBUG)

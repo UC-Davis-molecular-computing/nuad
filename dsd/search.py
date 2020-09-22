@@ -480,8 +480,13 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
         If `domain` is None, just return `strands`, otherwise return :any:`Strand`'s in `strands`
         that contain `domain`
     """
-    return strands if domains is None \
-        else [strand for strand in strands for domain in domains if domain in strand.domains]
+    if domains is None:
+        return strands
+    else:
+        # ensure we don't return duplicates of strands, and keep original order
+        strands_set = OrderedSet(strand for strand in strands for domain in domains
+                                 if domain in strand.domains)
+        return list(strands_set)
 
 
 def _convert_sets_of_violating_domains_to_violations(
@@ -1201,7 +1206,9 @@ def search_for_dna_sequences(*, design: dc.Design,
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
                                                                     max_domains_to_change,
-                                                                    domain_to_strand, rng)
+                                                                    domain_to_strand, rng,
+                                                                    # design
+                                                                    )
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
@@ -1209,8 +1216,12 @@ def search_for_dna_sequences(*, design: dc.Design,
                 domains_changed=domains_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight)
 
-            # _double_check_violations_from_scratch(design, iteration, never_increase_weight, violation_set_new,
-            #                                       violation_set_opt, weigh_violations_equally)
+            # _debug = False
+            _debug = True
+            if _debug:
+                _double_check_violations_from_scratch(design, iteration, never_increase_weight,
+                                                      violation_set_new, violation_set_opt,
+                                                      weigh_violations_equally)
 
             _log_constraint_summary(design=design,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
@@ -1298,8 +1309,9 @@ def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restar
 
 
 def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_domains_to_change: int,
-                      domain_to_strand: Dict[Domain, Strand], rng: np.random.Generator) \
-        -> Tuple[List[Domain], Dict[Domain, str]]:
+                      domain_to_strand: Dict[Domain, Strand], rng: np.random.Generator,
+                      # design: Design
+                      ) -> Tuple[List[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total weight of constraints it violates
     probs_opt = np.asarray(weights_opt)
     probs_opt /= probs_opt.sum()
@@ -1317,16 +1329,18 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
         original_sequences[domain] = domain.sequence
-        domain.sequence = domain.pool.generate_sequence()
+        domain.sequence = domain.pool.generate_sequence(rng)
 
     # for dependent domains, ensure each strand is only changed once
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
-    strands_dependent = {domain_to_strand[domain] for domain in dependent_domains}
+    strands_dependent = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
     for strand in strands_dependent:
         for domain in strand.domains:
             assert domain not in original_sequences
             original_sequences[domain] = domain.sequence
-        strand.assign_dna_from_pool()
+            if domain not in domains_changed:
+                domains_changed.append(domain)
+        strand.assign_dna_from_pool(rng)
 
     return domains_changed, original_sequences
 
@@ -1345,6 +1359,13 @@ def _double_check_violations_from_scratch(design: dc.Design, iteration: int, nev
     violation_set_new_fs, domains_new_fs, weights_new_fs = _find_violations_and_weigh(
         design=design, weigh_violations_equally=weigh_violations_equally,
         never_increase_weight=never_increase_weight)
+    # XXX: we shouldn't check that the actual weights are close if quit_early is enabled, because then
+    # the total weight found on quitting early will be less than the total weight if not.
+    # But uncomment this, while disabling quitting early, to test more precisely for "wrong total weight".
+    # import math
+    # if not math.isclose(violation_set_new.total_weight(), violation_set_new_fs.total_weight()):
+    # Instead, we check whether the total weight lie on different sides of the opt total weight, i.e.,
+    # they make different decisions about whether to change to the new assignment
     if (violation_set_new_fs.total_weight()
         > violation_set_opt.total_weight()
         >= violation_set_new.total_weight()) or \
@@ -1529,7 +1550,7 @@ def _find_violations_and_weigh(design: Design,
     # violation_set: _ViolationSet = _violations_of_constraints(design) # uncomment to recompute all violations
 
     domain_to_weights: Dict[Domain, float] = {
-        domain: sum(violation.constraint.weight for violation in domain_violations)
+        domain: sum(violation.weight for violation in domain_violations)
         for domain, domain_violations in violation_set.domain_to_violations.items()
     }
     domains = list(domain_to_weights.keys())
@@ -1537,7 +1558,9 @@ def _find_violations_and_weigh(design: Design,
 
     stopwatch.stop()
 
-    _log_time(stopwatch)
+    log_time = False
+    if log_time:
+        _log_time(stopwatch)
 
     return violation_set, domains, weights
 
@@ -1589,6 +1612,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_st
 
     :param design:
         Design to which to assign DNA sequences.
+    :param domain_to_strand:
+        Indicates, for each dependent :any:`Domain`, the unique :any:`Strand` with a :any:`StrandPool` used
+        to assign DNA sequences to the :any:`Strand` (thus also to this :any:`Domain`).
     :param rng:
         numpy random number generator (type returned by numpy.random.default_rng()).
     :param overwrite_existing_sequences:
@@ -1624,9 +1650,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_st
                     logger.info(skip_fixed_msg)
 
     dependent_domains = [domain for domain in design.domains if domain.dependent]
-    dependent_strands = {domain_to_strand[domain] for domain in dependent_domains}
+    dependent_strands = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
     for strand in dependent_strands:
-        strand.assign_dna_from_pool()
+        strand.assign_dna_from_pool(rng)
 
 
 _sentinel = object()

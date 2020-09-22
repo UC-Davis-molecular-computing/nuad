@@ -596,7 +596,7 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def generate_sequence(self, rng: np.random.Generator = dn.default_rng) -> str:
+    def generate_sequence(self, rng: np.random.Generator) -> str:
         """
         Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
         :py:data:`DomainPool.sequence_constraints`
@@ -608,8 +608,11 @@ class DomainPool(JSONSerializable):
         :py:meth:`domains_not_substrings_of_each_other_domain_pair_constraint`
         can be used to specify this :any:`Design`-wide constraint.
 
-        :return: DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
-                 :py:data:`DomainPool.sequence_constraints`
+        :param rng:
+            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
+        :return:
+            DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
+            :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
         sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
@@ -713,8 +716,10 @@ class StrandPool(JSONSerializable):
             return False
         return self.strand.name == other.strand.name
 
-    def generate_sequence(self, rng: np.random.Generator = dn.default_rng) -> str:
+    def generate_sequence(self, rng: np.random.Generator) -> str:
         """
+        :param rng:
+            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         :return: DNA sequence of uniformly at random from :py:data:`StrandPool.sequences`
         """
         sequence = rng.choice(a=self.sequences)
@@ -1327,13 +1332,16 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             end = start + domain.length
             domain_sequence = sequence[start:end]
             domain.sequence = domain_sequence
+            start = end
 
-    def assign_dna_from_pool(self) -> None:
+    def assign_dna_from_pool(self, rng: np.random.Generator) -> None:
         """
         Assigns a random DNA sequence from this :any:`Strand`'s :any:`StrandPool`.
+        :param rng:
+            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         """
         assert self.pool is not None
-        sequence = self.pool.generate_sequence()
+        sequence = self.pool.generate_sequence(rng)
         self.assign_dna(sequence)
 
     @property
