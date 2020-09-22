@@ -1216,8 +1216,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                 domains_changed=domains_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight)
 
-            # _debug = False
-            _debug = True
+            _debug = False
+            # _debug = True
             if _debug:
                 _double_check_violations_from_scratch(design, iteration, never_increase_weight,
                                                       violation_set_new, violation_set_opt,
