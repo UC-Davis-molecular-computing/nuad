@@ -819,15 +819,15 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     on the object should succeed without having to specify a custom encoder.)
     """
 
-    independent: bool = False
+    dependent: bool = False
     """
-    Whether this :any:`Domain`'s DNA sequence is independent of all others. Usually this is the case.
+    Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
     However, if using a :any:`StrandPool`, which assigns a DNA sequence to a whole :any:`Strand`, then
-    this will be marked as False. Such a :any:`Domain` is not fixed, since its DNA sequence can change,
-    but it is not independent, since it must be set along with other :any;`Domain`'s in the same
-    :any:`Strand`.
+    this will be marked as True (dependent). 
+    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent, 
+    since it must be set along with other :any;`Domain`'s in the same :any:`Strand`.
     
-    An independent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored 
+    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored 
     in the field :py:data:`DomainPool.length`. But that pool's method 
     :py:meth:`DomainPool.generate_sequence` will not be called to generate sequences for the :any:`Domain`;
     instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this 
@@ -1200,6 +1200,14 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             return False
         return self.domain_names_concatenated() == other.domain_names_concatenated()
 
+    def length(self) -> int:
+        """
+        :return:
+            Sum of lengths of :any:`Domain`'s in this :any:`Strand`.
+            Each :any:`Domain` must have a :any:`DomainPool` assigned so that the length is defined.
+        """
+        return sum(domain.length for domain in self.domains)
+
     def domain_names_concatenated(self) -> str:
         """
         :return: names of :any:`Domain`'s in this :any:`Strand`, concatenated with `delim` in between.
@@ -1304,6 +1312,29 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             seqs.append(domain.get_sequence(starred))
         delim = ' ' if spaces_between_domains else ''
         return delim.join(seqs)
+
+    def assign_dna(self, sequence: str) -> None:
+        """
+        :param sequence:
+            DNA sequence to assign to this :any:`Strand`.
+            Must have length = :py:meth:`Strand.length`.
+        """
+        if not self.length() == len(sequence):
+            raise ValueError(f'Strand {self.name} has length {self.length()}, but DNA sequence '
+                             f'{sequence} has length {len(sequence)}')
+        start = 0
+        for domain in self.domains:
+            end = start + domain.length
+            domain_sequence = sequence[start:end]
+            domain.sequence = domain_sequence
+
+    def assign_dna_from_pool(self) -> None:
+        """
+        Assigns a random DNA sequence from this :any:`Strand`'s :any:`StrandPool`.
+        """
+        assert self.pool is not None
+        sequence = self.pool.generate_sequence()
+        self.assign_dna(sequence)
 
     @property
     def fixed(self) -> bool:
@@ -1499,8 +1530,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                   pool_with_name: Optional[Dict[str, DomainPool]] = None,
                   strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
                   domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                  ) \
-            -> 'Design[StrandLabel, DomainLabel]':
+                  ) -> 'Design[StrandLabel, DomainLabel]':
         """
         :param json_str:
             The string representing the :any:`Design` as a JSON object.
@@ -1991,14 +2021,15 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # warn if not labels are dicts containing group_name_key on strands
         for sc_strand in strands_to_include:
-            if not hasattr(sc_strand.label, group_name_key):
+            if (isinstance(sc_strand.label, dict) and group_name_key not in sc_strand.label) or \
+                    (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_name_key)):
                 logger.warning(f'Strand label {sc_strand.label} should be an object with attribute '
                                f'{group_name_key} (for instance a dict or namedtuple).\n'
                                f'The label is type {type(sc_strand.label)}.\n'
                                f'Make the label has attribute {group_name_key} with associated value '
                                f'of type str in order to auto-population StrandGroups.')
             else:
-                label_value = getattr(sc_strand.label, group_name_key)
+                label_value = Design.get_group_name_from_strand_label(sc_strand)
                 if not isinstance(label_value, str):
                     logger.warning(f'Strand label {sc_strand.label} has attribute '
                                    f'{group_name_key}, but its associated value is not a string.\n'
@@ -2013,8 +2044,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_strand_groups: DefaultDict[str, List[sc.Strand]] = defaultdict(list)
         for sc_strand in strands_to_include:
             assigned = False
-            if hasattr(sc_strand.label, group_name_key):
-                group_name = getattr(sc_strand.label, group_name_key)
+            if hasattr(sc_strand.label, group_name_key) or (
+                    isinstance(sc_strand.label, dict) and group_name_key in sc_strand.label):
+                group_name = Design.get_group_name_from_strand_label(sc_strand)
                 if isinstance(group_name, str):
                     sc_strand_groups[group_name].append(sc_strand)
                     assigned = True
@@ -2052,12 +2084,29 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         if sc.DNA_base_wildcard not in domain_sequence:
                             dsd_domain.sequence_ = domain_sequence
                             dsd_domain.fixed = fix_assigned_sequences
+
+                # set domain labels
+                for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
+                    if dsd_domain.label is None:
                         dsd_domain.label = sc_domain.label
+                    elif sc_domain.label is not None:
+                        logger.warning(f'warning; dsd domain already has label {dsd_domain.label};\n'
+                                       f'skipping assignment of scadnano label {sc_domain.label}')
+
                 strands.append(dsd_strand)
                 strand_names.add(dsd_strand.name)
 
         design: Design[StrandLabel, DomainLabel] = Design(strands=strands)
         return design
+
+    @staticmethod
+    def get_group_name_from_strand_label(sc_strand: Strand) -> Any:
+        if hasattr(sc_strand.label, group_name_key):
+            return getattr(sc_strand.label, group_name_key)
+        elif isinstance(sc_strand.label, dict) and group_name_key in sc_strand.label:
+            return sc_strand.label[group_name_key]
+        else:
+            raise AssertionError(f'label does not have either an attribute or a dict key "{group_name_key}"')
 
     def assign_sequences_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                             ignored_strands: Iterable[Strand] = ()) -> None:
