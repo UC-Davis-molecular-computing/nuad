@@ -406,12 +406,15 @@ def _violations_of_constraints(design: Design,
     # pprint(violation_set.domain_to_violations)
     return violation_set
 
+def _is_significantly_greater(x: float, y: float) -> bool:
+    eps = min(x, y) * 0.001
+    return x > y + eps
 
 def _quit_early(never_increase_weight: bool,
                 violation_set: _ViolationSet,
                 violation_set_old: Optional[_ViolationSet]) -> bool:
     return (never_increase_weight and violation_set_old is not None
-            and violation_set.total_weight() > violation_set_old.total_weight())
+            and _is_significantly_greater(violation_set.total_weight(), violation_set_old.total_weight()))
 
 
 def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
@@ -621,7 +624,7 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                 total_weight_chunk = sum(weight_chunk
                                          for _, weight_chunk in sets_of_violating_domains_excesses_chunk)
                 weight_discovered_here += constraint.weight * total_weight_chunk
-                if weight_discovered_here > current_weight_gap:
+                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
                     break
 
@@ -685,7 +688,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                 violating_domain_pairs_weights.append((domain1, domain2, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
-                    if weight_discovered_here > current_weight_gap:
+                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                         quit_early = True
                         break
     else:
@@ -718,7 +721,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                     for domain_pair_weight in violating_domain_pairs_weights_chunk
                     if domain_pair_weight is not None)
                 weight_discovered_here += constraint.weight * total_weight_chunk
-                if weight_discovered_here > current_weight_gap:
+                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
                     break
 
@@ -775,7 +778,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                 violating_strand_pairs_weights.append((strand1, strand2, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
-                    if weight_discovered_here > current_weight_gap:
+                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                         quit_early = True
                         break
     else:
