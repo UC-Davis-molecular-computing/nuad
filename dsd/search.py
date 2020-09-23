@@ -19,6 +19,7 @@ import textwrap
 import time
 import re
 import datetime
+from enum import Enum
 from pprint import pprint
 
 from ordered_set import OrderedSet
@@ -408,7 +409,6 @@ def _violations_of_constraints(design: Design,
     # print('violation_set.domain_to_violations:')
     # pprint(violation_set.domain_to_violations)
     return violation_set
-
 
 
 def _is_significantly_greater(x: float, y: float) -> bool:
