@@ -184,7 +184,8 @@ def _violations_of_constraints(design: Design,
                                never_increase_weight: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[_ViolationSet],
-                               weigh_violations_equally: bool) -> _ViolationSet:
+                               weigh_violations_equally: bool,
+                               iteration: int) -> _ViolationSet:
     """
     :param design:
         The :any:`Design` for which to find DNA sequences.
@@ -202,6 +203,8 @@ def _violations_of_constraints(design: Design,
         skipping for most choices of DNA sequences to `domain_changed`.
     :param weigh_violations_equally:
         See other functions with this parameter.
+    :param iteration:
+        Current iteration number; useful for debugging (e.g., conditional breakpoints).
     :return:
         dict mapping each :any:`Domain` to the list of constraints it violated
     """
@@ -406,9 +409,17 @@ def _violations_of_constraints(design: Design,
     # pprint(violation_set.domain_to_violations)
     return violation_set
 
+
+
 def _is_significantly_greater(x: float, y: float) -> bool:
-    eps = min(x, y) * 0.001
-    return x > y + eps
+    # epsilon = min(abs(x), abs(y)) * 0.001
+    # XXX: important that this is absolute constant. Sometimes this is called for the total weight of all
+    # violations, and sometimes just for the difference between old and new (the latter are smaller).
+    # If using relative epsilon, then those can disagree and trigger the assert statement that
+    # checks that _violations_of_constraints quit_early agrees with the subroutines it calls.
+    epsilon = 0.001
+    return x > y + epsilon
+
 
 def _quit_early(never_increase_weight: bool,
                 violation_set: _ViolationSet,
@@ -597,7 +608,7 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                 sets_of_violating_domains_weights.append((set_of_violating_domains_weight, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
-                    if weight_discovered_here > current_weight_gap:
+                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                         quit_early = True
                         break
     else:
@@ -811,7 +822,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                     for domain_pair_weight in violating_strand_pairs_chunk
                     if domain_pair_weight is not None)
                 weight_discovered_here += constraint.weight * total_weight_chunk
-                if weight_discovered_here > current_weight_gap:
+                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
                     break
 
@@ -1189,7 +1200,7 @@ def search_for_dna_sequences(*, design: dc.Design,
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
             design=design, weigh_violations_equally=weigh_violations_equally,
-            never_increase_weight=never_increase_weight)
+            never_increase_weight=never_increase_weight, iteration=-1)
 
         if not restart:
             # write initial sequences and report
@@ -1209,15 +1220,13 @@ def search_for_dna_sequences(*, design: dc.Design,
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
                                                                     max_domains_to_change,
-                                                                    domain_to_strand, rng,
-                                                                    # design
-                                                                    )
+                                                                    domain_to_strand, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
                 design=design, weigh_violations_equally=weigh_violations_equally,
                 domains_changed=domains_changed, violation_set_old=violation_set_opt,
-                never_increase_weight=never_increase_weight)
+                never_increase_weight=never_increase_weight, iteration=iteration)
 
             _debug = False
             # _debug = True
@@ -1361,7 +1370,7 @@ def _double_check_violations_from_scratch(design: dc.Design, iteration: int, nev
                                           weigh_violations_equally: bool):
     violation_set_new_fs, domains_new_fs, weights_new_fs = _find_violations_and_weigh(
         design=design, weigh_violations_equally=weigh_violations_equally,
-        never_increase_weight=never_increase_weight)
+        never_increase_weight=never_increase_weight, iteration=iteration)
     # XXX: we shouldn't check that the actual weights are close if quit_early is enabled, because then
     # the total weight found on quitting early will be less than the total weight if not.
     # But uncomment this, while disabling quitting early, to test more precisely for "wrong total weight".
@@ -1526,7 +1535,8 @@ def _find_violations_and_weigh(design: Design,
                                weigh_violations_equally: bool,
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[_ViolationSet] = None,
-                               never_increase_weight: bool = False) \
+                               never_increase_weight: bool = False,
+                               iteration: int = -1) \
         -> Tuple[_ViolationSet, List[Domain], List[float]]:
     """
     :param design:
@@ -1539,6 +1549,8 @@ def _find_violations_and_weigh(design: Design,
         :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed
     :param never_increase_weight:
         See _violations_of_constraints for explanation of this parameter.
+    :param iteration:
+        Current iteration number; useful for debugging (e.g., conditional breakpoints).
     :return:
         Tuple (violations, domains, weights)
             `violations`: dict mapping each domain to list of constraints that they violated
@@ -1549,7 +1561,8 @@ def _find_violations_and_weigh(design: Design,
     stopwatch = Stopwatch()
 
     violation_set: _ViolationSet = _violations_of_constraints(
-        design, never_increase_weight, domains_changed, violation_set_old, weigh_violations_equally)
+        design, never_increase_weight, domains_changed, violation_set_old, weigh_violations_equally,
+        iteration)
     # violation_set: _ViolationSet = _violations_of_constraints(design) # uncomment to recompute all violations
 
     domain_to_weights: Dict[Domain, float] = {
