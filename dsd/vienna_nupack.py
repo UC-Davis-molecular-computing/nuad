@@ -190,8 +190,8 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         temperature: float = default_temperature,
                         negate: bool = False,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
-                        cache: bool = True,
-                        # cache: bool = False,  # off until I implement LRU queue to bound cache size
+                        # cache: bool = True,
+                        cache: bool = False,  # off until I implement LRU queue to bound cache size
                         ) -> List[float]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
