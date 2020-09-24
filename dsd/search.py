@@ -42,7 +42,7 @@ from multiprocessing.pool import ThreadPool
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
-    logger, DesignPart, all_pairs, all_pairs_iterator
+    logger, DesignPart, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -184,8 +184,7 @@ def _violations_of_constraints(design: Design,
                                never_increase_weight: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[_ViolationSet],
-                               weight_transfer_function: Callable[[float], float],
-                               iteration: int
+                               iteration: int,
                                ) -> _ViolationSet:
     """
     :param design:
@@ -202,10 +201,6 @@ def _violations_of_constraints(design: Design,
         solution. In later stages of the search, when the optimal solution so far has very few violated
         constraints, this vastly speeds up the search by allowing most of the constraint checking to be
         skipping for most choices of DNA sequences to `domain_changed`.
-    :param weight_transfer_function:
-        Function to pass "amount of violation" through. For example, if a constraint is violated
-        "by 2" (e.g., strand secondary structure 2 beyond threshold), and this is the cubing function, then
-        the weight assigned to the violation (before multiplying by the Constraint's weight) is 8.
     :param iteration:
         Current iteration number; useful for debugging (e.g., conditional breakpoints).
     :return:
@@ -238,8 +233,7 @@ def _violations_of_constraints(design: Design,
         for domain_constraint_pool in domain_pool.domain_constraints:
             domains = domains_in_pool if domains_changed is None else domains_changed
             domain_violations_pool = _violations_of_domain_constraint(
-                domains=domains, constraint=domain_constraint_pool,
-                weight_transfer_function=weight_transfer_function)
+                domains=domains, constraint=domain_constraint_pool)
             violation_set.update(domain_violations_pool)
 
             if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -252,11 +246,12 @@ def _violations_of_constraints(design: Design,
                 if never_increase_weight and violation_set_old is not None else None
             strands = _strands_containing_domains(domains_changed, strands)
             strand_violations_pool, quit_early_in_func = _violations_of_strand_constraint(
-                strands=strands, constraint=strand_constraint_pool, current_weight_gap=current_weight_gap,
-                weight_transfer_function=weight_transfer_function)
+                strands=strands, constraint=strand_constraint_pool, current_weight_gap=current_weight_gap)
             violation_set.update(strand_violations_pool)
 
             quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+            if quit_early != quit_early_in_func:
+                print('fail')
             assert quit_early == quit_early_in_func
             if quit_early:
                 return violation_set
@@ -264,13 +259,9 @@ def _violations_of_constraints(design: Design,
     # individual domain constraints across all domains in Design
     # most of the time we only check one of these, so we don't bother passing in the current weight gap
     for domain_constraint in design.domain_constraints:
-        if domains_changed is None:
-            domains_to_check = design.domains
-        else:  # don't bother with thread pools if there's just one domain
-            domains_to_check = domains_changed
+        domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domain_constraint)
         domain_violations = _violations_of_domain_constraint(
-            domains=domains_to_check, constraint=domain_constraint,
-            weight_transfer_function=weight_transfer_function)
+            domains=domains_to_check, constraint=domain_constraint)
         violation_set.update(domain_violations)
 
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
@@ -278,12 +269,13 @@ def _violations_of_constraints(design: Design,
 
     # individual strand constraints across all strands in Design
     for strand_constraint in design.strand_constraints:
+        strands_to_check = _determine_strands_to_check(design.strands, domains_changed, strand_constraint)
+
         current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
             if never_increase_weight and violation_set_old is not None else None
-        strands = _strands_containing_domains(domains_changed, design.strands)
+
         strand_violations, quit_early_in_func = _violations_of_strand_constraint(
-            strands=strands, constraint=strand_constraint, current_weight_gap=current_weight_gap,
-            weight_transfer_function=weight_transfer_function)
+            strands=strands_to_check, constraint=strand_constraint, current_weight_gap=current_weight_gap)
         violation_set.update(strand_violations)
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -297,8 +289,7 @@ def _violations_of_constraints(design: Design,
             if never_increase_weight and violation_set_old is not None else None
         domain_pair_violations, quit_early_in_func = _violations_of_domain_pair_constraint(
             domains=design.domains, constraint=domain_pair_constraint, domains_changed=domains_changed,
-            current_weight_gap=current_weight_gap,
-            weight_transfer_function=weight_transfer_function)
+            current_weight_gap=current_weight_gap)
         violation_set.update(domain_pair_violations)
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -312,8 +303,7 @@ def _violations_of_constraints(design: Design,
             if never_increase_weight and violation_set_old is not None else None
         strand_pair_violations, quit_early_in_func = _violations_of_strand_pair_constraint(
             strands=design.strands, constraint=strand_pair_constraint, domains_changed=domains_changed,
-            current_weight_gap=current_weight_gap,
-            weight_transfer_function=weight_transfer_function)
+            current_weight_gap=current_weight_gap)
         violation_set.update(strand_pair_violations)
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -323,16 +313,16 @@ def _violations_of_constraints(design: Design,
 
     # constraints that process each domain, but all at once (e.g., to hand off in batch to RNAduplex)
     for domains_constraint in design.domains_constraints:
-        domains = design.domains if domains_changed is None else domains_changed
+        domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domains_constraint)
 
         if log_names_of_domains_and_strands_checked:
             logger.debug(f'$ for domains constraint {domains_constraint.description}, '
                          f'checking these domains:\n'
-                         f'${pprint.pformat(domains, indent=pprint_indent)}')
+                         f'${pprint.pformat(domains_to_check, indent=pprint_indent)}')
 
-        sets_of_violating_domains_weights = domains_constraint(domains)
+        sets_of_violating_domains_weights = domains_constraint(domains_to_check)
         domains_violations = _convert_sets_of_violating_domains_to_violations(
-            domains_constraint, sets_of_violating_domains_weights, weight_transfer_function)
+            domains_constraint, sets_of_violating_domains_weights)
         violation_set.update(domains_violations)
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -341,17 +331,17 @@ def _violations_of_constraints(design: Design,
 
     # constraints that process each strand, but all at once (e.g., to hand off in batch to RNAduplex)
     for strands_constraint in design.strands_constraints:
-        strands = _strands_containing_domains(domains_changed, design.strands)
+        strands_to_check = _determine_strands_to_check(design.strands, domains_changed, strands_constraint)
 
         if log_names_of_domains_and_strands_checked:
             logger.debug(f'$ for strands constraint {strands_constraint.description}, '
                          f'checking these strands:\n'
-                         f'${pprint.pformat(strands, indent=pprint_indent)}')
+                         f'${pprint.pformat(strands_to_check, indent=pprint_indent)}')
 
-        if len(strands) > 0:
-            sets_of_violating_domains_weights = strands_constraint(strands)
+        if len(strands_to_check) > 0:
+            sets_of_violating_domains_weights = strands_constraint(strands_to_check)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
-                strands_constraint, sets_of_violating_domains_weights, weight_transfer_function)
+                strands_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
             quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -371,8 +361,7 @@ def _violations_of_constraints(design: Design,
         if len(domain_pairs_to_check) > 0:
             sets_of_violating_domains_weights = domain_pairs_constraint(domain_pairs_to_check)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
-                domain_pairs_constraint, sets_of_violating_domains_weights,
-                weight_transfer_function)
+                domain_pairs_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
             quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -391,8 +380,7 @@ def _violations_of_constraints(design: Design,
         if len(strand_pairs_to_check) > 0:
             sets_of_violating_domains_weights = strand_pairs_constraint(strand_pairs_to_check)
             domains_violations = _convert_sets_of_violating_domains_to_violations(
-                strand_pairs_constraint, sets_of_violating_domains_weights,
-                weight_transfer_function)
+                strand_pairs_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
             quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -404,7 +392,7 @@ def _violations_of_constraints(design: Design,
     for design_constraint in design.design_constraints:
         sets_of_violating_domains_weights = design_constraint(design, domains_changed)
         domains_violations = _convert_sets_of_violating_domains_to_violations(
-            design_constraint, sets_of_violating_domains_weights, weight_transfer_function)
+            design_constraint, sets_of_violating_domains_weights)
         violation_set.update(domains_violations)
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
@@ -460,6 +448,28 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     return domain_pairs_to_check
 
 
+def _determine_domains_to_check(all_domains: Iterable[Domain],
+                                domains_changed: Optional[Iterable[Domain]],
+                                constraint: ConstraintWithDomains) -> Sequence[Domain]:
+    """
+    Determines domains to check in `all_domains`.
+    If `domains_changed` is None, then this is all that are not fixed if constraint.domains
+    is None, otherwise it is constraint.domains.
+    If `domains_changed` is not None, then among those domains specified above,
+    it is just those in `domains_changed` that appear in `all_domains`.
+    """
+    # either all pairs, or just constraint.pairs if specified
+    domains_to_check_if_domain_changed_none = constraint.domains if constraint.domains is not None \
+        else [domain for domain in all_domains if not domain.fixed]
+
+    # filter out those not containing domain_change if specified
+    domains_to_check = list(domains_to_check_if_domain_changed_none) if domains_changed is None \
+        else [domain for domain in domains_to_check_if_domain_changed_none
+              if domain in domains_changed]
+
+    return domains_to_check
+
+
 def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
     return not (pair[0].fixed and pair[1].fixed)
 
@@ -489,6 +499,30 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
     return strand_pairs_to_check
 
 
+def _determine_strands_to_check(all_strands: Iterable[Strand],
+                                domains_changed: Optional[Iterable[Domain]],
+                                constraint: ConstraintWithStrands) -> Sequence[Strand]:
+    """
+    Similar to _determine_domain_pairs_to_check but for strands.
+    """
+    # either all pairs, or just constraint.pairs if specified
+    strands_to_check_if_domain_changed_none = constraint.strands if constraint.strands is not None \
+        else [strand for strand in all_strands if not strand.fixed]
+
+    # filter out those not containing domain_change if specified
+    strands_to_check: List[Strand] = []
+    if domains_changed is None:
+        strands_to_check = strands_to_check_if_domain_changed_none
+    else:
+        for strand in strands_to_check_if_domain_changed_none:
+            for domain_changed in domains_changed:
+                if domain_changed in strand.domains:
+                    strands_to_check.append(strand)
+                    break
+
+    return strands_to_check
+
+
 def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: List[Strand]) -> List[Strand]:
     """
     :param domains:
@@ -509,12 +543,11 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 
 
 def _convert_sets_of_violating_domains_to_violations(
-        constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]],
-        weight_transfer_function: Callable[[float], float]) -> Dict[Domain, OrderedSet[_Violation]]:
+        constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]]) \
+        -> Dict[Domain, OrderedSet[_Violation]]:
     domains_violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     for domain_set, weight in sets_of_violating_domains:
-        weight_to_use = weight_transfer_function(weight)
-        violation = _Violation(constraint, domain_set, weight_to_use)
+        violation = _Violation(constraint, domain_set, weight)
         for domain in domain_set:
             domain_violations = domains_violations[domain]
             domain_violations.add(violation)
@@ -530,7 +563,6 @@ _empty_ordered_set: OrderedSet = OrderedSet()
 # quitting early since we are usually only checking a single constraint.
 def _violations_of_domain_constraint(domains: Iterable[Domain],
                                      constraint: DomainConstraint,
-                                     weight_transfer_function: Callable[[float], float],
                                      ) -> Dict[Domain, OrderedSet[_Violation]]:
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     unfixed_domains = [domain for domain in domains if not domain.fixed]
@@ -566,8 +598,7 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
     for violating_domain_weight in violating_domains_weights:
         if violating_domain_weight is not None:
             violating_domain, weight = violating_domain_weight
-            weight_to_use = weight_transfer_function(weight)
-            violation = _Violation(constraint, [violating_domain], weight_to_use)
+            violation = _Violation(constraint, [violating_domain], weight)
             violations[violating_domain].add(violation)
 
     return violations
@@ -576,13 +607,15 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
 def _violations_of_strand_constraint(strands: Iterable[Strand],
                                      constraint: StrandConstraint,
                                      current_weight_gap: Optional[float],
-                                     weight_transfer_function: Callable[[float], float],
                                      ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     """
     :param strands:
+        Strands to check for violations
     :param constraint:
+        Constraint to check.
     :param current_weight_gap:
-    :param weight_transfer_function:
+        Current gap between total weight of constraint violations found so far and total weight of
+        optimal design. Used for quitting early.
     :return:
         1. dict mapping each domain to the set of violations that blame it
         2. bool indicating whether we quit early
@@ -647,8 +680,7 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
     # print(f'{[domains for domains,_ in sets_of_violating_domains_weights]}')
     for set_of_violating_domains_weight, weight in sets_of_violating_domains_weights:
         if len(set_of_violating_domains_weight) > 0:
-            weight_to_use = weight_transfer_function(weight)
-            violation = _Violation(constraint, set_of_violating_domains_weight, weight_to_use)
+            violation = _Violation(constraint, set_of_violating_domains_weight, weight)
             for domain in set_of_violating_domains_weight:
                 violations[domain].add(violation)
 
@@ -666,7 +698,6 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                                           constraint: DomainPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
                                           current_weight_gap: Optional[float],
-                                          weight_transfer_function: Callable[[float], float],
                                           ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     # If specified, current_weight_gap is the current difference between the weight of violated constraints
     # that have been found so far in the current iteration, compared to the total weight of violated
@@ -746,13 +777,12 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
     for violating_domain_pair_weight in violating_domain_pairs_weights:
         if violating_domain_pair_weight is not None:
             domain1, domain2, weight = violating_domain_pair_weight
-            weight_to_use = weight_transfer_function(weight)
             unfixed_domains_set: Set[Domain] = set()
             if not domain1.fixed:
                 unfixed_domains_set.add(domain1)
             if not domain2.fixed:
                 unfixed_domains_set.add(domain2)
-            violation = _Violation(constraint, frozenset(unfixed_domains_set), weight_to_use)
+            violation = _Violation(constraint, frozenset(unfixed_domains_set), weight)
             if not domain1.fixed:
                 violations[domain1].add(violation)
             if not domain2.fixed:
@@ -765,7 +795,6 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                                           constraint: StrandPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
                                           current_weight_gap: Optional[float],
-                                          weight_transfer_function: Callable[[float], float],
                                           ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = \
         _determine_strand_pairs_to_check(strands, domains_changed, constraint)
@@ -836,9 +865,8 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
     for violating_strand_pair_weight in violating_strand_pairs_weights:
         if violating_strand_pair_weight is not None:
             strand1, strand2, weight = violating_strand_pair_weight
-            weight_to_use = weight_transfer_function(weight)
             unfixed_domains_set = frozenset(strand1.unfixed_domains() + strand2.unfixed_domains())
-            violation = _Violation(constraint, unfixed_domains_set, weight_to_use)
+            violation = _Violation(constraint, unfixed_domains_set, weight)
             for domain in unfixed_domains_set:
                 violations[domain].add(violation)
 
@@ -1012,7 +1040,6 @@ def search_for_dna_sequences(*, design: dc.Design,
                              random_seed: Optional[int] = None,
                              never_increase_weight: Optional[bool] = None,
                              out_directory: Optional[str] = None,
-                             weight_transfer_function: Callable[[float], float] = lambda x: max(0, x),
                              report_delay: float = 60.0,
                              on_improved_design: Callable[[int], None] = lambda _: None,
                              restart: bool = False,
@@ -1098,13 +1125,6 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param random_seed:
         Integer given as a random seed to the numpy random number generator, used for
         all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
-    :param weight_transfer_function:
-        Function to pass "amount of violation" through. For example, if a constraint is violated
-        "by 2" (e.g., strand secondary structure 2 beyond threshold), and this is the cubing function, then
-        the weight assigned to the violation (before multiplying by the Constraint's weight) is 8.
-        Constraints, when checking a Domain, Strand, pair of Strands, etc., return a nonnegative float whose
-        interpretation is "how bad was the violation" if positive, and "constraint passed" if 0.0.
-        The total weight assigned to the violation is then this value times :py:data:`Constraint.weight`.
     :param report_delay:
         Every time the design improves, a report on the constraints is written, as long as it has been as
         `report_delay` seconds since the last report was written. Since writing a report requires evaluating
@@ -1191,8 +1211,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                                                       directories.dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
-            design=design, weight_transfer_function=weight_transfer_function,
-            never_increase_weight=never_increase_weight, iteration=-1)
+            design=design, never_increase_weight=never_increase_weight, iteration=-1)
 
         if not restart:
             # write initial sequences and report
@@ -1216,16 +1235,14 @@ def search_for_dna_sequences(*, design: dc.Design,
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
-                design=design, weight_transfer_function=weight_transfer_function,
-                domains_changed=domains_changed, violation_set_old=violation_set_opt,
+                design=design, domains_changed=domains_changed, violation_set_old=violation_set_opt,
                 never_increase_weight=never_increase_weight, iteration=iteration)
 
             _debug = False
             # _debug = True
             if _debug:
                 _double_check_violations_from_scratch(design, iteration, never_increase_weight,
-                                                      violation_set_new, violation_set_opt,
-                                                      weight_transfer_function)
+                                                      violation_set_new, violation_set_opt)
 
             _log_constraint_summary(design=design,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
@@ -1358,11 +1375,9 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # to think a new assignment was better than the optimal so far, but a mistake in weight accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
 def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_weight: bool,
-                                          violation_set_new: _ViolationSet, violation_set_opt: _ViolationSet,
-                                          weight_transfer_function: Callable[[float], float]):
+                                          violation_set_new: _ViolationSet, violation_set_opt: _ViolationSet):
     violation_set_new_fs, domains_new_fs, weights_new_fs = _find_violations_and_weigh(
-        design=design, weight_transfer_function=weight_transfer_function,
-        never_increase_weight=never_increase_weight, iteration=iteration)
+        design=design, never_increase_weight=never_increase_weight, iteration=iteration)
     # XXX: we shouldn't check that the actual weights are close if quit_early is enabled, because then
     # the total weight found on quitting early will be less than the total weight if not.
     # But uncomment this, while disabling quitting early, to test more precisely for "wrong total weight".
@@ -1524,7 +1539,6 @@ def _log_time(stopwatch: Stopwatch) -> None:
 
 
 def _find_violations_and_weigh(design: Design,
-                               weight_transfer_function: Callable[[float], float],
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[_ViolationSet] = None,
                                never_increase_weight: bool = False,
@@ -1553,8 +1567,7 @@ def _find_violations_and_weigh(design: Design,
     stopwatch = Stopwatch()
 
     violation_set: _ViolationSet = _violations_of_constraints(
-        design, never_increase_weight, domains_changed, violation_set_old, weight_transfer_function,
-        iteration)
+        design, never_increase_weight, domains_changed, violation_set_old, iteration)
 
     domain_to_weights: Dict[Domain, float] = {
         domain: sum(violation.weight for violation in domain_violations)

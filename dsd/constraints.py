@@ -2289,6 +2289,19 @@ class Constraint(ABC, Generic[DesignPart]):
     to satisfy all constraints.
     """
 
+    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x)
+    """
+    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative 
+    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure 
+    energy exceeding a threshold, it will return the difference between the energy and the threshold.
+    It is then passed through the weight_transfer_function.
+    The default is the ReLU function: f(x) = max(0, x).
+    However, others may be more appropriate.
+    For example, f(x) = 0 if x < 0 else x^2 "punishes" more severe violations more, i.e., it would 
+    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its 
+    threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
+    """
+
     def __post_init__(self) -> None:
         if len(self.short_description) == 0:
             # self.short_description = self.description
@@ -2323,8 +2336,29 @@ _no_summary_string = f"No summary for this constraint. " \
                      f'"summary" when creating the Constraint.'
 
 
+@dataclass(frozen=True, eq=False)
+class ConstraintWithDomains(Constraint[DesignPart], Generic[DesignPart]):
+    domains: Optional[Tuple[Domain, ...]] = None
+    """
+    List of :any:`Domain`'s to check; if not specified, all :any:`Domain`'s in :any:`Design` are checked.
+    """
+
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
+        raise NotImplementedError('subclasses of ConstraintWithDomains must implement generate_summary')
+
+
+@dataclass(frozen=True, eq=False)
+class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
+    strands: Optional[Tuple[Strand, ...]] = None
+    """
+    List of :any:`Strand`'s to check; if not specified, all :any:`Strand`'s in :any:`Design` are checked.
+    """
+
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
+        raise NotImplementedError('subclasses of ConstraintWithStrands must implement generate_summary')
+
 @dataclass(frozen=True, eq=False)  # type: ignore
-class DomainConstraint(Constraint[Domain]):
+class DomainConstraint(ConstraintWithDomains[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
 
     evaluate: Callable[[Domain],
@@ -2340,7 +2374,13 @@ class DomainConstraint(Constraint[Domain]):
         # and mypy finds it on the second line; this lets us ignore both of them.
         evaluate_callback = cast(Callable[[Domain], float],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(domain)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(domain)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
 
     def generate_summary(self, domain: Domain, report_only_violations: bool) -> str:
         summary_callback = cast(Callable[[Domain], str],  # noqa
@@ -2349,7 +2389,7 @@ class DomainConstraint(Constraint[Domain]):
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class StrandConstraint(Constraint[Strand]):
+class StrandConstraint(ConstraintWithStrands[Strand]):
     """Constraint that applies to a single :any:`Strand`."""
 
     evaluate: Callable[[Strand],
@@ -2365,12 +2405,19 @@ class StrandConstraint(Constraint[Strand]):
         # and mypy finds it on the second line; this lets us ignore both of them.
         evaluate_callback = cast(Callable[[Strand], float],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(strand)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(strand)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
 
     def generate_summary(self, strand: Strand, report_only_violations: bool) -> str:
         summary_callback = cast(Callable[[Strand], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand)
+
 
 
 @dataclass(frozen=True, eq=False)
@@ -2415,7 +2462,13 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
         domain1, domain2 = domain_pair
         evaluate_callback = cast(Callable[[Domain, Domain], float],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(domain1, domain2)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(domain1, domain2)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
 
     def generate_summary(self, domain_pair: Tuple[Domain, Domain], report_only_violations: bool) -> str:
         domain1, domain2 = domain_pair
@@ -2445,13 +2498,32 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
         strand1, strand2 = strand_pair
         evaluate_callback = cast(Callable[[Strand, Strand], float],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(strand1, strand2)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(strand1, strand2)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
 
     def generate_summary(self, strand_pair: Tuple[Strand, Strand], report_only_violations: bool) -> str:
         strand1, strand2 = strand_pair
         summary_callback = cast(Callable[[Strand, Strand], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand1, strand2)
+
+
+def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
+                               transfer_callback: Callable[[float], float]) \
+        -> List[Tuple[OrderedSet[Domain], float]]:
+    sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+    for set_, excess in sets_excesses:
+        if excess < 0:
+            weight = 0.0
+        else:
+            weight = transfer_callback(excess)
+        sets_weights.append((set_, weight))
+    return sets_weights
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2475,7 +2547,11 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
         evaluate_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
                                           List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(domain_pairs)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(domain_pairs)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
 
     def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]],
                          report_only_violations: bool) -> ConstraintReport:
@@ -2505,7 +2581,11 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
         evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
                                           List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(strand_pairs)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(strand_pairs)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
 
     def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]],
                          report_only_violations: bool) -> ConstraintReport:
@@ -2515,7 +2595,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class DomainsConstraint(Constraint[Iterable[Domain]]):
+class DomainsConstraint(ConstraintWithDomains[Iterable[Domain]]):
     """
     Constraint that applies to a several :any:`Domain`'s. The difference with :any:`DomainConstraint` is that
     the caller may want to process all :any:`Domain`'s at once, e.g., by giving many of them to a third-party
@@ -2542,7 +2622,11 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
     def __call__(self, domains: Iterable[Domain]) -> List[Tuple[OrderedSet[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(domains)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(domains)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
 
     def generate_summary(self, domains: Iterable[Domain], report_only_violations: bool) -> ConstraintReport:
         summary_callback = cast(Callable[[Iterable[Domain], bool], ConstraintReport],  # noqa
@@ -2551,7 +2635,7 @@ class DomainsConstraint(Constraint[Iterable[Domain]]):
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class StrandsConstraint(Constraint[Iterable[Strand]]):
+class StrandsConstraint(ConstraintWithStrands[Iterable[Strand]]):
     """
     Constraint that applies to a several :any:`Strand`'s. The difference with :any:`StrandConstraint` is that
     the caller may want to process all :any:`Strand`'s at once, e.g., by giving many of them to a third-party
@@ -2578,7 +2662,11 @@ class StrandsConstraint(Constraint[Iterable[Strand]]):
     def __call__(self, strands: Iterable[Strand]) -> List[Tuple[OrderedSet[Domain], float]]:
         evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
-        return evaluate_callback(strands)
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(strands)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
 
     def generate_summary(self, strands: Iterable[Strand], report_only_violations: bool) -> ConstraintReport:
         summary_callback = cast(Callable[[Iterable[Strand], bool], ConstraintReport],  # noqa
@@ -2613,10 +2701,14 @@ class DesignConstraint(Constraint[Design]):
 
     def __call__(self, design: Design, domains_changed: Optional[Iterable[Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        eval_callback = cast(Callable[[Design, Optional[Iterable[Domain]]],  # noqa
-                                      List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                             self.evaluate)  # type: ignore
-        return eval_callback(design, domains_changed)
+        evaluate_callback = cast(Callable[[Design, Optional[Iterable[Domain]]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(design, domains_changed)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
 
     def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
         summary_callback = cast(Callable[[Design, bool], ConstraintReport],  # noqa
@@ -2691,9 +2783,11 @@ def nupack_strand_secondary_structure_constraint(
         threshold: Union[float, Dict[StrandGroup, float]],
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         threaded: bool = False,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
+        strands: Optional[Iterable[Strand]] = None,
         negate: bool = False) -> StrandConstraint:
     """
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
@@ -2706,9 +2800,14 @@ def nupack_strand_secondary_structure_constraint(
     :param negate: whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
         If False, then the constraint is violated if energy < `threshold`.
-    :param weight: how much to weigh this :any:`Constraint`
+    :param weight:
+        how much to weigh this :any:`Constraint`
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param threaded:
         Whether to use threadds to parallelize.
+    :param strands:
+        Strands to check; if not specified, all strands are checked.
     :param description: detailed description of constraint suitable for putting in report; if not specified
         a reasonable default is chosen
     :param short_description: short description of constraint suitable for logging to stdout
@@ -2741,11 +2840,16 @@ def nupack_strand_secondary_structure_constraint(
         else:
             raise AssertionError('threshold must be one of float or dict')
 
+    if strands is not None:
+        strands = tuple(strands)
+
     return StrandConstraint(description=description,
                             short_description=short_description,
                             weight=weight,
+                            weight_transfer_function=weight_transfer_function,
                             evaluate=evaluate,
                             threaded=threaded,
+                            strands=strands,
                             summary=summary)
 
 
@@ -2755,6 +2859,7 @@ def nupack_domain_pair_constraint(
         threaded: bool = False,
         threaded4: bool = False,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
         negate: bool = False) -> DomainPairConstraint:
@@ -2780,6 +2885,8 @@ def nupack_domain_pair_constraint(
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
         How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param description:
         Detailed description of constraint suitable for summary report.
     :param short_description:
@@ -2849,6 +2956,7 @@ def nupack_domain_pair_constraint(
     return DomainPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
+                                weight_transfer_function=weight_transfer_function,
                                 evaluate=evaluate,
                                 summary=summary,
                                 threaded=threaded)
@@ -2858,6 +2966,7 @@ def nupack_strand_pair_constraint(
         threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'strand_pair_nupack',
         threaded: bool = False,
@@ -2880,6 +2989,8 @@ def nupack_strand_pair_constraint(
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
         How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param threaded:
         Whether to use threading to parallelize evaluating this constraint.
     :param description:
@@ -2925,6 +3036,7 @@ def nupack_strand_pair_constraint(
     return StrandPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
+                                weight_transfer_function=weight_transfer_function,
                                 threaded=threaded,
                                 pairs=pairs,
                                 evaluate=evaluate,
@@ -3003,6 +3115,7 @@ def rna_duplex_strand_pairs_constraint(
         temperature: float = dv.default_temperature,
         negate: bool = False,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
         threaded: bool = False,
@@ -3026,6 +3139,8 @@ def rna_duplex_strand_pairs_constraint(
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
         How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param description:
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
@@ -3134,6 +3249,7 @@ def rna_duplex_strand_pairs_constraint(
     return StrandPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
@@ -3171,6 +3287,7 @@ def rna_cofold_strand_pairs_constraint(
         temperature: float = dv.default_temperature,
         negate: bool = False,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
         threaded: bool = False,
@@ -3194,6 +3311,8 @@ def rna_cofold_strand_pairs_constraint(
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
         How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param description:
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
@@ -3300,6 +3419,7 @@ def rna_cofold_strand_pairs_constraint(
     return StrandPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
@@ -3342,6 +3462,7 @@ def rna_duplex_domain_pairs_constraint(
         temperature: float = dv.default_temperature,
         negate: bool = False,
         weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
         short_description: str = 'rna_dup_dom_pairs',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
         parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
@@ -3356,6 +3477,8 @@ def rna_duplex_domain_pairs_constraint(
                    If True, then the constraint is violated if energy > `threshold`.
                    If False, then the constraint is violated if energy < `threshold`.
     :param weight: how much to weigh this :any:`Constraint`
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
     :param short_description: short description of constraint suitable for logging to stdout
     :param pairs: pairs of :any:`Domain`'s to compare; if not specified, checks all pairs
     :param parameters_filename: name of parameters file for ViennaRNA; default is
@@ -3414,6 +3537,7 @@ def rna_duplex_domain_pairs_constraint(
     return DomainPairsConstraint(description='RNAduplex some domain pairs',
                                  short_description=short_description,
                                  weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
