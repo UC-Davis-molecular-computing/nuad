@@ -1759,7 +1759,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         num_violations = 0
         num_checks = 0
         if domains_to_check is None:
-            domains_to_check = self.domains
+            domains_to_check = self.domains if constraint.domains is None else constraint.domains
         fixed_domains = [domain for domain in domains_to_check if domain.fixed]
         unfixed_domains = [domain for domain in domains_to_check if not domain.fixed]
 
@@ -1796,7 +1796,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         num_violations = 0
         num_checks = 0
         if strands_to_check is None:
-            strands_to_check = self.strands
+            strands_to_check = self.strands if constraint.strands is None else constraint.strands
         fixed_strands = [strand for strand in strands_to_check if strand.fixed]
         unfixed_strands = [strand for strand in strands_to_check if not strand.fixed]
 
@@ -2357,6 +2357,7 @@ class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
         raise NotImplementedError('subclasses of ConstraintWithStrands must implement generate_summary')
 
+
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainConstraint(ConstraintWithDomains[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
@@ -2417,7 +2418,6 @@ class StrandConstraint(ConstraintWithStrands[Strand]):
         summary_callback = cast(Callable[[Strand], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand)
-
 
 
 @dataclass(frozen=True, eq=False)
