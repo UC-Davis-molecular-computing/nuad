@@ -3,6 +3,7 @@ Stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
 """
 
+import math
 import itertools
 import os
 import shutil
@@ -1608,10 +1609,11 @@ def _log_constraint_summary(*, design: Design,
 
     weight_opt = violation_set_opt.total_weight()
     weight_new = violation_set_new.total_weight()
-    weight_decimals = 2 if weight_opt < 10 else 1
+    dec_opt = max(1, math.ceil(math.log(1 / weight_opt, 10)) + 2)
+    dec_new = max(1, math.ceil(math.log(1 / weight_new, 10)) + 2)
     weight_str = f'{iteration:9}|{num_new_optimal:8}|' \
-                 f'{weight_opt :10.{weight_decimals}f}|' \
-                 f'{weight_new :10.{weight_decimals}f}|' \
+                 f'{weight_opt :10.{dec_opt}f}|' \
+                 f'{weight_new :10.{dec_new}f}|' \
                  f'{violation_set_opt.num_violations():9}|' \
                  f'{violation_set_new.num_violations():9}||'
     all_constraints_str = '|'.join(
