@@ -2289,15 +2289,14 @@ class Constraint(ABC, Generic[DesignPart]):
     to satisfy all constraints.
     """
 
-    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x)
+    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 3)
     """
     Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative 
     float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure 
     energy exceeding a threshold, it will return the difference between the energy and the threshold.
     It is then passed through the weight_transfer_function.
-    The default is the ReLU function: f(x) = max(0, x).
-    However, others may be more appropriate.
-    For example, f(x) = 0 if x < 0 else x^2 "punishes" more severe violations more, i.e., it would 
+    The default is the cubed ReLU function: f(x) = max(0, x^3).
+    This "punishes" more severe violations more, i.e., it would 
     bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its 
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
