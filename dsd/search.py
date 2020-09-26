@@ -1213,11 +1213,10 @@ def search_for_dna_sequences(*, design: dc.Design,
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
             design=design, never_increase_weight=never_increase_weight, iteration=-1)
 
-        if not restart:
-            # write initial sequences and report
-            _write_intermediate_files(design=design, num_new_optimal=0, write_report=True,
-                                      directories=directories, report_only_violations=report_only_violations,
-                                      num_digits_update=num_digits_update)
+        # write initial sequences and report
+        _write_intermediate_files(design=design, num_new_optimal=num_new_optimal, write_report=True,
+                                  directories=directories, report_only_violations=report_only_violations,
+                                  num_digits_update=num_digits_update)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
