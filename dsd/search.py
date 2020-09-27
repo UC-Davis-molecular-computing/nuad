@@ -978,7 +978,7 @@ class Directories:
     dsd_design_subdirectory: str = field(init=False, default='dsd_designs')
     report_subdirectory: str = field(init=False, default='reports')
     sequence_subdirectory: str = field(init=False, default='sequences')
-    dsd_design_filename_no_ext: str = field(init=False, default='design')
+    dsd_design_filename_no_ext: str = field(init=False, default='dsd-design')
     sequences_filename_no_ext: str = field(init=False, default='sequences')
     report_filename_no_ext: str = field(init=False, default='report')
     debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
