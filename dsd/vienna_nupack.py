@@ -166,7 +166,7 @@ _sentinel = object()
 _max_size = 1_000_000
 _hits = 0
 _misses = 0
-_rna_duplex_cache: Dict[Tuple[str, str], float] = {}
+_rna_duplex_cache: Dict[Tuple[Tuple[str, str], float, bool, str], float] = {}
 
 
 def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float, negate: bool,

@@ -1289,8 +1289,8 @@ def search_for_dna_sequences(*, design: dc.Design,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
     finally:
-        if sys.platform != 'win32':
-            _pfunc_killall()
+        # if sys.platform != 'win32':
+        #     _pfunc_killall()
         _thread_pool.close()  # noqa
         _thread_pool.terminate()
 
