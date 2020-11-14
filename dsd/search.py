@@ -34,8 +34,8 @@ import dsd.np as dn
 # Actually I can't really find any official documentation of ThreadPool, though it has the same API as Pool.
 # I'm using ThreadPool instead of Pool mainly because Pool
 # is a pain to call; all information must be pickle-able, but the only functions that are pickle-able are
-# defined at the top level of a module. The constraints call local functions defined by the user or
-# by us in higher-order functions such as rna_duplex_strand_pairs_constraint, so it's not how to use Pool.
+# defined at the top level of a module. The constraints call local functions defined by the user or by us in
+# higher-order functions such as rna_duplex_strand_pairs_constraint, so it's not clear how to use Pool.
 # There may also be a performance overhead for doing this pickling, but I don't know because I haven't
 # tested it.
 # from multiprocessing.pool import Pool
