@@ -8,7 +8,7 @@ dsd stands for "DNA sequence designer". It is a Python library that enables one 
 ## Installation
 dsd requires Python version 3.6 or higher. Currently, it cannot be installed using pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/dsd/issues/12)). 
 
-dsd uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download). While it is technically possible to use dsd without them, most of the pre-packaged constraints require them. ViennaRNA is fairly straightforward to install on any system. Installing NUPACK requires compiling C code from source, and it is not straightforward to install on Windows (for example, using Cygwin or MingGW). To use NUPACK on Windows, you should use [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system.
+dsd uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download). While it is technically possible to use dsd without them, most of the pre-packaged constraints require them. ViennaRNA is fairly straightforward to install on any system. Installing NUPACK requires compiling C code from source, and it is not straightforward to install on Windows (for example, using Cygwin or MinGW). To use NUPACK on Windows, you should use [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system.
 
 If you are using Windows, you can then run python code calling the dsd library from either WSL (which will appear to the Python virtual machine as though it is running on Linux), or from the Windows command prompt/PowerShell directly. If you do the latter, then the dsd library, when making a call to NUPACK or ViennaRNA, will assume they have been installed under WSL and call them via the Windows command line, e.g., `wsl.exe -e RNAduplex ...`. This is what will happen, for instance, if you use an IDE such as [PyCharm](https://www.jetbrains.com/pycharm/) to run your Python program in Windows.
 
@@ -30,9 +30,9 @@ To install dsd:
     export PYTHONPATH="${PYTHONPATH}:/path/to/dsd"
     ```
 
-    In Windows, the `PYTHONPATH` environment variable acn be adjusted by right-clicking "This PC" on the desktop &rarr; Properties &rarr; Advanced System Settings &rarr; Environment Variables.
+    In Windows (outside of Windows Subsystem for Linux), the `PYTHONPATH` environment variable can be adjusted by right-clicking "This PC" on the desktop &rarr; Properties &rarr; Advanced System Settings &rarr; Environment Variables.
 
-4. Install NUPACK and ViennaRNA following their installation instructions. (If you do not install one of them, you can still install dsd, but certain functions will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK and ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.)
+4. Install NUPACK and ViennaRNA following their installation instructions. (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK and ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.)
 
     To test that NUPACK is installed correctly, type `pfunc` at the command line (the wsl command line if using Windows); the pfunc NUPACK executable should be called. To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line. 
     
