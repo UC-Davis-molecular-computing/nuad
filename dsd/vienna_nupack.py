@@ -19,6 +19,12 @@ from functools import lru_cache
 from multiprocessing.pool import ThreadPool
 from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional
 
+try:
+    from nupack import pfunc as nupack_pfunc
+    from nupack import Model
+except ImportError:
+    pass
+
 os_is_windows = sys.platform == 'win32'
 
 global_thread_pool = ThreadPool()
@@ -26,6 +32,8 @@ global_thread_pool = ThreadPool()
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 default_temperature = 37.0
+default_magnesium = 0.0125
+default_sodium = 0.05
 
 
 # unix path must be able to find NUPACK, and NUPACKHOME must be set,
@@ -62,7 +70,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :param adjust: whether to adjust from NUPACK mole fraction units to molar units
     :param negate: whether to negate the standard free energy (typically free energies are negative;
                    if `negate` is ``True`` then the return value will be positive)
-    :return: partition function energy ("delta G") of ordered complex
+    :return: complex free energy ("delta G") of ordered complex
              with strands in given cyclic permutation
     """
     if isinstance(seqs, str):
@@ -87,6 +95,42 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         dg = 0.0
     else:
         dg = float(dg_str)
+
+    if adjust:
+        dg += _dg_adjust(temperature, len(seqs))
+
+    return -dg if negate else dg
+
+@lru_cache(maxsize=10_000)
+def pfunc4(seqs: Union[str, Tuple[str, ...]],
+          temperature: float = default_temperature,
+          sodium: float = default_sodium,
+          magnesium: float = default_magnesium,
+          adjust: bool = True,
+          negate: bool = False) -> float:
+    """Calls NUPACK's pfunc version 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
+    seqs, returns energy ("delta G"), i.e., generally a negative number.
+
+    :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
+                 For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
+                 in such cases.
+    :param temperature: temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param adjust: whether to adjust from NUPACK mole fraction units to molar units
+    :param negate: whether to negate the standard free energy (typically free energies are negative;
+                   if `negate` is ``True`` then the return value will be positive)
+    :return: complex free energy ("delta G") of ordered complex
+             with strands in given cyclic permutation
+    """
+    if isinstance(seqs, str):
+        seqs = (seqs,)
+
+    try:
+        model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
+        (_, dg) = nupack_pfunc(strands=seqs, model=model)
+    except NameError:
+        raise ImportError('pfunc4 requires nupack version 4')
 
     if adjust:
         dg += _dg_adjust(temperature, len(seqs))
