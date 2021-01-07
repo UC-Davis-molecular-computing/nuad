@@ -19,12 +19,6 @@ from functools import lru_cache
 from multiprocessing.pool import ThreadPool
 from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional
 
-try:
-    from nupack import pfunc as nupack_pfunc
-    from nupack import Model
-except ImportError:
-    pass
-
 os_is_windows = sys.platform == 'win32'
 
 global_thread_pool = ThreadPool()
@@ -62,6 +56,8 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
           negate: bool = False) -> float:
     """Calls NUPACK's pfunc (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
                  For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
@@ -108,8 +104,10 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
           magnesium: float = default_magnesium,
           adjust: bool = True,
           negate: bool = False) -> float:
-    """Calls NUPACK's pfunc version 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
+    """Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
 
     :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
                  For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
@@ -127,10 +125,13 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
         seqs = (seqs,)
 
     try:
-        model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
-        (_, dg) = nupack_pfunc(strands=seqs, model=model)
-    except NameError:
-        raise ImportError('pfunc4 requires nupack version 4')
+        from nupack import pfunc as nupack_pfunc
+        from nupack import Model
+    except ModuleNotFoundError:
+        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
+    (_, dg) = nupack_pfunc(strands=seqs, model=model)
 
     if adjust:
         dg += _dg_adjust(temperature, len(seqs))

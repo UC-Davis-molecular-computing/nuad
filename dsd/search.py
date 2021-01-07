@@ -222,7 +222,7 @@ def _violations_of_constraints(design: Design,
         violation_set = _ViolationSet()
     else:
         assert violation_set_old is not None
-        violation_set = violation_set_old.clone()
+        violation_set = violation_set_old.clone() # Keep old in case no improvement
         for domain_changed in domains_changed:
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
@@ -643,8 +643,8 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
         for strand in unfixed_strands:
             weight: float = constraint(strand)
             if weight > 0.0:
-                set_of_violating_domains_weight = OrderedSet(strand.unfixed_domains())
-                sets_of_violating_domains_weights.append((set_of_violating_domains_weight, weight))
+                set_of_violating_domains = OrderedSet(strand.unfixed_domains())
+                sets_of_violating_domains_weights.append((set_of_violating_domains, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
                     if _is_significantly_greater(weight_discovered_here, current_weight_gap):
@@ -679,10 +679,10 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                     break
 
     # print(f'{[domains for domains,_ in sets_of_violating_domains_weights]}')
-    for set_of_violating_domains_weight, weight in sets_of_violating_domains_weights:
-        if len(set_of_violating_domains_weight) > 0:
-            violation = _Violation(constraint, set_of_violating_domains_weight, weight)
-            for domain in set_of_violating_domains_weight:
+    for set_of_violating_domains, weight in sets_of_violating_domains_weights:
+        if len(set_of_violating_domains) > 0:
+            violation = _Violation(constraint, set_of_violating_domains, weight)
+            for domain in set_of_violating_domains:
                 violations[domain].add(violation)
 
     return violations, quit_early
@@ -1569,12 +1569,12 @@ def _find_violations_and_weigh(design: Design,
     violation_set: _ViolationSet = _violations_of_constraints(
         design, never_increase_weight, domains_changed, violation_set_old, iteration)
 
-    domain_to_weights: Dict[Domain, float] = {
+    domain_to_weight: Dict[Domain, float] = {
         domain: sum(violation.weight for violation in domain_violations)
         for domain, domain_violations in violation_set.domain_to_violations.items()
     }
-    domains = list(domain_to_weights.keys())
-    weights = list(domain_to_weights.values())
+    domains = list(domain_to_weight.keys())
+    weights = list(domain_to_weight.values())
 
     stopwatch.stop()
 
