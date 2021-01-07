@@ -26,6 +26,8 @@ global_thread_pool = ThreadPool()
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 default_temperature = 37.0
+default_magnesium = 0.0125
+default_sodium = 0.05
 
 
 # unix path must be able to find NUPACK, and NUPACKHOME must be set,
@@ -55,6 +57,8 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     """Calls NUPACK's pfunc (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
+    NUPACK version 2 or 3 must be installed and on the PATH.
+
     :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
                  For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
                  in such cases.
@@ -62,7 +66,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :param adjust: whether to adjust from NUPACK mole fraction units to molar units
     :param negate: whether to negate the standard free energy (typically free energies are negative;
                    if `negate` is ``True`` then the return value will be positive)
-    :return: partition function energy ("delta G") of ordered complex
+    :return: complex free energy ("delta G") of ordered complex
              with strands in given cyclic permutation
     """
     if isinstance(seqs, str):
@@ -87,6 +91,47 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         dg = 0.0
     else:
         dg = float(dg_str)
+
+    if adjust:
+        dg += _dg_adjust(temperature, len(seqs))
+
+    return -dg if negate else dg
+
+@lru_cache(maxsize=10_000)
+def pfunc4(seqs: Union[str, Tuple[str, ...]],
+          temperature: float = default_temperature,
+          sodium: float = default_sodium,
+          magnesium: float = default_magnesium,
+          adjust: bool = True,
+          negate: bool = False) -> float:
+    """Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
+    seqs, returns energy ("delta G"), i.e., generally a negative number.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
+                 For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
+                 in such cases.
+    :param temperature: temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param adjust: whether to adjust from NUPACK mole fraction units to molar units
+    :param negate: whether to negate the standard free energy (typically free energies are negative;
+                   if `negate` is ``True`` then the return value will be positive)
+    :return: complex free energy ("delta G") of ordered complex
+             with strands in given cyclic permutation
+    """
+    if isinstance(seqs, str):
+        seqs = (seqs,)
+
+    try:
+        from nupack import pfunc as nupack_pfunc
+        from nupack import Model
+    except ModuleNotFoundError:
+        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
+    (_, dg) = nupack_pfunc(strands=seqs, model=model)
 
     if adjust:
         dg += _dg_adjust(temperature, len(seqs))
