@@ -410,7 +410,10 @@ def wc(seq: str) -> str:
 
 def binding_complement(seq: str, temperature: float = default_temperature, subtract_indv: bool = True,
                        negate: bool = False) -> float:
-    """Computes the (partition function) free energy of a strand with its perfect WC complement."""
+    """Computes the (partition function) free energy of a strand with its perfect WC complement.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     seq1 = seq
     seq2 = wc(seq)
     # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
@@ -425,14 +428,51 @@ def binding_complement(seq: str, temperature: float = default_temperature, subtr
     return association_energy
 
 
+def binding_complement4(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
+                        magnesium: float = default_magnesium, subtract_indv: bool = True,
+                        negate: bool = False) -> float:
+    """Computes the (partition function) free energy of a strand with its perfect WC complement.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    seq1 = seq
+    seq2 = wc(seq)
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    #   considered different tuples hence are cached differently by lrucache;
+    #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
+    if seq1 > seq2:
+        seq1, seq2 = seq2, seq1
+    association_energy = pfunc4((seq1, seq2), temperature, sodium, magnesium, negate)
+    if subtract_indv:
+        # ddG_reaction == dG(products) - dG(reactants)
+        association_energy -= (pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium, magnesium, negate))
+    return association_energy
+
+
 def secondary_structure_single_strand(seq: str, temperature: float = default_temperature,
                                       negate: bool = False) -> float:
-    """Computes the (partition function) free energy of single-strand secondary structure."""
+    """Computes the (partition function) free energy of single-strand secondary structure.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     return pfunc((seq,), temperature, negate)
 
 
+def secondary_structure_single_strand4(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
+                                       magnesium: float = default_magnesium,
+                                       negate: bool = False) -> float:
+    """Computes the (partition function) free energy of single-strand secondary structure.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    return pfunc4((seq,), temperature, sodium, magnesium, negate)
+
+
 def binding(seq1: str, seq2: str, temperature: float = default_temperature, negate: bool = False) -> float:
-    """Computes the (partition function) free energy of association between two strands."""
+    """Computes the (partition function) free energy of association between two strands.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function so it's safe to swap the order
@@ -442,19 +482,50 @@ def binding(seq1: str, seq2: str, temperature: float = default_temperature, nega
             pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
 
 
+def binding4(seq1: str, seq2: str, temperature: float = default_temperature,  sodium: float = default_sodium,
+             magnesium: float = default_magnesium, negate: bool = False) -> float:
+    """Computes the (partition function) free energy of association between two strands.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    #   considered different tuples hence are cached differently by lrucache;
+    #   but pfunc is a symmetric function so it's safe to swap the order
+    if seq1 > seq2:
+        seq1, seq2 = seq2, seq1
+    return pfunc4((seq1, seq2), temperature, sodium, magnesium, negate) - (
+            pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium, magnesium, negate))
+
+
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
     """Chooses a random DNA sequence."""
     return ''.join(random.choices(population=bases, k=length))
 
 
 def domain_equal_strength(seq: str, temperature: float, low: float, high: float) -> bool:
-    """test roughly equal strength of domains (according to partition function)"""
+    """test roughly equal strength of domains (according to partition function)
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     dg = binding(seq, wc(seq), temperature)
     return low <= dg <= high
 
 
+def domain_equal_strength4(seq: str, temperature: float,  sodium: float,
+                           magnesium: float, low: float, high: float) -> bool:
+    """test roughly equal strength of domains (according to partition function)
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    dg = binding4(seq, wc(seq), temperature, sodium, magnesium)
+    return low <= dg <= high
+
+
 def domain_no_sec_struct(seq: str, temperature: float, individual: float, threaded: bool) -> float:
-    """test lack of secondary structure in domains"""
+    """test lack of secondary structure in domains
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     if threaded:
         results = [global_thread_pool.apply_async(secondary_structure_single_strand, args=(s, temperature))
                    for s in (seq, wc(seq))]
@@ -463,6 +534,23 @@ def domain_no_sec_struct(seq: str, temperature: float, individual: float, thread
     else:
         seq_sec_struc = secondary_structure_single_strand(seq, temperature)
         seq_wc_sec_struc = secondary_structure_single_strand(wc(seq), temperature)
+        return seq_sec_struc <= individual and seq_wc_sec_struc <= individual
+
+
+def domain_no_sec_struct4(seq: str, temperature: float, sodium: float,
+                          magnesium: float, individual: float, threaded: bool) -> float:
+    """test lack of secondary structure in domains
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    if threaded:
+        results = [global_thread_pool.apply_async(secondary_structure_single_strand4, args=(s, temperature, sodium, magnesium))
+                   for s in (seq, wc(seq))]
+        e_seq, e_wcseq = [result.get() for result in results]
+        return e_seq <= individual and e_wcseq <= individual
+    else:
+        seq_sec_struc = secondary_structure_single_strand4(seq, temperature, sodium, magnesium)
+        seq_wc_sec_struc = secondary_structure_single_strand4(wc(seq), temperature, sodium, magnesium)
         return seq_sec_struc <= individual and seq_wc_sec_struc <= individual
 
 
@@ -476,7 +564,10 @@ def log_energy(energy: float) -> None:
 
 def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, orthogonality: float,
                       orthogonality_ave: float = -1, threaded: bool = True) -> bool:
-    """test orthogonality of domain with all others and their wc complements"""
+    """test orthogonality of domain with all others and their wc complements
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     if threaded:
         results = [global_thread_pool.apply_async(binding, args=(s, s, temperature)) for s in (seq, wc(seq))]
         energies = [result.get() for result in results]
@@ -525,10 +616,68 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, orthogo
         return True
 
 
+def domain_orthogonal4(seq: str, seqs: Sequence[str], temperature: float,  sodium: float,
+                       magnesium: float, orthogonality: float,
+                       orthogonality_ave: float = -1, threaded: bool = True) -> bool:
+    """test orthogonality of domain with all others and their wc complements
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    if threaded:
+        results = [global_thread_pool.apply_async(binding4, args=(s, s, temperature, sodium, magnesium)) for s in (seq, wc(seq))]
+        energies = [result.get() for result in results]
+        if max(energies) > orthogonality:
+            return False
+    else:
+        ss = binding4(seq, seq, temperature, sodium, magnesium)
+        log_energy(ss)
+        if ss > orthogonality:
+            return False
+        wsws = binding4(wc(seq), wc(seq), temperature, sodium, magnesium)
+        log_energy(wsws)
+        if wsws > orthogonality:
+            return False
+    energy_sum = 0.0
+    for altseq in seqs:
+        if threaded:
+            results = [global_thread_pool.apply_async(binding4, args=(seq1, seq2, temperature, sodium, magnesium))
+                       for seq1, seq2 in itertools.product((seq, wc(seq)), (altseq, wc(altseq)))]
+            energies = [result.get() for result in results]
+            if max(energies) > orthogonality:
+                return False
+            energy_sum += sum(energies)
+        else:
+            sa = binding4(seq, altseq, temperature, sodium, magnesium)
+            log_energy(sa)
+            if sa > orthogonality:
+                return False
+            sw = binding4(seq, wc(altseq), temperature, sodium, magnesium)
+            log_energy(sw)
+            if sw > orthogonality:
+                return False
+            wa = binding4(wc(seq), altseq, temperature, sodium, magnesium)
+            log_energy(wa)
+            if wa > orthogonality:
+                return False
+            ww = binding4(wc(seq), wc(altseq), temperature, sodium, magnesium)
+            log_energy(ww)
+            if ww > orthogonality:
+                return False
+            energy_sum += sa + sw + wa + ww
+    if orthogonality_ave > 0:
+        energy_ave = energy_sum / (4 * len(seqs)) if len(seqs) > 0 else 0.0
+        return energy_ave <= orthogonality_ave
+    else:
+        return True
+
+
 def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], temperature: float,
                                                concat: float, concat_ave: float = -1,
                                                threaded: bool = True) -> bool:
-    """test lack of secondary structure in concatenated domains"""
+    """test lack of secondary structure in concatenated domains
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
+    """
     #     if hairpin(seq+seq,temperature) > concat: return False
     #     if hairpin(wc(seq)+wc(seq),temperature) > concat: return False
     energy_sum = 0.0
@@ -576,6 +725,72 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
             if wcalt_seq > concat:
                 return False
             wcalt_wcseq = secondary_structure_single_strand(wc_altseq + wc_seq, temperature)
+            if wcalt_wcseq > concat:
+                return False
+            energy_sum += (seq_alt + seq_wcalt + wcseq_alt + wcseq_wcalt +
+                           alt_seq + alt_wcseq + wcalt_seq + wcalt_wcseq)
+    if concat_ave > 0:
+        energy_ave = energy_sum / (8 * len(seqs)) if len(seqs) > 0 else 0.0
+        return energy_ave <= concat_ave
+    else:
+        return True
+
+
+def domain_pairwise_concatenated_no_sec_struct4(seq: str, seqs: Sequence[str], temperature: float,
+                                                sodium: float, magnesium: float,
+                                                concat: float, concat_ave: float = -1,
+                                                threaded: bool = True) -> bool:
+    """test lack of secondary structure in concatenated domains
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    #     if hairpin(seq+seq,temperature) > concat: return False
+    #     if hairpin(wc(seq)+wc(seq),temperature) > concat: return False
+    energy_sum = 0.0
+    for altseq in seqs:
+        wc_seq = wc(seq)
+        wc_altseq = wc(altseq)
+        if threaded:
+            results = [global_thread_pool.apply_async(secondary_structure_single_strand4,
+                                                      args=(seq1 + seq2, temperature, sodium, magnesium)) for
+                       (seq1, seq2) in
+                       [(seq, altseq),
+                        (seq, wc_altseq),
+                        (wc_seq, altseq),
+                        (wc_seq, wc_altseq),
+                        (altseq, seq),
+                        (wc_altseq, seq),
+                        (altseq, wc_seq),
+                        (wc_altseq, wc_seq)]]
+            energies = [result.get() for result in results]
+            #             print len(results)
+            #             print 'pair: %s' % [round(e,1) for e in energies]
+            if max(energies) > concat:
+                return False
+            energy_sum += sum(energies)
+        else:
+            seq_alt = secondary_structure_single_strand4(seq + altseq, temperature, sodium, magnesium)
+            if seq_alt > concat:
+                return False
+            seq_wcalt = secondary_structure_single_strand4(seq + wc_altseq, temperature, sodium, magnesium)
+            if seq_wcalt > concat:
+                return False
+            wcseq_alt = secondary_structure_single_strand4(wc_seq + altseq, temperature, sodium, magnesium)
+            if wcseq_alt > concat:
+                return False
+            wcseq_wcalt = secondary_structure_single_strand4(wc_seq + wc_altseq, temperature, sodium, magnesium)
+            if wcseq_wcalt > concat:
+                return False
+            alt_seq = secondary_structure_single_strand4(altseq + seq, temperature, sodium, magnesium)
+            if alt_seq > concat:
+                return False
+            alt_wcseq = secondary_structure_single_strand4(altseq + wc_seq, temperature, sodium, magnesium)
+            if alt_wcseq > concat:
+                return False
+            wcalt_seq = secondary_structure_single_strand4(wc_altseq + seq, temperature, sodium, magnesium)
+            if wcalt_seq > concat:
+                return False
+            wcalt_wcseq = secondary_structure_single_strand4(wc_altseq + wc_seq, temperature, sodium, magnesium)
             if wcalt_wcseq > concat:
                 return False
             energy_sum += (seq_alt + seq_wcalt + wcseq_alt + wcseq_wcalt +

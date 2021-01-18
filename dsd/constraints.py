@@ -2792,6 +2792,8 @@ def nupack_strand_secondary_structure_constraint(
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
 
+    NUPACK version 2 or 3 must be installed and on the PATH.
+
     :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
         :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
         one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
@@ -2852,6 +2854,86 @@ def nupack_strand_secondary_structure_constraint(
                             summary=summary)
 
 
+def nupack_4_strand_secondary_structure_constraint(
+        threshold: Union[float, Dict[StrandGroup, float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        threaded: bool = False,
+        description: Optional[str] = None,
+        short_description: str = 'strand_ss_nupack',
+        strands: Optional[Iterable[Strand]] = None,
+        negate: bool = False) -> StrandConstraint:
+    """
+    Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
+    NUPACK's pfunc executable.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
+        one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature: temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param negate: whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        how much to weigh this :any:`Constraint`
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threadds to parallelize.
+    :param strands:
+        Strands to check; if not specified, all strands are checked.
+    :param description: detailed description of constraint suitable for putting in report; if not specified
+        a reasonable default is chosen
+    :param short_description: short description of constraint suitable for logging to stdout
+    :return: constraint
+    """
+
+    def evaluate(strand: Strand) -> float:
+        threshold_value = convert_threshold(threshold, strand.group)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        logger.debug(
+            f'strand ss threshold: {threshold_value:6.2f} '
+            f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        return max(0.0, excess)
+
+    def summary(strand: Strand) -> str:
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        return f'{energy:6.2f} kcal/mol'
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {strand_group.name: value
+                                              for strand_group, value in threshold.items()}
+            description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
+                          f'as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise AssertionError('threshold must be one of float or dict')
+
+    if strands is not None:
+        strands = tuple(strands)
+
+    return StrandConstraint(description=description,
+                            short_description=short_description,
+                            weight=weight,
+                            weight_transfer_function=weight_transfer_function,
+                            evaluate=evaluate,
+                            threaded=threaded,
+                            strands=strands,
+                            summary=summary)
+
+
 def nupack_domain_pair_constraint(
         threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
         temperature: float = dv.default_temperature,
@@ -2866,6 +2948,8 @@ def nupack_domain_pair_constraint(
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
     are compared.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param threshold:
         Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
@@ -2961,6 +3045,121 @@ def nupack_domain_pair_constraint(
                                 threaded=threaded)
 
 
+def nupack_4_domain_pair_constraint(
+        threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        threaded: bool = False,
+        threaded4: bool = False,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'dom_pair_nupack',
+        negate: bool = False) -> DomainPairConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
+    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
+    are compared.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`DomainPool`'s to a float; when a :any:`Domain` in :any:`DomainPool` ``dp1`` is compared to
+        one in ``dp2``, the threshold used is ``threshold[(dp1, dp2)]``
+    :param temperature:
+        Temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param threaded:
+        Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
+        :py:data:`DomainPairConstraint.threaded`)
+    :param threaded4:
+        Whether to test the four pairs in different threads, allowing the calls to NUPACK to be parallelized.
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        Detailed description of constraint suitable for summary report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :return:
+        The :any:`DomainPairConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK energy of domain pair exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            domain_pool_name_pair_to_threshold = {(domain_pool1.name, domain_pool2.name): value
+                                                  for (domain_pool1, domain_pool2), value in
+                                                  threshold.items()}
+            description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
+                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    num_threads = cpu_count()
+    thread_pool = ThreadPool(processes=num_threads)
+
+    def binding_closure(seq_pair: Tuple[str, str]) -> float:
+        return dv.binding4(seq_pair[0], seq_pair[1], temperature, sodium, magnesium, negate)
+
+    def evaluate(domain1: Domain, domain2: Domain) -> float:
+        threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
+        seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+
+        energies: List[float]
+        if threaded4:
+            energies = thread_pool.map(binding_closure, seq_pairs)
+        else:
+            energies = []
+            for seq1, seq2 in seq_pairs:
+                energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
+                energies.append(energy)
+
+        excesses: List[float] = []
+        for energy, (name1, name2) in zip(energies, name_pairs):
+            logger.debug(
+                f'domain pair threshold: {threshold_value:6.2f} '
+                f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+            excess = threshold_value - energy
+            if negate:
+                excess = -excess
+            excesses.append(excess)
+
+        max_excess = max(excesses)
+        return max(0.0, max_excess)
+
+    def summary(domain1: Domain, domain2: Domain) -> str:
+        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+        energies = []
+        for seq1, seq2 in seq_pairs:
+            energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
+            energies.append(energy)
+        max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
+        lines = [f'{name1:{max_name_length}}, '
+                 f'{name2:{max_name_length}}: '
+                 f' {energy:6.2f} kcal/mol'
+                 for (name1, name2), energy in zip(domain_name_pairs, energies)]
+        return '\n  ' + '\n  '.join(lines)
+
+    return DomainPairConstraint(description=description,
+                                short_description=short_description,
+                                weight=weight,
+                                weight_transfer_function=weight_transfer_function,
+                                evaluate=evaluate,
+                                summary=summary,
+                                threaded=threaded)
+
+
 def nupack_strand_pair_constraint(
         threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
         temperature: float = dv.default_temperature,
@@ -2974,6 +3173,8 @@ def nupack_strand_pair_constraint(
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param threshold:
         Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
@@ -3027,6 +3228,91 @@ def nupack_strand_pair_constraint(
 
     def summary(strand1: Strand, strand2: Strand) -> str:
         energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
+        return f'{energy:6.2f} kcal/mol'
+
+    if pairs is not None:
+        pairs = tuple(pairs)
+
+    return StrandPairConstraint(description=description,
+                                short_description=short_description,
+                                weight=weight,
+                                weight_transfer_function=weight_transfer_function,
+                                threaded=threaded,
+                                pairs=pairs,
+                                evaluate=evaluate,
+                                summary=summary)
+
+
+def nupack_4_strand_pair_constraint(
+        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'strand_pair_nupack',
+        threaded: bool = False,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        negate: bool = False) -> StrandPairConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    NUPACK's pfunc executable.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float;
+        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
+        the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature:
+        Temperature in Celsius
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threading to parallelize evaluating this constraint.
+    :param description:
+        Detailed description of constraint suitable for report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+    :return:
+        The :any:`StrandPairConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+                                              for (strand_group1, strand_group2), value in threshold.items()}
+            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    def evaluate(strand1: Strand, strand2: Strand) -> float:
+        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        logger.debug(
+            f'strand pair threshold: {threshold_value:6.2f} '
+            f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        return max(0.0, excess)
+
+    def summary(strand1: Strand, strand2: Strand) -> str:
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
         return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:
