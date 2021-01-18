@@ -57,7 +57,7 @@ executable directory you need to add to `path`.
     >>>
     ```
 
-    To test that NUPACK and ViennaRNA can each be called from within the Python library, type
+    To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install both versions of NUPACK, and ViennaRNA, then only a subset of the following will succeed):
 
     ```python
     >>> import dsd.vienna_nupack as dv
