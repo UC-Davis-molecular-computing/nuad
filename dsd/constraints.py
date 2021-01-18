@@ -2265,10 +2265,12 @@ DesignPart = TypeVar('DesignPart',
                      Strand,
                      Tuple[Domain, Domain],  # noqa
                      Tuple[Strand, Strand],  # noqa
+                     Tuple[Strand, ...],  # noqa
                      Iterable[Domain],  # noqa
                      Iterable[Strand],  # noqa
                      Iterable[Tuple[Domain, Domain]],  # noqa
                      Iterable[Tuple[Strand, Strand]],  # noqa
+                     Iterable[Tuple[Strand, ...]],  # noqa
                      Design)
 
 
@@ -2440,6 +2442,16 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
+@dataclass(frozen=True, eq=False)
+class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
+    complexes: Tuple[Tuple[Strand, ...], ...]
+    """
+    List of complexes (tuples of :any:`Strand`'s) to check.
+    """
+
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
+        raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
+
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
@@ -2510,6 +2522,40 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
         summary_callback = cast(Callable[[Strand, Strand], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand1, strand2)
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
+    """Constraint that applies to a complex (tuple of :any:`Strand`'s)."""
+
+    evaluate: Callable[[Tuple[Strand, ...]],
+                       float] = lambda _, __: 0.0
+    """
+    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s). 
+    Returns float indicating how much the constraint is violated,  
+    or 0.0 if the constraint is satisfied.
+    """
+
+    summary: Callable[[Tuple[Strand, ...]],
+                      str] = lambda _, __: _no_summary_string
+
+    threaded: bool = False
+
+    def __call__(self, strand_complex: Tuple[Strand, ...]) -> float:
+        evaluate_callback = cast(Callable[[Tuple[Strand, ...]], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(strand_complex)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
+
+    def generate_summary(self, strand_complex: Tuple[Strand, ...], report_only_violations: bool) -> str:
+        summary_callback = cast(Callable[[Tuple[Strand, ...]], str],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(strand_complex)
 
 
 def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
@@ -2591,6 +2637,40 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
         summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand_pairs, report_only_violations)
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Tuple[Strand, ...]]]):
+    """
+    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
+    """
+
+    evaluate: Callable[[Iterable[Tuple[Strand, ...]]],
+                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
+    """
+    Check to perform on an iterable of complexes (tuples of :any:`Strand`'s).
+    Returns True if and only if the all complexes in the input iterable satisfy the constraint.
+    """
+
+    summary: Callable[[Iterable[Tuple[Strand, ...]], bool],
+                      ConstraintReport] = lambda _: _no_summary_string
+
+    def __call__(self, complexes: Iterable[Tuple[Strand, ...]]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
+        evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, ...]]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(complexes)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
+
+    def generate_summary(self, complexes: Iterable[Tuple[Strand, ...]],
+                         report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Tuple[Strand, ...]], bool], ConstraintReport],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(complexes, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore

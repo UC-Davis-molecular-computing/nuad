@@ -43,7 +43,8 @@ from multiprocessing.pool import ThreadPool
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
-    logger, DesignPart, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands
+    logger, DesignPart, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
+    ComplexConstraint, ConstraintWithComplexes, ComplexesConstraint
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -312,6 +313,20 @@ def _violations_of_constraints(design: Design,
         if quit_early:
             return violation_set
 
+    # complexes
+    for complex_constraint in design.complex_constraints:
+        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
+            if never_increase_weight and violation_set_old is not None else None
+        complex_violations, quit_early_in_func = _violations_of_complex_constraint(
+            constraint=complex_constraint, domains_changed=domains_changed,
+            current_weight_gap=current_weight_gap)
+        violation_set.update(complex_violations)
+
+        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        assert quit_early == quit_early_in_func
+        if quit_early:
+            return violation_set
+
     # constraints that process each domain, but all at once (e.g., to hand off in batch to RNAduplex)
     for domains_constraint in design.domains_constraints:
         domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domains_constraint)
@@ -487,7 +502,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
         else all_pairs(all_strands, where=_at_least_one_strand_unfixed)
 
     # filter out those not containing domain_change if specified
-    strand_pairs_to_check: List[Tuple[Strand, Strand]] = []
+    strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = []
     if domains_changed is None:
         strand_pairs_to_check = strand_pairs_to_check_if_domain_changed_none
     else:
@@ -498,6 +513,33 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
                     break
 
     return strand_pairs_to_check
+
+
+def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
+                                     constraint: ConstraintWithComplexes) -> \
+        List[Tuple[Strand, ...]]:
+    """
+    Similar to _determine_domain_pairs_to_check but for complexes.
+    """
+    # filter out those not containing domain_change if specified
+    complexes_to_check: List[Tuple[Strand, ...]] = []
+    if domains_changed is None:
+        complexes_to_check = constraint.complexes
+    else:
+        for strand_complex in constraint.complexes:
+            complex_added = False
+            for strand in strand_complex:
+                for domain_changed in domains_changed:
+                    if domain_changed in strand.domains:
+                        complexes_to_check.append(strand_complex)
+                        complex_added = True
+                        break
+
+                if complex_added:
+                    # Need to break out of checking each strand in complex since we added complex already
+                    break
+
+    return complexes_to_check
 
 
 def _determine_strands_to_check(all_strands: Iterable[Strand],
@@ -867,6 +909,94 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         if violating_strand_pair_weight is not None:
             strand1, strand2, weight = violating_strand_pair_weight
             unfixed_domains_set = frozenset(strand1.unfixed_domains() + strand2.unfixed_domains())
+            violation = _Violation(constraint, unfixed_domains_set, weight)
+            for domain in unfixed_domains_set:
+                violations[domain].add(violation)
+
+    return violations, quit_early
+
+
+def _violations_of_complex_constraint(constraint: ComplexConstraint,
+                                          domains_changed: Optional[Iterable[Domain]],
+                                          current_weight_gap: Optional[float],
+                                          ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+    complexes_to_check: Sequence[Tuple[Strand, Strand]] = \
+        _determine_complexes_to_check(domains_changed, constraint)
+
+    if log_names_of_domains_and_strands_checked:
+        logger.debug(f'$ for complex constraint {constraint.description}, checking these complexes:')
+        logger.debug(f'$ {pprint.pformat(complexes_to_check, indent=pprint_indent)}')
+
+    violating_complexes_weights: List[Optional[Tuple[Strand, ..., float]]] = []
+
+    weight_discovered_here: float = 0.0
+    quit_early = False
+
+    cpu_count = dc.cpu_count() if constraint.threaded else 1
+
+    chunk_size = cpu_count
+    if (not constraint.threaded
+            or cpu_count == 1
+            or (current_weight_gap is not None and chunk_size == 1)):
+        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
+        for strand_complex in complexes_to_check:
+            for strand in strand_complex:
+                assert not strand.fixed
+                weight = constraint(strand_complex)
+                if weight > 0.0:
+                    violating_complexes_weights.append((strand_complex, weight))
+                    if current_weight_gap is not None:
+                        weight_discovered_here += constraint.weight * weight
+                        if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                            quit_early = True
+                            break
+            if quit_early:
+                # Need to break out of checking each strand in complex since we added complex already
+                break
+    else:
+        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
+
+        def complex_weight_if_violates(strand_complex: Tuple[Strand, ...]) \
+                -> Optional[Tuple[Strand, Strand, float]]:
+            # return strand pair if it violates the constraint, else None
+            weight_ = constraint(strand_complex)
+            if weight_ > 0.0:
+                return strand_complex, weight_
+            else:
+                return None
+
+        if current_weight_gap is None:
+            violating_complexes_weights = list(
+                _thread_pool.map(complex_weight_if_violates, complexes_to_check))
+        else:
+            chunks = dc.chunker(complexes_to_check, chunk_size)
+            for complex_chunk in chunks:
+                violating_complexes_chunk_with_none: List[Optional[Tuple[Strand, Strand, float]]] = \
+                    _thread_pool.map(complex_weight_if_violates, complex_chunk)
+                violating_complexes_chunk: List[Tuple[Strand, Strand, float]] = \
+                    remove_none_from_list(violating_complexes_chunk_with_none)
+                violating_complexes_weights.extend(violating_complexes_chunk)
+
+                # quit early if possible
+                total_weight_chunk = sum(
+                    complex_pair_weight[1]
+                    for complex_pair_weight in violating_complexes_chunk
+                    if complex_pair_weight is not None)
+                weight_discovered_here += constraint.weight * total_weight_chunk
+                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                    quit_early = True
+                    break
+
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violating_complex_weight: Optional[Tuple[Strand, Strand, float]]
+    for violating_complex_weight in violating_complexes_weights:
+        if violating_complex_weight is not None:
+            strand_complex, weight = violating_complex_weight
+            unfixed_domains_set_builder = set()
+            strand: Strand
+            for strand in strand_complex:
+                unfixed_domains_set_builder += strand.unfixed_domains()
+            unfixed_domains_set = frozenset(unfixed_domains_set_builder)
             violation = _Violation(constraint, unfixed_domains_set, weight)
             for domain in unfixed_domains_set:
                 violations[domain].add(violation)
