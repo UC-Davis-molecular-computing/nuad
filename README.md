@@ -37,10 +37,13 @@ To install dsd:
 
     In Windows (outside of Windows Subsystem for Linux), the `PYTHONPATH` environment variable can be adjusted by right-clicking "This PC" on the desktop &rarr; Properties &rarr; Advanced System Settings &rarr; Environment Variables.
 
-4. Install NUPACK and ViennaRNA following their installation instructions. (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK and ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.)
+4. Install NUPACK (version 3 and/or 4) and ViennaRNA following their installation instructions. (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK 3 and/or ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so there is is no
+executable directory you need to add to `path`.
 
-    To test that NUPACK is installed correctly, type `pfunc` at the command line (the wsl command line if using Windows); the pfunc NUPACK executable should be called. To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line. 
-    
+    To test that NUPACK 3 is installed correctly, type `pfunc` at the command line (the wsl command line if using Windows); the pfunc NUPACK 3 executable should be called.
+    To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
+    To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
+
     On Windows, you should also test that they can be called through the normal Windows command line (or Powershell) by typing `wsl -e pfunc` and `wsl -e RNAduplex`, since this is how the dsd library will call them if you run your Python programs from a Windows command line.
 
 5. Test it works by typing `python` at the command line, then typing `import dsd`. It should import without errors:
@@ -58,8 +61,10 @@ To install dsd:
 
     ```python
     >>> import dsd.vienna_nupack as dv
-    >>> dv.pfunc('GCGCGCGCGC') # test NUPACK
+    >>> dv.pfunc('GCGCGCGCGC') # test NUPACK 3
     -2.06056146
+    >>> dv.pfunc4('GCGCGCGCGC') # test NUPACK 4
+    -1.9079766874655928
     >>> dv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
     [-15.7]
     ```
