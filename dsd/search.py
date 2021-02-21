@@ -940,16 +940,14 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
             or (current_weight_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
         for strand_complex in complexes_to_check:
-            for strand in strand_complex:
-                assert not strand.fixed
-                weight = constraint(strand_complex)
-                if weight > 0.0:
-                    violating_complexes_weights.append((strand_complex, weight))
-                    if current_weight_gap is not None:
-                        weight_discovered_here += constraint.weight * weight
-                        if _is_significantly_greater(weight_discovered_here, current_weight_gap):
-                            quit_early = True
-                            break
+            weight = constraint(strand_complex)
+            if weight > 0.0:
+                violating_complexes_weights.append((strand_complex, weight))
+                if current_weight_gap is not None:
+                    weight_discovered_here += constraint.weight * weight
+                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                        quit_early = True
+                        break
             if quit_early:
                 # Need to break out of checking each strand in complex since we added complex already
                 break
@@ -995,7 +993,7 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
             unfixed_domains_set_builder = set()
             strand: Strand
             for strand in strand_complex:
-                unfixed_domains_set_builder += strand.unfixed_domains()
+                unfixed_domains_set_builder.update(strand.unfixed_domains())
             unfixed_domains_set = frozenset(unfixed_domains_set_builder)
             violation = _Violation(constraint, unfixed_domains_set, weight)
             for domain in unfixed_domains_set:

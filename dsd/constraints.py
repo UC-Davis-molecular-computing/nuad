@@ -24,6 +24,7 @@ import logging
 import textwrap
 from multiprocessing.pool import ThreadPool
 from numbers import Number
+from enum import Enum, auto
 
 import numpy as np  # noqa
 from ordered_set import OrderedSet
@@ -1021,6 +1022,15 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         return self.sequence_ is not None
 
+    @staticmethod
+    def complementary_domain_name(domain_name: str) -> str:
+        """
+        Returns the name of the domain complementary to `domain_name`
+        :param domain_name: name of domain
+        """
+        return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
+
+
 
 _domains_interned: Dict[str, Domain] = {}
 
@@ -1449,6 +1459,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
+    complex_constraints: List['ComplexConstraint'] = field(default_factory=list)
+    """
+    Applied to tuple of :any:`Strand`'s in the :any:`Design`.
+    """
+
     domains_constraints: List['DomainsConstraint'] = field(default_factory=list)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
@@ -1681,6 +1696,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         constraints.extend(self.strands_constraints)
         constraints.extend(self.domain_pairs_constraints)
         constraints.extend(self.strand_pairs_constraints)
+        constraints.extend(self.complex_constraints)
         constraints.extend(self.design_constraints)
         return constraints
 
@@ -2444,7 +2460,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
-    complexes: Tuple[Tuple[Strand, ...], ...]
+    complexes: Tuple[Tuple[Strand, ...], ...] = None
     """
     List of complexes (tuples of :any:`Strand`'s) to check.
     """
@@ -3120,6 +3136,334 @@ def nupack_strand_pair_constraint(
                                 pairs=pairs,
                                 evaluate=evaluate,
                                 summary=summary)
+
+
+def ExteriorBaseType(Enum):
+    # END_OF_BOTH_STRANDS
+    # [----------------------->
+    # | | | | | | | | | | | | |
+    # <-----------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    END_OF_BOTH_STRANDS = auto()
+    # NICK
+    # [-----------------------> [----------------->
+    # | | | | | | | | | | | | | | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    NICK = auto()
+    # DANGLE_ON_ONE_STRAND
+    # [----------------------->
+    # | | | | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    DANGLE_ON_ONE_STRAND = auto()
+    # DANGLE_ON_BOTH_STRANDS
+    #                                ---------------------->
+    #                               /
+    #                              /
+    #                             /
+    #                            /
+    #                           /
+    #                          /
+    # [------------------------
+    # | | | | | | | | | | | | |
+    # <------------------------
+    #                         ^\
+    #                         | \
+    #                  this base \
+    #                             \
+    #                              \
+    #                               \
+    #                                --------------------]
+    DANGLE_ON_BOTH_STRANDS = auto()
+    # OVERHANG_ON_THIS_STRAND
+    #                <----
+    #                     \
+    #                      \
+    #                       \
+    #                        \
+    # [------------------------ [----------------->
+    # | | | | | | | | | | | | | | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    OVERHANG_ON_THIS_STRAND = auto()
+    # OVERHANG_ON_ADJACENT_STRAND
+    #                                ------]
+    #                               /
+    #                              /
+    #                             /
+    #                            /
+    # [------------------------ ------------------>
+    # | | | | | | | | | | | | | | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    OVERHANG_ON_ADJACENT_STRAND = auto()
+    # OVERHANG_ON_BOTH_STRANDS
+    #           <---------           ------]
+    #                     \         /
+    #                      \       /
+    #                       \     /
+    #                        \   /
+    # [------------------------ ------------------>
+    # | | | | | | | | | | | | | | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    OVERHANG_ON_BOTH_STRANDS = auto()
+    # THREE_ARM_JUNCTION
+    #                         |--|
+    #                         |--|
+    #                         |--|
+    #                         |--|
+    #                         |--|
+    # [------------------------  ------------------>
+    # | | | | | | | | | | | | |  | | | | | | | | | |
+    # <-------------------------------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    THREE_ARM_JUNCTION = auto()
+
+
+
+def nupack_4_complex_secondary_structure_constraint(
+        complexes: Iterable[Tuple[Strand, ...]],
+        exterior_base_pair_prob: float = 0.4,
+        internal_base_pair_prob: float = 0.95,
+        unpaired_base_prob: float = 0.95,
+        domain_binding: Iterable[Tuple[Domain, Domain]] = None,
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'complex_secondary_structure_nupack',
+        threaded: bool = False,
+        ) -> ComplexConstraint:
+    # TODO: change doc strings
+    # TODO: Handle domain_binding
+    """
+    Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
+
+    :param complexes:
+        Iterable of :any:`Strand` tuples
+    :param exterior_base_pair_prob:
+        Probability threshold for exterior base pairs
+    :param internal_base_pair_prob:
+        Probability threshold for internal base pairs
+    :param unpaired_base_pair_prob:
+        Probability threshold for unpaired bases
+    :param domain_binding:
+        Maps which domains should be binded. If None, then all complementary domains will be binded,
+        but requires that each complementary domain has only one domain.
+    :param temperature:
+        Temperature in Celsius
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threading to parallelize evaluating this constraint.
+    :param description:
+        Detailed description of constraint suitable for report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :return:
+        The :any:`ComplexConstraint`.
+    """
+
+    # Input validaiton: check no "competition" between domain (at most one starred domain for every domain)
+    for strand_complex in complexes:
+        domain_counts: Dict[str, int] = defaultdict(int)
+        for strand in strand_complex:
+            for idx, domain in enumerate(strand.domains):
+                is_starred = idx in strand.starred_domain_indices
+                domain_name = domain.get_name(is_starred)
+                # domain_name_complement = domain.get_name(not is_starred)
+                domain_counts[domain_name] += 1
+
+        for domain_name in domain_counts:
+            domain_name_complement = Domain.complementary_domain_name(domain_name)
+            if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+                # TODO: Print which complex violates this.
+                raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
+                                "Violating domain: {domain_name_complement}")
+
+
+
+    # TODO: change description string
+    # if description is None:
+    #     if isinstance(threshold, Number):
+    #         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+    #     elif isinstance(threshold, dict):
+    #         strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+    #                                           for (strand_group1, strand_group2), value in threshold.items()}
+    #         description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
+    #                       f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+    #     else:
+    #         raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+    #                          f'but it is {type(threshold)}')
+
+    def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
+        strand_complex_domain_name_to_base_index_and_length: Dict[str, Tuple[int, int]] = {}
+
+        domain_base_index = 0
+
+        for strand in strand_complex:
+            for idx, domain in enumerate(strand.domains):
+                domain_name = domain.name
+                if idx in strand.starred_domain_indices:
+                    domain_name = domain.starred_name
+
+                # Ensure that we have checked that each domain has at most one complement in the complex
+                assert not (domain.name in strand_complex_domain_name_to_base_index_and_length and domain.starred_name in strand_complex_domain_name_to_base_index_and_length)
+                strand_complex_domain_name_to_base_index_and_length[domain_name] = (domain_base_index, domain.length)
+                domain_base_index += domain.length
+
+        base_pair_domain_endpoints_to_check: List[Tuple[int, int, int]] = [] # list of (domain1_5p, domain2_3p, length)
+        #    0123           4567
+        # 5'-AAAA-3'     5'-TTTT-3'
+        #    ^              ^  ^
+        #    |              |  domain2_3p
+        #    domain1_5p    domain2_5p
+
+        for (domain_name, (domain_base_index, domain_length)) in strand_complex_domain_name_to_base_index_and_length.items():
+            complementary_domain_name = Domain.complementary_domain_name(domain_name)
+
+            # TODO: Add check to avoid duplicate
+            if complementary_domain_name in strand_complex_domain_name_to_base_index_and_length:
+                complementary_domain_base_index, complementary_domain_length = strand_complex_domain_name_to_base_index_and_length[complementary_domain_name]
+                domain1_5p = min(domain_base_index, complementary_domain_base_index)
+                domain2_5p = max(domain_base_index, complementary_domain_base_index)
+                assert domain_length == complementary_domain_length
+
+                domain2_3p = domain2_5p + domain_length - 1
+
+                base_pair_domain_endpoints_to_check.append((domain1_5p, domain2_3p, domain_length))
+
+
+        try:
+            from nupack import Complex as NupackComplex
+            from nupack import Model as NupackModel
+            from nupack import ComplexSet as NupackComplexSet
+            from nupack import Strand as NupackStrand
+            from nupack import SetSpec as NupackSetSpec
+            from nupack import complex_analysis as nupack_complex_analysis
+            from nupack import PairsMatrix as NupackPairsMatrix
+        except ModuleNotFoundError:
+            raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+        nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
+        nupack_complex: NupackComplex = NupackComplex(nupack_strands)
+        nupack_model = NupackModel(material='dna', celsius=temperature)
+
+        # TODO: only consider one complex, but may be more accurate to include other possible complexes
+        nupack_complex_set = NupackComplexSet(nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
+        nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=['pairs'], model=nupack_model)
+        pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
+        nupack_complex_result: np.ndarray = pairs.to_array()
+
+        # DEBUG: Print out result matrix
+        # for r in nupack_complex_result:
+        #     for c in r:
+        #         print("{:.2f}".format(c), end=' ')
+        #     print()
+
+        # DEBUG: Print out complex strands and sequences
+        for strand in strand_complex:
+            print(f'{strand.name}: {strand.sequence()}')
+
+
+        expected_paired_idxs: Set[int] = set()
+        #  0123
+        # [AGCT>    domain1
+        #       \
+        #       |
+        #       /
+        # <TCGA]    domain2
+        #  7654
+        # TODO: Exterior base pair prob should apply to bases at end of strand (instead of bases at end of every domain)
+        # TODO: Handle other types of ends
+        # - blunt ends
+        # - overhangs
+
+        def summarize_violation(i, j, mat, threshold, paired=True):
+            paired_string = 'paired'
+            if not paired:
+                paired_string = 'unpaired'
+            print(
+                f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%')
+
+        # TODO: Instead of returning boolean, we should take differences between desired probabilities
+        for (domain1_5p, domain2_3p, domain_length) in base_pair_domain_endpoints_to_check:
+            # Checks if base pairs at ends of domain to be above 40% probability
+            domain1_3p = domain1_5p + (domain_length - 1)
+            domain2_5p = domain2_3p - (domain_length - 1)
+
+            if nupack_complex_result[domain1_5p][domain2_3p] < exterior_base_pair_prob:
+                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result, exterior_base_pair_prob)
+                return 1.0
+            expected_paired_idxs.add(domain1_5p)
+            expected_paired_idxs.add(domain2_3p)
+
+            if nupack_complex_result[domain1_3p][domain2_5p] < exterior_base_pair_prob:
+                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result, exterior_base_pair_prob)
+                return 1.0
+            expected_paired_idxs.add(domain1_3p)
+            expected_paired_idxs.add(domain2_5p)
+            # Check if base pairs in middle are above 99%
+            #
+            # TODO: Rewrite this loop using numpy
+            # domain1_idxs = np.arange(domain1_5p + 1, domain1_5p + domain_length - 1)
+            # domain2_idxs = np.arange(domain2_3p - 1, ,-1)
+            for i in range(1, domain_length - 1):
+                row = domain1_5p + i
+                col = domain2_3p - i
+                if nupack_complex_result[row][col] < internal_base_pair_prob:
+                    summarize_violation(row, col, nupack_complex_result, internal_base_pair_prob)
+                    return 1.0
+                expected_paired_idxs.add(row)
+                expected_paired_idxs.add(col)
+
+
+        # Check base pairs that should not be paired are high probability
+        for i in range(len(nupack_complex_result)):
+            if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
+                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob)
+                return 1.0
+
+        return 0.0
+
+
+
+
+    def summary(strand1: Strand, strand2: Strand) -> str:
+        # energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
+        # return f'{energy:6.2f} kcal/mol'
+        raise NotImplemented
+
+    # TODO: Is this needed, code was used in nupack_strand_pair_constraint
+    # if complexes is not None:
+    #     complexes = tuple(complexes)
+
+    return ComplexConstraint(description=description,
+                             short_description=short_description,
+                             weight=weight,
+                             weight_transfer_function=weight_transfer_function,
+                             threaded=threaded,
+                             complexes=complexes,
+                             evaluate=evaluate,
+                             summary=summary)
 
 
 def chunker(sequence: Sequence[T], chunk_length: Optional[int] = None, num_chunks: Optional[int] = None) -> \
