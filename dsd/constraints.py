@@ -3346,7 +3346,6 @@ def nupack_4_complex_secondary_structure_constraint(
         for (domain_name, (domain_base_index, domain_length)) in strand_complex_domain_name_to_base_index_and_length.items():
             complementary_domain_name = Domain.complementary_domain_name(domain_name)
 
-            # TODO: Add check to avoid duplicate
             if complementary_domain_name in strand_complex_domain_name_to_base_index_and_length:
                 complementary_domain_base_index, complementary_domain_length = strand_complex_domain_name_to_base_index_and_length[complementary_domain_name]
                 domain1_5p = min(domain_base_index, complementary_domain_base_index)
