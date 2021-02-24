@@ -3337,6 +3337,12 @@ def nupack_4_complex_secondary_structure_constraint(
         #    |              |  domain2_3p
         #    domain1_5p    domain2_5p
 
+        # Since bounded domains appear twice in strand_complex_domain_name_to_base_index_and_length
+        # (domain + its complement), the following for loop encounters each
+        # domain pair twice. To avoid duplication, we keep track of domain pairs
+        # we have seen before
+        seen_base_pair_domain_endpoints: set[Tuple[int, int]] = set()
+
         for (domain_name, (domain_base_index, domain_length)) in strand_complex_domain_name_to_base_index_and_length.items():
             complementary_domain_name = Domain.complementary_domain_name(domain_name)
 
@@ -3349,7 +3355,10 @@ def nupack_4_complex_secondary_structure_constraint(
 
                 domain2_3p = domain2_5p + domain_length - 1
 
-                base_pair_domain_endpoints_to_check.append((domain1_5p, domain2_3p, domain_length))
+                base_pair = (domain1_5p, domain2_3p)
+                if base_pair not in seen_base_pair_domain_endpoints:
+                    base_pair_domain_endpoints_to_check.append((*base_pair, domain_length))
+                    seen_base_pair_domain_endpoints.add(base_pair)
 
 
         try:
