@@ -3609,30 +3609,42 @@ def nupack_4_complex_secondary_structure_constraint(
         # - blunt ends
         # - overhangs
 
-        # TODO: Populate these dictionaries
         exterior_base_type_probability_threshold: dict[ExteriorBasePairType, float] = {}
+        for exterior_base_type in ExteriorBasePairType:
+            # TODO: replace this by setting real probabilities for each case
+            exterior_base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
 
-        def summarize_violation(i, j, mat, threshold, paired=True):
+        def summarize_violation(i, j, mat, threshold, paired=True, exterior_base_pair_type=None):
             paired_string = 'paired'
             if not paired:
                 paired_string = 'unpaired'
+            exterior_base_pair_string = ''
+            if exterior_base_pair_type is not None:
+                exterior_base_pair_string = f'({exterior_base_pair_type})'
             print(
-                f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%')
+                f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%',
+                exterior_base_pair_string)
 
         # TODO: Instead of returning boolean, we should take differences between desired probabilities
-        for (domain1_5p, domain2_3p, domain_length, _, _) in base_pair_domain_endpoints_to_check:
+        for (domain1_5p, domain2_3p, domain_length, domain1_5p_domain2_3p_exterior_base_pair_type, domain1_3p_domain2_5p_exterior_base_pair_type) in base_pair_domain_endpoints_to_check:
             # Checks if base pairs at ends of domain to be above 40% probability
             domain1_3p = domain1_5p + (domain_length - 1)
             domain2_5p = domain2_3p - (domain_length - 1)
 
-            if nupack_complex_result[domain1_5p][domain2_3p] < exterior_base_pair_prob:
-                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result, exterior_base_pair_prob)
+            domain1_5p_domain2_3p_exterior_base_pair_prob = internal_base_pair_prob
+            if domain1_5p_domain2_3p_exterior_base_pair_type is not None:
+                domain1_5p_domain2_3p_exterior_base_pair_prob = exterior_base_type_probability_threshold[domain1_5p_domain2_3p_exterior_base_pair_type]
+            if nupack_complex_result[domain1_5p][domain2_3p] < domain1_5p_domain2_3p_exterior_base_pair_prob:
+                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result, domain1_5p_domain2_3p_exterior_base_pair_prob, exterior_base_pair_type=domain1_5p_domain2_3p_exterior_base_pair_type)
                 return 1.0
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
-            if nupack_complex_result[domain1_3p][domain2_5p] < exterior_base_pair_prob:
-                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result, exterior_base_pair_prob)
+            domain1_3p_domain2_5p_exterior_base_pair_prob = internal_base_pair_prob
+            if domain1_3p_domain2_5p_exterior_base_pair_type is not None:
+                domain1_3p_domain2_5p_exterior_base_pair_prob = exterior_base_type_probability_threshold[domain1_3p_domain2_5p_exterior_base_pair_type]
+            if nupack_complex_result[domain1_3p][domain2_5p] < domain1_3p_domain2_5p_exterior_base_pair_prob:
+                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result, domain1_3p_domain2_5p_exterior_base_pair_prob, exterior_base_pair_type=domain1_3p_domain2_5p_exterior_base_pair_type)
                 return 1.0
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
@@ -3654,7 +3666,7 @@ def nupack_4_complex_secondary_structure_constraint(
         # Check base pairs that should not be paired are high probability
         for i in range(len(nupack_complex_result)):
             if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
-                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob)
+                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob, paired=False)
                 return 1.0
 
         return 0.0
