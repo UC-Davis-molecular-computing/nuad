@@ -3138,38 +3138,44 @@ def nupack_strand_pair_constraint(
                                 summary=summary)
 
 
+# TODO: NUPACK queries:
+# * Holliday junction
+# * n-arm junctions (see if n = 4 is signficantly different from other n)
+
+
 # TODO: hide this class
 class AdjacentStrandType(Enum):
+    # TODO(benlee12): What if "nothing here" is an overhang?
     # EMPTY
     #                       c
-    # [------------------|----->
+    #                     -----
     # | | | | | | | | | | | | |
-    # <------------------|-----]
+    # <------------------|-----] "nothing here!"
     #                       c*
     EMPTY = auto()
     # NON_NICK
     #                       c
-    # [------------------|----->
+    #                     -----
     # | | | | | | | | | | | | |
     # <------------------|-----|-----|--------------]
     #                       c*    d*
-    NON_NICK = auto()
+    DANGLE_5P = auto()
     # NICK
     #                       c     d
-    # [------------------|----->[----|------------->
+    #                     ----- [----|------------->
     # | | | | | | | | | | | | |   | | | | | | | |
     # <------------------|-----|-----|--------------]
     #                       c*    d*
     NICK = auto()
     # OVERHANG
-    #                            ----]
-    #                           /
+    #                           +----]
+    #                           |
     #                           | e (unbounded)
     #                           |
-    #                       c     d
-    # [------------------|----->[----|------------->
-    # | | | | | | | | | | | | |   | | | | | | | |
-    # <------------------|-----|-----|--------------]
+    #                       c   | d
+    #                    #-----#+---#------------->
+    # ||||||||||||||||||| |||||||||| ||||||||||||||
+    # <------------------#-----#----#-------------]
     #                       c*    d*
     OVERHANG = auto()
     # POSSIBLE_THREE_ARM_JUNCTION
@@ -3181,15 +3187,33 @@ class AdjacentStrandType(Enum):
     # (e* may be next to c) e* |-| e (bounded)
     #                          |-|
     #                       c     d
-    # [------------------|----->[----|------------->
+    #                    [----> +----|------------->
     # | | | | | | | | | | | | |   | | | | | | | |
     # <------------------|-----|-----|--------------]
     #                       c*    d*
     POSSIBLE_THREE_ARM_JUNCTION = auto()
 
+# TODO(benlee12): Add whatever makes ascii art fixed length (see scadnano python repo)
+# Get sphinx working so that I can test docstrings
+# Ex: https://github.com/UC-Davis-molecular-computing/scadnano-python-package/blob/b6cd6984c66e766b20b5a7a34654d3ca3fba42bf/scadnano/origami_rectangle.py#L64
 
-class ExteriorBasePairType(Enum):
-    # END_OF_BOTH_STRANDS
+
+class BasePairType(Enum):
+    """ExteriorBasePairType TODO
+    """
+
+    INTERIOR_TO_STRAND = auto()
+    """
+    .. code-block:: none
+
+                c                    d
+        [----------------------|----------->
+        | | | | | | | | | | | | | | | | | |
+        <----------------------|-----------]
+                c*           ^       d*
+                            |
+                        this base pair
+    """
     # [----------------------->
     # | | | | | | | | | | | | |
     # <-----------------------]
@@ -3197,7 +3221,6 @@ class ExteriorBasePairType(Enum):
     #                         |
     #                     this base
     END_OF_BOTH_STRANDS = auto()
-    # NICK
     # [-----------------------> [----------------->
     # | | | | | | | | | | | | | | | | | | | | | | |
     # <-------------------------------------------]
@@ -3205,15 +3228,21 @@ class ExteriorBasePairType(Enum):
     #                         |
     #                     this base
     NICK = auto()
-    # NON_NICK
+    # TODO(benlee12): detect and handle this type
+    # [------------------------------------------->
+    # | | | | | | | | | | | | |
+    # <-----------------------]
+    #                         ^
+    #                         |
+    #                     this base
+    DANGLE_3P = auto()
     # [----------------------->
     # | | | | | | | | | | | | |
     # <-------------------------------------------]
     #                         ^
     #                         |
     #                     this base
-    NON_NICK = auto()
-    # DANGLE_ON_BOTH_STRANDS
+    DANGLE_5P = auto()
     #                                ---------------------->
     #                               /
     #                              /
@@ -3231,8 +3260,7 @@ class ExteriorBasePairType(Enum):
     #                              \
     #                               \
     #                                --------------------]
-    DANGLE_ON_BOTH_STRANDS = auto()
-    # OVERHANG_ON_THIS_STRAND
+    DANGLE_5P_3P = auto()
     #                <----
     #                     \
     #                      \
@@ -3245,7 +3273,6 @@ class ExteriorBasePairType(Enum):
     #                         |
     #                     this base
     OVERHANG_ON_THIS_STRAND = auto()
-    # OVERHANG_ON_ADJACENT_STRAND
     #                                ------]
     #                               /
     #                              /
@@ -3258,7 +3285,6 @@ class ExteriorBasePairType(Enum):
     #                         |
     #                     this base
     OVERHANG_ON_ADJACENT_STRAND = auto()
-    # OVERHANG_ON_BOTH_STRANDS
     #           <---------           ------]
     #                     \         /
     #                      \       /
@@ -3271,7 +3297,6 @@ class ExteriorBasePairType(Enum):
     #                         |
     #                     this base
     OVERHANG_ON_BOTH_STRANDS = auto()
-    # THREE_ARM_JUNCTION
     #                         |--|
     #                         |--|
     #                         |--|
@@ -3285,36 +3310,49 @@ class ExteriorBasePairType(Enum):
     #                     this base
     THREE_ARM_JUNCTION = auto()
 
+    def default_pair_probability(self) -> float:
+        # TODO: Populate with default probabilties
+        # Reference global variables (for documentation purposes)
+        # Ex: if self is NICK:
+        #         return default_nick_probability
+        return 0.4
+
+
 def _exterior_base_type_of_domain_3p_end(domain_name: str,
-                                         bounded_domains: Set[str],
-                                         domain_neighbors: Dict[str, Tuple[str, str]]) -> ExteriorBasePairType:
+                                         bound_domains: Set[str],
+                                         domain_neighbors: Dict[str, Tuple[str, str]]) -> BasePairType:
     # determine which case is at 3'-adjacent to this base pair
     adjacent_strand_type: AdjacentStrandType = AdjacentStrandType.EMPTY
     three_arm_junction_third_strand_candidate_domain: str = None
 
     #                             ----]
     #                          |-/
-    # (e* may be next to c) e* |-| adjacent_domain_name_neighbor_5p
+    # (e* may be next to c) e* |-| <- adjacent_domain_name_neighbor_5p
     #                          |-|
-    #              domain_name   adjacent_domain_name
-    # [------------------|----->[----|------------->
+    #                          - -
+    #              domain_name   |  adjacent_domain_name
+    #                      |     |  |
+    #                      v     |  v
+    # [------------------|------>+------------|------------->
     # | | | | | | | | | | | | |   | | | | | | | |
-    # <------------------|-----|-----|--------------]
+    # <------------------|------|-------------|--------------]
+    #                      ^       ^
+    #                      |       |
     # complementary_domain_name complementary_domain_name_neighbor_5p
     complementary_domain_name = Domain.complementary_domain_name(domain_name)
     (complementary_domain_name_neighbor_5p, _) = domain_neighbors[complementary_domain_name]
     if complementary_domain_name_neighbor_5p is not None:
-        adjacent_strand_type = AdjacentStrandType.NON_NICK
-        if complementary_domain_name_neighbor_5p in bounded_domains:
+        adjacent_strand_type = AdjacentStrandType.DANGLE_5P
+        if complementary_domain_name_neighbor_5p in bound_domains:
             adjacent_strand_type = AdjacentStrandType.NICK
             adjacent_domain_name = Domain.complementary_domain_name(complementary_domain_name_neighbor_5p)
             (adjacent_domain_name_neighbor_5p, _) = domain_neighbors[adjacent_domain_name]
-            if adjacent_domain_name_neighbor_5p in bounded_domains:
+            if adjacent_domain_name_neighbor_5p in bound_domains:
                 if domain_name == adjacent_domain_name_neighbor_5p:
                     # TODO(benlee12): handle case when domains are competitive
 
                     # Assuming non-competitive, then this must be internal base
-                    return None
+                    return BasePairType.INTERIOR_TO_STRAND
                 else:
                     # could be three arm junction
                     three_arm_junction_third_strand_candidate_domain = adjacent_domain_name_neighbor_5p
@@ -3326,30 +3364,31 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
     if domain_name_3p_neighbor is None:
         # domain_name is at 3' end of strand
         if adjacent_strand_type is AdjacentStrandType.EMPTY:
-            return ExteriorBasePairType.END_OF_BOTH_STRANDS
-        elif adjacent_strand_type is AdjacentStrandType.NON_NICK:
-            return ExteriorBasePairType.NON_NICK
+            return BasePairType.END_OF_BOTH_STRANDS
+        elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
+            return BasePairType.DANGLE_5P
         elif adjacent_strand_type is AdjacentStrandType.NICK:
-            return ExteriorBasePairType.NICK
+            return BasePairType.NICK
         elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
-            return ExteriorBasePairType.OVERHANG_ON_ADJACENT_STRAND
+            return BasePairType.OVERHANG_ON_ADJACENT_STRAND
         elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
+            # Seems to be a bounded overhang
             raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
         else:
             # Shouldn't reach here
             assert False
     else:
         # domain_name is in the middle of a strand
-        if domain_name_3p_neighbor not in bounded_domains:
+        if domain_name_3p_neighbor not in bound_domains:
             # domain_name's 3' neighbor is an unbounded overhang
             if adjacent_strand_type is AdjacentStrandType.EMPTY:
-                return ExteriorBasePairType.NON_NICK
-            elif adjacent_strand_type is AdjacentStrandType.NON_NICK:
-                return ExteriorBasePairType.DANGLE_ON_BOTH_STRANDS
+                return BasePairType.DANGLE_5P
+            elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
+                return BasePairType.DANGLE_5P_3P
             elif adjacent_strand_type is AdjacentStrandType.NICK:
-                return ExteriorBasePairType.OVERHANG_ON_THIS_STRAND
+                return BasePairType.OVERHANG_ON_THIS_STRAND
             elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
-                return ExteriorBasePairType.OVERHANG_ON_BOTH_STRANDS
+                return BasePairType.OVERHANG_ON_BOTH_STRANDS
             elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
                 raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
             else:
@@ -3374,22 +3413,23 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                 # Not an internal base pair since domain_name's 3' neighbor is
                 # bounded to a domain that is not complementary's 5' neighbor
                 if adjacent_strand_type is AdjacentStrandType.EMPTY:
-                    return ExteriorBasePairType.NICK
-                elif adjacent_strand_type is AdjacentStrandType.NON_NICK:
-                    return ExteriorBasePairType.OVERHANG_ON_THIS_STRAND
+                    return BasePairType.NICK
+                elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
+                    return BasePairType.OVERHANG_ON_THIS_STRAND
                 elif adjacent_strand_type is AdjacentStrandType.NICK:
-                    return ExteriorBasePairType.DANGLE_ON_BOTH_STRANDS
+                    return BasePairType.DANGLE_5P_3P
                 elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
-                    return ExteriorBasePairType.DANGLE_ON_BOTH_STRANDS
+                    return BasePairType.DANGLE_5P_3P
                 elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
                     if domain_name_3p_neighbor == Domain.complementary_domain_name(three_arm_junction_third_strand_candidate_domain):
-                        return ExteriorBasePairType.THREE_ARM_JUNCTION
+                        return BasePairType.THREE_ARM_JUNCTION
                 else:
                     raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
 
 
 def nupack_4_complex_secondary_structure_constraint(
         complexes: Iterable[Tuple[Strand, ...]],
+        base_pair_probs: Dict[BasePairType, float] = None,
         exterior_base_pair_prob: float = 0.4,
         internal_base_pair_prob: float = 0.95,
         unpaired_base_prob: float = 0.95,
@@ -3400,7 +3440,7 @@ def nupack_4_complex_secondary_structure_constraint(
         description: Optional[str] = None,
         short_description: str = 'complex_secondary_structure_nupack',
         threaded: bool = False,
-        ) -> ComplexConstraint:
+) -> ComplexConstraint:
     # TODO: change doc strings
     # TODO: Handle domain_binding
     """
@@ -3448,9 +3488,7 @@ def nupack_4_complex_secondary_structure_constraint(
             if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
                 # TODO: Print which complex violates this.
                 raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
-                                "Violating domain: {domain_name_complement}")
-
-
+                                 "Violating domain: {domain_name_complement}")
 
     # TODO: change description string
     # if description is None:
@@ -3477,7 +3515,6 @@ def nupack_4_complex_secondary_structure_constraint(
 
         # maps each domain to a tuple of it's 5' and 3' neighbor
         domain_neighbors: Dict[str, Tuple[str, str]] = {}
-
 
         for strand in strand_complex:
             prev_domain_name = None
@@ -3517,12 +3554,18 @@ def nupack_4_complex_secondary_structure_constraint(
         # list of tuples (domain1_5p, domain2_3p, length,
         #                 domain1_5p_domain2_3p_exterior_base_pair_type,
         #                 domain1_3p_domain2_5p_exterior_base_pair_type)
-        base_pair_domain_endpoints_to_check: List[Tuple[int, int, int, ExteriorBasePairType, ExteriorBasePairType]] = []
+        base_pair_domain_endpoints_to_check: List[Tuple[int,int, int, BasePairType, BasePairType]] = []
         #    0123           4567
         # 5'-AAAA-3'     5'-TTTT-3'
         #    ^              ^  ^
         #    |              |  domain2_3p
         #    domain1_5p    domain2_5p
+        #
+        # This has one entry per a pair of bound domains and stores the type of
+        # both endpoint base pairs. First two entries are domain1_5p, domain2_3p.
+        # Next entry is length. (Note that other endpoint indicies can be
+        # computed from these three.) Last two entries are the ExteriorBasePairType
+        # of these two base pairs.
         #
         # domain1_5p_domain2_3p_exterior_base_pair_type and domain1_3p_domain2_5p_exterior_base_pair_type
         # denote the ExteriorBasePairTYpe if base pair is exterior, otherwise
@@ -3557,10 +3600,18 @@ def nupack_4_complex_secondary_structure_constraint(
 
                 base_pair = (domain1_5p, domain2_3p)
                 if base_pair not in seen_base_pair_domain_endpoints:
-                    domain1_3p_domain2_5p_exterior_base_pair_type = _exterior_base_type_of_domain_3p_end(domain_name, bounded_domains, domain_neighbors)
-                    domain1_5p_domain2_3p_exterior_base_pair_type = _exterior_base_type_of_domain_3p_end(complementary_domain_name, bounded_domains, domain_neighbors)
+                    # domain_name                 5' --------------------------------- 3'
+                    #                                | | | | | | | | | | | | | | | | |
+                    # complementary_domain_name   3' --------------------------------- 5'
+                    #                             ^                                    ^
+                    #                             |                                    |
+                    #                   d1_5p_d2_3p_ext_bp_type                        |
+                    #                                                                  |
+                    #                                                       d1_3p_d2_5p_ext_bp_type
+                    d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_name, bounded_domains, domain_neighbors)
+                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementary_domain_name, bounded_domains, domain_neighbors)
 
-                    base_pair_domain_endpoints_to_check.append((*base_pair, domain_length, domain1_5p_domain2_3p_exterior_base_pair_type, domain1_3p_domain2_5p_exterior_base_pair_type))
+                    base_pair_domain_endpoints_to_check.append((*base_pair, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
                     seen_base_pair_domain_endpoints.add(base_pair)
 
 
@@ -3595,7 +3646,6 @@ def nupack_4_complex_secondary_structure_constraint(
         for strand in strand_complex:
             print(f'{strand.name}: {strand.sequence()}')
 
-
         expected_paired_idxs: Set[int] = set()
         #  0123
         # [AGCT>    domain1
@@ -3609,42 +3659,45 @@ def nupack_4_complex_secondary_structure_constraint(
         # - blunt ends
         # - overhangs
 
-        exterior_base_type_probability_threshold: dict[ExteriorBasePairType, float] = {}
-        for exterior_base_type in ExteriorBasePairType:
+        base_type_probability_threshold: dict[BasePairType, float] = {}
+        for exterior_base_type in BasePairType:
             # TODO: replace this by setting real probabilities for each case
-            exterior_base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
+            #     * Add parameter in function for user to specifiy probabilities
+            #     * This should be a constant dictionary in the library
+            #     * Iterate over user's dictionary into a copy of the constant
+            #       dictionary.
+            base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
+        base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND] = internal_base_pair_prob
 
-        def summarize_violation(i, j, mat, threshold, paired=True, exterior_base_pair_type=None):
+        def summarize_violation(i, j, mat, threshold, paired=True, base_pair_type=None):
             paired_string = 'paired'
             if not paired:
                 paired_string = 'unpaired'
-            exterior_base_pair_string = ''
-            if exterior_base_pair_type is not None:
-                exterior_base_pair_string = f'({exterior_base_pair_type})'
+            base_pair_string = ''
+            if base_pair_type is not None:
+                base_pair_string = f'({base_pair_type})'
             print(
                 f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%',
-                exterior_base_pair_string)
+                base_pair_string)
 
         # TODO: Instead of returning boolean, we should take differences between desired probabilities
-        for (domain1_5p, domain2_3p, domain_length, domain1_5p_domain2_3p_exterior_base_pair_type, domain1_3p_domain2_5p_exterior_base_pair_type) in base_pair_domain_endpoints_to_check:
+        for (domain1_5p, domain2_3p, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type) in base_pair_domain_endpoints_to_check:
             # Checks if base pairs at ends of domain to be above 40% probability
             domain1_3p = domain1_5p + (domain_length - 1)
             domain2_5p = domain2_3p - (domain_length - 1)
 
-            domain1_5p_domain2_3p_exterior_base_pair_prob = internal_base_pair_prob
-            if domain1_5p_domain2_3p_exterior_base_pair_type is not None:
-                domain1_5p_domain2_3p_exterior_base_pair_prob = exterior_base_type_probability_threshold[domain1_5p_domain2_3p_exterior_base_pair_type]
-            if nupack_complex_result[domain1_5p][domain2_3p] < domain1_5p_domain2_3p_exterior_base_pair_prob:
-                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result, domain1_5p_domain2_3p_exterior_base_pair_prob, exterior_base_pair_type=domain1_5p_domain2_3p_exterior_base_pair_type)
+            d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
+            if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
+                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result,
+                                    d1_5p_d2_3p_ext_bp_prob_thres, base_pair_type=d1_5p_d2_3p_ext_bp_type)
                 return 1.0
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
-            domain1_3p_domain2_5p_exterior_base_pair_prob = internal_base_pair_prob
-            if domain1_3p_domain2_5p_exterior_base_pair_type is not None:
-                domain1_3p_domain2_5p_exterior_base_pair_prob = exterior_base_type_probability_threshold[domain1_3p_domain2_5p_exterior_base_pair_type]
-            if nupack_complex_result[domain1_3p][domain2_5p] < domain1_3p_domain2_5p_exterior_base_pair_prob:
-                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result, domain1_3p_domain2_5p_exterior_base_pair_prob, exterior_base_pair_type=domain1_3p_domain2_5p_exterior_base_pair_type)
+            d1_3p_d2_5p_ext_bp_prob_thres = base_type_probability_threshold[d1_3p_d2_5p_ext_bp_type]
+            if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
+                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result,
+                                    d1_3p_d2_5p_ext_bp_prob_thres, base_pair_type=d1_3p_d2_5p_ext_bp_type)
                 return 1.0
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
@@ -3657,7 +3710,7 @@ def nupack_4_complex_secondary_structure_constraint(
                 row = domain1_5p + i
                 col = domain2_3p - i
                 if nupack_complex_result[row][col] < internal_base_pair_prob:
-                    summarize_violation(row, col, nupack_complex_result, internal_base_pair_prob)
+                    summarize_violation(row, col, nupack_complex_result, internal_base_pair_prob, base_pair_type=BasePairType.INTERIOR_TO_STRAND)
                     return 1.0
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
@@ -3670,9 +3723,6 @@ def nupack_4_complex_secondary_structure_constraint(
                 return 1.0
 
         return 0.0
-
-
-
 
     def summary(strand1: Strand, strand2: Strand) -> str:
         # energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
