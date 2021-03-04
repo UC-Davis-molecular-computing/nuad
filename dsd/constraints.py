@@ -3306,7 +3306,7 @@ class BasePairType(Enum):
     #                    #-----##-----#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     INTERIOR_TO_STRAND = auto()
     """TODO: Rewrite all docstrings using Sphinx doc strings
     .. code-block:: none
@@ -3324,7 +3324,7 @@ class BasePairType(Enum):
     #                    #-----]
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     BLUNT_END = auto()
 
     #                    #----->[-----#
@@ -3332,7 +3332,7 @@ class BasePairType(Enum):
     #                    #-----##-----#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     #
     #                        OR
     #
@@ -3341,7 +3341,7 @@ class BasePairType(Enum):
     #                    #-----]<-----#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     NICK = auto()
 
     #                    #-----##----#
@@ -3378,16 +3378,16 @@ class BasePairType(Enum):
     #                    #-----###-----#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     #
     #                         OR
     #
-    #                     this base
+    #                     base pair
     #                         |
     #                         v
-    #                    #-----# #-----#
-    #                     |||||   |||||
     #                    #-----###-----#
+    #                     |||||   |||||
+    #                    #-----# #-----#
     #                          #
     #                          |
     #                          |
@@ -3401,15 +3401,15 @@ class BasePairType(Enum):
     #                            |
     #                            #
     #                    #-----# #---#
-    #                     |||||  ||||
+    #                     |||||   |||
     #                    #-----###---#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     #
     #                         OR
     #
-    #                     this base
+    #                     base pair
     #                         |
     #                         v
     #                    #-----###-----#
@@ -3432,11 +3432,11 @@ class BasePairType(Enum):
     #                    #-----###---#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     #
     #                         OR
     #
-    #                     this base
+    #                     base pair
     #                         |
     #                         v
     #                    #-----###-----#
@@ -3459,11 +3459,11 @@ class BasePairType(Enum):
     #                    #-----###---#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     #
     #                         OR
     #
-    #                     this base
+    #                     base pair
     #                         |
     #                         v
     #                    #-----###-----#
@@ -3475,6 +3475,22 @@ class BasePairType(Enum):
     #                          |-|
     #                          # #
     THREE_ARM_JUNCTION = auto()
+
+
+    #                          # #
+    #                          |-|
+    #                          |-|
+    #                          |-|
+    #                          # #
+    #                    #-----# #-----#
+    #                     |||||   |||||
+    #                    #-----# #-----#
+    #                          # #
+    #                          |-|
+    #                          |-|
+    #                          |-|
+    #                          # #
+    FOUR_ARM_JUNCTION = auto()
 
     OTHER = auto()
 
