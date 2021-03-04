@@ -3662,71 +3662,295 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                 #     complementary_domain_name    complementary_domain_name_neighbor_5p
                 return BasePairType.DANGLE_5P_3P
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
-            #                              #
-            #                              |
-            #      domain_name_3p_neighbor |
-            #                              |
-            #                              #
-            #             domain_name      #         adjacent_domain_name
-            #    #-------------------------# [-------------------------------------#
-            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
-            #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                #                              #
+                #                              |
+                #      domain_name_3p_neighbor |
+                #                              |
+                #                              #
+                #             domain_name      #         adjacent_domain_name
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_domain_name    complementary_domain_name_neighbor_5p
                 return BasePairType.OVERHANG_ON_THIS_STRAND
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+                #                              # #
+                #                              | |
+                #      domain_name_3p_neighbor | | adjacent_domain_name_neighbor_5p
+                #                              | |
+                #                              # #
+                #             domain_name      # #       adjacent_domain_name
+                #    #-------------------------# #-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_domain_name    complementary_domain_name_neighbor_5p
                 return BasePairType.OVERHANG_ON_BOTH_STRANDS
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
                 # TODO: Possible case (nick n-arm junction)
+                #                              #                    # #
+                #                              |                    |-|
+                #      domain_name_3p_neighbor |                    |-| adjacent_domain_name_neighbor_5p
+                #                              |                    |-|
+                #                              #                    # #
+                #             domain_name      #                      #       adjacent_domain_name
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
                 return BasePairType.OTHER
             else:
                 # Shouldn't reach here
                 assert False
         else:
-            # domain_name's 3' neighbor is a bound overhang
-    #                                         ----]
-    #                          |-            /
-    # (e* may be next to c) e* |-            | <- adjacent_domain_name_neighbor_5p
-    #                          |-            |
-    #                           -             -
-    #              domain_name  |            |  adjacent_domain_name
-    #                      |    | e          |  |
-    #                      v    |            |  v
-    # [------------------#------+            +-------------#------------->
-    # | | | | | | | | | | ||||||              ||||||||||||| |||||||||||||
-    # <------------------#------#            #-------------#-------------]
-    #                      ^                       ^
-    #                      |                       |
-    # complementary_domain_name                 complementary_domain_name_neighbor_5p
+            # domain_name's 3' neighbor is a bound domain
+
+            # Techinically, could be an interior base, but we should have caught this earlier
+            # back when we were determining AdjacentDuplexType.
+            #
+            # Assertion checks that it is not an internal base
+            #
+            #                                        domain_name_neighbor_3p
+            #             domain_name                 adjacent_domain_name
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
             # TODO: Compare domain objects instead of str (handle competitiveness)
-            # if domain_name_3p_neighbor == Domain.complementary_domain_name(complementary_domain_name_neighbor_5p):
-                # Since the adjacent strand is just the same strand that
-                # domain_name resides on, the adjacent_strand_type
-                # should had been set to type NICK since NICK is set
-                # if complementary_domain_name_neighbor_5p is binded
-                # assert adjacent_strand_type is AdjacentStrandType.NICK
+            assert domain_name_3p_neighbor != adjacent_domain_name
 
-                # Internal base pair
-                # return None
+            # Declare new variables:
+            complementary_domain_name_3p_neighbor = Domain.complementary_domain_name(domain_name_3p_neighbor)
+            (_, complementary_domain_name_3p_neighbor_3p_neighbor) = domain_neighbors[complementary_domain_name_3p_neighbor]
+            #             domain_name                 domain_name_3p_neighbor
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+            #                                #
+            #                                |
+            #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+            #                                |
+            #                                #
 
-                # internal base pair should be detected earlier
-                # assert False
-            assert domain_name_3p_neighbor != Domain.complementary_domain_name(complementary_domain_name_neighbor_5p)
+            # Three cases:
+            #
+            # complementary_domain_name_3p_neighbor is 3' end
+            #             domain_name                 domain_name_3p_neighbor
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# <-------------------------------------#
+            #    complementary_domain_name     complementary_domain_name_3p_neighbor
+            #
+            # complementary_domain_name_3p_neighbor_3p_neighbor is unbound overhang
+            #             domain_name                 domain_name_3p_neighbor
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+            #                                #
+            #                                |
+            #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+            #                                |
+            #                                #
+            #
+            # complementary_domain_name_3p_neighbor_3p_neighbor is unbound overhang
+            #             domain_name                 domain_name_3p_neighbor
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #    complementary_domain_name ? # complementary_domain_name_3p_neighbor
+            #                              # #
+            #                              |-|
+            #                              |-| complementary_domain_name_3p_neighbor_3p_neighbor
+            #                              |-|
+            #                              #-#
 
-            # else:
+            complementary_domain_name_3p_neighbor_3p_neighbor_is_bound: bool = None
+            if complementary_domain_name_3p_neighbor_3p_neighbor is not None:
+                complementary_domain_name_3p_neighbor_3p_neighbor_is_bound = complementary_domain_name_3p_neighbor_3p_neighbor in bound_domains
+
+
             # TODO: double check these ones
             # Not an internal base pair since domain_name's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
             if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
-                return BasePairType.OTHER
+                # NICK
+                #
+                #             domain_name                 domain_name_3p_neighbor
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] <-------------------------------------#
+                #    complementary_domain_name    complementary_domain_name_3p_neighbor
+                #
+                #                        OR
+                #
+                # OVERHANG_ON_ADJACENT_STRAND
+                #
+                #             domain_name                 domain_name_3p_neighbor
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] #-------------------------------------#
+                #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+                #                                #
+                #                                |
+                #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+                #                                |
+                #                                #
+                #
+                #                        OR
+                #
+                # OTHER
+                #
+                #             domain_name                 domain_name_3p_neighbor
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] #-------------------------------------#
+                #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+                #                              # #
+                #                              |-|
+                #                              |-| complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              |-|
+                #                              # #
+                if complementary_domain_name_3p_neighbor_3p_neighbor_is_bound is None:
+                    return BasePairType.NICK
+                elif complementary_domain_name_3p_neighbor_3p_neighbor_is_bound == False:
+                    return BasePairType.OVERHANG_ON_ADJACENT_STRAND
+                else:
+                    return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
-                return BasePairType.OVERHANG_ON_THIS_STRAND
+                # OVERHANG_ON_THIS_STRAND
+                #
+                #             domain_name               domain_name_3p_neighbor
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------# #-------------------------------------#
+                #    complementary_domain_name #  complementary_domain_name_3p_neighbor
+                #                              #
+                #                              |
+                #                              |
+                #                              |
+                #                              #
+                #
+                #                        OR
+                #
+                # OVERHANG_ON_BOTH_STRAND
+                #
+                #             domain_name               domain_name_3p_neighbor
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------# #-------------------------------------#
+                #    complementary_domain_name # # complementary_domain_name_3p_neighbor
+                #                              # #
+                #                              | |
+                #                              | | complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              | |
+                #                              # #
+                #
+                #                        OR
+                #
+                #
+                # OTHER
+                # TODO: Possible case (nick n-arm junction)
+                #
+                #             domain_name                                   domain_name_3p_neighbor
+                #    #-------------------------########################-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------#                      #-------------------------------------#
+                #    complementary_domain_name #                      # complementary_domain_name_3p_neighbor
+                #                              #                    # #
+                #                              |                    |-|
+                #                              |                    |-| complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              |                    |-|
+                #                              #                    # #
+
+                if complementary_domain_name_3p_neighbor_3p_neighbor_is_bound is None:
+                    return BasePairType.OVERHANG_ON_THIS_STRAND
+                elif complementary_domain_name_3p_neighbor_3p_neighbor_is_bound == False:
+                    return BasePairType.OVERHANG_ON_BOTH_STRANDS
+                else:
+                    return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
-                return BasePairType.DANGLE_5P_3P
+                # TODO: Possible case (nick n-arm junction)
+                # Bound DANGLE_5P_3P?
+                #                              # #
+                #                              |-|
+                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #                              |-|
+                #                              # v
+                #             domain_name      #                              adjacent_domain_name
+                #    #-------------------------#                      [-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #
+                #
+                #
+                #                              # #
+                #                              |-|
+                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #                              |-|
+                #                              # ##---------#
+                #             domain_name      #                            adjacent_domain_name
+                #    #-------------------------#                      [-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #
+                #
+                #
+                #
+                #                              # #
+                #                              |-|
+                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #                              |-|
+                #                              # ##---------#
+                #             domain_name      #   ||||||||                            adjacent_domain_name
+                #    #-------------------------#  #---------#         [-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                # Similar to DANBLE_5P_3P, but both dangles are bound
+                return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
-                return BasePairType.DANGLE_5P_3P
+                # TODO: Possible case (nick n-arm junction)
+                # Bound DANGLE_5P_3P?
+                #                              # #                    #
+                #                              |-|                    |
+                #      domain_name_3p_neighbor |-|                    | adjacent_domain_name_neighbor_5p
+                #                              |-|                    |
+                #                              # #                    #
+                #             domain_name      #                      #       adjacent_domain_name
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+                #                              # #                  # #
+                #                              |-|                  |-|
+                #      domain_name_3p_neighbor |-|                  |-| adjacent_domain_name_neighbor_5p
+                #                              |-|                  |-|
+                #                              # #                  # #
+                #             domain_name      #                      #       adjacent_domain_name
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
                 if domain_name_3p_neighbor == Domain.complementary_domain_name(adjacent_domain_name_neighbor_5p):
+                    #                              # #
+                    #                              |-|
+                    #      domain_name_3p_neighbor |-| adjacent_domain_name_neighbor_5p
+                    #                              |-|
+                    #                              # #
+                    #             domain_name      # #       adjacent_domain_name
+                    #    #-------------------------# #-------------------------------------#
+                    #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                    #    #-------------------------###-------------------------------------#
+                    #     complementary_domain_name    complementary_domain_name_neighbor_5p
                     return BasePairType.THREE_ARM_JUNCTION
+                else:
+                    # Could possibly be n-arm junction
+                    return BasePairType.OTHER
             else:
                 raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
 
