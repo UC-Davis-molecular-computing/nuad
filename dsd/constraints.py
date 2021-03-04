@@ -3144,54 +3144,92 @@ def nupack_strand_pair_constraint(
 
 
 # TODO: hide this class
-class AdjacentStrandType(Enum):
-    # TODO(benlee12): What if "nothing here" is an overhang?
-    # EMPTY
-    #                       c
-    #                     -----
-    # | | | | | | | | | | | | |
-    # <------------------|-----] "nothing here!"
-    #                       c*
-    EMPTY = auto()
-    # NON_NICK
-    #                       c
-    #                     -----
-    # | | | | | | | | | | | | |
-    # <------------------|-----|-----|--------------]
-    #                       c*    d*
-    DANGLE_5P = auto()
-    # NICK
-    #                       c     d
-    #                     ----- [----|------------->
-    # | | | | | | | | | | | | |   | | | | | | | |
-    # <------------------|-----|-----|--------------]
-    #                       c*    d*
-    NICK = auto()
-    # OVERHANG
-    #                           +----]
-    #                           |
-    #                           | e (unbounded)
-    #                           |
-    #                       c   | d
-    #                    #-----#+---#------------->
-    # ||||||||||||||||||| |||||||||| ||||||||||||||
-    # <------------------#-----#----#-------------]
-    #                       c*    d*
-    OVERHANG = auto()
-    # POSSIBLE_THREE_ARM_JUNCTION
+class AdjacentDuplexType(Enum):
+    # Refer to comments under BaseTypePair for notation reference
     #
-    # Since e is bounded, if e* is c's 3p neighbor, we have
-    # a three arm junction
-    #                             ----]
-    #                          |-/
-    # (e* may be next to c) e* |-| e (bounded)
+    #
+    # Domain definitions:
+    #   All AdjacentDuplexType are with reference to domain c.
+    #   AdjacentDuplexType is agnostic to the ends of domain c.
+    #   Hence, c is written as #-----# in each of the AdjacentDuplexType
+    #   variants.
+    #
+    #   c* - complement of c   (must exist)
+    #   d* - 5' neighbor of c* (does not neccessarily exist)
+    #   d  - complement of d*  (does not neccessarily exist)
+    #   e  - 5' neighbor of d  (does not neccessarily exist)
+    #   e* - complement of e   (does not neccessarily exist)
+    #
+    #                          # #
     #                          |-|
-    #                       c     d
-    #                    [----> +----|------------->
-    # | | | | | | | | | | | | |   | | | | | | | |
-    # <------------------|-----|-----|--------------]
+    #                       e* |-| e (bound)
+    #                          |-|
+    #                          # #
+    #                       c  ? # d
+    #                    #-----# #-----#
+    #                     |||||   |||||
+    #                    #-----###-----#
     #                       c*    d*
-    POSSIBLE_THREE_ARM_JUNCTION = auto()
+    #
+    #   Note: if "?" was a "#" (meaning e* is adjacent to c), then then
+    #   it would be a three arm junction
+    #
+    ###########################################################################
+
+    # d* does not exist
+    #                       c
+    #                    #-----#
+    #                     |||||
+    #                    #-----]
+    #                       c*
+    BOTTOM_RIGHT_EMPTY = auto()
+
+    # d* exist, but d does not exist
+    #                       c
+    #                    #-----#
+    #                     |||||
+    #                    #-----##----#
+    #                       c*    d*
+    BOTTOM_RIGHT_DANGLE = auto()
+
+    # d* and d exist, but e does not exist
+    # d is is the 5' end of the strand
+    #                       c     d
+    #                    #-----#[----#
+    #                     |||||  ||||
+    #                    #-----##----#
+    #                       c*    d*
+    TOP_RIGHT_5P = auto()
+
+    # d* and d and e exist, but e* does not exist
+    #                           #
+    #                           |
+    #                           | e (unbound)
+    #                           |
+    #                           #
+    #                       c   | d
+    #                    #-----#+---#
+    #                     ||||| ||||
+    #                    #-----#----#
+    #                       c*    d*
+    TOP_RIGHT_OVERHANG = auto()
+
+    # d* and d and e and e* exist
+    #
+    # ? on 3p end of c domain because this case is agnostic to
+    # whether c and e* are connected
+    #
+    #                          # #
+    #                          |-|
+    #                       e* |-| e (bound)
+    #                          |-|
+    #                          # #
+    #                       c  ? # d
+    #                    #-----# #---#
+    #                     |||||  ||||
+    #                    #-----###---#
+    #                       c*    d*
+    TOP_RIGHT_BOUND_OVERHANG = auto()
 
 # TODO(benlee12): Add whatever makes ascii art fixed length (see scadnano python repo)
 # Get sphinx working so that I can test docstrings
@@ -3201,9 +3239,76 @@ class AdjacentStrandType(Enum):
 class BasePairType(Enum):
     """ExteriorBasePairType TODO
     """
+    # Notation:
+    #   "#" indicates denotes the ends of a domain. They can either be the end
+    #       of a strand or they could be connected to another domain.
+    #   "]" and "[" indicates 5' ends of strand
+    #   ">" and "<" indicates 3' ends of a strand
+    #   "-" indicates a base (number of these are not important).
+    #   "|" indicates a bases are bound (forming a base pair).
+    #       Any "-" not connected by "|" is unbound
+    #
+    #   Ocassionally, domains will be vertical in the case of overhangs.
+    #   In this case, "-" and "|" have opposite meanings
+    #
+    #   Ex:
+    #     #
+    #     |
+    #     |
+    #     |
+    #     #
+    #
+    #
+    # Formatting:
+    #   Top strands have 5' end on left side and 3' end on right side
+    #   Bottom strand have 3' end on left side and 5' end on right side
+    #
+    # Strand Example:
+    #   strand0: a-b-c-d
+    #   strand1: d*-b*-c*-a*
+    #
+    #               a      b      c      d
+    #   strand0  [-----##-----##-----##----->
+    #             |||||  |||||  |||||  |||||
+    #   strand1  <-----##-----##-----##-----]
+    #               a*     b*     c*     d*
+    #
+    #
+    # Consecutive "#":
+    #   In some cases, extra "#" are needed to to make space for ascii art.
+    #   We consider any consecutive "#"s to be equivalent "##".
+    #   The following is consider equivalent to the example above
+    #
+    #               a       b        c      d
+    #   strand0  [-----###-----####-----##----->
+    #             |||||   |||||    |||||  |||||
+    #   strand1  <-----###-----####-----##-----]
+    #               a*      b*       c*     d*
+    #
+    #   Note that only consecutive "#"s is consider equivalent to "$$".
+    #   The following example is not equivalent to the strands above because
+    #   the "#  #" between b and c are seperated by spaces, so they are
+    #   not equivalent to "##", meaning that b and c neednot be adjacent.
+    #   Note that while b and c need not be adjacent, b* and c* are still
+    #   adjacent because they are seperated by consecutive "#"s with no
+    #   spaces in between.
+    #
+    #               a       b        c      d
+    #   strand0  [-----###-----#  #-----##----->
+    #             |||||   |||||    |||||  |||||
+    #   strand1  <-----###-----####-----##-----]
+    #               a*      b*       c*     d*
+    ###########################################################################
 
+
+    #                    #-----##-----#
+    #                     |||||  |||||
+    #                    #-----##-----#
+    #                         ^
+    #                         |
+    #                     this base
     INTERIOR_TO_STRAND = auto()
-    """
+    """TODO: Rewrite all docstrings using Sphinx doc strings
     .. code-block:: none
 
                 c                    d
@@ -3211,104 +3316,167 @@ class BasePairType(Enum):
         | | | | | | | | | | | | | | | | | |
         <----------------------|-----------]
                 c*           ^       d*
-                            |
-                        this base pair
+                             |
+                         this base pair
     """
-    # [----------------------->
-    # | | | | | | | | | | | | |
-    # <-----------------------]
+    #                    #----->
+    #                     |||||
+    #                    #-----]
     #                         ^
     #                         |
     #                     this base
-    END_OF_BOTH_STRANDS = auto()
-    # [-----------------------> [----------------->
-    # | | | | | | | | | | | | | | | | | | | | | | |
-    # <-------------------------------------------]
+    BLUNT_END = auto()
+
+    #                    #----->[-----#
+    #                     |||||  |||||
+    #                    #-----##-----#
+    #                         ^
+    #                         |
+    #                     this base
+    #
+    #                        OR
+    #
+    #                    #-----##-----#
+    #                     |||||  |||||
+    #                    #-----]<-----#
     #                         ^
     #                         |
     #                     this base
     NICK = auto()
-    # TODO(benlee12): detect and handle this type
-    # [------------------------------------------->
-    # | | | | | | | | | | | | |
-    # <-----------------------]
+
+    #                    #-----##----#
+    #                     |||||
+    #                    #-----]
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     DANGLE_3P = auto()
-    # [----------------------->
-    # | | | | | | | | | | | | |
-    # <-------------------------------------------]
+
+    #                    #----->
+    #                     |||||
+    #                    #-----##----#
     #                         ^
     #                         |
-    #                     this base
+    #                     base pair
     DANGLE_5P = auto()
-    #                                ---------------------->
-    #                               /
-    #                              /
-    #                             /
-    #                            /
-    #                           /
-    #                          /
-    # [------------------------
-    # | | | | | | | | | | | | |
-    # <------------------------
-    #                         ^\
-    #                         | \
-    #                  this base \
-    #                             \
-    #                              \
-    #                               \
-    #                                --------------------]
+
+    #                    #-----##----#
+    #                     |||||
+    #                    #-----##----#
+    #                         ^
+    #                         |
+    #                     base pair
     DANGLE_5P_3P = auto()
-    #                <----
-    #                     \
-    #                      \
-    #                       \
-    #                        \
-    # [------------------------ [----------------->
-    # | | | | | | | | | | | | | | | | | | | | | | |
-    # <-------------------------------------------]
+
+    #                          #
+    #                          |
+    #                          |
+    #                          |
+    #                          #
+    #                    #-----# #-----#
+    #                     |||||   |||||
+    #                    #-----###-----#
     #                         ^
     #                         |
     #                     this base
+    #
+    #                         OR
+    #
+    #                     this base
+    #                         |
+    #                         v
+    #                    #-----# #-----#
+    #                     |||||   |||||
+    #                    #-----###-----#
+    #                          #
+    #                          |
+    #                          |
+    #                          |
+    #                          #
     OVERHANG_ON_THIS_STRAND = auto()
-    #                                ------]
-    #                               /
-    #                              /
-    #                             /
-    #                            /
-    # [-----------------------> ------------------>
-    # | | | | | | | | | | | | | | | | | | | | | | |
-    # <-------------------------------------------]
+
+    #                            #
+    #                            |
+    #                            |
+    #                            |
+    #                            #
+    #                    #-----# #---#
+    #                     |||||  ||||
+    #                    #-----###---#
     #                         ^
     #                         |
     #                     this base
+    #
+    #                         OR
+    #
+    #                     this base
+    #                         |
+    #                         v
+    #                    #-----###-----#
+    #                     |||||   |||||
+    #                    #-----# #-----#
+    #                            #
+    #                            |
+    #                            |
+    #                            |
+    #                            #
     OVERHANG_ON_ADJACENT_STRAND = auto()
-    #           <---------           ------]
-    #                     \         /
-    #                      \       /
-    #                       \     /
-    #                        \   /
-    # [------------------------ ------------------>
-    # | | | | | | | | | | | | | | | | | | | | | | |
-    # <-------------------------------------------]
+
+    #                          # #
+    #                          | |
+    #                          | |
+    #                          | |
+    #                          # #
+    #                    #-----# #---#
+    #                     |||||  ||||
+    #                    #-----###---#
     #                         ^
     #                         |
     #                     this base
+    #
+    #                         OR
+    #
+    #                     this base
+    #                         |
+    #                         v
+    #                    #-----###-----#
+    #                     |||||   |||||
+    #                    #-----# #-----#
+    #                          # #
+    #                          | |
+    #                          | |
+    #                          | |
+    #                          # #
     OVERHANG_ON_BOTH_STRANDS = auto()
-    #                         |--|
-    #                         |--|
-    #                         |--|
-    #                         |--|
-    #                         |--|
-    # [------------------------  ------------------>
-    # | | | | | | | | | | | | |  | | | | | | | | | |
-    # <-------------------------------------------]
+
+    #                          # #
+    #                          |-|
+    #                          |-|
+    #                          |-|
+    #                          # #
+    #                    #-----# #---#
+    #                     |||||  ||||
+    #                    #-----###---#
     #                         ^
     #                         |
     #                     this base
+    #
+    #                         OR
+    #
+    #                     this base
+    #                         |
+    #                         v
+    #                    #-----###-----#
+    #                     |||||   |||||
+    #                    #-----# #-----#
+    #                          # #
+    #                          |-|
+    #                          |-|
+    #                          |-|
+    #                          # #
     THREE_ARM_JUNCTION = auto()
+
+    OTHER = auto()
 
     def default_pair_probability(self) -> float:
         # TODO: Populate with default probabilties
@@ -3322,81 +3490,215 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                                          bound_domains: Set[str],
                                          domain_neighbors: Dict[str, Tuple[str, str]]) -> BasePairType:
     # determine which case is at 3'-adjacent to this base pair
-    adjacent_strand_type: AdjacentStrandType = AdjacentStrandType.EMPTY
-    three_arm_junction_third_strand_candidate_domain: str = None
-
-    #                             ----]
-    #                          |-/
-    # (e* may be next to c) e* |-| <- adjacent_domain_name_neighbor_5p
-    #                          |-|
-    #                          - -
-    #              domain_name   |  adjacent_domain_name
-    #                      |     |  |
-    #                      v     |  v
-    # [------------------|------>+------------|------------->
-    # | | | | | | | | | | | | |   | | | | | | | |
-    # <------------------|------|-------------|--------------]
-    #                      ^       ^
-    #                      |       |
-    # complementary_domain_name complementary_domain_name_neighbor_5p
+    # Declare domain variables:
+    #                              # #
+    #                              |-|
+    #                            ? |-| adjacent_domain_name_neighbor_5p
+    #                              |-|
+    #                              # #
+    #             domain_name      ? #        adjacent_domain_name
+    #    #-------------------------# #-------------------------------------#
+    #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+    #    #-------------------------###-------------------------------------#
+    #     complementary_domain_name    complementary_domain_name_neighbor_5p
     complementary_domain_name = Domain.complementary_domain_name(domain_name)
     (complementary_domain_name_neighbor_5p, _) = domain_neighbors[complementary_domain_name]
+    adjacent_domain_name: str = None
+    adjacent_domain_name_neighbor_5p: str = None
+
+    # First assume BOTTOM_RIGHT_EMPTY
+    #            domain_name
+    #    #-------------------------#
+    #     |||||||||||||||||||||||||
+    #    #-------------------------]
+    #     complementary_domain_name
+    adjacent_strand_type: AdjacentDuplexType = AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
+
     if complementary_domain_name_neighbor_5p is not None:
-        adjacent_strand_type = AdjacentStrandType.DANGLE_5P
+        #   Since complementary_domain_name_neighbor_5p exists, assume BOTTOM_RIGHT_DANGLE
+        #
+        #            domain_name
+        #    #-------------------------#
+        #     |||||||||||||||||||||||||
+        #    #-------------------------###-------------------------------------#
+        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+        adjacent_strand_type = AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
         if complementary_domain_name_neighbor_5p in bound_domains:
-            adjacent_strand_type = AdjacentStrandType.NICK
+            # Since complementary_domain_name_neighbor_5p is bound, meaning
+            # adjacent_domain_name exist, assume TOP_RIGHT_5p
+            #
+            #             domain_name                adjacent_domain_name
+            #    #-------------------------# [-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+            adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_5P
             adjacent_domain_name = Domain.complementary_domain_name(complementary_domain_name_neighbor_5p)
             (adjacent_domain_name_neighbor_5p, _) = domain_neighbors[adjacent_domain_name]
-            if adjacent_domain_name_neighbor_5p in bound_domains:
-                if domain_name == adjacent_domain_name_neighbor_5p:
-                    # TODO(benlee12): handle case when domains are competitive
+            if adjacent_domain_name_neighbor_5p is not None:
+                # Since adjacent_domain_name_neighbor_5p exists, assume TOP_RIGHT_OVERHANG
+                #
+                #                                #
+                #                                |
+                #                                | adjacent_domain_name_neighbor_5p
+                #                                |
+                #                                #
+                #             domain_name        #        adjacent_domain_name
+                #    #-------------------------# #-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_OVERHANG
+                if adjacent_domain_name_neighbor_5p in bound_domains:
+                    # Since adjacent_domain_name_neighbor_5p is bound, two possible cases:
 
-                    # Assuming non-competitive, then this must be internal base
-                    return BasePairType.INTERIOR_TO_STRAND
-                else:
-                    # could be three arm junction
-                    three_arm_junction_third_strand_candidate_domain = adjacent_domain_name_neighbor_5p
-                    adjacent_strand_type = AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION
-            else:
-                adjacent_strand_type = AdjacentStrandType.OVERHANG
+                    # TODO(benlee12): handle case when domains are competitive
+                    if domain_name == adjacent_domain_name_neighbor_5p:
+                        # Since domain_name and adjacent_domain_name_neighbor_5p
+                        # are the same, then this must be an internal base pair
+                        #
+                        #    adjacent_domain_name_neighbor_5p
+                        #             domain_name                 adjacent_domain_name
+                        #    #-------------------------###-------------------------------------#
+                        #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                        #    #-------------------------###-------------------------------------#
+                        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+
+                        # Assuming non-competitive, then this must be internal base pair
+                        return BasePairType.INTERIOR_TO_STRAND
+                    else:
+                        # Since adjacent_domain_name_neighbor_5p does not equal domain_name,
+                        # must be a bound overhang:
+                        #
+                        #                              # #
+                        #                              |-|
+                        #                            ? |-| adjacent_domain_name_neighbor_5p
+                        #                              |-|
+                        #                              # #
+                        #             domain_name      ? #        adjacent_domain_name
+                        #    #-------------------------# #-------------------------------------#
+                        #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                        #    #-------------------------###-------------------------------------#
+                        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                        adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
 
     (_, domain_name_3p_neighbor) = domain_neighbors[domain_name]
     if domain_name_3p_neighbor is None:
         # domain_name is at 3' end of strand
-        if adjacent_strand_type is AdjacentStrandType.EMPTY:
-            return BasePairType.END_OF_BOTH_STRANDS
-        elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
+        #
+        #            domain_name
+        #    #------------------------->
+
+        # TODO: draw ascii for each case
+        if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+            #            domain_name
+            #    #------------------------->
+            #     |||||||||||||||||||||||||
+            #    #-------------------------]
+            #     complementary_domain_name
+            return BasePairType.BLUNT_END
+        elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+            #            domain_name
+            #    #------------------------->
+            #     |||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
             return BasePairType.DANGLE_5P
-        elif adjacent_strand_type is AdjacentStrandType.NICK:
+        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+            #             domain_name                adjacent_domain_name
+            #    #-------------------------> [-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
             return BasePairType.NICK
-        elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
+        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+                #                                #
+                #                                |
+                #                                | adjacent_domain_name_neighbor_5p
+                #                                |
+                #                                #
+                #             domain_name        #        adjacent_domain_name
+                #    #-------------------------> #-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_domain_name    complementary_domain_name_neighbor_5p
             return BasePairType.OVERHANG_ON_ADJACENT_STRAND
-        elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
-            # Seems to be a bounded overhang
-            raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
+        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+            #                              # #
+            #                              |-|
+            #                            ? |-| adjacent_domain_name_neighbor_5p
+            #                              |-|
+            #                              # #
+            #             domain_name        #        adjacent_domain_name
+            #    #-------------------------> #-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+            # TODO: Possible case (nick n-arm junction)
+            return BasePairType.OTHER
         else:
             # Shouldn't reach here
             assert False
     else:
-        # domain_name is in the middle of a strand
+        # domain_name is not the 3' end of the strand
+        #
+        #            domain_name          domain_name_3p_neighbor
+        #    #-------------------------##-------------------------#
+
         if domain_name_3p_neighbor not in bound_domains:
-            # domain_name's 3' neighbor is an unbounded overhang
-            if adjacent_strand_type is AdjacentStrandType.EMPTY:
-                return BasePairType.DANGLE_5P
-            elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
+            # domain_name's 3' neighbor is an unbound overhang
+            if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+                #            domain_name          domain_name_3p_neighbor
+                #    #-------------------------##-------------------------#
+                #     |||||||||||||||||||||||||
+                #    #-------------------------]
+                #     complementary_domain_name
+                return BasePairType.DANGLE_3P
+            elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+                #            domain_name                 domain_name_3p_neighbor
+                #    #-------------------------##-------------------------------------#
+                #     |||||||||||||||||||||||||
+                #    #-------------------------##-------------------------------------#
+                #     complementary_domain_name    complementary_domain_name_neighbor_5p
                 return BasePairType.DANGLE_5P_3P
-            elif adjacent_strand_type is AdjacentStrandType.NICK:
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+            #                              #
+            #                              |
+            #      domain_name_3p_neighbor |
+            #                              |
+            #                              #
+            #             domain_name      #         adjacent_domain_name
+            #    #-------------------------# [-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_domain_name    complementary_domain_name_neighbor_5p
                 return BasePairType.OVERHANG_ON_THIS_STRAND
-            elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 return BasePairType.OVERHANG_ON_BOTH_STRANDS
-            elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
-                raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+                # TODO: Possible case (nick n-arm junction)
+                return BasePairType.OTHER
             else:
                 # Shouldn't reach here
                 assert False
         else:
-            # domain_name's 3' neighbor is a bounded overhang
-            if domain_name_3p_neighbor == Domain.complementary_domain_name(complementary_domain_name_neighbor_5p):
+            # domain_name's 3' neighbor is a bound overhang
+    #                                         ----]
+    #                          |-            /
+    # (e* may be next to c) e* |-            | <- adjacent_domain_name_neighbor_5p
+    #                          |-            |
+    #                           -             -
+    #              domain_name  |            |  adjacent_domain_name
+    #                      |    | e          |  |
+    #                      v    |            |  v
+    # [------------------#------+            +-------------#------------->
+    # | | | | | | | | | | ||||||              ||||||||||||| |||||||||||||
+    # <------------------#------#            #-------------#-------------]
+    #                      ^                       ^
+    #                      |                       |
+    # complementary_domain_name                 complementary_domain_name_neighbor_5p
+            # TODO: Compare domain objects instead of str (handle competitiveness)
+            # if domain_name_3p_neighbor == Domain.complementary_domain_name(complementary_domain_name_neighbor_5p):
                 # Since the adjacent strand is just the same strand that
                 # domain_name resides on, the adjacent_strand_type
                 # should had been set to type NICK since NICK is set
@@ -3407,24 +3709,26 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                 # return None
 
                 # internal base pair should be detected earlier
-                assert False
+                # assert False
+            assert domain_name_3p_neighbor != Domain.complementary_domain_name(complementary_domain_name_neighbor_5p)
+
+            # else:
+            # TODO: double check these ones
+            # Not an internal base pair since domain_name's 3' neighbor is
+            # bounded to a domain that is not complementary's 5' neighbor
+            if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+                return BasePairType.OTHER
+            elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+                return BasePairType.OVERHANG_ON_THIS_STRAND
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+                return BasePairType.DANGLE_5P_3P
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+                return BasePairType.DANGLE_5P_3P
+            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+                if domain_name_3p_neighbor == Domain.complementary_domain_name(adjacent_domain_name_neighbor_5p):
+                    return BasePairType.THREE_ARM_JUNCTION
             else:
-                # TODO: double check these ones
-                # Not an internal base pair since domain_name's 3' neighbor is
-                # bounded to a domain that is not complementary's 5' neighbor
-                if adjacent_strand_type is AdjacentStrandType.EMPTY:
-                    return BasePairType.NICK
-                elif adjacent_strand_type is AdjacentStrandType.DANGLE_5P:
-                    return BasePairType.OVERHANG_ON_THIS_STRAND
-                elif adjacent_strand_type is AdjacentStrandType.NICK:
-                    return BasePairType.DANGLE_5P_3P
-                elif adjacent_strand_type is AdjacentStrandType.OVERHANG:
-                    return BasePairType.DANGLE_5P_3P
-                elif adjacent_strand_type is AdjacentStrandType.POSSIBLE_THREE_ARM_JUNCTION:
-                    if domain_name_3p_neighbor == Domain.complementary_domain_name(three_arm_junction_third_strand_candidate_domain):
-                        return BasePairType.THREE_ARM_JUNCTION
-                else:
-                    raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
+                raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
 
 
 def nupack_4_complex_secondary_structure_constraint(
