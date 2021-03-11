@@ -4129,7 +4129,7 @@ def nupack_4_complex_secondary_structure_constraint(
         # (domain + its complement), the following for loop encounters each
         # domain pair twice. To avoid duplication, we keep track of domain pairs
         # we have seen before
-        seen_base_pair_domain_endpoints: set[Tuple[int, int]] = set()
+        seen_base_pair_domain_endpoints: Set[Tuple[int, int]] = set()
 
         for (domain_name, (domain_base_index, domain_length)) in strand_complex_domain_name_to_base_index_and_length.items():
             complementary_domain_name = Domain.complementary_domain_name(domain_name)
