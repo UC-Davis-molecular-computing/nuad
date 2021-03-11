@@ -755,7 +755,7 @@ def add_quotes(string: str) -> str:
     return f'"{string}"'
 
 
-def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
+def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys: str) -> Any:
     # should be called from function whose return type is the type being constructed from JSON, e.g.,
     # Design or Strand, given by ret_type. This helps give a useful error message
     for key in (main_key,) + legacy_keys:
@@ -4203,7 +4203,7 @@ def nupack_4_complex_secondary_structure_constraint(
         # - blunt ends
         # - overhangs
 
-        base_type_probability_threshold: dict[BasePairType, float] = {}
+        base_type_probability_threshold: Dict[BasePairType, float] = {}
         for exterior_base_type in BasePairType:
             # TODO: replace this by setting real probabilities for each case
             #     * Add parameter in function for user to specifiy probabilities
