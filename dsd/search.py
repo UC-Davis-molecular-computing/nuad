@@ -1096,7 +1096,7 @@ call search_for_dna_sequences with the parameter restart=True.
 
 
 @dataclass
-class Directories:
+class _Directories:
     # Container for various directories and files associated with output from the search.
     # Easier than passing around several strings as parameters/return values.
     out: str
@@ -1284,9 +1284,9 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param max_iterations:
         Maximum number of iterations of search to perform.
     :param max_domains_to_change:
-        Maximum number of :any:`constraint.Domain`'s to change at a time. A number between 1 and
+        Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
         `max_domains_to_change` is selected uniformly at random, and then that many
-        :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraint.Constraint`'s
+        :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
         that they violated.
     :param num_digits_update:
         Number of digits to use when writing update number in filenames. By default,
@@ -1443,10 +1443,10 @@ def _check_cpu_count(cpu_count: int) -> None:
 
 
 def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
-                       out_directory: str) -> Directories:
+                       out_directory: str) -> _Directories:
     if out_directory is None:
         out_directory = default_output_directory()
-    directories = Directories(out=out_directory, debug=debug, info=info)
+    directories = _Directories(out=out_directory, debug=debug, info=info)
     if not os.path.exists(directories.out):
         os.makedirs(directories.out)
     if not restart:
@@ -1596,7 +1596,7 @@ def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -
 
 
 def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
-                              directories: Directories, report_only_violations: bool,
+                              directories: _Directories, report_only_violations: bool,
                               num_digits_update: Optional[int]) -> None:
     num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
         else f'{num_new_optimal:0{num_digits_update}d}'

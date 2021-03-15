@@ -1347,6 +1347,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     def assign_dna_from_pool(self, rng: np.random.Generator) -> None:
         """
         Assigns a random DNA sequence from this :any:`Strand`'s :any:`StrandPool`.
+
         :param rng:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         """
@@ -3309,6 +3310,7 @@ class BasePairType(Enum):
     #                     base pair
     INTERIOR_TO_STRAND = auto()
     """TODO: Rewrite all docstrings using Sphinx doc strings
+    
     .. code-block:: none
 
                 c                    d
@@ -3318,6 +3320,9 @@ class BasePairType(Enum):
                 c*           ^       d*
                              |
                          this base pair
+    
+    
+    TODO: figure out why Sphinx generates error if this line of the docstring is missing
     """
     #                    #----->
     #                     |||||
