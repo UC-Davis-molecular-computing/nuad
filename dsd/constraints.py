@@ -3992,6 +3992,7 @@ def nupack_4_complex_secondary_structure_constraint(
 ) -> ComplexConstraint:
     # TODO: change doc strings
     # TODO: Handle domain_binding
+    # TODO: Upper bound probability
     """
     Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
