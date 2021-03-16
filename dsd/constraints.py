@@ -3992,6 +3992,7 @@ def nupack_4_complex_secondary_structure_constraint(
 ) -> ComplexConstraint:
     # TODO: change doc strings
     # TODO: Handle domain_binding
+    # TODO: Upper bound probability
     """
     Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
@@ -4180,6 +4181,9 @@ def nupack_4_complex_secondary_structure_constraint(
         nupack_model = NupackModel(material='dna', celsius=temperature)
 
         # TODO: only consider one complex, but may be more accurate to include other possible complexes
+        #       NupackSetSpec(max_size=0, include=(nupack_complex,) can be replaced with (nupack_complex,)
+        #       at the moment. But in future, might want to change max_size to nonzero value to compute
+        #       probabilities that take into account other complexes.
         nupack_complex_set = NupackComplexSet(nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
         nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=['pairs'], model=nupack_model)
         pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
