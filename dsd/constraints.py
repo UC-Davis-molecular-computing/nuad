@@ -3236,6 +3236,19 @@ class AdjacentDuplexType(Enum):
 # Get sphinx working so that I can test docstrings
 # Ex: https://github.com/UC-Davis-molecular-computing/scadnano-python-package/blob/b6cd6984c66e766b20b5a7a34654d3ca3fba42bf/scadnano/origami_rectangle.py#L64
 
+# TODO(benlee12): NUPACK experiment
+# Make small designs (each domain 15 bases roughly)
+# Come up of concrete examples and query nupack for base pair probability
+# average energy sorted
+# standard deviation
+# 100 random DNA sequences
+# Do it for four arm junction
+# Hypothesis: four arm junction more stable
+# Use library function for generating random DNA sequence
+# Mean probability, standard deviation
+# 95% confidence interval
+# Maybe have two cases, one where base pair is forced to get A T and another where
+# it is forced to be C G
 
 class BasePairType(Enum):
     """ExteriorBasePairType TODO
@@ -3976,13 +3989,24 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                 raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
 
 
+class StrandDomainAddress:
+    def __init__(self, strand: Strand, domain_idx: int) -> None:
+        self.strand = strand
+        self.domain_idx = domain_idx
+
+    @classmethod
+    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int) -> None:
+        pass
+
+
 def nupack_4_complex_secondary_structure_constraint(
         complexes: Iterable[Tuple[Strand, ...]],
         base_pair_probs: Dict[BasePairType, float] = None,
         exterior_base_pair_prob: float = 0.4,
         internal_base_pair_prob: float = 0.95,
         unpaired_base_prob: float = 0.95,
-        domain_binding: Iterable[Tuple[Domain, Domain]] = None,
+        nonimplicit_base_pairs: Iterable[Tuple[Domain, Domain]] = None,
+        all_base_pairs: Iterable[Tuple[Domain, Domain]] = None,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -3993,6 +4017,8 @@ def nupack_4_complex_secondary_structure_constraint(
     # TODO: change doc strings
     # TODO: Handle domain_binding
     # TODO: Upper bound probability
+    # TODO: nonimplicit_base_pairs (dsd figures out all the rest of base pairs)
+    # TODO: all_base_pairs (dsd does not add any base pairs)
     """
     Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
