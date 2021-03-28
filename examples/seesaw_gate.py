@@ -56,12 +56,31 @@ strands = [
     gate_5_base_strand
 ]
 
-# Complexes
+# Complexes (with NUPACK indexing)
 #
 #               S5           T           S6
+#         34            20 19  15 14            0
+#         |             |  |   |  |             |
 #        <===============--=====--===============]
+#         |||||||||||||||  |||||
 # [=====--===============--=====>
+#  |   |  |             |  |   |
+#  35  39 40            54 55  59
 #    T*         S5*          T*
+
+
+#                                S5
+# [===============--=====--===============>
+#                   =====--===============--=====
+#                                S5*
+
+#    0          1           2
+#             S5*
+# [=====--===============--=====>
+#        <===============--=====--===============]
+#                2           1            0
+#             S5
+#
 g_5_s_5_6_complex = (signal_6_5_strand, gate_5_base_strand)
 g_5_s_5_6_nonimplicit_base_pairs = [(signal_toehold_addr, gate_5_bound_toehold_3p_addr)]
 g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(

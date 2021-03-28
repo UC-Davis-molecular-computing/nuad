@@ -3351,16 +3351,16 @@ class BasePairType(Enum):
     #                         ^
     #                         |
     #                     base pair
-    #
-    #                        OR
-    #
+    NICK_3P = auto()
+
     #                    #-----##-----#
     #                     |||||  |||||
     #                    #-----]<-----#
     #                         ^
     #                         |
     #                     base pair
-    NICK = auto()
+    NICK_5P = auto()
+
 
     #                    #-----##----#
     #                     |||||
@@ -3397,9 +3397,8 @@ class BasePairType(Enum):
     #                         ^
     #                         |
     #                     base pair
-    #
-    #                         OR
-    #
+    OVERHANG_ON_THIS_STRAND_3P = auto()
+
     #                     base pair
     #                         |
     #                         v
@@ -3411,7 +3410,8 @@ class BasePairType(Enum):
     #                          |
     #                          |
     #                          #
-    OVERHANG_ON_THIS_STRAND = auto()
+    OVERHANG_ON_THIS_STRAND_5P = auto()
+
 
     #                            #
     #                            |
@@ -3424,9 +3424,9 @@ class BasePairType(Enum):
     #                         ^
     #                         |
     #                     base pair
-    #
-    #                         OR
-    #
+    OVERHANG_ON_ADJACENT_STRAND_3P = auto()
+
+
     #                     base pair
     #                         |
     #                         v
@@ -3438,7 +3438,7 @@ class BasePairType(Enum):
     #                            |
     #                            |
     #                            #
-    OVERHANG_ON_ADJACENT_STRAND = auto()
+    OVERHANG_ON_ADJACENT_STRAND_5P = auto()
 
     #                          # #
     #                          | |
@@ -3451,9 +3451,8 @@ class BasePairType(Enum):
     #                         ^
     #                         |
     #                     base pair
-    #
-    #                         OR
-    #
+    OVERHANG_ON_BOTH_STRANDS_3P = auto()
+
     #                     base pair
     #                         |
     #                         v
@@ -3465,7 +3464,7 @@ class BasePairType(Enum):
     #                          | |
     #                          | |
     #                          # #
-    OVERHANG_ON_BOTH_STRANDS = auto()
+    OVERHANG_ON_BOTH_STRANDS_5P = auto()
 
     #                          # #
     #                          |-|
@@ -3478,22 +3477,7 @@ class BasePairType(Enum):
     #                         ^
     #                         |
     #                     base pair
-    #
-    #                         OR
-    #
-    #                     base pair
-    #                         |
-    #                         v
-    #                    #-----###-----#
-    #                     |||||   |||||
-    #                    #-----# #-----#
-    #                          # #
-    #                          |-|
-    #                          |-|
-    #                          |-|
-    #                          # #
     THREE_ARM_JUNCTION = auto()
-
 
     #                          # #
     #                          |-|
@@ -3537,7 +3521,7 @@ class StrandDomainAddress:
         if not forward:
             itr = reversed(itr)
 
-        for i in range(len(domain_names)):
+        for i in itr:
             if domain_names[i] == domain_str:
                 occurences += 1
                 if occurences == n:
@@ -3565,7 +3549,7 @@ class StrandDomainAddress:
 
     def neighbor_3p(self) -> 'StrandDomainAddress':
         idx = self.domain_idx + 1
-        if idx < len(self.strand.domains()):
+        if idx < len(self.strand.domains):
             return StrandDomainAddress(self.strand, idx)
         else:
             return None
@@ -3594,6 +3578,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
     #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
     #    #-------------------------###-------------------------------------#
     #         complementary_addr              complementary_5n_addr
+    assert domain_addr in all_bound_domain_addresses
     complementary_addr = all_bound_domain_addresses[domain_addr]
     complementary_5n_addr = complementary_addr.neighbor_5p()
     adjacent_addr: StrandDomainAddress = None
@@ -3608,7 +3593,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
     adjacent_strand_type: AdjacentDuplexType = AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
 
     if complementary_5n_addr is not None:
-        #   Since complementary_domain_name_neighbor_5p exists, assume BOTTOM_RIGHT_DANGLE
+        #   Since complementary_5n_addr exists, assume BOTTOM_RIGHT_DANGLE
         #
         #            domain_addr
         #    #-------------------------#
@@ -3617,8 +3602,8 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
         #     complementary_addr                complementary_5n_addr
         adjacent_strand_type = AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
         if complementary_5n_addr in all_bound_domain_addresses:
-            # Since complementary_domain_name_neighbor_5p is bound, meaning
-            # adjacent_domain_name exist, assume TOP_RIGHT_5p
+            # Since complementary_5n_addr is bound, meaning
+            # adjacent_addr exist, assume TOP_RIGHT_5p
             #
             #             domain_addr                adjacent_addr
             #    #-------------------------# [-------------------------------------#
@@ -3626,10 +3611,10 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             #    #-------------------------###-------------------------------------#
             #          complementary_addr          complementary_5n_addr
             adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_5P
-            adjacent_addr = all_bound_domain_addresses[complementary_addr]
+            adjacent_addr = all_bound_domain_addresses[complementary_5n_addr]
             adjacent_5n_addr = adjacent_addr.neighbor_5p()
             if adjacent_5n_addr is not None:
-                # Since adjacent_domain_name_neighbor_5p exists, assume TOP_RIGHT_OVERHANG
+                # Since adjacent_5n_addr exists, assume TOP_RIGHT_OVERHANG
                 #
                 #                                #
                 #                                |
@@ -3643,249 +3628,249 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #          complementary_addr          complementary_5n_addr
                 adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_OVERHANG
                 if adjacent_5n_addr in all_bound_domain_addresses:
-                    # Since adjacent_domain_name_neighbor_5p is bound, two possible cases:
+                    # Since adjacent_5n_addr is bound, two possible cases:
 
                     if domain_addr == adjacent_5n_addr:
-                        # Since domain_name and adjacent_domain_name_neighbor_5p
+                        # Since domain_addr and adjacent_5n_addr
                         # are the same, then this must be an internal base pair
                         #
-                        #    adjacent_domain_name_neighbor_5p
-                        #             domain_name                 adjacent_domain_name
+                        #   domain_addr == adjacent_5n_addr        adjacent_addr
                         #    #-------------------------###-------------------------------------#
                         #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                         #    #-------------------------###-------------------------------------#
-                        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                        #        complementary_addr            complementary_5n_addr
 
                         # Assuming non-competitive, then this must be internal base pair
                         return BasePairType.INTERIOR_TO_STRAND
                     else:
-                        # Since adjacent_domain_name_neighbor_5p does not equal domain_name,
+                        # Since adjacent_5n_addr does not equal domain_addr,
                         # must be a bound overhang:
                         #
                         #                              # #
                         #                              |-|
-                        #                            ? |-| adjacent_domain_name_neighbor_5p
+                        #                            ? |-| adjacent_5n_addr
                         #                              |-|
                         #                              # #
-                        #             domain_name      ? #        adjacent_domain_name
+                        #             domain_addr      ? #        adjacent_addr
                         #    #-------------------------# #-------------------------------------#
                         #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                         #    #-------------------------###-------------------------------------#
-                        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                        #         complementary_addr            complementary_5n_addr
                         adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
 
-    (_, domain_name_3p_neighbor) = domain_neighbors[domain_addr]
-    if domain_name_3p_neighbor is None:
-        # domain_name is at 3' end of strand
+    domain_3n_addr = domain_addr.neighbor_3p()
+    if domain_3n_addr is None:
+        # domain_addr is at 3' end of strand
         #
-        #            domain_name
+        #            domain_addr
         #    #------------------------->
+        #     |||||||||||||||||||||||||
+        #    #-------------------------#
+        #         complementary_addr
 
-        # TODO: draw ascii for each case
         if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
-            #            domain_name
+            #            domain_addr
             #    #------------------------->
             #     |||||||||||||||||||||||||
             #    #-------------------------]
-            #     complementary_domain_name
+            #         complementary_addr
             return BasePairType.BLUNT_END
         elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
-            #            domain_name
+            #          domain_addr
             #    #------------------------->
             #     |||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+            #       complementary_addr              complementary_5n_addr
             return BasePairType.DANGLE_5P
         elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
-            #             domain_name                adjacent_domain_name
+            #             domain_addr                adjacent_addr
             #    #-------------------------> [-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
-            return BasePairType.NICK
+            #     complementary_addr    complementary_5n_addr
+            return BasePairType.NICK_3P
         elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 #                                #
                 #                                |
-                #                                | adjacent_domain_name_neighbor_5p
+                #                                | adjacent_5n_addr
                 #                                |
                 #                                #
-                #             domain_name        #        adjacent_domain_name
+                #             domain_addr        #        adjacent_addr
                 #    #-------------------------> #-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------###-------------------------------------#
-                #     complementary_domain_name    complementary_domain_name_neighbor_5p
-            return BasePairType.OVERHANG_ON_ADJACENT_STRAND
+                #     complementary_addr    complementary_5n_addr
+            return BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P
         elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
             #                              # #
             #                              |-|
-            #                            ? |-| adjacent_domain_name_neighbor_5p
+            #                            ? |-| adjacent_5n_addr
             #                              |-|
             #                              # #
-            #             domain_name        #        adjacent_domain_name
+            #             domain_addr        #        adjacent_addr
             #    #-------------------------> #-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+            #     complementary_addr    complementary_5n_addr
             # TODO: Possible case (nick n-arm junction)
             return BasePairType.OTHER
         else:
             # Shouldn't reach here
             assert False
     else:
-        # domain_name is not the 3' end of the strand
+        # domain_addr is not the 3' end of the strand
         #
-        #            domain_name          domain_name_3p_neighbor
+        #            domain_addr              domain_3n_addr
         #    #-------------------------##-------------------------#
 
-        if domain_name_3p_neighbor not in bound_domains:
-            # domain_name's 3' neighbor is an unbound overhang
+        if domain_3n_addr not in all_bound_domain_addresses:
+            # domain_addr's 3' neighbor is an unbound overhang
             if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
-                #            domain_name          domain_name_3p_neighbor
+                #            domain_addr             domain_3n_addr
                 #    #-------------------------##-------------------------#
                 #     |||||||||||||||||||||||||
                 #    #-------------------------]
-                #     complementary_domain_name
+                #     complementary_addr
                 return BasePairType.DANGLE_3P
             elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
-                #            domain_name                 domain_name_3p_neighbor
+                #            domain_addr                 domain_3n_addr
                 #    #-------------------------##-------------------------------------#
                 #     |||||||||||||||||||||||||
                 #    #-------------------------##-------------------------------------#
-                #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                #          complementary_addr            complementary_5n_addr
                 return BasePairType.DANGLE_5P_3P
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
                 #                              #
                 #                              |
-                #      domain_name_3p_neighbor |
+                #               domain_3n_addr |
                 #                              |
                 #                              #
-                #             domain_name      #         adjacent_domain_name
+                #             domain_addr      #         adjacent_addr
                 #    #-------------------------# [-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------###-------------------------------------#
-                #     complementary_domain_name    complementary_domain_name_neighbor_5p
-                return BasePairType.OVERHANG_ON_THIS_STRAND
+                #     complementary_addr    complementary_5n_addr
+                return BasePairType.OVERHANG_ON_THIS_STRAND_3P
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 #                              # #
                 #                              | |
-                #      domain_name_3p_neighbor | | adjacent_domain_name_neighbor_5p
+                #               domain_3n_addr | | adjacent_5n_addr
                 #                              | |
                 #                              # #
-                #             domain_name      # #       adjacent_domain_name
+                #             domain_addr      # #       adjacent_addr
                 #    #-------------------------# #-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------###-------------------------------------#
-                #     complementary_domain_name    complementary_domain_name_neighbor_5p
-                return BasePairType.OVERHANG_ON_BOTH_STRANDS
+                #     complementary_addr    complementary_5n_addr
+                return BasePairType.OVERHANG_ON_BOTH_STRANDS_3P
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
                 # TODO: Possible case (nick n-arm junction)
                 #                              #                    # #
                 #                              |                    |-|
-                #      domain_name_3p_neighbor |                    |-| adjacent_domain_name_neighbor_5p
+                #               domain_3n_addr |                    |-| adjacent_5n_addr
                 #                              |                    |-|
                 #                              #                    # #
-                #             domain_name      #                      #       adjacent_domain_name
+                #             domain_addr      #                      #       adjacent_addr
                 #    #-------------------------#                      #-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #     complementary_addr                         complementary_5n_addr
                 return BasePairType.OTHER
             else:
                 # Shouldn't reach here
                 assert False
         else:
-            # domain_name's 3' neighbor is a bound domain
+            # domain_addr's 3' neighbor is a bound domain
 
             # Techinically, could be an interior base, but we should have caught this earlier
             # back when we were determining AdjacentDuplexType.
             #
             # Assertion checks that it is not an internal base
             #
-            #                                        domain_name_neighbor_3p
-            #             domain_name                 adjacent_domain_name
+            #             domain_addr            domain_3n_addr == adjacent_addr
             #    #-------------------------###-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
-            # TODO: Compare domain objects instead of str (handle competitiveness)
-            assert domain_name_3p_neighbor != adjacent_addr
+            #        complementary_addr              complementary_5n_addr
+            assert domain_3n_addr != adjacent_addr
 
             # Declare new variables:
-            complementary_domain_name_3p_neighbor = Domain.complementary_domain_name(domain_name_3p_neighbor)
-            (_, complementary_domain_name_3p_neighbor_3p_neighbor) = domain_neighbors[complementary_domain_name_3p_neighbor]
-            #             domain_name                 domain_name_3p_neighbor
+            domain_3n_complementary_addr = all_bound_domain_addresses[domain_3n_addr]
+            domain_3n_complementary_3n_addr = domain_3n_complementary_addr.neighbor_3p()
+            #             domain_addr                 domain_3n_addr
             #    #-------------------------###-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------# #-------------------------------------#
-            #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+            #        complementary_addr      # domain_3n_complementary_addr
             #                                #
             #                                |
-            #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+            #                                | domain_3n_complementary_3n_addr
             #                                |
             #                                #
 
             # Three cases:
             #
-            # complementary_domain_name_3p_neighbor is 3' end
-            #             domain_name                 domain_name_3p_neighbor
+            # domain_3n_complementary_addr is 3' end
+            #             domain_addr                 domain_3n_addr
             #    #-------------------------###-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------# <-------------------------------------#
-            #    complementary_domain_name     complementary_domain_name_3p_neighbor
+            #         complementary_addr         domain_3n_complementary_addr
             #
-            # complementary_domain_name_3p_neighbor_3p_neighbor is unbound overhang
-            #             domain_name                 domain_name_3p_neighbor
+            # domain_3n_complementary_3n_addr is unbound overhang
+            #             domain_addr                 domain_3n_addr
             #    #-------------------------###-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------# #-------------------------------------#
-            #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+            #           complementary_addr   # domain_3n_complementary_addr
             #                                #
             #                                |
-            #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+            #                                | domain_3n_complementary_3n_addr
             #                                |
             #                                #
             #
-            # complementary_domain_name_3p_neighbor_3p_neighbor is unbound overhang
-            #             domain_name                 domain_name_3p_neighbor
+            # domain_3n_complementary_3n_addr is unbound overhang
+            #             domain_addr                 domain_3n_addr
             #    #-------------------------###-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------# #-------------------------------------#
-            #    complementary_domain_name ? # complementary_domain_name_3p_neighbor
+            #         complementary_addr   ? #    domain_3n_complementary_addr
             #                              # #
             #                              |-|
-            #                              |-| complementary_domain_name_3p_neighbor_3p_neighbor
+            #                              |-| domain_3n_complementary_3n_addr
             #                              |-|
             #                              #-#
-
-            complementary_domain_name_3p_neighbor_3p_neighbor_is_bound: bool = None
-            if complementary_domain_name_3p_neighbor_3p_neighbor is not None:
-                complementary_domain_name_3p_neighbor_3p_neighbor_is_bound = complementary_domain_name_3p_neighbor_3p_neighbor in bound_domains
+            #
+            # Variable is None, False, True respectively based on cases above
+            domain_3n_complementary_3n_addr_is_bound: bool = None
+            if domain_3n_complementary_3n_addr is not None:
+                domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
 
 
             # TODO: double check these ones
-            # Not an internal base pair since domain_name's 3' neighbor is
+            # Not an internal base pair since domain_addr's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
             if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
-                # NICK
+                # NICK_5P
                 #
-                #             domain_name                 domain_name_3p_neighbor
+                #             domain_addr                 domain_3n_addr
                 #    #-------------------------###-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------] <-------------------------------------#
-                #    complementary_domain_name    complementary_domain_name_3p_neighbor
+                #        complementary_addr           domain_3n_complementary_addr
                 #
                 #                        OR
                 #
-                # OVERHANG_ON_ADJACENT_STRAND
+                # OVERHANG_ON_ADJACENT_STRAND_5P
                 #
-                #             domain_name                 domain_name_3p_neighbor
+                #             domain_addr                 domain_3n_addr
                 #    #-------------------------###-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------] #-------------------------------------#
-                #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+                #          complementary_addr    #   domain_3n_complementary_addr
                 #                                #
                 #                                |
-                #                                | complementary_domain_name_3p_neighbor_3p_neighbor
+                #                                | domain_3n_complementary_3n_addr
                 #                                |
                 #                                #
                 #
@@ -3893,30 +3878,30 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #
                 # OTHER
                 #
-                #             domain_name                 domain_name_3p_neighbor
+                #             domain_addr                 domain_3n_addr
                 #    #-------------------------###-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------] #-------------------------------------#
-                #    complementary_domain_name   # complementary_domain_name_3p_neighbor
+                #           complementary_addr   # domain_3n_complementary_addr
                 #                              # #
                 #                              |-|
-                #                              |-| complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              |-| domain_3n_complementary_3n_addr
                 #                              |-|
                 #                              # #
-                if complementary_domain_name_3p_neighbor_3p_neighbor_is_bound is None:
-                    return BasePairType.NICK
-                elif complementary_domain_name_3p_neighbor_3p_neighbor_is_bound == False:
-                    return BasePairType.OVERHANG_ON_ADJACENT_STRAND
+                if domain_3n_complementary_3n_addr_is_bound is None:
+                    return BasePairType.NICK_5P
+                elif domain_3n_complementary_3n_addr_is_bound == False:
+                    return BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P
                 else:
                     return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
-                # OVERHANG_ON_THIS_STRAND
+                # OVERHANG_ON_THIS_STRAND_5P
                 #
-                #             domain_name               domain_name_3p_neighbor
+                #             domain_addr               domain_3n_addr
                 #    #-------------------------###-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------# #-------------------------------------#
-                #    complementary_domain_name #  complementary_domain_name_3p_neighbor
+                #          complementary_addr  #   domain_3n_complementary_addr
                 #                              #
                 #                              |
                 #                              |
@@ -3925,16 +3910,16 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #
                 #                        OR
                 #
-                # OVERHANG_ON_BOTH_STRAND
+                # OVERHANG_ON_BOTH_STRAND_5P
                 #
-                #             domain_name               domain_name_3p_neighbor
+                #             domain_addr               domain_3n_addr
                 #    #-------------------------###-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------# #-------------------------------------#
-                #    complementary_domain_name # # complementary_domain_name_3p_neighbor
+                #           complementary_addr # # domain_3n_complementary_addr
                 #                              # #
                 #                              | |
-                #                              | | complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              | | domain_3n_complementary_3n_addr
                 #                              | |
                 #                              # #
                 #
@@ -3944,101 +3929,124 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 # OTHER
                 # TODO: Possible case (nick n-arm junction)
                 #
-                #             domain_name                                   domain_name_3p_neighbor
+                #             domain_addr                                   domain_3n_addr
                 #    #-------------------------########################-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------#                      #-------------------------------------#
-                #    complementary_domain_name #                      # complementary_domain_name_3p_neighbor
+                #           complementary_addr #                      # domain_3n_complementary_addr
                 #                              #                    # #
                 #                              |                    |-|
-                #                              |                    |-| complementary_domain_name_3p_neighbor_3p_neighbor
+                #                              |                    |-| domain_3n_complementary_3n_addr
                 #                              |                    |-|
                 #                              #                    # #
 
-                if complementary_domain_name_3p_neighbor_3p_neighbor_is_bound is None:
-                    return BasePairType.OVERHANG_ON_THIS_STRAND
-                elif complementary_domain_name_3p_neighbor_3p_neighbor_is_bound == False:
-                    return BasePairType.OVERHANG_ON_BOTH_STRANDS
+                if domain_3n_complementary_3n_addr_is_bound is None:
+                    return BasePairType.OVERHANG_ON_THIS_STRAND_5P
+                elif domain_3n_complementary_3n_addr_is_bound == False:
+                    return BasePairType.OVERHANG_ON_BOTH_STRANDS_5P
                 else:
                     return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
                 # TODO: Possible case (nick n-arm junction)
-                # Bound DANGLE_5P_3P?
+                # TODO: Bound DANGLE_5P_3P? or OTHER?
                 #                              # #
                 #                              |-|
-                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #               domain_3n_addr |-| domain_3n_complementary_addr
                 #                              |-|
                 #                              # v
-                #             domain_name      #                              adjacent_domain_name
+                #             domain_addr      #                              adjacent_addr
                 #    #-------------------------#                      [-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #     complementary_addr                         complementary_5n_addr
                 #
                 #
                 #
                 #                              # #
                 #                              |-|
-                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #               domain_3n_addr |-| domain_3n_complementary_addr
                 #                              |-|
                 #                              # ##---------#
-                #             domain_name      #                            adjacent_domain_name
+                #             domain_addr      #                            adjacent_addr
                 #    #-------------------------#                      [-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #     complementary_addr                                  complementary_5n_addr
                 #
                 #
                 #
                 #
                 #                              # #
                 #                              |-|
-                #      domain_name_3p_neighbor |-| complementary_domain_name_3p_neighbor
+                #               domain_3n_addr |-| domain_3n_complementary_addr
                 #                              |-|
                 #                              # ##---------#
-                #             domain_name      #   ||||||||                            adjacent_domain_name
+                #             domain_addr      #   |||||||||                     adjacent_addr
                 #    #-------------------------#  #---------#         [-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
-                # Similar to DANBLE_5P_3P, but both dangles are bound
+                #     complementary_addr                                     complementary_5n_addr
                 return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 # TODO: Possible case (nick n-arm junction)
                 # Bound DANGLE_5P_3P?
                 #                              # #                    #
                 #                              |-|                    |
-                #      domain_name_3p_neighbor |-|                    | adjacent_domain_name_neighbor_5p
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
                 #                              |-|                    |
-                #                              # #                    #
-                #             domain_name      #                      #       adjacent_domain_name
+                #                              # v                    #
+                #             domain_addr      #                      #       adjacent_addr
                 #    #-------------------------#                      #-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
+                #     complementary_addr                         complementary_5n_addr
+                #
+                #
+                #
+                #                              # #                    #
+                #                              |-|                    |
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
+                #                              |-|                    |
+                #                              # ##---------#         #
+                #             domain_addr      #                      #       adjacent_addr
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                #
+                #                              # #                    #
+                #                              |-|                    |
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
+                #                              |-|                    |
+                #                              # ##---------#         #
+                #             domain_addr      #   |||||||||          #       adjacent_addr
+                #    #-------------------------#  #---------#         #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
                 return BasePairType.OTHER
             elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
                 #                              # #                  # #
                 #                              |-|                  |-|
-                #      domain_name_3p_neighbor |-|                  |-| adjacent_domain_name_neighbor_5p
+                #               domain_3n_addr |-|                  |-| adjacent_5n_addr
                 #                              |-|                  |-|
                 #                              # #                  # #
-                #             domain_name      #                      #       adjacent_domain_name
+                #             domain_addr      #                      #       adjacent_addr
                 #    #-------------------------#                      #-------------------------------------#
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
-                #     complementary_domain_name                         complementary_domain_name_neighbor_5p
-                if domain_name_3p_neighbor == Domain.complementary_domain_name(adjacent_5n_addr):
+                #     complementary_addr                         complementary_5n_addr
+                if domain_3n_addr == all_bound_domain_addresses[adjacent_5n_addr]:
                     #                              # #
                     #                              |-|
-                    #      domain_name_3p_neighbor |-| adjacent_domain_name_neighbor_5p
+                    #               domain_3n_addr |-| adjacent_5n_addr
                     #                              |-|
                     #                              # #
-                    #             domain_name      # #       adjacent_domain_name
+                    #             domain_addr      # #       adjacent_addr
                     #    #-------------------------# #-------------------------------------#
                     #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                     #    #-------------------------###-------------------------------------#
-                    #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                    #     complementary_addr    complementary_5n_addr
                     return BasePairType.THREE_ARM_JUNCTION
                 else:
                     # Could possibly be n-arm junction
@@ -4150,6 +4158,7 @@ def nupack_4_complex_secondary_structure_constraint(
     #                          f'but it is {type(threshold)}')
 
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
+        # TODO: check if i still need this
         # Maps strand to index in strand_complex
         strand_to_strand_idx = {}
         for i, strand in enumerate(strand_complex):
@@ -4181,6 +4190,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
                 # Move on to next domain if it was paired via nonimplicit_base_pairs
                 if domain_addr in nonimplicit_base_pairs_domain_names:
+                    domain_base_index += domain.length
                     continue
 
                 # populate implicit bounded_domains
@@ -4242,8 +4252,8 @@ def nupack_4_complex_secondary_structure_constraint(
 
         for (domain_addr, (domain_base_index, domain_length)) in implicit_domain_name_to_base_index_and_length.items():
             if domain_addr in implicitly_bounded_domain_addresses:
-                complementar_addr = implicitly_bounded_domain_addresses[domain_addr]
-                complementary_domain_base_index, complementary_domain_length = implicit_domain_name_to_base_index_and_length[complementar_addr]
+                complementary_addr = implicitly_bounded_domain_addresses[domain_addr]
+                complementary_domain_base_index, complementary_domain_length = implicit_domain_name_to_base_index_and_length[complementary_addr]
                 domain1_5p = min(domain_base_index, complementary_domain_base_index)
                 domain2_5p = max(domain_base_index, complementary_domain_base_index)
                 assert domain_length == complementary_domain_length
@@ -4252,16 +4262,16 @@ def nupack_4_complex_secondary_structure_constraint(
 
                 base_pair = (domain1_5p, domain2_3p)
                 if base_pair not in seen_base_pair_domain_endpoints:
-                    # domain_name                 5' --------------------------------- 3'
+                    # domain_addr                 5' --------------------------------- 3'
                     #                                | | | | | | | | | | | | | | | | |
-                    # complementary_domain_name   3' --------------------------------- 5'
+                    # complementary_addr          3' --------------------------------- 5'
                     #                             ^                                    ^
                     #                             |                                    |
                     #                   d1_5p_d2_3p_ext_bp_type                        |
                     #                                                                  |
                     #                                                       d1_3p_d2_5p_ext_bp_type
                     d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_addr, all_bound_domain_addresses)
-                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementar_addr, all_bound_domain_addresses)
+                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementary_addr, all_bound_domain_addresses)
 
                     base_pair_domain_endpoints_to_check.append((*base_pair, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
                     seen_base_pair_domain_endpoints.add(base_pair)
