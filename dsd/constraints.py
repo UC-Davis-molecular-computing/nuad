@@ -3496,6 +3496,8 @@ class BasePairType(Enum):
 
     OTHER = auto()
 
+    UNPAIRED = auto()
+
     def default_pair_probability(self) -> float:
         # TODO: Populate with default probabilties
         # Reference global variables (for documentation purposes)
@@ -4059,7 +4061,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 
 
 def nupack_4_complex_secondary_structure_constraint(
-        complexes: Iterable[Tuple[Strand, ...]],
+        strand_complex: Tuple[Strand, ...],
         base_pair_probs: Dict[BasePairType, float] = None,
         exterior_base_pair_prob: float = 0.4,
         internal_base_pair_prob: float = 0.95,
@@ -4107,8 +4109,18 @@ def nupack_4_complex_secondary_structure_constraint(
     :return:
         The :any:`ComplexConstraint`.
     """
-    # TODO: Input validation
-    # check for duplicate strands given in complex
+    try:
+        from nupack import Complex as NupackComplex
+        from nupack import Model as NupackModel
+        from nupack import ComplexSet as NupackComplexSet
+        from nupack import Strand as NupackStrand
+        from nupack import SetSpec as NupackSetSpec
+        from nupack import complex_analysis as nupack_complex_analysis
+        from nupack import PairsMatrix as NupackPairsMatrix
+    except ModuleNotFoundError:
+        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    ## Start Input Validation ##
 
     # Keep track of all the domain names that are provided as
     # part of a nonimplicit_base_pair so that input validation
@@ -4117,35 +4129,150 @@ def nupack_4_complex_secondary_structure_constraint(
     for (addr1, addr2) in nonimplicit_base_pairs:
         d1 = addr1.strand.domains[addr1.domain_idx]
         d2 = addr2.strand.domains[addr2.domain_idx]
-
         if d1 is not d2:
             print('WARNING: a base pair is specified between two different domain objects')
-
         nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
         nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
         nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
         nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=True))
 
-    # Input validaiton: check no "competition" between domain (at most one
-    # starred domain for every domain, unless given as nonimplicit_base_pair)
-    for strand_complex in complexes:
-        # Count number of occuruences of each domain
-        domain_counts: Dict[str, int] = defaultdict(int)
-        for strand in strand_complex:
-            for idx, domain in enumerate(strand.domains):
-                is_starred = idx in strand.starred_domain_indices
-                domain_name = domain.get_name(is_starred)
-                if domain_name not in nonimplicit_base_pairs_domain_names:
-                    domain_counts[domain_name] += 1
+    # Input validation checks:
+    #
+    # No repeated strand
+    #
+    # No competition:
+    #   check no "competition" between domain (at most one
+    #   starred domain for every domain, unless given as nonimplicit_base_pair)
+    #   Count number of occuruences of each domain
+    seen_strands: Set[Strand] = set()
+    domain_counts: Dict[str, int] = defaultdict(int)
+    for strand in strand_complex:
+        if strand in seen_strands:
+            raise ValueError(f"Multiple instances of a strand in a complex is not allowed")
+        seen_strands.add(strand)
+        for idx, domain in enumerate(strand.domains):
+            is_starred = idx in strand.starred_domain_indices
+            domain_name = domain.get_name(is_starred)
+            if domain_name not in nonimplicit_base_pairs_domain_names:
+                domain_counts[domain_name] += 1
 
-        # Check final counts of each domain for competition
-        for domain_name in domain_counts:
-            domain_name_complement = Domain.complementary_domain_name(domain_name)
-            if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
-                assert domain_name not in nonimplicit_base_pairs_domain_names
-                # TODO: Print which complex violates this.
-                raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
-                                    "Violating domain: {domain_name_complement}")
+    # Check final counts of each domain for competition
+    for domain_name in domain_counts:
+        domain_name_complement = Domain.complementary_domain_name(domain_name)
+        if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+            assert domain_name not in nonimplicit_base_pairs_domain_names
+            raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
+                                "Violating domain: {domain_name_complement}")
+    ## End Input Validation ##
+
+    # Maps domain pairs
+    all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
+    # Populate with the domain pairs given
+    for (addr1, addr2) in nonimplicit_base_pairs:
+        all_bound_domain_addresses[addr1] = addr2
+        all_bound_domain_addresses[addr2] = addr1
+
+    # Will be used for identifying base pair idx for non-implicit base pairs
+    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = {}
+
+    # Fill addr_to_starting_base_pair_idx and all_bound_domain_addresses
+    domain_base_index = 0
+    implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
+    for strand in strand_complex:
+        for domain_idx, domain in enumerate(strand.domains):
+            addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
+            domain_base_index += domain.length
+
+            # Get domain_name
+            domain_addr = domain.name
+            if domain_idx in strand.starred_domain_indices:
+                domain_addr = domain.starred_name
+
+            # Move on to next domain if it was paired via nonimplicit_base_pairs
+            if domain_addr in nonimplicit_base_pairs_domain_names:
+                continue
+
+            # populate implicit bounded_domains
+            strand_domain_address = StrandDomainAddress(strand, domain_idx)
+            # Assertions checks that domain_name was not previously seen.
+            # This is to check that the non-competition requirement on
+            # implicit domains was properly checked earlier in input validation.
+            assert domain_addr not in implicit_seen_domains
+            implicit_seen_domains[domain_addr] = strand_domain_address
+
+            complementary_domain_name = Domain.complementary_domain_name(domain_addr)
+            if complementary_domain_name in implicit_seen_domains:
+                complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
+                all_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
+                all_bound_domain_addresses[complementary_strand_domain_address] = strand_domain_address
+
+    # list of tuples (domain1_5p, domain2_3p, length,
+    #                 domain1_5p_domain2_3p_exterior_base_pair_type,
+    #                 domain1_3p_domain2_5p_exterior_base_pair_type)
+    #    0123           4567
+    # 5'-AAAA-3'     5'-TTTT-3'
+    #    ^              ^  ^
+    #    |              |  domain2_3p
+    #    domain1_5p    domain2_5p
+    #
+    # This has one entry per a pair of bound domains and stores the type of
+    # both endpoint base pairs. First two entries are domain1_5p, domain2_3p.
+    # Next entry is length. (Note that other endpoint indicies can be
+    # computed from these three.) Last two entries are the ExteriorBasePairType
+    # of these two base pairs.
+    #
+    # domain1_5p_domain2_3p_exterior_base_pair_type and domain1_3p_domain2_5p_exterior_base_pair_type
+    # denote the ExteriorBasePairTYpe if base pair is exterior, otherwise
+    # set to None
+    #
+    #
+    # domain1   5' --------------------------------- 3'
+    #              | | | | | | | | | | | | | | | | |
+    # domain2   3' --------------------------------- 5'
+    #           ^                                    ^
+    #           |                                    |
+    # domain1_5p_domain2_3p_exterior_base_pair_type  |
+    #                                                |
+    #                         domain1_3p_domain2_5p_exterior_base_pair_type
+    base_pair_domain_endpoints_to_check: Set[Tuple[int, int, int, BasePairType, BasePairType]] = set()
+
+    for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
+        domain_base_length = domain_addr.domain_base_length()
+        assert domain_base_length == comple_addr.domain_base_length()
+
+        domain_5p = addr_to_starting_base_pair_idx[domain_addr]
+        comple_5p = addr_to_starting_base_pair_idx[comple_addr]
+
+        # Define domain1 to be the "earlier" domain
+        if domain_5p < comple_5p:
+            domain1_addr = domain_addr
+            domain1_5p = domain_5p
+
+            domain2_addr = comple_addr
+            domain2_5p = comple_5p
+        else:
+            domain1_addr = comple_addr
+            domain1_5p = comple_5p
+
+            domain2_addr = domain_addr
+            domain2_5p = domain_5p
+
+        domain2_3p = domain2_5p + domain_base_length - 1
+
+        base_pair = (domain1_5p, domain2_3p)
+
+        # domain1                     5' --------------------------------- 3'
+        #                                | | | | | | | | | | | | | | | | |
+        # domain2                     3' --------------------------------- 5'
+        #                             ^                                    ^
+        #                             |                                    |
+        #                   d1_5p_d2_3p_ext_bp_type                        |
+        #                                                                  |
+        #                                                       d1_3p_d2_5p_ext_bp_type
+        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr, all_bound_domain_addresses)
+        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr, all_bound_domain_addresses)
+
+        base_pair_domain_endpoints_to_check.add((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
     # TODO: change description string
     # if description is None:
@@ -4160,155 +4287,22 @@ def nupack_4_complex_secondary_structure_constraint(
     #         raise ValueError(f'threshold = {threshold} must be one of float or dict, '
     #                          f'but it is {type(threshold)}')
 
+    base_type_probability_threshold: Dict[BasePairType, float] = {}
+    for exterior_base_type in BasePairType:
+        # TODO: replace this by setting real probabilities for each case
+        #     * Add parameter in function for user to specifiy probabilities
+        #     * This should be a constant dictionary in the library
+        #     * Iterate over user's dictionary into a copy of the constant
+        #       dictionary.
+        base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
+    base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND] = internal_base_pair_prob
+    base_type_probability_threshold[BasePairType.UNPAIRED] = unpaired_base_prob
+
+    nupack_model = NupackModel(material='dna', celsius=temperature)
+
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
-        # TODO: check if i still need this
-        # Maps strand to index in strand_complex
-        strand_to_strand_idx = {}
-        for i, strand in enumerate(strand_complex):
-            strand_to_strand_idx[strand] = i
-
-        # Maps domain pairs
-        all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
-        # Populate with the domain pairs given
-        for (addr1, addr2) in nonimplicit_base_pairs:
-            all_bound_domain_addresses[addr1] = addr2
-            all_bound_domain_addresses[addr2] = addr1
-
-        # Maps domain to base index and domain length
-        implicit_domain_name_to_base_index_and_length: Dict[StrandDomainAddress, Tuple[int, int]] = {}
-
-        # Maps domain pairs that are implicit
-        implicitly_bounded_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
-        # helper to fill above
-        implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
-
-        # Will be used for identifying base pair idx for non-implicit base pairs
-        addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = {}
-
-        # Fill implicitly_bounded_domain_addresses and implicit_domain_name_to_base_index_and_length
-        domain_base_index = 0
-        for strand in strand_complex:
-            for domain_idx, domain in enumerate(strand.domains):
-                addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
-
-                # Get domain_name
-                domain_addr = domain.name
-                if domain_idx in strand.starred_domain_indices:
-                    domain_addr = domain.starred_name
-
-                # Move on to next domain if it was paired via nonimplicit_base_pairs
-                if domain_addr in nonimplicit_base_pairs_domain_names:
-                    domain_base_index += domain.length
-                    continue
-
-                # populate implicit bounded_domains
-                strand_domain_address = StrandDomainAddress(strand, domain_idx)
-                # Assertions checks that domain_name was not previously seen.
-                # This is to check that the non-competition requirement on
-                # implicit domains was properly checked earlier in input validation.
-                assert domain_addr not in implicit_seen_domains
-                implicit_seen_domains[domain_addr] = strand_domain_address
-
-                complementary_domain_name = Domain.complementary_domain_name(domain_addr)
-                if complementary_domain_name in implicit_seen_domains:
-                    complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
-                    implicitly_bounded_domain_addresses[strand_domain_address] = complementary_strand_domain_address
-                    implicitly_bounded_domain_addresses[complementary_strand_domain_address] = strand_domain_address
-
-                # populates implicit_domain_name_to_base_index_and_length
-                implicit_domain_name_to_base_index_and_length[strand_domain_address] = (domain_base_index, domain.length)
-                domain_base_index += domain.length
-
-        # Add the implicitly detected domain pairs to all_bound_domain_addresses
-        all_bound_domain_addresses.update(implicitly_bounded_domain_addresses)
-
-        # list of tuples (domain1_5p, domain2_3p, length,
-        #                 domain1_5p_domain2_3p_exterior_base_pair_type,
-        #                 domain1_3p_domain2_5p_exterior_base_pair_type)
-        base_pair_domain_endpoints_to_check: List[Tuple[int, int, int, BasePairType, BasePairType]] = []
-        #    0123           4567
-        # 5'-AAAA-3'     5'-TTTT-3'
-        #    ^              ^  ^
-        #    |              |  domain2_3p
-        #    domain1_5p    domain2_5p
-        #
-        # This has one entry per a pair of bound domains and stores the type of
-        # both endpoint base pairs. First two entries are domain1_5p, domain2_3p.
-        # Next entry is length. (Note that other endpoint indicies can be
-        # computed from these three.) Last two entries are the ExteriorBasePairType
-        # of these two base pairs.
-        #
-        # domain1_5p_domain2_3p_exterior_base_pair_type and domain1_3p_domain2_5p_exterior_base_pair_type
-        # denote the ExteriorBasePairTYpe if base pair is exterior, otherwise
-        # set to None
-        #
-        #
-        # domain1   5' --------------------------------- 3'
-        #              | | | | | | | | | | | | | | | | |
-        # domain2   3' --------------------------------- 5'
-        #           ^                                    ^
-        #           |                                    |
-        # domain1_5p_domain2_3p_exterior_base_pair_type  |
-        #                                                |
-        #                         domain1_3p_domain2_5p_exterior_base_pair_type
-
-        # Since bounded domains appear twice in strand_complex_domain_name_to_base_index_and_length
-        # (domain + its complement), the following for loop encounters each
-        # domain pair twice. To avoid duplication, we keep track of domain pairs
-        # we have seen before
-        seen_base_pair_domain_endpoints: Set[Tuple[int, int]] = set()
-
-        def __update_base_pair_domain_endpoints_to_check(domain_addr: StrandDomainAddress, comple_addr: StrandDomainAddress):
-            domain_5p = addr_to_starting_base_pair_idx[domain_addr]
-            comple_5p = addr_to_starting_base_pair_idx[comple_addr]
-
-            domain_base_length = domain_addr.domain_base_length()
-            comple_base_length = comple_addr.domain_base_length()
-            assert domain_base_length == comple_base_length
-
-            domain1_5p = min(domain_5p, comple_5p)
-            domain2_5p = max(domain_5p, comple_5p)
-
-            domain2_3p = domain2_5p + domain_base_length - 1
-
-            base_pair = (domain1_5p, domain2_3p)
-            if base_pair not in seen_base_pair_domain_endpoints:
-                # domain_addr                 5' --------------------------------- 3'
-                #                                | | | | | | | | | | | | | | | | |
-                # complementary_addr          3' --------------------------------- 5'
-                #                             ^                                    ^
-                #                             |                                    |
-                #                   d1_5p_d2_3p_ext_bp_type                        |
-                #                                                                  |
-                #                                                       d1_3p_d2_5p_ext_bp_type
-                d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_addr, all_bound_domain_addresses)
-                d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(comple_addr, all_bound_domain_addresses)
-
-                base_pair_domain_endpoints_to_check.append((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
-                seen_base_pair_domain_endpoints.add(base_pair)
-
-        for (domain_addr, (_, _)) in implicit_domain_name_to_base_index_and_length.items():
-            if domain_addr in implicitly_bounded_domain_addresses:
-                comple_addr = implicitly_bounded_domain_addresses[domain_addr]
-                __update_base_pair_domain_endpoints_to_check(domain_addr, comple_addr)
-
-        for (domain_addr, comple_addr) in nonimplicit_base_pairs:
-            __update_base_pair_domain_endpoints_to_check(domain_addr, comple_addr)
-
-        try:
-            from nupack import Complex as NupackComplex
-            from nupack import Model as NupackModel
-            from nupack import ComplexSet as NupackComplexSet
-            from nupack import Strand as NupackStrand
-            from nupack import SetSpec as NupackSetSpec
-            from nupack import complex_analysis as nupack_complex_analysis
-            from nupack import PairsMatrix as NupackPairsMatrix
-        except ModuleNotFoundError:
-            raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
-
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
-        nupack_model = NupackModel(material='dna', celsius=temperature)
 
         # TODO: only consider one complex, but may be more accurate to include other possible complexes
         #       NupackSetSpec(max_size=0, include=(nupack_complex,) can be replaced with (nupack_complex,)
@@ -4329,26 +4323,8 @@ def nupack_4_complex_secondary_structure_constraint(
         for strand in strand_complex:
             print(f'{strand.name}: {strand.sequence()}')
 
-        expected_paired_idxs: Set[int] = set()
-        #  0123
-        # [AGCT>    domain1
-        #       \
-        #       |
-        #       /
-        # <TCGA]    domain2
-        #  7654
-
-        base_type_probability_threshold: Dict[BasePairType, float] = {}
-        for exterior_base_type in BasePairType:
-            # TODO: replace this by setting real probabilities for each case
-            #     * Add parameter in function for user to specifiy probabilities
-            #     * This should be a constant dictionary in the library
-            #     * Iterate over user's dictionary into a copy of the constant
-            #       dictionary.
-            base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
-        base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND] = internal_base_pair_prob
-
-        def summarize_violation(i, j, mat, threshold, paired=True, base_pair_type=None):
+        def summarize_violation(i, j, mat, threshold, base_pair_type=None):
+            paired = base_pair_type is not BasePairType.UNPAIRED
             paired_string = 'paired'
             if not paired:
                 paired_string = 'unpaired'
@@ -4360,6 +4336,9 @@ def nupack_4_complex_secondary_structure_constraint(
                 base_pair_string)
 
         # TODO: Instead of returning boolean, we should take differences between desired probabilities
+
+        # Tracks which bases are paired. Used to determine unpaired bases.
+        expected_paired_idxs: Set[int] = set()
         for (domain1_5p, domain2_3p, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type) in base_pair_domain_endpoints_to_check:
             # Checks if base pairs at ends of domain to be above 40% probability
             domain1_3p = domain1_5p + (domain_length - 1)
@@ -4380,7 +4359,17 @@ def nupack_4_complex_secondary_structure_constraint(
                 return 1.0
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
-            # Check if base pairs in middle are above 99%
+            # Check if base pairs interior to domain (note ascending base pair indices
+            # for domain1 and descending base pair indices for domain2)
+            #
+            # Ex:
+            #     0123
+            #    [AGCT>    domain1
+            #          \
+            #          |
+            #          /
+            #    <TCGA]    domain2
+            #     7654
             #
             # TODO: Rewrite this loop using numpy
             # domain1_idxs = np.arange(domain1_5p + 1, domain1_5p + domain_length - 1)
@@ -4394,11 +4383,10 @@ def nupack_4_complex_secondary_structure_constraint(
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
 
-
         # Check base pairs that should not be paired are high probability
         for i in range(len(nupack_complex_result)):
             if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
-                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob, paired=False)
+                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob, base_pair_type=BasePairType.UNPAIRED)
                 return 1.0
 
         return 0.0
@@ -4417,7 +4405,7 @@ def nupack_4_complex_secondary_structure_constraint(
                              weight=weight,
                              weight_transfer_function=weight_transfer_function,
                              threaded=threaded,
-                             complexes=complexes,
+                             complexes=[strand_complex],
                              evaluate=evaluate,
                              summary=summary)
 

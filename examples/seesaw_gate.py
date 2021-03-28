@@ -90,7 +90,7 @@ strands = [
 g_5_s_5_6_complex = (signal_6_5_strand, gate_5_base_strand)
 g_5_s_5_6_nonimplicit_base_pairs = [(signal_toehold_addr, gate_5_bound_toehold_3p_addr)]
 g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
-    complexes=[g_5_s_5_6_complex],
+    strand_complex=g_5_s_5_6_complex,
     nonimplicit_base_pairs=g_5_s_5_6_nonimplicit_base_pairs
 )
 
