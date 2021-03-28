@@ -3995,8 +3995,35 @@ class StrandDomainAddress:
         self.domain_idx = domain_idx
 
     @classmethod
-    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int) -> None:
-        pass
+    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
+        if n < 1:
+            raise ValueError(f'n needs to be at least 1')
+        domain_names = strand.domain_names_tuple()
+        idx = -1
+        occurences = 0
+
+        itr = range(len(domain_names))
+        if not forward:
+            itr = reversed(itr)
+
+        for i in range(len(domain_names)):
+            if domain_names[i] == domain_str:
+                occurences += 1
+                if occurences == n:
+                    idx = i
+                    break
+        if idx == -1:
+            raise ValueError(f'{strand} contained less than {n} occurrences of domain {domain_str}')
+
+        return cls(strand, idx)
+
+    @classmethod
+    def address_of_first_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
+        return cls.address_of_nth_domain_occurence(strand, domain_str, 1)
+
+    @classmethod
+    def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
+        return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
 
 
 def nupack_4_complex_secondary_structure_constraint(
@@ -4005,8 +4032,8 @@ def nupack_4_complex_secondary_structure_constraint(
         exterior_base_pair_prob: float = 0.4,
         internal_base_pair_prob: float = 0.95,
         unpaired_base_prob: float = 0.95,
-        nonimplicit_base_pairs: Iterable[Tuple[Domain, Domain]] = None,
-        all_base_pairs: Iterable[Tuple[Domain, Domain]] = None,
+        nonimplicit_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
+        all_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,

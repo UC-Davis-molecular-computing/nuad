@@ -59,12 +59,19 @@ strands = [
 #        <===============--=====--===============]
 # [=====--===============--=====>
 #    T*         S5*          T*
-gate_5_binds_signal_5_6_complex = (signal_6_5_strand, gate_5_base_strand)
+g_5_s_5_6_complex = (signal_6_5_strand, gate_5_base_strand)
+signal_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_6_5_strand, TOEHOLD_DOMAIN)
+gate_bound_toehold_addr = dc.StrandDomainAddress.address_of_last_domain_occurence(gate_5_base_strand, 'T*')
+
+g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
+    complexes=[g_5_s_5_6_complex],
+    nonimplicit_base_pairs=[dc.StrandDomainAddress.address_of_first_domain_occurence()]
+)
+
 
 
 # Constraints
 complex_constraints = [
-    dc.nupack_4_complex_secondary_structure_constraint(complexes=[gate_5_binds_signal_5_6_complex])
 ]
 
 
