@@ -3250,6 +3250,24 @@ class AdjacentDuplexType(Enum):
 # Maybe have two cases, one where base pair is forced to get A T and another where
 # it is forced to be C G
 
+default_interior_to_strand_probability = 0.99
+default_blunt_end_probability = 0.33
+default_nick_3p_probability = 0.79
+default_nick_5p_probability = 0.73
+default_dangle_3p_probability = 0.51
+default_dangle_5p_probability = 0.57
+default_dangle_5p_3p_probability = 0.73
+default_overhang_on_this_strand_3p_probability = 0.82
+default_overhang_on_this_strand_5p_probability = 0.79
+default_overhang_on_adjacent_strand_3p_probability = 0.55
+default_overhang_on_adjacent_strand_5p_probability = 0.49
+default_overhang_on_both_strand_3p_probability = 0.61
+default_overhang_on_both_strand_5p_probability = 0.55
+default_three_arm_junction_probability = 0.69
+default_four_arm_junction_probability = 0.84
+default_five_arm_junction_probability = 0.77
+default_unpaired_probability = 0.99
+
 class BasePairType(Enum):
     """ExteriorBasePairType TODO
     """
@@ -4078,7 +4096,6 @@ def nupack_4_complex_secondary_structure_constraint(
     # TODO: change doc strings
     # TODO: Handle domain_binding
     # TODO: Upper bound probability
-    # TODO: nonimplicit_base_pairs (dsd figures out all the rest of base pairs)
     # TODO: all_base_pairs (dsd does not add any base pairs)
     """
     Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
@@ -4274,19 +4291,6 @@ def nupack_4_complex_secondary_structure_constraint(
 
         base_pair_domain_endpoints_to_check.add((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
-    # TODO: change description string
-    # if description is None:
-    #     if isinstance(threshold, Number):
-    #         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
-    #     elif isinstance(threshold, dict):
-    #         strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-    #                                           for (strand_group1, strand_group2), value in threshold.items()}
-    #         description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-    #                       f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-    #     else:
-    #         raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-    #                          f'but it is {type(threshold)}')
-
     base_type_probability_threshold: Dict[BasePairType, float] = {}
     for exterior_base_type in BasePairType:
         # TODO: replace this by setting real probabilities for each case
@@ -4299,6 +4303,19 @@ def nupack_4_complex_secondary_structure_constraint(
     base_type_probability_threshold[BasePairType.UNPAIRED] = unpaired_base_prob
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
+
+    # TODO: change description string
+    # if description is None:
+    #     if isinstance(threshold, Number):
+    #         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+    #     elif isinstance(threshold, dict):
+    #         strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+    #                                           for (strand_group1, strand_group2), value in threshold.items()}
+    #         description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
+    #                       f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+    #     else:
+    #         raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+    #                          f'but it is {type(threshold)}')
 
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
