@@ -41,11 +41,14 @@ def gate_base_strand(gate: int) -> dc.Strand:
 #         S6          T           S5
 # [===============--=====--===============>
 signal_6_5_strand = seesaw_signal_strand(6, 5)
+signal_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_6_5_strand, TOEHOLD_DOMAIN)
 
 # Gate Bases
 #    T*         S5*          T*
 # [=====--===============--=====>
 gate_5_base_strand = gate_base_strand(5)
+gate_5_bound_toehold_3p_addr = dc.StrandDomainAddress.address_of_last_domain_occurence(gate_5_base_strand, TOEHOLD_COMPLEMENT)
+gate_5_bound_toehold_5p_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(gate_5_base_strand, TOEHOLD_COMPLEMENT)
 
 # Collect all strands
 strands = [
@@ -60,23 +63,18 @@ strands = [
 # [=====--===============--=====>
 #    T*         S5*          T*
 g_5_s_5_6_complex = (signal_6_5_strand, gate_5_base_strand)
-signal_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_6_5_strand, TOEHOLD_DOMAIN)
-gate_bound_toehold_addr = dc.StrandDomainAddress.address_of_last_domain_occurence(gate_5_base_strand, 'T*')
-
+g_5_s_5_6_nonimplicit_base_pairs = [(signal_toehold_addr, gate_5_bound_toehold_3p_addr)]
 g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
     complexes=[g_5_s_5_6_complex],
-    nonimplicit_base_pairs=[dc.StrandDomainAddress.address_of_first_domain_occurence()]
+    nonimplicit_base_pairs=g_5_s_5_6_nonimplicit_base_pairs
 )
-
-
 
 # Constraints
 complex_constraints = [
+    g_5_s_5_6_complex_constraint,
 ]
 
-
-seesaw_design = dc.Design(
-    strands=strands, complex_constraints=complex_constraints)
+seesaw_design = dc.Design(strands=strands, complex_constraints=complex_constraints)
 
 ds.search_for_dna_sequences(design=seesaw_design,
                             # weigh_violations_equally=True,

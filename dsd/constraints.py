@@ -3520,74 +3520,132 @@ class BasePairType(Enum):
         return 0.4
 
 
-def _exterior_base_type_of_domain_3p_end(domain_name: str,
-                                         bound_domains: Set[str],
-                                         domain_neighbors: Dict[str, Tuple[str, str]]) -> BasePairType:
+class StrandDomainAddress:
+    def __init__(self, strand: Strand, domain_idx: int) -> None:
+        self.strand = strand
+        self.domain_idx = domain_idx
+
+    @classmethod
+    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
+        if n < 1:
+            raise ValueError(f'n needs to be at least 1')
+        domain_names = strand.domain_names_tuple()
+        idx = -1
+        occurences = 0
+
+        itr = range(len(domain_names))
+        if not forward:
+            itr = reversed(itr)
+
+        for i in range(len(domain_names)):
+            if domain_names[i] == domain_str:
+                occurences += 1
+                if occurences == n:
+                    idx = i
+                    break
+        if idx == -1:
+            raise ValueError(f'{strand} contained less than {n} occurrences of domain {domain_str}')
+
+        return cls(strand, idx)
+
+    @classmethod
+    def address_of_first_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
+        return cls.address_of_nth_domain_occurence(strand, domain_str, 1)
+
+    @classmethod
+    def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
+        return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
+
+    def neighbor_5p(self) -> 'StrandDomainAddress':
+        idx = self.domain_idx - 1
+        if self.domain_idx >= 0:
+            return StrandDomainAddress(self.strand, idx)
+        else:
+            return None
+
+    def neighbor_3p(self) -> 'StrandDomainAddress':
+        idx = self.domain_idx + 1
+        if idx < len(self.strand.domains()):
+            return StrandDomainAddress(self.strand, idx)
+        else:
+            return None
+
+    def __hash__(self) -> int:
+        return hash((self.strand, self.domain_idx))
+
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+        if isinstance(other, StrandDomainAddress):
+            return self.strand == other.strand and self.domain_idx and other.domain_idx
+        return False
+
+
+def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
+                                         all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
     # determine which case is at 3'-adjacent to this base pair
     # Declare domain variables:
     #                              # #
     #                              |-|
-    #                            ? |-| adjacent_domain_name_neighbor_5p
+    #                            ? |-| adjacent_5n_addr
     #                              |-|
     #                              # #
-    #             domain_name      ? #        adjacent_domain_name
+    #             domain_addr      ? #        adjacent_addr
     #    #-------------------------# #-------------------------------------#
     #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
     #    #-------------------------###-------------------------------------#
-    #     complementary_domain_name    complementary_domain_name_neighbor_5p
-    complementary_domain_name = Domain.complementary_domain_name(domain_name)
-    (complementary_domain_name_neighbor_5p, _) = domain_neighbors[complementary_domain_name]
-    adjacent_domain_name: str = None
-    adjacent_domain_name_neighbor_5p: str = None
+    #         complementary_addr              complementary_5n_addr
+    complementary_addr = all_bound_domain_addresses[domain_addr]
+    complementary_5n_addr = complementary_addr.neighbor_5p()
+    adjacent_addr: StrandDomainAddress = None
+    adjacent_5n_addr: StrandDomainAddress = None
 
     # First assume BOTTOM_RIGHT_EMPTY
-    #            domain_name
+    #            domain_addr
     #    #-------------------------#
     #     |||||||||||||||||||||||||
-    #    #-------------------------]
-    #     complementary_domain_name
+    #    #-------------------------] <- Note this 3' end here
+    #         complementary_addr
     adjacent_strand_type: AdjacentDuplexType = AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
 
-    if complementary_domain_name_neighbor_5p is not None:
+    if complementary_5n_addr is not None:
         #   Since complementary_domain_name_neighbor_5p exists, assume BOTTOM_RIGHT_DANGLE
         #
-        #            domain_name
+        #            domain_addr
         #    #-------------------------#
         #     |||||||||||||||||||||||||
         #    #-------------------------###-------------------------------------#
-        #     complementary_domain_name    complementary_domain_name_neighbor_5p
+        #     complementary_addr                complementary_5n_addr
         adjacent_strand_type = AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
-        if complementary_domain_name_neighbor_5p in bound_domains:
+        if complementary_5n_addr in all_bound_domain_addresses:
             # Since complementary_domain_name_neighbor_5p is bound, meaning
             # adjacent_domain_name exist, assume TOP_RIGHT_5p
             #
-            #             domain_name                adjacent_domain_name
+            #             domain_addr                adjacent_addr
             #    #-------------------------# [-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
-            #     complementary_domain_name    complementary_domain_name_neighbor_5p
+            #          complementary_addr          complementary_5n_addr
             adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_5P
-            adjacent_domain_name = Domain.complementary_domain_name(complementary_domain_name_neighbor_5p)
-            (adjacent_domain_name_neighbor_5p, _) = domain_neighbors[adjacent_domain_name]
-            if adjacent_domain_name_neighbor_5p is not None:
+            adjacent_addr = all_bound_domain_addresses[complementary_addr]
+            adjacent_5n_addr = adjacent_addr.neighbor_5p()
+            if adjacent_5n_addr is not None:
                 # Since adjacent_domain_name_neighbor_5p exists, assume TOP_RIGHT_OVERHANG
                 #
                 #                                #
                 #                                |
-                #                                | adjacent_domain_name_neighbor_5p
+                #                                | adjacent_5n_addr
                 #                                |
                 #                                #
-                #             domain_name        #        adjacent_domain_name
+                #             domain_addr        #       adjacent_addr
                 #    #-------------------------# #-------------------------------------#
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------###-------------------------------------#
-                #     complementary_domain_name    complementary_domain_name_neighbor_5p
+                #          complementary_addr          complementary_5n_addr
                 adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_OVERHANG
-                if adjacent_domain_name_neighbor_5p in bound_domains:
+                if adjacent_5n_addr in all_bound_domain_addresses:
                     # Since adjacent_domain_name_neighbor_5p is bound, two possible cases:
 
-                    # TODO(benlee12): handle case when domains are competitive
-                    if domain_name == adjacent_domain_name_neighbor_5p:
+                    if domain_addr == adjacent_5n_addr:
                         # Since domain_name and adjacent_domain_name_neighbor_5p
                         # are the same, then this must be an internal base pair
                         #
@@ -3616,7 +3674,7 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                         #     complementary_domain_name    complementary_domain_name_neighbor_5p
                         adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
 
-    (_, domain_name_3p_neighbor) = domain_neighbors[domain_name]
+    (_, domain_name_3p_neighbor) = domain_neighbors[domain_addr]
     if domain_name_3p_neighbor is None:
         # domain_name is at 3' end of strand
         #
@@ -3750,7 +3808,7 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
             #    #-------------------------###-------------------------------------#
             #     complementary_domain_name    complementary_domain_name_neighbor_5p
             # TODO: Compare domain objects instead of str (handle competitiveness)
-            assert domain_name_3p_neighbor != adjacent_domain_name
+            assert domain_name_3p_neighbor != adjacent_addr
 
             # Declare new variables:
             complementary_domain_name_3p_neighbor = Domain.complementary_domain_name(domain_name_3p_neighbor)
@@ -3970,7 +4028,7 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
                 #     complementary_domain_name                         complementary_domain_name_neighbor_5p
-                if domain_name_3p_neighbor == Domain.complementary_domain_name(adjacent_domain_name_neighbor_5p):
+                if domain_name_3p_neighbor == Domain.complementary_domain_name(adjacent_5n_addr):
                     #                              # #
                     #                              |-|
                     #      domain_name_3p_neighbor |-| adjacent_domain_name_neighbor_5p
@@ -3986,44 +4044,7 @@ def _exterior_base_type_of_domain_3p_end(domain_name: str,
                     # Could possibly be n-arm junction
                     return BasePairType.OTHER
             else:
-                raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_name}')
-
-
-class StrandDomainAddress:
-    def __init__(self, strand: Strand, domain_idx: int) -> None:
-        self.strand = strand
-        self.domain_idx = domain_idx
-
-    @classmethod
-    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
-        if n < 1:
-            raise ValueError(f'n needs to be at least 1')
-        domain_names = strand.domain_names_tuple()
-        idx = -1
-        occurences = 0
-
-        itr = range(len(domain_names))
-        if not forward:
-            itr = reversed(itr)
-
-        for i in range(len(domain_names)):
-            if domain_names[i] == domain_str:
-                occurences += 1
-                if occurences == n:
-                    idx = i
-                    break
-        if idx == -1:
-            raise ValueError(f'{strand} contained less than {n} occurrences of domain {domain_str}')
-
-        return cls(strand, idx)
-
-    @classmethod
-    def address_of_first_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1)
-
-    @classmethod
-    def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
+                raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_addr}')
 
 
 def nupack_4_complex_secondary_structure_constraint(
@@ -4075,23 +4096,45 @@ def nupack_4_complex_secondary_structure_constraint(
     :return:
         The :any:`ComplexConstraint`.
     """
+    # TODO: Input validation
+    # check for duplicate strands given in complex
 
-    # Input validaiton: check no "competition" between domain (at most one starred domain for every domain)
+    # Keep track of all the domain names that are provided as
+    # part of a nonimplicit_base_pair so that input validation
+    # knows to ignore these domain names.
+    nonimplicit_base_pairs_domain_names: Set[str] = set()
+    for (addr1, addr2) in nonimplicit_base_pairs:
+        d1 = addr1.strand.domains[addr1.domain_idx]
+        d2 = addr2.strand.domains[addr2.domain_idx]
+
+        if d1 is not d2:
+            print('WARNING: a base pair is specified between two different domain objects')
+
+        nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
+        nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
+        nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
+        nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=True))
+
+    # Input validaiton: check no "competition" between domain (at most one
+    # starred domain for every domain, unless given as nonimplicit_base_pair)
     for strand_complex in complexes:
+        # Count number of occuruences of each domain
         domain_counts: Dict[str, int] = defaultdict(int)
         for strand in strand_complex:
             for idx, domain in enumerate(strand.domains):
                 is_starred = idx in strand.starred_domain_indices
                 domain_name = domain.get_name(is_starred)
-                # domain_name_complement = domain.get_name(not is_starred)
-                domain_counts[domain_name] += 1
+                if domain_name not in nonimplicit_base_pairs_domain_names:
+                    domain_counts[domain_name] += 1
 
+        # Check final counts of each domain for competition
         for domain_name in domain_counts:
             domain_name_complement = Domain.complementary_domain_name(domain_name)
             if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+                assert domain_name not in nonimplicit_base_pairs_domain_names
                 # TODO: Print which complex violates this.
                 raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
-                                 "Violating domain: {domain_name_complement}")
+                                    "Violating domain: {domain_name_complement}")
 
     # TODO: change description string
     # if description is None:
@@ -4107,57 +4150,64 @@ def nupack_4_complex_secondary_structure_constraint(
     #                          f'but it is {type(threshold)}')
 
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
-        strand_complex_domain_name_to_base_index_and_length: Dict[str, Tuple[int, int]] = {}
+        # Maps strand to index in strand_complex
+        strand_to_strand_idx = {}
+        for i, strand in enumerate(strand_complex):
+            strand_to_strand_idx[strand] = i
 
-        domain_base_index = 0
+        # Maps domain pairs
+        all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
+        # Populate with the domain pairs given
+        for (addr1, addr2) in nonimplicit_base_pairs:
+            all_bound_domain_addresses[addr1] = addr2
+            all_bound_domain_addresses[addr2] = addr1
 
-        # set of bounded domain names
-        bounded_domains: Set[str] = set()
+        # Maps domain to base index and domain length
+        implicit_domain_name_to_base_index_and_length: Dict[StrandDomainAddress, Tuple[int, int]] = {}
+
+        # Maps domain pairs that are implicit
+        implicitly_bounded_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
         # helper to fill above
-        seen_domains: Set[str] = set()
+        implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
 
-        # maps each domain to a tuple of it's 5' and 3' neighbor
-        domain_neighbors: Dict[str, Tuple[str, str]] = {}
-
+        # Fill implicitly_bounded_domain_addresses and implicit_domain_name_to_base_index_and_length
+        domain_base_index = 0
         for strand in strand_complex:
-            prev_domain_name = None
-            for idx, domain in enumerate(strand.domains):
-                domain_name = domain.name
-                if idx in strand.starred_domain_indices:
-                    domain_name = domain.starred_name
+            for domain_idx, domain in enumerate(strand.domains):
+                # Get domain_name
+                domain_addr = domain.name
+                if domain_idx in strand.starred_domain_indices:
+                    domain_addr = domain.starred_name
 
-                # populate bounded_domains
-                seen_domains.add(domain_name)
-                complementary_domain_name = Domain.complementary_domain_name(domain_name)
-                if Domain.complementary_domain_name(domain_name) in seen_domains:
-                    bounded_domains.add(domain_name)
-                    bounded_domains.add(complementary_domain_name)
+                # Move on to next domain if it was paired via nonimplicit_base_pairs
+                if domain_addr in nonimplicit_base_pairs_domain_names:
+                    continue
 
-                # populates domain_neighbors
-                # sets previous domain's domain_neighbor entry now that neighbor_3p is known
-                if prev_domain_name is not None:
-                    # every prev_domain_name should be in domain_neighbors because each
-                    # domain is added to domain_neighbors upon iteration
-                    assert prev_domain_name in domain_neighbors
-                    (neighbor_5p, neighbor_3p) = domain_neighbors[prev_domain_name]
-                    # since iterating forward, neighbor_3p should be unknown
-                    assert neighbor_3p is None
-                    domain_neighbors[prev_domain_name] = (neighbor_5p, domain_name)
-                # sets current domain's domain_neighbor entry
-                domain_neighbors[domain_name] = (prev_domain_name, None)
-                # prepare for next iteration
-                prev_domain_name = domain_name
+                # populate implicit bounded_domains
+                strand_domain_address = StrandDomainAddress(strand, domain_idx)
+                # Assertions checks that domain_name was not previously seen.
+                # This is to check that the non-competition requirement on
+                # implicit domains was properly checked earlier in input validation.
+                assert domain_addr not in implicit_seen_domains
+                implicit_seen_domains[domain_addr] = strand_domain_address
 
-                # populates strand_complex_domain_name_to_base_index_and_length
-                # Ensure that we have checked that each domain has at most one complement in the complex
-                assert not (domain.name in strand_complex_domain_name_to_base_index_and_length and domain.starred_name in strand_complex_domain_name_to_base_index_and_length)
-                strand_complex_domain_name_to_base_index_and_length[domain_name] = (domain_base_index, domain.length)
+                complementary_domain_name = Domain.complementary_domain_name(domain_addr)
+                if complementary_domain_name in implicit_seen_domains:
+                    complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
+                    implicitly_bounded_domain_addresses[strand_domain_address] = complementary_strand_domain_address
+                    implicitly_bounded_domain_addresses[complementary_strand_domain_address] = strand_domain_address
+
+                # populates implicit_domain_name_to_base_index_and_length
+                implicit_domain_name_to_base_index_and_length[strand_domain_address] = (domain_base_index, domain.length)
                 domain_base_index += domain.length
+
+        # Add the implicitly detected domain pairs to all_bound_domain_addresses
+        all_bound_domain_addresses.update(implicitly_bounded_domain_addresses)
 
         # list of tuples (domain1_5p, domain2_3p, length,
         #                 domain1_5p_domain2_3p_exterior_base_pair_type,
         #                 domain1_3p_domain2_5p_exterior_base_pair_type)
-        base_pair_domain_endpoints_to_check: List[Tuple[int,int, int, BasePairType, BasePairType]] = []
+        base_pair_domain_endpoints_to_check: List[Tuple[int, int, int, BasePairType, BasePairType]] = []
         #    0123           4567
         # 5'-AAAA-3'     5'-TTTT-3'
         #    ^              ^  ^
@@ -4190,11 +4240,10 @@ def nupack_4_complex_secondary_structure_constraint(
         # we have seen before
         seen_base_pair_domain_endpoints: Set[Tuple[int, int]] = set()
 
-        for (domain_name, (domain_base_index, domain_length)) in strand_complex_domain_name_to_base_index_and_length.items():
-            complementary_domain_name = Domain.complementary_domain_name(domain_name)
-
-            if complementary_domain_name in strand_complex_domain_name_to_base_index_and_length:
-                complementary_domain_base_index, complementary_domain_length = strand_complex_domain_name_to_base_index_and_length[complementary_domain_name]
+        for (domain_addr, (domain_base_index, domain_length)) in implicit_domain_name_to_base_index_and_length.items():
+            if domain_addr in implicitly_bounded_domain_addresses:
+                complementar_addr = implicitly_bounded_domain_addresses[domain_addr]
+                complementary_domain_base_index, complementary_domain_length = implicit_domain_name_to_base_index_and_length[complementar_addr]
                 domain1_5p = min(domain_base_index, complementary_domain_base_index)
                 domain2_5p = max(domain_base_index, complementary_domain_base_index)
                 assert domain_length == complementary_domain_length
@@ -4211,8 +4260,8 @@ def nupack_4_complex_secondary_structure_constraint(
                     #                   d1_5p_d2_3p_ext_bp_type                        |
                     #                                                                  |
                     #                                                       d1_3p_d2_5p_ext_bp_type
-                    d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_name, bounded_domains, domain_neighbors)
-                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementary_domain_name, bounded_domains, domain_neighbors)
+                    d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_addr, all_bound_domain_addresses)
+                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementar_addr, all_bound_domain_addresses)
 
                     base_pair_domain_endpoints_to_check.append((*base_pair, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
                     seen_base_pair_domain_endpoints.add(base_pair)
