@@ -3554,6 +3554,9 @@ class StrandDomainAddress:
         else:
             return None
 
+    def domain_base_length(self) -> int:
+        return self.strand.domains[self.domain_idx].length
+
     def __hash__(self) -> int:
         return hash((self.strand, self.domain_idx))
 
@@ -4179,10 +4182,15 @@ def nupack_4_complex_secondary_structure_constraint(
         # helper to fill above
         implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
 
+        # Will be used for identifying base pair idx for non-implicit base pairs
+        addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = {}
+
         # Fill implicitly_bounded_domain_addresses and implicit_domain_name_to_base_index_and_length
         domain_base_index = 0
         for strand in strand_complex:
             for domain_idx, domain in enumerate(strand.domains):
+                addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
+
                 # Get domain_name
                 domain_addr = domain.name
                 if domain_idx in strand.starred_domain_indices:
@@ -4250,32 +4258,42 @@ def nupack_4_complex_secondary_structure_constraint(
         # we have seen before
         seen_base_pair_domain_endpoints: Set[Tuple[int, int]] = set()
 
-        for (domain_addr, (domain_base_index, domain_length)) in implicit_domain_name_to_base_index_and_length.items():
+        def __update_base_pair_domain_endpoints_to_check(domain_addr: StrandDomainAddress, comple_addr: StrandDomainAddress):
+            domain_5p = addr_to_starting_base_pair_idx[domain_addr]
+            comple_5p = addr_to_starting_base_pair_idx[comple_addr]
+
+            domain_base_length = domain_addr.domain_base_length()
+            comple_base_length = comple_addr.domain_base_length()
+            assert domain_base_length == comple_base_length
+
+            domain1_5p = min(domain_5p, comple_5p)
+            domain2_5p = max(domain_5p, comple_5p)
+
+            domain2_3p = domain2_5p + domain_base_length - 1
+
+            base_pair = (domain1_5p, domain2_3p)
+            if base_pair not in seen_base_pair_domain_endpoints:
+                # domain_addr                 5' --------------------------------- 3'
+                #                                | | | | | | | | | | | | | | | | |
+                # complementary_addr          3' --------------------------------- 5'
+                #                             ^                                    ^
+                #                             |                                    |
+                #                   d1_5p_d2_3p_ext_bp_type                        |
+                #                                                                  |
+                #                                                       d1_3p_d2_5p_ext_bp_type
+                d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_addr, all_bound_domain_addresses)
+                d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(comple_addr, all_bound_domain_addresses)
+
+                base_pair_domain_endpoints_to_check.append((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
+                seen_base_pair_domain_endpoints.add(base_pair)
+
+        for (domain_addr, (_, _)) in implicit_domain_name_to_base_index_and_length.items():
             if domain_addr in implicitly_bounded_domain_addresses:
-                complementary_addr = implicitly_bounded_domain_addresses[domain_addr]
-                complementary_domain_base_index, complementary_domain_length = implicit_domain_name_to_base_index_and_length[complementary_addr]
-                domain1_5p = min(domain_base_index, complementary_domain_base_index)
-                domain2_5p = max(domain_base_index, complementary_domain_base_index)
-                assert domain_length == complementary_domain_length
+                comple_addr = implicitly_bounded_domain_addresses[domain_addr]
+                __update_base_pair_domain_endpoints_to_check(domain_addr, comple_addr)
 
-                domain2_3p = domain2_5p + domain_length - 1
-
-                base_pair = (domain1_5p, domain2_3p)
-                if base_pair not in seen_base_pair_domain_endpoints:
-                    # domain_addr                 5' --------------------------------- 3'
-                    #                                | | | | | | | | | | | | | | | | |
-                    # complementary_addr          3' --------------------------------- 5'
-                    #                             ^                                    ^
-                    #                             |                                    |
-                    #                   d1_5p_d2_3p_ext_bp_type                        |
-                    #                                                                  |
-                    #                                                       d1_3p_d2_5p_ext_bp_type
-                    d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain_addr, all_bound_domain_addresses)
-                    d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(complementary_addr, all_bound_domain_addresses)
-
-                    base_pair_domain_endpoints_to_check.append((*base_pair, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
-                    seen_base_pair_domain_endpoints.add(base_pair)
-
+        for (domain_addr, comple_addr) in nonimplicit_base_pairs:
+            __update_base_pair_domain_endpoints_to_check(domain_addr, comple_addr)
 
         try:
             from nupack import Complex as NupackComplex
@@ -4319,10 +4337,6 @@ def nupack_4_complex_secondary_structure_constraint(
         #       /
         # <TCGA]    domain2
         #  7654
-        # TODO: Exterior base pair prob should apply to bases at end of strand (instead of bases at end of every domain)
-        # TODO: Handle other types of ends
-        # - blunt ends
-        # - overhangs
 
         base_type_probability_threshold: Dict[BasePairType, float] = {}
         for exterior_base_type in BasePairType:

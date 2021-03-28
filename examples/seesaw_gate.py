@@ -35,16 +35,19 @@ def gate_base_strand(gate: int) -> dc.Strand:
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
     return s
 
+# Comments show resulting sequence (6862 iterations).
 
 # Signals
 
 #         S6          T           S5
+#  AGTGGGTGGTTTTAT  GGAGC  ATCCTGGTCTGGGCT
 # [===============--=====--===============>
 signal_6_5_strand = seesaw_signal_strand(6, 5)
 signal_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_6_5_strand, TOEHOLD_DOMAIN)
 
 # Gate Bases
 #    T*         S5*          T*
+#  GCTCC  AGCCCAGACCAGGAT  GCTCC
 # [=====--===============--=====>
 gate_5_base_strand = gate_base_strand(5)
 gate_5_bound_toehold_3p_addr = dc.StrandDomainAddress.address_of_last_domain_occurence(gate_5_base_strand, TOEHOLD_COMPLEMENT)
@@ -61,18 +64,21 @@ strands = [
 #               S5           T           S6
 #         34            20 19  15 14            0
 #         |             |  |   |  |             |
+#         TCGGGTCTGGTCCTA  CGAGG  TATTTTGGTGGGTGA
 #        <===============--=====--===============]
 #         |||||||||||||||  |||||
 # [=====--===============--=====>
+#  GCTCC  AGCCCAGACCAGGAT  GCTCC
 #  |   |  |             |  |   |
 #  35  39 40            54 55  59
 #    T*         S5*          T*
 
 
-#                                S5
+#                     T          S5
 # [===============--=====--===============>
 #                   =====--===============--=====
-#                                S5*
+#                     T*         S5*
+#
 
 #    0          1           2
 #             S5*
