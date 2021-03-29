@@ -3250,7 +3250,7 @@ class AdjacentDuplexType(Enum):
 # Maybe have two cases, one where base pair is forced to get A T and another where
 # it is forced to be C G
 
-default_interior_to_strand_probability = 0.99
+default_interior_to_strand_probability = 0.95
 default_blunt_end_probability = 0.33
 default_nick_3p_probability = 0.79
 default_nick_5p_probability = 0.73
@@ -3267,6 +3267,7 @@ default_three_arm_junction_probability = 0.69
 default_four_arm_junction_probability = 0.84
 default_five_arm_junction_probability = 0.77
 default_unpaired_probability = 0.99
+default_other_probability = 0.70
 
 class BasePairType(Enum):
     """ExteriorBasePairType TODO
@@ -3497,6 +3498,7 @@ class BasePairType(Enum):
     #                     base pair
     THREE_ARM_JUNCTION = auto()
 
+    # TODO: Currently, this case isn't actually detected
     #                          # #
     #                          |-|
     #                          |-|
@@ -3512,6 +3514,9 @@ class BasePairType(Enum):
     #                          # #
     FOUR_ARM_JUNCTION = auto()
 
+    # TODO: Currently, this case isn't actually detected
+    FIVE_ARM_JUNCTION = auto()
+
     OTHER = auto()
 
     UNPAIRED = auto()
@@ -3521,7 +3526,44 @@ class BasePairType(Enum):
         # Reference global variables (for documentation purposes)
         # Ex: if self is NICK:
         #         return default_nick_probability
-        return 0.4
+        if self is BasePairType.INTERIOR_TO_STRAND:
+            return default_interior_to_strand_probability
+        elif self is BasePairType.BLUNT_END:
+            return default_blunt_end_probability
+        elif self is BasePairType.NICK_3P:
+            return default_nick_3p_probability
+        elif self is BasePairType.NICK_5P:
+            return default_nick_5p_probability
+        elif self is BasePairType.DANGLE_3P:
+            return default_dangle_3p_probability
+        elif self is BasePairType.DANGLE_5P:
+            return default_dangle_5p_probability
+        elif self is BasePairType.DANGLE_5P_3P:
+            return default_dangle_5p_3p_probability
+        elif self is BasePairType.OVERHANG_ON_THIS_STRAND_3P:
+            return default_overhang_on_this_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_THIS_STRAND_5P:
+            return default_overhang_on_this_strand_5p_probability
+        elif self is BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P:
+            return default_overhang_on_adjacent_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P:
+            return default_overhang_on_adjacent_strand_5p_probability
+        elif self is BasePairType.OVERHANG_ON_BOTH_STRANDS_3P:
+            return default_overhang_on_both_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_BOTH_STRANDS_5P:
+            return default_overhang_on_both_strand_5p_probability
+        elif self is BasePairType.THREE_ARM_JUNCTION:
+            return default_three_arm_junction_probability
+        elif self is BasePairType.FOUR_ARM_JUNCTION:
+            return default_four_arm_junction_probability
+        elif self is BasePairType.FIVE_ARM_JUNCTION:
+            return default_five_arm_junction_probability
+        elif self is BasePairType.OTHER:
+            return default_other_probability
+        elif self is BasePairType.UNPAIRED:
+            return default_unpaired_probability
+        else:
+            assert False
 
 
 class StrandDomainAddress:
@@ -4081,9 +4123,6 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 def nupack_4_complex_secondary_structure_constraint(
         strand_complex: Tuple[Strand, ...],
         base_pair_probs: Dict[BasePairType, float] = None,
-        exterior_base_pair_prob: float = 0.4,
-        internal_base_pair_prob: float = 0.95,
-        unpaired_base_prob: float = 0.95,
         nonimplicit_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
         all_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
         temperature: float = dv.default_temperature,
@@ -4181,6 +4220,13 @@ def nupack_4_complex_secondary_structure_constraint(
             raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
                                 "Violating domain: {domain_name_complement}")
     ## End Input Validation ##
+
+    ## Start populating base_pair_probs ##
+    base_type_probability_threshold: Dict[BasePairType, float] = {} if base_pair_probs is None else base_pair_probs.copy()
+    for base_type in BasePairType:
+        if base_type not in base_type_probability_threshold:
+            base_type_probability_threshold[base_type] = base_type.default_pair_probability()
+    ## End populating base_pair_probs ##
 
     # Maps domain pairs
     all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
@@ -4291,16 +4337,6 @@ def nupack_4_complex_secondary_structure_constraint(
 
         base_pair_domain_endpoints_to_check.add((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
-    base_type_probability_threshold: Dict[BasePairType, float] = {}
-    for exterior_base_type in BasePairType:
-        # TODO: replace this by setting real probabilities for each case
-        #     * Add parameter in function for user to specifiy probabilities
-        #     * This should be a constant dictionary in the library
-        #     * Iterate over user's dictionary into a copy of the constant
-        #       dictionary.
-        base_type_probability_threshold[exterior_base_type] = exterior_base_pair_prob
-    base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND] = internal_base_pair_prob
-    base_type_probability_threshold[BasePairType.UNPAIRED] = unpaired_base_prob
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
@@ -4353,6 +4389,10 @@ def nupack_4_complex_secondary_structure_constraint(
                 base_pair_string)
 
         # TODO: Instead of returning boolean, we should take differences between desired probabilities
+
+        # Probability threshold
+        internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
+        unpaired_base_prob = base_type_probability_threshold[BasePairType.UNPAIRED]
 
         # Tracks which bases are paired. Used to determine unpaired bases.
         expected_paired_idxs: Set[int] = set()
