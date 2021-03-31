@@ -3250,7 +3250,8 @@ class AdjacentDuplexType(Enum):
 # Maybe have two cases, one where base pair is forced to get A T and another where
 # it is forced to be C G
 
-default_interior_to_strand_probability = 0.95
+default_interior_to_strand_probability = 0.98
+default_adjacent_to_exterior_base_pair = 0.95
 default_blunt_end_probability = 0.33
 default_nick_3p_probability = 0.79
 default_nick_5p_probability = 0.73
@@ -3266,7 +3267,7 @@ default_overhang_on_both_strand_5p_probability = 0.55
 default_three_arm_junction_probability = 0.69
 default_four_arm_junction_probability = 0.84
 default_five_arm_junction_probability = 0.77
-default_unpaired_probability = 0.99
+default_unpaired_probability = 0.95
 default_other_probability = 0.70
 
 class BasePairType(Enum):
@@ -3342,7 +3343,7 @@ class BasePairType(Enum):
     #                     base pair
     INTERIOR_TO_STRAND = auto()
     """TODO: Rewrite all docstrings using Sphinx doc strings
-    
+
     .. code-block:: none
 
                 c                    d
@@ -3352,10 +3353,29 @@ class BasePairType(Enum):
                 c*           ^       d*
                              |
                          this base pair
-    
+
     
     TODO: figure out why Sphinx generates error if this line of the docstring is missing
     """
+
+
+    #                    #-----#
+    #                     |||||
+    #                    #-----]
+    #                        ^
+    #                        |
+    #                    base pair
+    #
+    #                       or
+    #
+    #                    #----->
+    #                     |||||
+    #                    #-----#
+    #                        ^
+    #                        |
+    #                    base pair
+    ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()
+
     #                    #----->
     #                     |||||
     #                    #-----]
@@ -3528,6 +3548,8 @@ class BasePairType(Enum):
         #         return default_nick_probability
         if self is BasePairType.INTERIOR_TO_STRAND:
             return default_interior_to_strand_probability
+        elif self is BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR:
+            return default_adjacent_to_exterior_base_pair
         elif self is BasePairType.BLUNT_END:
             return default_blunt_end_probability
         elif self is BasePairType.NICK_3P:
@@ -3604,7 +3626,7 @@ class StrandDomainAddress:
 
     def neighbor_5p(self) -> 'StrandDomainAddress':
         idx = self.domain_idx - 1
-        if self.domain_idx >= 0:
+        if idx >= 0:
             return StrandDomainAddress(self.strand, idx)
         else:
             return None
@@ -3625,8 +3647,14 @@ class StrandDomainAddress:
     def __eq__(self, other):
         """Overrides the default implementation"""
         if isinstance(other, StrandDomainAddress):
-            return self.strand == other.strand and self.domain_idx and other.domain_idx
+            return self.strand == other.strand and self.domain_idx == other.domain_idx
         return False
+
+    def __str__(self) -> str:
+        return f'{{strand: {self.strand}, domain_idx: {self.domain_idx}}}'
+
+    def __repr__(self) -> str:
+        return self.__str__() + f' hash: {self.__hash__()}'
 
 
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
@@ -4178,19 +4206,28 @@ def nupack_4_complex_secondary_structure_constraint(
 
     ## Start Input Validation ##
 
+    # Maps domain pairs
+    all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
+
     # Keep track of all the domain names that are provided as
     # part of a nonimplicit_base_pair so that input validation
     # knows to ignore these domain names.
     nonimplicit_base_pairs_domain_names: Set[str] = set()
-    for (addr1, addr2) in nonimplicit_base_pairs:
-        d1 = addr1.strand.domains[addr1.domain_idx]
-        d2 = addr2.strand.domains[addr2.domain_idx]
-        if d1 is not d2:
-            print('WARNING: a base pair is specified between two different domain objects')
-        nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
-        nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
-        nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
-        nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=True))
+
+    if nonimplicit_base_pairs is not None:
+        for (addr1, addr2) in nonimplicit_base_pairs:
+            d1 = addr1.strand.domains[addr1.domain_idx]
+            d2 = addr2.strand.domains[addr2.domain_idx]
+            if d1 is not d2:
+                print('WARNING: a base pair is specified between two different domain objects')
+            nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
+            nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
+            nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
+            nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=True))
+
+            all_bound_domain_addresses[addr1] = addr2
+            all_bound_domain_addresses[addr2] = addr1
+
 
     # Input validation checks:
     #
@@ -4227,13 +4264,6 @@ def nupack_4_complex_secondary_structure_constraint(
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
     ## End populating base_pair_probs ##
-
-    # Maps domain pairs
-    all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
-    # Populate with the domain pairs given
-    for (addr1, addr2) in nonimplicit_base_pairs:
-        all_bound_domain_addresses[addr1] = addr2
-        all_bound_domain_addresses[addr2] = addr1
 
     # Will be used for identifying base pair idx for non-implicit base pairs
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = {}
@@ -4302,6 +4332,12 @@ def nupack_4_complex_secondary_structure_constraint(
     for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
         domain_base_length = domain_addr.domain_base_length()
         assert domain_base_length == comple_addr.domain_base_length()
+
+        if domain_addr not in addr_to_starting_base_pair_idx:
+            raise ValueError(f'StrandDomainAddress {domain_addr} is not found in given complex')
+
+        if comple_addr not in addr_to_starting_base_pair_idx:
+            raise ValueError(f'StrandDomainAddress {comple_addr} is not found in given complex')
 
         domain_5p = addr_to_starting_base_pair_idx[domain_addr]
         comple_5p = addr_to_starting_base_pair_idx[comple_addr]
@@ -4393,6 +4429,7 @@ def nupack_4_complex_secondary_structure_constraint(
         # Probability threshold
         internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
         unpaired_base_prob = base_type_probability_threshold[BasePairType.UNPAIRED]
+        border_internal_base_pair_prob = base_type_probability_threshold[BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
 
         # Tracks which bases are paired. Used to determine unpaired bases.
         expected_paired_idxs: Set[int] = set()
@@ -4434,8 +4471,17 @@ def nupack_4_complex_secondary_structure_constraint(
             for i in range(1, domain_length - 1):
                 row = domain1_5p + i
                 col = domain2_3p - i
-                if nupack_complex_result[row][col] < internal_base_pair_prob:
-                    summarize_violation(row, col, nupack_complex_result, internal_base_pair_prob, base_pair_type=BasePairType.INTERIOR_TO_STRAND)
+
+                # Determine if base pair is adjacent to exterior base pair
+                prob_thres = internal_base_pair_prob
+                bp_type = BasePairType.INTERIOR_TO_STRAND
+                if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND or i == domain_length - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
+                    prob_thres = border_internal_base_pair_prob
+                    bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
+
+
+                if nupack_complex_result[row][col] < prob_thres:
+                    summarize_violation(row, col, nupack_complex_result, prob_thres, base_pair_type=bp_type)
                     return 1.0
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
