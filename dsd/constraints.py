@@ -3587,11 +3587,20 @@ class BasePairType(Enum):
         else:
             assert False
 
+# TODO: document StrandDomainAddress
 
+@dataclass
 class StrandDomainAddress:
-    def __init__(self, strand: Strand, domain_idx: int) -> None:
-        self.strand = strand
-        self.domain_idx = domain_idx
+    """An addressing scheme for specifying a domain on a strand.
+    """
+
+    strand: Strand
+    """strand to index
+    """
+
+    domain_idx: int
+    """order in which domain appears in :py:data:`StrandDomainAddress.strand`
+    """
 
     @classmethod
     def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
@@ -3645,7 +3654,6 @@ class StrandDomainAddress:
         return hash((self.strand, self.domain_idx))
 
     def __eq__(self, other):
-        """Overrides the default implementation"""
         if isinstance(other, StrandDomainAddress):
             return self.strand == other.strand and self.domain_idx == other.domain_idx
         return False
@@ -4241,7 +4249,9 @@ def nupack_4_complex_secondary_structure_constraint(
     domain_counts: Dict[str, int] = defaultdict(int)
     for strand in strand_complex:
         if strand in seen_strands:
-            raise ValueError(f"Multiple instances of a strand in a complex is not allowed")
+            raise ValueError(f"Multiple instances of a strand in a complex is not allowed."
+                              " Please make a separate Strand object with the same Domain objects in the same order"
+                              " but a different strand name")
         seen_strands.add(strand)
         for idx, domain in enumerate(strand.domains):
             is_starred = idx in strand.starred_domain_indices
@@ -4425,6 +4435,12 @@ def nupack_4_complex_secondary_structure_constraint(
                 base_pair_string)
 
         # TODO: Instead of returning boolean, we should take differences between desired probabilities
+        # May take squared differences (if below threshold) and sum them up
+        # Refactor all this into a function that returns all the base pairs that are below threshold
+        # eval would take the squared sum of prob differences
+        # summary would print all the base pairs
+        # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
+        # * maybe consider puting second and after base pairs on new line with indent
 
         # Probability threshold
         internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
@@ -4494,9 +4510,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
         return 0.0
 
-    def summary(strand1: Strand, strand2: Strand) -> str:
-        # energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
-        # return f'{energy:6.2f} kcal/mol'
+    def summary(strand_complex: Tuple[Strand, ...]) -> str:
         raise NotImplemented
 
     # TODO: Is this needed, code was used in nupack_strand_pair_constraint

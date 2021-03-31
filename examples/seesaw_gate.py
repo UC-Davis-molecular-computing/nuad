@@ -70,6 +70,7 @@ def reporter_base_strand(gate) -> dc.Strand:
 #  AGTGGGTGGTTTTAT  GGAGC  ATCCTGGTCTGGGCT
 # [===============--=====--===============>
 signal_5_6_strand = seesaw_signal_strand(5, 6)
+# TODO: make this a method of Strand instead of a StrandDomainAddress method
 signal_5_6_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_5_6_strand, TOEHOLD_DOMAIN)
 
 #         S5          T           S2
