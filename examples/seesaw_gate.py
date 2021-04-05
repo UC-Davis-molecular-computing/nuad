@@ -70,18 +70,17 @@ def reporter_base_strand(gate) -> dc.Strand:
 #  AGTGGGTGGTTTTAT  GGAGC  ATCCTGGTCTGGGCT
 # [===============--=====--===============>
 signal_5_6_strand = seesaw_signal_strand(5, 6)
-# TODO: make this a method of Strand instead of a StrandDomainAddress method
-signal_5_6_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_5_6_strand, TOEHOLD_DOMAIN)
+signal_5_6_toehold_addr = signal_5_6_strand.address_of_first_domain_occurence(TOEHOLD_DOMAIN)
 
 #         S5          T           S2
 # [===============--=====--===============>
 signal_2_5_strand = seesaw_signal_strand(2, 5)
-signal_2_5_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_2_5_strand, TOEHOLD_DOMAIN)
+signal_2_5_toehold_addr = signal_2_5_strand.address_of_first_domain_occurence(TOEHOLD_DOMAIN)
 
 #         S7          T           S5
 # [===============--=====--===============>
 signal_5_7_strand = seesaw_signal_strand(5, 7)
-signal_5_7_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(signal_5_7_strand, TOEHOLD_DOMAIN)
+signal_5_7_toehold_addr = signal_5_7_strand.address_of_first_domain_occurence(TOEHOLD_DOMAIN)
 
 
 # Gate Bases
@@ -89,8 +88,8 @@ signal_5_7_toehold_addr = dc.StrandDomainAddress.address_of_first_domain_occuren
 #  GCTCC  AGCCCAGACCAGGAT  GCTCC
 # [=====--===============--=====>
 gate_5_base_strand = gate_base_strand(5)
-gate_5_bound_toehold_3p_addr = dc.StrandDomainAddress.address_of_last_domain_occurence(gate_5_base_strand, TOEHOLD_COMPLEMENT)
-gate_5_bound_toehold_5p_addr = dc.StrandDomainAddress.address_of_first_domain_occurence(gate_5_base_strand, TOEHOLD_COMPLEMENT)
+gate_5_bound_toehold_3p_addr = gate_5_base_strand.address_of_last_domain_occurence(TOEHOLD_COMPLEMENT)
+gate_5_bound_toehold_5p_addr = gate_5_base_strand.address_of_first_domain_occurence(TOEHOLD_COMPLEMENT)
 
 # Waste Strands
 #        S5

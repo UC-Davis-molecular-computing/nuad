@@ -1388,6 +1388,48 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     #              in the order they appear in this :any:`Strand`.
     #     """
 
+    def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name.
+
+        :param forward:
+            if True, starts searching from 5' end, otherwise starts searching from 3' end.
+        """
+        if n < 1:
+            raise ValueError(f'n needs to be at least 1')
+        domain_names = self.domain_names_tuple()
+        idx = -1
+        occurences = 0
+
+        itr = range(len(domain_names))
+        if not forward:
+            itr = reversed(itr)
+
+        for i in itr:
+            if domain_names[i] == domain_name:
+                occurences += 1
+                if occurences == n:
+                    idx = i
+                    break
+        if idx == -1:
+            raise ValueError(f'{self} contained less than {n} occurrences of domain {domain_name}')
+
+        return StrandDomainAddress(self, idx)
+
+    def address_of_first_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the first occurence of domain named domain_name
+        starting from the 5' end.
+        """
+        return self.address_of_nth_domain_occurence(domain_name, 1)
+
+    def address_of_last_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name
+        starting from the 3' end.
+        """
+        return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
+
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
@@ -1754,6 +1796,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = self.summary_of_strand_pairs_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DesignConstraint):
             report = self.summary_of_design_constraint(constraint, report_only_violations)
+        elif isinstance(constraint, ComplexConstraint):
+            report = self.summary_of_complex_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
                       f'unrecognized type {type(constraint)}'
@@ -1997,6 +2041,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   content='constraint.pairs is empty; nothing to report',
                                   num_violations=0, num_checks=0)
         return report
+
+    def summary_of_complex_constraint(self, constraint: 'ComplexConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
+        # TODO: handle multiple complexes in constraint
+        summary = constraint.generate_summary(constraint.complexes[0], report_only_violations)
+        return ConstraintReport(constraint, summary, num_violations=-1, num_checks=-1)
 
     # remove quotes when Python 3.6 support dropped
     def summary_of_design_constraint(self, constraint: 'DesignConstraint',
@@ -3139,13 +3189,8 @@ def nupack_strand_pair_constraint(
                                 summary=summary)
 
 
-# TODO: NUPACK queries:
-# * Holliday junction
-# * n-arm junctions (see if n = 4 is signficantly different from other n)
-
-
 # TODO: hide this class
-class AdjacentDuplexType(Enum):
+class _AdjacentDuplexType(Enum):
     # Refer to comments under BaseTypePair for notation reference
     #
     #
@@ -3235,20 +3280,6 @@ class AdjacentDuplexType(Enum):
 # TODO(benlee12): Add whatever makes ascii art fixed length (see scadnano python repo)
 # Get sphinx working so that I can test docstrings
 # Ex: https://github.com/UC-Davis-molecular-computing/scadnano-python-package/blob/b6cd6984c66e766b20b5a7a34654d3ca3fba42bf/scadnano/origami_rectangle.py#L64
-
-# TODO(benlee12): NUPACK experiment
-# Make small designs (each domain 15 bases roughly)
-# Come up of concrete examples and query nupack for base pair probability
-# average energy sorted
-# standard deviation
-# 100 random DNA sequences
-# Do it for four arm junction
-# Hypothesis: four arm junction more stable
-# Use library function for generating random DNA sequence
-# Mean probability, standard deviation
-# 95% confidence interval
-# Maybe have two cases, one where base pair is forced to get A T and another where
-# it is forced to be C G
 
 default_interior_to_strand_probability = 0.98
 default_adjacent_to_exterior_base_pair = 0.95
@@ -3542,10 +3573,6 @@ class BasePairType(Enum):
     UNPAIRED = auto()
 
     def default_pair_probability(self) -> float:
-        # TODO: Populate with default probabilties
-        # Reference global variables (for documentation purposes)
-        # Ex: if self is NICK:
-        #         return default_nick_probability
         if self is BasePairType.INTERIOR_TO_STRAND:
             return default_interior_to_strand_probability
         elif self is BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR:
@@ -3691,7 +3718,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
     #     |||||||||||||||||||||||||
     #    #-------------------------] <- Note this 3' end here
     #         complementary_addr
-    adjacent_strand_type: AdjacentDuplexType = AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
+    adjacent_strand_type: _AdjacentDuplexType = _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
 
     if complementary_5n_addr is not None:
         #   Since complementary_5n_addr exists, assume BOTTOM_RIGHT_DANGLE
@@ -3701,7 +3728,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
         #     |||||||||||||||||||||||||
         #    #-------------------------###-------------------------------------#
         #     complementary_addr                complementary_5n_addr
-        adjacent_strand_type = AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
+        adjacent_strand_type = _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
         if complementary_5n_addr in all_bound_domain_addresses:
             # Since complementary_5n_addr is bound, meaning
             # adjacent_addr exist, assume TOP_RIGHT_5p
@@ -3711,7 +3738,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
             #          complementary_addr          complementary_5n_addr
-            adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_5P
+            adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_5P
             adjacent_addr = all_bound_domain_addresses[complementary_5n_addr]
             adjacent_5n_addr = adjacent_addr.neighbor_5p()
             if adjacent_5n_addr is not None:
@@ -3727,7 +3754,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------###-------------------------------------#
                 #          complementary_addr          complementary_5n_addr
-                adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_OVERHANG
+                adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_OVERHANG
                 if adjacent_5n_addr in all_bound_domain_addresses:
                     # Since adjacent_5n_addr is bound, two possible cases:
 
@@ -3757,7 +3784,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                         #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
                         #    #-------------------------###-------------------------------------#
                         #         complementary_addr            complementary_5n_addr
-                        adjacent_strand_type = AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
+                        adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
 
     domain_3n_addr = domain_addr.neighbor_3p()
     if domain_3n_addr is None:
@@ -3769,28 +3796,28 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
         #    #-------------------------#
         #         complementary_addr
 
-        if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+        if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
             #            domain_addr
             #    #------------------------->
             #     |||||||||||||||||||||||||
             #    #-------------------------]
             #         complementary_addr
             return BasePairType.BLUNT_END
-        elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+        elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
             #          domain_addr
             #    #------------------------->
             #     |||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
             #       complementary_addr              complementary_5n_addr
             return BasePairType.DANGLE_5P
-        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
             #             domain_addr                adjacent_addr
             #    #-------------------------> [-------------------------------------#
             #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
             #    #-------------------------###-------------------------------------#
             #     complementary_addr    complementary_5n_addr
             return BasePairType.NICK_3P
-        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 #                                #
                 #                                |
                 #                                | adjacent_5n_addr
@@ -3802,7 +3829,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #    #-------------------------###-------------------------------------#
                 #     complementary_addr    complementary_5n_addr
             return BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P
-        elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
             #                              # #
             #                              |-|
             #                            ? |-| adjacent_5n_addr
@@ -3826,21 +3853,21 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 
         if domain_3n_addr not in all_bound_domain_addresses:
             # domain_addr's 3' neighbor is an unbound overhang
-            if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+            if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
                 #            domain_addr             domain_3n_addr
                 #    #-------------------------##-------------------------#
                 #     |||||||||||||||||||||||||
                 #    #-------------------------]
                 #     complementary_addr
                 return BasePairType.DANGLE_3P
-            elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+            elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
                 #            domain_addr                 domain_3n_addr
                 #    #-------------------------##-------------------------------------#
                 #     |||||||||||||||||||||||||
                 #    #-------------------------##-------------------------------------#
                 #          complementary_addr            complementary_5n_addr
                 return BasePairType.DANGLE_5P_3P
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
                 #                              #
                 #                              |
                 #               domain_3n_addr |
@@ -3852,7 +3879,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #    #-------------------------###-------------------------------------#
                 #     complementary_addr    complementary_5n_addr
                 return BasePairType.OVERHANG_ON_THIS_STRAND_3P
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 #                              # #
                 #                              | |
                 #               domain_3n_addr | | adjacent_5n_addr
@@ -3864,7 +3891,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #    #-------------------------###-------------------------------------#
                 #     complementary_addr    complementary_5n_addr
                 return BasePairType.OVERHANG_ON_BOTH_STRANDS_3P
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
                 # TODO: Possible case (nick n-arm junction)
                 #                              #                    # #
                 #                              |                    |-|
@@ -3951,7 +3978,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             # TODO: double check these ones
             # Not an internal base pair since domain_addr's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
-            if adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+            if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
                 # NICK_5P
                 #
                 #             domain_addr                 domain_3n_addr
@@ -3995,7 +4022,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                     return BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P
                 else:
                     return BasePairType.OTHER
-            elif adjacent_strand_type is AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+            elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
                 # OVERHANG_ON_THIS_STRAND_5P
                 #
                 #             domain_addr               domain_3n_addr
@@ -4047,7 +4074,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                     return BasePairType.OVERHANG_ON_BOTH_STRANDS_5P
                 else:
                     return BasePairType.OTHER
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_5P:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
                 # TODO: Possible case (nick n-arm junction)
                 # TODO: Bound DANGLE_5P_3P? or OTHER?
                 #                              # #
@@ -4088,7 +4115,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #    #-------------------------########################-------------------------------------#
                 #     complementary_addr                                     complementary_5n_addr
                 return BasePairType.OTHER
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
                 # TODO: Possible case (nick n-arm junction)
                 # Bound DANGLE_5P_3P?
                 #                              # #                    #
@@ -4126,7 +4153,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #    #-------------------------########################-------------------------------------#
                 #     complementary_addr                         complementary_5n_addr
                 return BasePairType.OTHER
-            elif adjacent_strand_type is AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
                 #                              # #                  # #
                 #                              |-|                  |-|
                 #               domain_3n_addr |-|                  |-| adjacent_5n_addr
@@ -4169,7 +4196,6 @@ def nupack_4_complex_secondary_structure_constraint(
         threaded: bool = False,
 ) -> ComplexConstraint:
     # TODO: change doc strings
-    # TODO: Handle domain_binding
     # TODO: Upper bound probability
     # TODO: all_base_pairs (dsd does not add any base pairs)
     """
@@ -4386,20 +4412,33 @@ def nupack_4_complex_secondary_structure_constraint(
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
-    # TODO: change description string
-    # if description is None:
-    #     if isinstance(threshold, Number):
-    #         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
-    #     elif isinstance(threshold, dict):
-    #         strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-    #                                           for (strand_group1, strand_group2), value in threshold.items()}
-    #         description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-    #                       f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-    #     else:
-    #         raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-    #                          f'but it is {type(threshold)}')
+    if description is None:
+        description = ' '.join([str(s) for s in strand_complex])
 
+
+    # TODO: Instead of returning boolean, we should take differences between desired probabilities
+    # May take squared differences (if below threshold) and sum them up
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
+        bps = _violation_base_pairs(strand_complex)
+        err_sq = 0
+        for (_, _, prob, bp_type) in bps:
+            e = base_type_probability_threshold[bp_type] - prob
+            assert e > 0
+            err_sq += e ** 2
+        return err_sq
+
+    # summary would print all the base pairs
+    # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
+    # * maybe consider puting second and after base pairs on new line with indent
+    def summary(strand_complex: Tuple[Strand, ...]) -> str:
+        bps = _violation_base_pairs(strand_complex)
+        summary_list = []
+        for (i, j, p, t) in bps:
+            summary_list.append(f'{i},{j}: {round(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+        return '\n'.join(summary_list)
+
+
+    def _violation_base_pairs(strand_complex: Tuple[Strand, ...]) -> List[Tuple[int, int, float, BasePairType]]:
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
@@ -4434,13 +4473,8 @@ def nupack_4_complex_secondary_structure_constraint(
                 f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%',
                 base_pair_string)
 
-        # TODO: Instead of returning boolean, we should take differences between desired probabilities
-        # May take squared differences (if below threshold) and sum them up
         # Refactor all this into a function that returns all the base pairs that are below threshold
         # eval would take the squared sum of prob differences
-        # summary would print all the base pairs
-        # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
-        # * maybe consider puting second and after base pairs on new line with indent
 
         # Probability threshold
         internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
@@ -4449,6 +4483,9 @@ def nupack_4_complex_secondary_structure_constraint(
 
         # Tracks which bases are paired. Used to determine unpaired bases.
         expected_paired_idxs: Set[int] = set()
+
+        # Collect violating base pairs
+        bps: List[int, int, float, BasePairType] = []
         for (domain1_5p, domain2_3p, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type) in base_pair_domain_endpoints_to_check:
             # Checks if base pairs at ends of domain to be above 40% probability
             domain1_3p = domain1_5p + (domain_length - 1)
@@ -4458,7 +4495,7 @@ def nupack_4_complex_secondary_structure_constraint(
             if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
                 summarize_violation(domain1_5p, domain2_3p, nupack_complex_result,
                                     d1_5p_d2_3p_ext_bp_prob_thres, base_pair_type=d1_5p_d2_3p_ext_bp_type)
-                return 1.0
+                bps.append((domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p], d1_5p_d2_3p_ext_bp_type))
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
@@ -4466,7 +4503,7 @@ def nupack_4_complex_secondary_structure_constraint(
             if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
                 summarize_violation(domain1_3p, domain2_5p, nupack_complex_result,
                                     d1_3p_d2_5p_ext_bp_prob_thres, base_pair_type=d1_3p_d2_5p_ext_bp_type)
-                return 1.0
+                bps.append((domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p], d1_3p_d2_5p_ext_bp_type))
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
             # Check if base pairs interior to domain (note ascending base pair indices
@@ -4498,7 +4535,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
                 if nupack_complex_result[row][col] < prob_thres:
                     summarize_violation(row, col, nupack_complex_result, prob_thres, base_pair_type=bp_type)
-                    return 1.0
+                    bps.append((row, col, nupack_complex_result[row][col], bp_type))
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
 
@@ -4506,12 +4543,9 @@ def nupack_4_complex_secondary_structure_constraint(
         for i in range(len(nupack_complex_result)):
             if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
                 summarize_violation(i, i, nupack_complex_result, unpaired_base_prob, base_pair_type=BasePairType.UNPAIRED)
-                return 1.0
+                bps.append((i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED))
 
-        return 0.0
-
-    def summary(strand_complex: Tuple[Strand, ...]) -> str:
-        raise NotImplemented
+        return bps
 
     # TODO: Is this needed, code was used in nupack_strand_pair_constraint
     # if complexes is not None:
