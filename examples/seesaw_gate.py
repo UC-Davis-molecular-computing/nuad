@@ -325,25 +325,33 @@ waste_5_strand = waste_strand(5)
 t_2_5_w_5_complex = (waste_5_strand, threshold_2_5_base_strand)
 t_2_5_w_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[t_2_5_w_5_complex])
 
-#        S2           T           S5
-#  34            20 19  15 14            0
-#  |             |  |   |  |             |
-# <===============--=====--===============]
-#  |||||||||||||||  |||||  |||||||||||||||
-# [===============--=====--===============>
-#  |             |  |   |  |             |
-#  35           49  50  54 55            69
-#        S2*         T*          S5*
+#
+#      S2        s2    T          S5       s5
+#
+#                21
+#  34          22|20 19  15 14          2  10
+#  |           | ||  |   |  |           |  ||
+# <=============-==--=====--=============--==]
+#                ||  |||||  |||||||||||||  ||
+#               [==--=====--=============--==>
+#                ||  |   |  |           |  ||
+#               35|  37  41 42          54 |56
+#                 36                       55
+#
+#                s2*   T*        S5*       s5*
 #
 # Debugging base pair types:
 #
-#  BLUNT_END   INTERIOR_TO_STRAND
-#  |     S2         | T    |     S5
-# <===============--=====--===============]
-#  |||||||||||||||  |||||  |||||||||||||||
-# [===============--=====--===============>
-#        S2*     |    T*|        S5*     |
-#           INTERIOR_TO_STRAND           BLUNT_END
+#      S2        s2    T          S5       s5
+#        DANGLE_3P INTERIOR_TO_STRAND      INTERIOR_TO_STRAND
+#                |   |      |              |
+# <=============-==--=====--=============--==]
+#                ||  |||||  |||||||||||||  ||
+#               [==--=====--=============--==>
+#                 |      |              |   |
+# INTERIOR_TO_STRAND     INTERIOR_TO_STRAND BLUNT_END
+#                s2*   T*        S5*       s5*
+
 waste_2_5_complex = (signal_2_5_strand, threshold_2_5_base_strand)
 waste_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[waste_2_5_complex])
 
