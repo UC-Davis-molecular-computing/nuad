@@ -299,24 +299,29 @@ g_5_s_5_7_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
 # [===============>
 waste_5_strand = waste_strand(5)
 
-#                                S5
-#                          14            0
-#                          |             |
-#                         <===============]
-#                          |||||||||||||||
-# [===============--=====--===============>
-#  |             |  |   |  |             |
-#  15           29  30  34 35            49
-#        S2*         T*          S5*
+#                   S5       s5
+#             14          2  10
+#             |           |  ||
+#            <=============--==]
+#             |||||||||||||  ||
+# [==--=====--=============--==>
+#  ||  |   |  |           |  ||
+# 15|  17  21 22          34 |36
+#   16                      35
+#  s2*   T*        S5*       s5*
 #
 # Debugging base pair types:
-#                          DANGLE_5P
-#                          |     S5
-#                         <===============]
-#                          |||||||||||||||
-# [===============--=====--===============>
-#        S2*         T*          S5*     |
-#                                        BLUNT_END
+#
+#
+#                   S5       s5
+#     DANGLE_5P              INTERIOR_TO_STRAND
+#             |              |
+#            <=============--==]
+#             |||||||||||||  ||
+# [==--=====--=============--==>
+#                         |   |
+#        INTERIOR_TO_STRAND   BLUNT_END
+#  s2*   T*        S5*       s5*
 t_2_5_w_5_complex = (waste_5_strand, threshold_2_5_base_strand)
 t_2_5_w_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[t_2_5_w_5_complex])
 
