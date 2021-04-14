@@ -4205,6 +4205,43 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             else:
                 raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_addr}')
 
+@dataclass(frozen=True)
+class _BasePairDomainEndpoint:
+    """A base pair endpoint in the context of the domain it resides on.
+
+    Numbering the bases in strand complex order, of the two bound domains,
+    domain1 is defined to be the domain that occurs earlier and domain2 is
+    defined to be the domain that occurs later.
+
+    ```(this line is to avoid Python syntax highlighting of ASCII art below)
+                 domain1_5p_index
+                 |
+    domain1   5' --------------------------------- 3'
+                 | | | | | | | | | | | | | | | | |
+    domain2   3' --------------------------------- 5'
+              ^  |                                 ^
+              |  domain2_3p_index                  |
+              |                                    |
+              |                                    |
+    domain1_5p_domain2_3p_exterior_base_pair_type  |
+                                                   |
+                            domain1_3p_domain2_5p_exterior_base_pair_type
+    ```
+    """
+    domain1_5p_index: int
+    domain2_3p_index: int
+    domain_base_length: int
+    domain1_5p_domain2_base_pair_type: BasePairType
+    domain1_3p_domain1_base_pair_type: BasePairType
+
+
+@dataclass(frozen=True)
+class _BasePair:
+    base_index1: int
+    base_index2: int
+    base_pairing_probability: float
+    base_pair_type: BasePairType
+
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
@@ -4366,35 +4403,8 @@ def nupack_4_complex_secondary_structure_constraint(
                 all_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
                 all_bound_domain_addresses[complementary_strand_domain_address] = strand_domain_address
 
-    # list of tuples (domain1_5p, domain2_3p, length,
-    #                 domain1_5p_domain2_3p_exterior_base_pair_type,
-    #                 domain1_3p_domain2_5p_exterior_base_pair_type)
-    #    0123           4567
-    # 5'-AAAA-3'     5'-TTTT-3'
-    #    ^              ^  ^
-    #    |              |  domain2_3p
-    #    domain1_5p    domain2_5p
-    #
-    # This has one entry per a pair of bound domains and stores the type of
-    # both endpoint base pairs. First two entries are domain1_5p, domain2_3p.
-    # Next entry is length. (Note that other endpoint indicies can be
-    # computed from these three.) Last two entries are the ExteriorBasePairType
-    # of these two base pairs.
-    #
-    # domain1_5p_domain2_3p_exterior_base_pair_type and domain1_3p_domain2_5p_exterior_base_pair_type
-    # denote the ExteriorBasePairTYpe if base pair is exterior, otherwise
-    # set to None
-    #
-    #
-    # domain1   5' --------------------------------- 3'
-    #              | | | | | | | | | | | | | | | | |
-    # domain2   3' --------------------------------- 5'
-    #           ^                                    ^
-    #           |                                    |
-    # domain1_5p_domain2_3p_exterior_base_pair_type  |
-    #                                                |
-    #                         domain1_3p_domain2_5p_exterior_base_pair_type
-    base_pair_domain_endpoints_to_check: Set[Tuple[int, int, int, BasePairType, BasePairType]] = set()
+    # Set of all bound domain endpoints to check.
+    base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
 
     for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
         domain_base_length = domain_addr.domain_base_length()
@@ -4438,7 +4448,7 @@ def nupack_4_complex_secondary_structure_constraint(
         d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr, all_bound_domain_addresses)
         d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr, all_bound_domain_addresses)
 
-        base_pair_domain_endpoints_to_check.add((*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
+        base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
@@ -4452,8 +4462,8 @@ def nupack_4_complex_secondary_structure_constraint(
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
         bps = _violation_base_pairs(strand_complex)
         err_sq = 0
-        for (_, _, prob, bp_type) in bps:
-            e = base_type_probability_threshold[bp_type] - prob
+        for bp in bps:
+            e = base_type_probability_threshold[bp.base_pair_type] - bp.base_pairing_probability
             assert e > 0
             err_sq += e ** 2
         return err_sq
@@ -4466,12 +4476,16 @@ def nupack_4_complex_secondary_structure_constraint(
         if len(bps) == 0:
             return "\tAll base pairs satisfy thresholds."
         summary_list = []
-        for (i, j, p, t) in bps:
+        for bp in bps:
+            i = bp.base_index1
+            j = bp.base_index2
+            p = bp.base_pairing_probability
+            t = bp.base_pair_type
             summary_list.append(f'\t{i},{j}: {round(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
 
 
-    def _violation_base_pairs(strand_complex: Tuple[Strand, ...]) -> List[Tuple[int, int, float, BasePairType]]:
+    def _violation_base_pairs(strand_complex: Tuple[Strand, ...]) -> List[_BasePair]:
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
@@ -4506,21 +4520,27 @@ def nupack_4_complex_secondary_structure_constraint(
         expected_paired_idxs: Set[int] = set()
 
         # Collect violating base pairs
-        bps: List[int, int, float, BasePairType] = []
-        for (domain1_5p, domain2_3p, domain_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type) in base_pair_domain_endpoints_to_check:
+        bps: List[_BasePair] = []
+        for e in base_pair_domain_endpoints_to_check:
+            domain1_5p = e.domain1_5p_index
+            domain2_3p = e.domain2_3p_index
+            domain_length = e.domain_base_length
+            d1_5p_d2_3p_ext_bp_type = e.domain1_5p_domain2_base_pair_type
+            d1_3p_d2_5p_ext_bp_type = e.domain1_3p_domain1_base_pair_type
+
             # Checks if base pairs at ends of domain to be above 40% probability
             domain1_3p = domain1_5p + (domain_length - 1)
             domain2_5p = domain2_3p - (domain_length - 1)
 
             d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
             if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
-                bps.append((domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p], d1_5p_d2_3p_ext_bp_type))
+                bps.append(_BasePair(domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p], d1_5p_d2_3p_ext_bp_type))
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
             d1_3p_d2_5p_ext_bp_prob_thres = base_type_probability_threshold[d1_3p_d2_5p_ext_bp_type]
             if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
-                bps.append((domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p], d1_3p_d2_5p_ext_bp_type))
+                bps.append(_BasePair(domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p], d1_3p_d2_5p_ext_bp_type))
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
             # Check if base pairs interior to domain (note ascending base pair indices
@@ -4551,14 +4571,14 @@ def nupack_4_complex_secondary_structure_constraint(
 
 
                 if nupack_complex_result[row][col] < prob_thres:
-                    bps.append((row, col, nupack_complex_result[row][col], bp_type))
+                    bps.append(_BasePair(row, col, nupack_complex_result[row][col], bp_type))
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
 
         # Check base pairs that should not be paired are high probability
         for i in range(len(nupack_complex_result)):
             if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
-                bps.append((i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED))
+                bps.append(_BasePair(i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED))
 
         return bps
 
