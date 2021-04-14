@@ -128,16 +128,16 @@ signal_5_6_toehold_addr = signal_5_6_strand.address_of_first_domain_occurence(TO
 #  s5       S5          T    s2      S2
 # [==--=============--=====--==-=============>
 #
-#       S2        s2    T          S5       s5
-# <=============-===--=====--=============--==]
+#       S2       s2    T          S5       s5
+# <=============-==--=====--=============--==]
 signal_2_5_strand = seesaw_signal_strand(2, 5)
 signal_2_5_toehold_addr = signal_2_5_strand.address_of_first_domain_occurence(TOEHOLD_DOMAIN)
 
 #  s7       S7          T    s5      S5
 # [==--=============--=====--==-=============>
 #
-#       S5        s5    T          S7       s7
-# <=============-===--=====--=============--==]
+#       S5       s5    T          S7       s7
+# <=============-==--=====--=============--==]
 signal_5_7_strand = seesaw_signal_strand(5, 7)
 signal_5_7_toehold_addr = signal_5_7_strand.address_of_first_domain_occurence(TOEHOLD_DOMAIN)
 
@@ -224,33 +224,30 @@ g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
     # }
 )
 
-#        S2           T           S5
-#  34            20 19  15 14            0
-#  |             |  |   |  |             |
-# <===============--=====--===============]
-#                   |||||  |||||||||||||||
-#                  [=====--===============--=====>
-#                   |   |  |             |  |   |
-#                   35  39 40            54 55  59
-#                     T*         S5*          T*
+#       S2        s2    T          S5       s5
+#                21
+#  34          22|20 19  15 14          2  10
+#  |           | ||  |   |  |           |  ||
+# <=============-==--=====--=============--==]
+#                    |||||  |||||||||||||  ||
+#                   [=====--=============--==--=====>
+#                    |   |  |           |  ||  |   |
+#                    35  39 40          52 |54 55  59
+#                                          53
+#                      T*         S5*      s5*   T*
 #
 # Debugging base pair types:
 #
-#                         INTERIOR_TO_STRAND
-#           DANGLE_3P      |
-#                   |      |
-#                   |      |
-#        S2         | T    |      S5
-# <===============--=====--===============]
-#                   |||||  |||||||||||||||
-#                  [=====--===============--=====>
-#                       |                |
-#                     T*|        S5*     |    T*
-#                       |                |
-#                       |                |
-#      INTERIOR_TO_STRAND                DANGLE_3P
 #
-#
+#      S2        s2    T          S5       s5
+#            DANGLE_3P     INTERIOR_TO_STRAND
+#                    |      |              |
+# <=============-==--=====--=============--==]
+#                    |||||  |||||||||||||  ||
+#                   [=====--=============--==--=====>
+#                        |              |   |
+#                       INTERIOR_TO_STRAND  DANGLE_3P
+#                      T*         S5*      s5*   T*
 g_5_s_2_5_complex = (signal_2_5_strand, gate_5_base_strand)
 g_5_s_2_5_nonimplicit_base_pairs = [(signal_2_5_toehold_addr, gate_5_bound_toehold_5p_addr)]
 g_5_s_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
