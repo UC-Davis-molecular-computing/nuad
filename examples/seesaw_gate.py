@@ -192,8 +192,8 @@ strands = [
 #
 #
 #                 S5         s5    T          S6       s6
-#                            21                         1
-#             34          22 |20 19  15 14          2  |0
+#                            21
+#             34          22 |20 19  15 14          2  10
 #             |           |  ||  |   |  |           |  ||
 #            <=============--==--=====--=============--==]
 #             |||||||||||||  ||  |||||
@@ -263,7 +263,7 @@ g_5_s_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
 #
 #
 #                 S5         s5    T          S7       s7
-#                            21                         1
+#                            21                        1
 #             34          22 |20 19  15 14          2  |0
 #             |           |  ||  |   |  |           |  ||
 #            <=============--==--=====--=============--==]
@@ -380,26 +380,29 @@ waste_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
 reporter_6_complex = (waste_6_strand, reporter_6_base_strand)
 reporter_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[reporter_6_complex])
 
-#               S5           T           S6
-#         34            20 19  15 14            0
-#         |             |  |   |  |             |
-#        <===============--=====--===============]
-#                          |||||  |||||||||||||||
-#                         [=====--===============>
-#                          |   |  |             |
-#                          35  39 40            54
-#                            T*           S6*
+#       S5        s5    T          S6       s6
+#                 21
+#  34          22 |20 19  15 14          2  10
+#  |           |  ||  |   |  |           |  ||
+# <=============--==--=====--=============--==]
+#                     |||||  |||||||||||||  ||
+#                    [=====--=============--==>
+#                     |   |  |           |  ||
+#                     35  39 40          52 |54
+#                                           53
+#                       T*        S6*       s6*
 #
 # Base Pair Types:
-#                  DANGLE_3P      INTERIOR_TO_STRAND
-#                          |      |
-#               S5         | T    |      S6
-#        <===============--=====--===============]
-#                          |||||  |||||||||||||||
-#                         [=====--===============>
-#                            T*|          S6*   |
-#                              |                |
-#             INTERIOR_TO_STRAND                BLUNT_END
+#
+#       S5        s5    T          S6       s6
+#             DANGLE_3P     INTERIOR_TO_STRAND
+#                     |      |              |
+# <=============--==--=====--=============--==]
+#                     |||||  |||||||||||||  ||
+#                    [=====--=============--==>
+#                         |              |   |
+#                        INTERIOR_TO_STRAND  BLUNT_END
+#                       T*        S6*       s6*
 f_waste_6_complex = (signal_5_6_strand, reporter_6_base_strand)
 f_waste_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[f_waste_6_complex])
 
