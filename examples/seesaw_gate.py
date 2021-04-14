@@ -355,26 +355,28 @@ t_2_5_w_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
 waste_2_5_complex = (signal_2_5_strand, threshold_2_5_base_strand)
 waste_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[waste_2_5_complex])
 
-#                                        S6
-#                                 14            0
-#                                 |             |
-#                                <===============]
-#                                 |||||||||||||||
-#                         [=====--===============>
-#                          |   |  |             |
-#                          15  19 20            34
-#                            T*           S6*
+#               S6       s6
+#         14          2  10
+#         |           |  ||
+#        <=============--==]
+#         |||||||||||||  ||
+# [=====--=============--==>
+#  |   |  |           |  ||
+#  15  19 20          32 |34
+#                        33
+#    T*        S6*       s6*
 #
 # Base Pair Types:
-#                                 DANGLE_5P
-#                                 |
-#                                 |      S6
-#                                <===============]
-#                                 |||||||||||||||
-#                         [=====--===============>
-#                            T*           S6*   |
-#                                               |
-#                                               BLUNT_END
+#
+#               S6       s6
+# DANGLE_5P              INTERIOR_TO_STRAND
+#         |              |
+#        <=============--==]
+#         |||||||||||||  ||
+# [=====--=============--==>
+#                     |   |
+#    INTERIOR_TO_STRAND   BLUNT_END
+#    T*        S6*       s6*
 reporter_6_complex = (waste_6_strand, reporter_6_base_strand)
 reporter_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[reporter_6_complex])
 
