@@ -2044,9 +2044,32 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def summary_of_complex_constraint(self, constraint: 'ComplexConstraint',
                                       report_only_violations: bool) -> ConstraintReport:
-        # TODO: handle multiple complexes in constraint
-        summary = constraint.generate_summary(constraint.complexes[0], report_only_violations)
-        return ConstraintReport(constraint, summary, num_violations=-1, num_checks=-1)
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
+
+        for strand_complex in constraint.complexes:
+            num_checks += 1
+            passed = constraint(strand_complex) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                # TODO (move summary here for all of the constraints)
+                summary = constraint.generate_summary(strand_complex, False)
+                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
+                line = (f'strand complex: '
+                        f'{strand_names}'
+                        f'{"" if passed else "  **violation**"}'
+                        f'\n{summary}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
 
     # remove quotes when Python 3.6 support dropped
     def summary_of_design_constraint(self, constraint: 'DesignConstraint',
@@ -4184,10 +4207,16 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 
 
 def nupack_4_complex_secondary_structure_constraint(
-        strand_complex: Tuple[Strand, ...],
+        strand_complexes: List[Tuple[Strand, ...]],
+        # TODO Check that all complexes follow same motif
+        # * checking each strand has same number of domains
+        # * check each domain's length is the same
+        # * same base pair mapping
         base_pair_probs: Dict[BasePairType, float] = None,
+        # TODO: Docstring for this should mention that they apply to first complex given
         nonimplicit_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
         all_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
+
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -4240,6 +4269,8 @@ def nupack_4_complex_secondary_structure_constraint(
 
     ## Start Input Validation ##
 
+    strand_complex_template = strand_complexes[0]
+
     # Maps domain pairs
     all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
 
@@ -4273,7 +4304,7 @@ def nupack_4_complex_secondary_structure_constraint(
     #   Count number of occuruences of each domain
     seen_strands: Set[Strand] = set()
     domain_counts: Dict[str, int] = defaultdict(int)
-    for strand in strand_complex:
+    for strand in strand_complex_template:
         if strand in seen_strands:
             raise ValueError(f"Multiple instances of a strand in a complex is not allowed."
                               " Please make a separate Strand object with the same Domain objects in the same order"
@@ -4307,7 +4338,7 @@ def nupack_4_complex_secondary_structure_constraint(
     # Fill addr_to_starting_base_pair_idx and all_bound_domain_addresses
     domain_base_index = 0
     implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
-    for strand in strand_complex:
+    for strand in strand_complex_template:
         for domain_idx, domain in enumerate(strand.domains):
             addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
             domain_base_index += domain.length
@@ -4413,7 +4444,7 @@ def nupack_4_complex_secondary_structure_constraint(
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
     if description is None:
-        description = ' '.join([str(s) for s in strand_complex])
+        description = ' '.join([str(s) for s in strand_complex_template])
 
 
     # TODO: Instead of returning boolean, we should take differences between desired probabilities
@@ -4432,9 +4463,11 @@ def nupack_4_complex_secondary_structure_constraint(
     # * maybe consider puting second and after base pairs on new line with indent
     def summary(strand_complex: Tuple[Strand, ...]) -> str:
         bps = _violation_base_pairs(strand_complex)
+        if len(bps) == 0:
+            return "\tAll base pairs satisfy thresholds."
         summary_list = []
         for (i, j, p, t) in bps:
-            summary_list.append(f'{i},{j}: {round(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+            summary_list.append(f'\t{i},{j}: {round(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
 
 
@@ -4458,20 +4491,8 @@ def nupack_4_complex_secondary_structure_constraint(
         #     print()
 
         # DEBUG: Print out complex strands and sequences
-        for strand in strand_complex:
-            print(f'{strand.name}: {strand.sequence()}')
-
-        def summarize_violation(i, j, mat, threshold, base_pair_type=None):
-            paired = base_pair_type is not BasePairType.UNPAIRED
-            paired_string = 'paired'
-            if not paired:
-                paired_string = 'unpaired'
-            base_pair_string = ''
-            if base_pair_type is not None:
-                base_pair_string = f'({base_pair_type})'
-            print(
-                f'base pairs ({i}, {j}) have probability {int(mat[i][j] * 100)}% of being {paired_string}, which is below {threshold * 100}%',
-                base_pair_string)
+        # for strand in strand_complex:
+        #     print(f'{strand.name}: {strand.sequence()}')
 
         # Refactor all this into a function that returns all the base pairs that are below threshold
         # eval would take the squared sum of prob differences
@@ -4493,16 +4514,12 @@ def nupack_4_complex_secondary_structure_constraint(
 
             d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
             if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
-                summarize_violation(domain1_5p, domain2_3p, nupack_complex_result,
-                                    d1_5p_d2_3p_ext_bp_prob_thres, base_pair_type=d1_5p_d2_3p_ext_bp_type)
                 bps.append((domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p], d1_5p_d2_3p_ext_bp_type))
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
             d1_3p_d2_5p_ext_bp_prob_thres = base_type_probability_threshold[d1_3p_d2_5p_ext_bp_type]
             if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
-                summarize_violation(domain1_3p, domain2_5p, nupack_complex_result,
-                                    d1_3p_d2_5p_ext_bp_prob_thres, base_pair_type=d1_3p_d2_5p_ext_bp_type)
                 bps.append((domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p], d1_3p_d2_5p_ext_bp_type))
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
@@ -4534,7 +4551,6 @@ def nupack_4_complex_secondary_structure_constraint(
 
 
                 if nupack_complex_result[row][col] < prob_thres:
-                    summarize_violation(row, col, nupack_complex_result, prob_thres, base_pair_type=bp_type)
                     bps.append((row, col, nupack_complex_result[row][col], bp_type))
                 expected_paired_idxs.add(row)
                 expected_paired_idxs.add(col)
@@ -4542,7 +4558,6 @@ def nupack_4_complex_secondary_structure_constraint(
         # Check base pairs that should not be paired are high probability
         for i in range(len(nupack_complex_result)):
             if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
-                summarize_violation(i, i, nupack_complex_result, unpaired_base_prob, base_pair_type=BasePairType.UNPAIRED)
                 bps.append((i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED))
 
         return bps
@@ -4556,7 +4571,7 @@ def nupack_4_complex_secondary_structure_constraint(
                              weight=weight,
                              weight_transfer_function=weight_transfer_function,
                              threaded=threaded,
-                             complexes=[strand_complex],
+                             complexes=[strand_complex_template],
                              evaluate=evaluate,
                              summary=summary)
 
