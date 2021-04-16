@@ -4305,8 +4305,44 @@ def nupack_4_complex_secondary_structure_constraint(
         raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     ## Start Input Validation ##
+    if len(strand_complexes) == 0:
+        raise ValueError("strand_complexes list cannot be empty.")
 
     strand_complex_template = strand_complexes[0]
+
+    if (type(strand_complex_template) is not tuple):
+        raise ValueError(f"First element in strand_complexes was not a tuple of Strands. Please provide a tuple of Strands.")
+
+    for strand in strand_complex_template:
+        if type(strand) is not Strand:
+            raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(s)}")
+
+    for i in range(1, len(strand_complexes)):
+        strand_complex = strand_complexes[i]
+        if (type(strand_complex) is not tuple):
+            raise ValueError(f"Element at index {i} was not a tuple of Strands. Please provide a tuple of Strands.")
+        if len(strand_complex) != len(strand_complex_template):
+            raise ValueError(f"Inconsistent complex structures: Complex at index {i} contained {len(strand_complex)} strands, "
+                             f"but complex at index 0 contained {len(strand_complex_template)} strands."
+                            )
+        for s in range(len(strand_complex)):
+            strand: Strand = strand_complex[s]
+            template_strand: Strand = strand_complex_template[s]
+            if (type(strand) is not Strand):
+                raise ValueError(f"Complex at index {i} contained non-Strand object at index {s}: {type(strand)}")
+            if len(strand.domains) != len(template_strand.domains):
+                raise ValueError(f"Strand {strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
+                                 f"({template_strand}). "
+                                 f"Strand {strand} contains {len(strand.domains)} domains but template strand {template_strand} contains "
+                                 f"{len(template_strand.domains)} domains."
+                                )
+            for d in range(1, len(strand.domains)):
+                domain_length: Domain = strand.domains[d].length
+                template_domain_length: Domain = template_strand.domains[d].length
+                if domain_length != template_domain_length:
+                    raise ValueError(f"Strand {strand} (index {s} of strand_complexes at index {i}) does not match the "
+                                     f"provided template ({template_strand}: domain at index {d} is length"
+                                     f"{domain_length}, but expected {template_domain_length}.")
 
     # Maps domain pairs
     all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
@@ -4582,16 +4618,12 @@ def nupack_4_complex_secondary_structure_constraint(
 
         return bps
 
-    # TODO: Is this needed, code was used in nupack_strand_pair_constraint
-    # if complexes is not None:
-    #     complexes = tuple(complexes)
-
     return ComplexConstraint(description=description,
                              short_description=short_description,
                              weight=weight,
                              weight_transfer_function=weight_transfer_function,
                              threaded=threaded,
-                             complexes=[strand_complex_template],
+                             complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
 

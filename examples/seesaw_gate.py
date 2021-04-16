@@ -191,7 +191,7 @@ strands = [
 # Complexes (with NUPACK indexing)
 #
 #
-#                 S5         s5    T          S6       s6
+#                 S5         s5    T        S6 / S7  s6 / s7
 #                            21
 #             34          22 |20 19  15 14          2  10
 #             |           |  ||  |   |  |           |  ||
@@ -205,7 +205,7 @@ strands = [
 #
 # Debugging base pair types:
 #
-#                 S5         s5    T          S6       s6
+#                 S5         s5    T       S6 / S7    s6 / s7
 #             DANGLE_5P   INTERIOR_TO_STRAND
 #             |              |   |
 #            <=============--==--=====--=============--==]
@@ -215,9 +215,11 @@ strands = [
 #                INTERIOR_TO_STRAND  DANGLE_5P
 #        T*         S5*      s5*   T*
 g_5_s_5_6_complex = (signal_5_6_strand, gate_5_base_strand)
+g_5_s_5_7_complex = (signal_5_7_strand, gate_5_base_strand)
+
 g_5_s_5_6_nonimplicit_base_pairs = [(signal_5_6_toehold_addr, gate_5_bound_toehold_3p_addr)]
 g_5_s_5_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
-    strand_complexes=[g_5_s_5_6_complex],
+    strand_complexes=[g_5_s_5_6_complex, g_5_s_5_7_complex],
     nonimplicit_base_pairs=g_5_s_5_6_nonimplicit_base_pairs,
     # base_pair_probs={
     #     dc.BasePairType.DANGLE_5P: 0.4
@@ -253,43 +255,6 @@ g_5_s_2_5_nonimplicit_base_pairs = [(signal_2_5_toehold_addr, gate_5_bound_toeho
 g_5_s_2_5_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
     strand_complexes=[g_5_s_2_5_complex],
     nonimplicit_base_pairs=g_5_s_2_5_nonimplicit_base_pairs,
-    # base_pair_probs={
-    #     dc.BasePairType.DANGLE_5P: 0.4
-    # }
-)
-
-#
-# Complexes (with NUPACK indexing)
-#
-#
-#                 S5         s5    T          S7       s7
-#                            21                        1
-#             34          22 |20 19  15 14          2  |0
-#             |           |  ||  |   |  |           |  ||
-#            <=============--==--=====--=============--==]
-#             |||||||||||||  ||  |||||
-#     [=====--=============--==--=====>
-#      |   |  |           |  ||  |   |
-#      35  39 40          52 |54 55  59
-#                            53
-#        T*         S5*      s5*   T*
-#
-# Debugging base pair types:
-#
-#                 S5         s5    T          S7       s7
-#             DANGLE_5P     INTERIOR_TO_STRAND
-#             |              |   |
-#            <=============--==--=====--=============--==]
-#             |||||||||||||  ||  |||||
-#     [=====--=============--==--=====>
-#                         |   |      |
-#                INTERIOR_TO_STRAND  DANGLE_5P
-#        T*         S5*      s5*   T*
-g_5_s_5_7_complex = (signal_5_7_strand, gate_5_base_strand)
-g_5_s_5_7_nonimplicit_base_pairs = [(signal_5_7_toehold_addr, gate_5_bound_toehold_3p_addr)]
-g_5_s_5_7_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(
-    strand_complexes=[g_5_s_5_7_complex],
-    nonimplicit_base_pairs=g_5_s_5_7_nonimplicit_base_pairs,
     # base_pair_probs={
     #     dc.BasePairType.DANGLE_5P: 0.4
     # }
@@ -413,7 +378,6 @@ f_waste_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constrain
 complex_constraints = [
     g_5_s_5_6_complex_constraint,
     g_5_s_2_5_complex_constraint,
-    g_5_s_5_7_complex_constraint,
     t_2_5_w_5_complex_constraint,
     waste_2_5_complex_constraint,
     reporter_6_complex_constraint,
