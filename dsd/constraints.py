@@ -4517,7 +4517,7 @@ def nupack_4_complex_secondary_structure_constraint(
             j = bp.base_index2
             p = bp.base_pairing_probability
             t = bp.base_pair_type
-            summary_list.append(f'\t{i},{j}: {round(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+            summary_list.append(f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
 
 

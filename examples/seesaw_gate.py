@@ -372,6 +372,22 @@ f_waste_6_complex = (signal_5_6_strand, reporter_6_base_strand)
 f_waste_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[f_waste_6_complex])
 
 # TODO: Strand Constraint check for 4 G's (don't need to check for 4 C's)
+def four_g_constraint_evaluate(strand: dc.Strand):
+    if 'GGGG' in strand.sequence():
+        return 1000
+    else:
+        return 0
+
+def four_g_constraint_summary(strand: dc.Strand):
+    violation_str = "" if 'GGGG' not in strand.sequence() else "** violation**"
+    return f"{strand.name}: {strand.sequence()}{violation_str}"
+
+
+four_g_constraint = dc.StrandConstraint(description="4GConstraint",
+                            short_description="4GConstraint",
+                            evaluate=four_g_constraint_evaluate ,
+                            strands=strands,
+                            summary=four_g_constraint_summary)
 
 
 # Constraints
@@ -384,7 +400,7 @@ complex_constraints = [
     f_waste_6_complex_constraint,
 ]
 
-seesaw_design = dc.Design(strands=strands, complex_constraints=complex_constraints)
+seesaw_design = dc.Design(strands=strands, complex_constraints=complex_constraints, strand_constraints=[four_g_constraint])
 
 ds.search_for_dna_sequences(design=seesaw_design,
                             # weigh_violations_equally=True,
