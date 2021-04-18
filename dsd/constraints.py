@@ -3211,7 +3211,6 @@ def nupack_strand_pair_constraint(
                                 summary=summary)
 
 
-# TODO: hide this class
 class _AdjacentDuplexType(Enum):
     # Refer to comments under BaseTypePair for notation reference
     #
@@ -3997,7 +3996,6 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
 
 
-            # TODO: double check these ones
             # Not an internal base pair since domain_addr's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
             if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
