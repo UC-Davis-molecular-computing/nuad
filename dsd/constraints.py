@@ -3323,214 +3323,300 @@ default_unpaired_probability = 0.95
 default_other_probability = 0.70
 
 class BasePairType(Enum):
-    """ExteriorBasePairType TODO
     """
-    # Notation:
-    #   "#" indicates denotes the ends of a domain. They can either be the end
-    #       of a strand or they could be connected to another domain.
-    #   "]" and "[" indicates 5' ends of strand
-    #   ">" and "<" indicates 3' ends of a strand
-    #   "-" indicates a base (number of these are not important).
-    #   "|" indicates a bases are bound (forming a base pair).
-    #       Any "-" not connected by "|" is unbound
-    #
-    #   Ocassionally, domains will be vertical in the case of overhangs.
-    #   In this case, "-" and "|" have opposite meanings
-    #
-    #   Ex:
-    #     #
-    #     |
-    #     |
-    #     |
-    #     #
-    #
-    #
-    # Formatting:
-    #   Top strands have 5' end on left side and 3' end on right side
-    #   Bottom strand have 3' end on left side and 5' end on right side
-    #
-    # Strand Example:
-    #   strand0: a-b-c-d
-    #   strand1: d*-b*-c*-a*
-    #
-    #               a      b      c      d
-    #   strand0  [-----##-----##-----##----->
-    #             |||||  |||||  |||||  |||||
-    #   strand1  <-----##-----##-----##-----]
-    #               a*     b*     c*     d*
-    #
-    #
-    # Consecutive "#":
-    #   In some cases, extra "#" are needed to to make space for ascii art.
-    #   We consider any consecutive "#"s to be equivalent "##".
-    #   The following is consider equivalent to the example above
-    #
-    #               a       b        c      d
-    #   strand0  [-----###-----####-----##----->
-    #             |||||   |||||    |||||  |||||
-    #   strand1  <-----###-----####-----##-----]
-    #               a*      b*       c*     d*
-    #
-    #   Note that only consecutive "#"s is consider equivalent to "$$".
-    #   The following example is not equivalent to the strands above because
-    #   the "#  #" between b and c are seperated by spaces, so they are
-    #   not equivalent to "##", meaning that b and c neednot be adjacent.
-    #   Note that while b and c need not be adjacent, b* and c* are still
-    #   adjacent because they are seperated by consecutive "#"s with no
-    #   spaces in between.
-    #
-    #               a       b        c      d
-    #   strand0  [-----###-----#  #-----##----->
-    #             |||||   |||||    |||||  |||||
-    #   strand1  <-----###-----####-----##-----]
-    #               a*      b*       c*     d*
-    ###########################################################################
+    Represents different configurations for a base pair and it's immediate
+    neighboring base pairs (or lack thereof).
 
+    **Notation**:
 
-    #                    #-----##-----#
-    #                     |||||  |||||
-    #                    #-----##-----#
-    #                         ^
-    #                         |
-    #                     base pair
-    INTERIOR_TO_STRAND = auto()
-    """TODO: Rewrite all docstrings using Sphinx doc strings
+    * "#" indicates denotes the ends of a domain.
+      They can either be the end of a strand or they could be connected to another domain.
+    * "]" and "[" indicates 5' ends of strand
+    * ">" and "<" indicates 3' ends of a strand
+    * "-" indicates a base (number of these are not important).
+    * "|" indicates a bases are bound (forming a base pair).
+      Any "-" not connected by "|" is unbound
+
+    Ocassionally, domains will be vertical in the case of overhangs.
+    In this case, "-" and "|" have opposite meanings
+
+    Ex:
 
     .. code-block:: none
 
-                c                    d
-        [----------------------|----------->
-        | | | | | | | | | | | | | | | | | |
-        <----------------------|-----------]
-                c*           ^       d*
-                             |
-                         this base pair
+        #
+        |
+        |
+        |
+        #
 
-    
-    TODO: figure out why Sphinx generates error if this line of the docstring is missing
+    **Formatting**:
+
+    * Top strands have 5' end on left side and 3' end on right side
+    * Bottom strand have 3' end on left side and 5' end on right side
+
+    **Strand Example**:
+
+    .. code-block:: none
+
+      strand0: a-b-c-d
+      strand1: d*-b*-c*-a*
+
+                  a      b      c      d
+      strand0  [-----##-----##-----##----->
+                |||||  |||||  |||||  |||||
+      strand1  <-----##-----##-----##-----]
+                  a*     b*     c*     d*
+
+    **Consecutive "#"**:
+    In some cases, extra "#" are needed to to make space for ascii art.
+    We consider any consecutive "#"s to be equivalent "##".
+    The following is consider equivalent to the example above
+
+    .. code-block:: none
+
+                  a       b        c      d
+      strand0  [-----###-----####-----##----->
+                |||||   |||||    |||||  |||||
+      strand1  <-----###-----####-----##-----]
+                  a*      b*       c*     d*
+
+    Note that only consecutive "#"s is consider equivalent to "$$".
+    The following example is not equivalent to the strands above because
+    the "#  #" between b and c are seperated by spaces, so they are
+    not equivalent to "##", meaning that b and c neednot be adjacent.
+    Note that while b and c need not be adjacent, b* and c* are still
+    adjacent because they are seperated by consecutive "#"s with no
+    spaces in between.
+
+    .. code-block:: none
+
+                  a       b        c      d
+      strand0  [-----###-----#  #-----##----->
+                |||||   |||||    |||||  |||||
+      strand1  <-----###-----####-----##-----]
+                  a*      b*       c*     d*
     """
 
 
-    #                    #-----#
-    #                     |||||
-    #                    #-----]
-    #                        ^
-    #                        |
-    #                    base pair
-    #
-    #                       or
-    #
-    #                    #----->
-    #                     |||||
-    #                    #-----#
-    #                        ^
-    #                        |
-    #                    base pair
+    INTERIOR_TO_STRAND = auto()
+    """
+    Base pair is located inside of a strand but not next
+    to a base pair that resides on the end of a strand.
+
+    Similar to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` but usually breathes less.
+
+    .. code-block:: none
+
+        #-----##-----#
+         |||||  |||||
+        #-----##-----#
+             ^
+             |
+         base pair
+
+    """
+
+
     ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()
+    """
+    Base pair is located inside of a strand and next
+    to a base pair that resides on the end of a strand.
 
-    #                    #----->
-    #                     |||||
-    #                    #-----]
-    #                         ^
-    #                         |
-    #                     base pair
+    Similar to :py:attr:`INTERIOR_TO_STRAND` but usually breathes more.
+
+    .. code-block:: none
+
+        #-----#
+         |||||
+        #-----]
+            ^
+            |
+        base pair
+
+    or
+
+    .. code-block:: none
+
+
+        #----->
+         |||||
+        #-----#
+            ^
+            |
+        base pair
+    """
+
+
     BLUNT_END = auto()
+    """
+    Base pair is located at the end of both strands.
 
-    #                    #----->[-----#
-    #                     |||||  |||||
-    #                    #-----##-----#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+        #----->
+         |||||
+        #-----]
+             ^
+             |
+         base pair
+    """
+
+
     NICK_3P = auto()
+    """
+    Base pair is located at a nick involving the 3' end of the strand.
 
-    #                    #-----##-----#
-    #                     |||||  |||||
-    #                    #-----]<-----#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+        #----->[-----#
+         |||||  |||||
+        #-----##-----#
+             ^
+             |
+         base pair
+
+    """
+
+
     NICK_5P = auto()
+    """
+    Base pair is located at a nick involving the 3' end of the strand.
+
+    .. code-block:: none
+
+        #-----##-----#
+         |||||  |||||
+        #-----]<-----#
+             ^
+             |
+         base pair
+    """
 
 
-    #                    #-----##----#
-    #                     |||||
-    #                    #-----]
-    #                         ^
-    #                         |
-    #                     base pair
+
     DANGLE_3P = auto()
+    """
+    Base pair is located at the end of a strand with a dangle on the
+    3' end.
 
-    #                    #----->
-    #                     |||||
-    #                    #-----##----#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+        #-----##----#
+         |||||
+        #-----]
+             ^
+             |
+         base pair
+    """
+
+
     DANGLE_5P = auto()
+    """
+    Base pair is located at the end of a strand with a dangle on the
+    5' end.
 
-    #                    #-----##----#
-    #                     |||||
-    #                    #-----##----#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+        #----->
+         |||||
+        #-----##----#
+             ^
+             |
+         base pair
+    """
+
+
     DANGLE_5P_3P = auto()
+    """
+    Base pair is located with dangle at both the 3' and 5' end.
 
-    #                          #
-    #                          |
-    #                          |
-    #                          |
-    #                          #
-    #                    #-----# #-----#
-    #                     |||||   |||||
-    #                    #-----###-----#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+        #-----##----#
+         |||||
+        #-----##----#
+             ^
+             |
+         base pair
+    """
+
+
     OVERHANG_ON_THIS_STRAND_3P = auto()
+    """
+    Base pair is next to a overhang on the 3' end.
 
-    #                     base pair
-    #                         |
-    #                         v
-    #                    #-----###-----#
-    #                     |||||   |||||
-    #                    #-----# #-----#
-    #                          #
-    #                          |
-    #                          |
-    #                          |
-    #                          #
+    .. code-block:: none
+
+              #
+              |
+              |
+              |
+              #
+        #-----# #-----#
+         |||||   |||||
+        #-----###-----#
+             ^
+             |
+         base pair
+    """
+
     OVERHANG_ON_THIS_STRAND_5P = auto()
+    """
+    Base pair is next to a overhang on the 5' end.
 
+    .. code-block:: none
 
-    #                            #
-    #                            |
-    #                            |
-    #                            |
-    #                            #
-    #                    #-----# #---#
-    #                     |||||   |||
-    #                    #-----###---#
-    #                         ^
-    #                         |
-    #                     base pair
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+              #
+              |
+              |
+              |
+              #
+    """
+
     OVERHANG_ON_ADJACENT_STRAND_3P = auto()
+    """
+    Base pair is located next to an overhang on an adjacent strand.
 
+    .. code-block:: none
 
-    #                     base pair
-    #                         |
-    #                         v
-    #                    #-----###-----#
-    #                     |||||   |||||
-    #                    #-----# #-----#
-    #                            #
-    #                            |
-    #                            |
-    #                            |
-    #                            #
+                #
+                |
+                |
+                |
+                #
+        #-----# #---#
+         |||||   |||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
     OVERHANG_ON_ADJACENT_STRAND_5P = auto()
+    """
+    Base pair is located next to an overhang on an adjacent strand.
 
+    .. code-block:: none
+
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+                #
+                |
+                |
+                |
+                #
+    """
     #                          # #
     #                          | |
     #                          | |
