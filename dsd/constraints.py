@@ -1896,11 +1896,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for fixed_domain in domains:
             num_checks += 1
-            summary = constraint.generate_summary(fixed_domain, False)
             passed = constraint(fixed_domain) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(fixed_domain, False)
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
@@ -1924,11 +1924,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand in strands:
             num_checks += 1
-            summary = constraint.generate_summary(strand, False)
             passed = constraint(strand) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(strand, False)
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
@@ -1953,11 +1953,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for domain1, domain2 in pairs_to_check:
             num_checks += 1
-            summary = constraint.generate_summary((domain1, domain2), False)
             passed = constraint((domain1, domain2)) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary((domain1, domain2), False)
                 line = (f'domains '
                         f'{domain1.name:{max_domain_name_length}}, '
                         f'{domain2.name:{max_domain_name_length}}: '
@@ -1985,11 +1985,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand1, strand2 in pairs_to_check:
             num_checks += 1
-            summary = constraint.generate_summary((strand1, strand2), False)
             passed = constraint((strand1, strand2)) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary((strand1, strand2), False)
                 line = (f'strands '
                         f'{strand1.name:{max_strand_name_length}}, '
                         f'{strand2.name:{max_strand_name_length}}: '
@@ -2054,7 +2054,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
-                # TODO (move summary here for all of the constraints)
                 summary = constraint.generate_summary(strand_complex, False)
                 strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
                 line = (f'strand complex: '
@@ -4492,9 +4491,6 @@ def nupack_4_complex_secondary_structure_constraint(
     if description is None:
         description = ' '.join([str(s) for s in strand_complex_template])
 
-
-    # TODO: Instead of returning boolean, we should take differences between desired probabilities
-    # May take squared differences (if below threshold) and sum them up
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
         bps = _violation_base_pairs(strand_complex)
         err_sq = 0
@@ -4525,10 +4521,6 @@ def nupack_4_complex_secondary_structure_constraint(
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
-        # TODO: only consider one complex, but may be more accurate to include other possible complexes
-        #       NupackSetSpec(max_size=0, include=(nupack_complex,) can be replaced with (nupack_complex,)
-        #       at the moment. But in future, might want to change max_size to nonzero value to compute
-        #       probabilities that take into account other complexes.
         nupack_complex_set = NupackComplexSet(nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
         nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=['pairs'], model=nupack_model)
         pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
