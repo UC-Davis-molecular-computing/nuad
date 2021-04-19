@@ -3582,7 +3582,9 @@ class BasePairType(Enum):
 
     OVERHANG_ON_ADJACENT_STRAND_3P = auto()
     """
-    Base pair is located next to an overhang on an adjacent strand.
+    Base pair 3' end interfaces with an overhang.
+
+    The adjacent base pair type is :py:attr:`OVERHANG_ON_THIS_STRAND_5P`
 
     .. code-block:: none
 
@@ -3601,7 +3603,9 @@ class BasePairType(Enum):
 
     OVERHANG_ON_ADJACENT_STRAND_5P = auto()
     """
-    Base pair is located next to an overhang on an adjacent strand.
+    Base pair 5' end interfaces with an overhang.
+
+    The adjacent base pair type is :py:attr:`OVERHANG_ON_THIS_STRAND_3P`
 
     .. code-block:: none
 
@@ -3617,67 +3621,112 @@ class BasePairType(Enum):
                 |
                 #
     """
-    #                          # #
-    #                          | |
-    #                          | |
-    #                          | |
-    #                          # #
-    #                    #-----# #---#
-    #                     |||||  ||||
-    #                    #-----###---#
-    #                         ^
-    #                         |
-    #                     base pair
+
     OVERHANG_ON_BOTH_STRANDS_3P = auto()
+    """
+    Base pair's 3' end is an overhang and adjacent strand also has an overhang.
 
-    #                     base pair
-    #                         |
-    #                         v
-    #                    #-----###-----#
-    #                     |||||   |||||
-    #                    #-----# #-----#
-    #                          # #
-    #                          | |
-    #                          | |
-    #                          | |
-    #                          # #
+    .. code-block:: none
+
+              # #
+              | |
+              | |
+              | |
+              # #
+        #-----# #---#
+         |||||  ||||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
+
     OVERHANG_ON_BOTH_STRANDS_5P = auto()
+    """
+    Base pair's 5' end is an overhang and adjacent strand also has an overhang.
 
-    #                          # #
-    #                          |-|
-    #                          |-|
-    #                          |-|
-    #                          # #
-    #                    #-----# #---#
-    #                     |||||  ||||
-    #                    #-----###---#
-    #                         ^
-    #                         |
-    #                     base pair
+    .. code-block:: none
+
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+              # #
+              | |
+              | |
+              | |
+              # #
+    """
+
+
     THREE_ARM_JUNCTION = auto()
+    """
+    Base pair is located next to a three-arm-junction.
 
-    # TODO: Currently, this case isn't actually detected
-    #                          # #
-    #                          |-|
-    #                          |-|
-    #                          |-|
-    #                          # #
-    #                    #-----# #-----#
-    #                     |||||   |||||
-    #                    #-----# #-----#
-    #                          # #
-    #                          |-|
-    #                          |-|
-    #                          |-|
-    #                          # #
+    .. code-block:: none
+
+
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+        #-----# #---#
+         |||||  ||||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
+
     FOUR_ARM_JUNCTION = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
 
-    # TODO: Currently, this case isn't actually detected
+    Base pair is located next to a four-arm-junction (e.g. Holliday junction).
+
+    .. code-block:: none
+
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+        #-----# #-----#
+         |||||   |||||
+        #-----# #-----#
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+    """
+
     FIVE_ARM_JUNCTION = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
 
-    OTHER = auto()
+    Base pair is located next to a five-arm-junction.
+    """
 
     UNPAIRED = auto()
+    """
+    Base is unpaired.
+
+    Probabilities specify how unlikely a base is to be paired with another base.
+    """
+
+
+    OTHER = auto()
+    """
+    Other base pair types.
+    """
+
+
 
     def default_pair_probability(self) -> float:
         if self is BasePairType.INTERIOR_TO_STRAND:
