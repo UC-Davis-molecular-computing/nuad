@@ -84,7 +84,6 @@ def waste_strand(gate: int) -> dc.Strand:
 #  s1*   T*        S2*       s2*
 # [==--=====--=============--==>
 def threshold_base_strand(gate1: int, gate2: int) -> dc.Strand:
-    # TODO: account for subdomain for gate1
     d1_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}{COMPLEMENT_SUFFIX}'
 
     d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}{COMPLEMENT_SUFFIX}'
@@ -371,7 +370,6 @@ reporter_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constrai
 f_waste_6_complex = (signal_5_6_strand, reporter_6_base_strand)
 f_waste_6_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=[f_waste_6_complex])
 
-# TODO: Strand Constraint check for 4 G's (don't need to check for 4 C's)
 def four_g_constraint_evaluate(strand: dc.Strand):
     if 'GGGG' in strand.sequence():
         return 1000

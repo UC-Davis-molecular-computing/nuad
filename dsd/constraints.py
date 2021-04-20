@@ -3847,7 +3847,6 @@ class StrandDomainAddress:
     def __repr__(self) -> str:
         return self.__str__() + f' hash: {self.__hash__()}'
 
-
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                                          all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
     # determine which case is at 3'-adjacent to this base pair
@@ -4237,11 +4236,11 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #               domain_3n_addr |-| domain_3n_complementary_addr
                 #                              |-|
                 #                              # v
-                #             domain_addr      #                              adjacent_addr
-                #    #-------------------------#                      [-------------------------------------#
-                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
-                #    #-------------------------########################-------------------------------------#
-                #     complementary_addr                         complementary_5n_addr
+                #             domain_addr      #           adjacent_addr
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_addr                 complementary_5n_addr
                 #
                 #
                 #
@@ -4250,10 +4249,10 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #               domain_3n_addr |-| domain_3n_complementary_addr
                 #                              |-|
                 #                              # ##---------#
-                #             domain_addr      #                            adjacent_addr
-                #    #-------------------------#                      [-------------------------------------#
-                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
-                #    #-------------------------########################-------------------------------------#
+                #             domain_addr      #       adjacent_addr
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
                 #     complementary_addr                                  complementary_5n_addr
                 #
                 #
@@ -4374,6 +4373,24 @@ class _BasePair:
     base_pairing_probability: float
     base_pair_type: BasePairType
 
+BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
+BasePairAddress = Tuple[BaseAddress, BaseAddress]
+
+# TODO: specify base pair in complex 
+# TODO: specify base in complex (for unpaired bases) 
+# Two ways to specify base
+# * global address (NUPACK indexing)
+# * StrandDomainAddress + base offset in that domain (0 means 5', -1 means 3')
+# Base pair is a pair of ^
+# Union[int, Tuple[StrandDomainAddress, int]]
+#
+# Optional parameter for nupack_4_complex_secondary_structure_constraint:
+#   Dictionary for lower_bound
+#     * Dict[BasePairAddress, float]  base_pair_probabilities
+#     * Dict[BaseAddress, float]      base_unpaired_probabilities
+#   Dictionary for upper_bound
+#     * Dict[BasePairAddress, float]  base_pair_probabilities_upper_bound
+#     * Dict[BaseAddress, float]      base_unpaired_probabilities_upper_bound
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
@@ -4381,10 +4398,21 @@ def nupack_4_complex_secondary_structure_constraint(
         # * checking each strand has same number of domains
         # * check each domain's length is the same
         # * same base pair mapping
-        base_pair_probs: Dict[BasePairType, float] = None,
+        # TODO: Documentation, indicate that despite name of this argument, UNPAIRED
+        # can be used to specify probability threshold for unpaired bases.
+        base_pair_prob_by_type: Dict[BasePairType, float] = field(default_factory=dict),
+        # TODO
+        base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = field(default_factory=dict),
+
         # TODO: Docstring for this should mention that they apply to first complex given
-        nonimplicit_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
-        all_base_pairs: Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]] = None,
+        # TODO: mypy and check if BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
+        nonimplicit_base_pairs: Optional[Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]]] = None,
+        all_base_pairs: Optional[Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]]] = None,
+        # TODO
+        base_pair_prob: Dict[BasePairAddress, float] = field(default_factory=dict),
+        base_unpaired_prob: Dict[BaseAddress, float] = field(default_factory=dict),
+        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = field(default_factory=dict),
+        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = field(default_factory=dict),
 
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
@@ -4531,7 +4559,7 @@ def nupack_4_complex_secondary_structure_constraint(
     ## End Input Validation ##
 
     ## Start populating base_pair_probs ##
-    base_type_probability_threshold: Dict[BasePairType, float] = {} if base_pair_probs is None else base_pair_probs.copy()
+    base_type_probability_threshold: Dict[BasePairType, float] = {} if base_pair_prob_by_type is None else base_pair_prob_by_type.copy()
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
