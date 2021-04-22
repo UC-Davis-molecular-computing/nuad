@@ -1,3 +1,5 @@
+from typing import List
+
 import dsd.vienna_nupack as dv
 
 # Test ComplexConstraint evaluate
@@ -25,7 +27,7 @@ non_sub_long_domain_constraints = [
     dc.RestrictBasesConstraint(('A', 'C', 'T')),
     *forbidden_substring_constraints
 ]
-sub_long_domain_constraints = [
+sub_long_domain_constraints: List[dc.NumpyConstraint] = [
     dc.RestrictBasesConstraint(('A', 'C', 'T')),
 ]
 
@@ -49,7 +51,7 @@ def seesaw_signal_strand(gate1: int, gate2: int) -> dc.Strand:
     d1_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}'
     d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}'
     d2_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}'
-    s = dc.Strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f'signal {gate1} {gate2}')
+    s: dc.Strand = dc.Strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f'signal {gate1} {gate2}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
@@ -76,7 +78,7 @@ def gate_base_strand(gate: int) -> dc.Strand:
 def waste_strand(gate: int) -> dc.Strand:
     d = f'{SIGNAL_DOMAIN_PREFIX}{gate}'
     d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}'
-    s = dc.Strand([d_sub, d], name=f'waste {gate}')
+    s: dc.Strand = dc.Strand([d_sub, d], name=f'waste {gate}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     return s
@@ -384,7 +386,7 @@ def four_g_constraint_summary(strand: dc.Strand):
 four_g_constraint = dc.StrandConstraint(description="4GConstraint",
                             short_description="4GConstraint",
                             evaluate=four_g_constraint_evaluate ,
-                            strands=strands,
+                            strands=tuple(strands),
                             summary=four_g_constraint_summary)
 
 
