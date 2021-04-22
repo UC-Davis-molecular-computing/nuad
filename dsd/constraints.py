@@ -3793,9 +3793,7 @@ class StrandDomainAddress:
         idx = -1
         occurences = 0
 
-        itr = range(len(domain_names))
-        if not forward:
-            itr = reversed(itr)
+        itr = iter(range(0, len(domain_names), 1 if forward else -1))
 
         for i in itr:
             if domain_names[i] == domain_str:
@@ -3816,14 +3814,14 @@ class StrandDomainAddress:
     def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
         return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
 
-    def neighbor_5p(self) -> 'StrandDomainAddress':
+    def neighbor_5p(self) -> Optional['StrandDomainAddress']:
         idx = self.domain_idx - 1
         if idx >= 0:
             return StrandDomainAddress(self.strand, idx)
         else:
             return None
 
-    def neighbor_3p(self) -> 'StrandDomainAddress':
+    def neighbor_3p(self) -> Optional['StrandDomainAddress']:
         idx = self.domain_idx + 1
         if idx < len(self.strand.domains):
             return StrandDomainAddress(self.strand, idx)
@@ -3864,8 +3862,8 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
     assert domain_addr in all_bound_domain_addresses
     complementary_addr = all_bound_domain_addresses[domain_addr]
     complementary_5n_addr = complementary_addr.neighbor_5p()
-    adjacent_addr: StrandDomainAddress = None
-    adjacent_5n_addr: StrandDomainAddress = None
+    adjacent_addr: Optional[StrandDomainAddress] = None
+    adjacent_5n_addr: Optional[StrandDomainAddress] = None
 
     # First assume BOTTOM_RIGHT_EMPTY
     #            domain_addr
@@ -4125,7 +4123,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             #                              #-#
             #
             # Variable is None, False, True respectively based on cases above
-            domain_3n_complementary_3n_addr_is_bound: bool = None
+            domain_3n_complementary_3n_addr_is_bound: Optional[bool] = None
             if domain_3n_complementary_3n_addr is not None:
                 domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
 
@@ -4212,15 +4210,15 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 # TODO: Possible case (nick n-arm junction)
                 #
                 #             domain_addr                                   domain_3n_addr
-                #    #-------------------------########################-------------------------------------#
-                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
-                #    #-------------------------#                      #-------------------------------------#
-                #           complementary_addr #                      # domain_3n_complementary_addr
-                #                              #                    # #
-                #                              |                    |-|
-                #                              |                    |-| domain_3n_complementary_3n_addr
-                #                              |                    |-|
-                #                              #                    # #
+                #    #-------------------------########-------------------------------------#
+                #     |||||||||||||||||||||||||        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------#      #-------------------------------------#
+                #           complementary_addr #      # domain_3n_complementary_addr
+                #                              #    # #
+                #                              |    |-|
+                #                              |    |-| domain_3n_complementary_3n_addr
+                #                              |    |-|
+                #                              #    # #
 
                 if domain_3n_complementary_3n_addr_is_bound is None:
                     return BasePairType.OVERHANG_ON_THIS_STRAND_5P
@@ -4318,6 +4316,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
                 #    #-------------------------########################-------------------------------------#
                 #     complementary_addr                         complementary_5n_addr
+                assert adjacent_5n_addr is not None
                 if domain_3n_addr == all_bound_domain_addresses[adjacent_5n_addr]:
                     #                              # #
                     #                              |-|
@@ -4394,13 +4393,9 @@ BasePairAddress = Tuple[BaseAddress, BaseAddress]
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
-        # TODO Check that all complexes follow same motif
-        # * checking each strand has same number of domains
-        # * check each domain's length is the same
-        # * same base pair mapping
         # TODO: Documentation, indicate that despite name of this argument, UNPAIRED
         # can be used to specify probability threshold for unpaired bases.
-        base_pair_prob_by_type: Dict[BasePairType, float] = field(default_factory=dict),
+        base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
         # TODO
         base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = field(default_factory=dict),
 
@@ -4475,7 +4470,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
     for strand in strand_complex_template:
         if type(strand) is not Strand:
-            raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(s)}")
+            raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(strand)}")
 
     for i in range(1, len(strand_complexes)):
         strand_complex = strand_complexes[i]
@@ -4486,21 +4481,21 @@ def nupack_4_complex_secondary_structure_constraint(
                              f"but complex at index 0 contained {len(strand_complex_template)} strands."
                             )
         for s in range(len(strand_complex)):
-            strand: Strand = strand_complex[s]
+            other_strand: Strand = strand_complex[s]
             template_strand: Strand = strand_complex_template[s]
-            if (type(strand) is not Strand):
-                raise ValueError(f"Complex at index {i} contained non-Strand object at index {s}: {type(strand)}")
-            if len(strand.domains) != len(template_strand.domains):
-                raise ValueError(f"Strand {strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
+            if (type(other_strand) is not Strand):
+                raise ValueError(f"Complex at index {i} contained non-Strand object at index {s}: {type(other_strand)}")
+            if len(other_strand.domains) != len(template_strand.domains):
+                raise ValueError(f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
                                  f"({template_strand}). "
-                                 f"Strand {strand} contains {len(strand.domains)} domains but template strand {template_strand} contains "
+                                 f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
                                  f"{len(template_strand.domains)} domains."
                                 )
             for d in range(1, len(strand.domains)):
-                domain_length: Domain = strand.domains[d].length
-                template_domain_length: Domain = template_strand.domains[d].length
+                domain_length: int = other_strand.domains[d].length
+                template_domain_length: int = template_strand.domains[d].length
                 if domain_length != template_domain_length:
-                    raise ValueError(f"Strand {strand} (index {s} of strand_complexes at index {i}) does not match the "
+                    raise ValueError(f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the "
                                      f"provided template ({template_strand}: domain at index {d} is length"
                                      f"{domain_length}, but expected {template_domain_length}.")
 
@@ -4577,12 +4572,12 @@ def nupack_4_complex_secondary_structure_constraint(
             domain_base_index += domain.length
 
             # Get domain_name
-            domain_addr = domain.name
+            domain_name = domain.name
             if domain_idx in strand.starred_domain_indices:
-                domain_addr = domain.starred_name
+                domain_name = domain.starred_name
 
             # Move on to next domain if it was paired via nonimplicit_base_pairs
-            if domain_addr in nonimplicit_base_pairs_domain_names:
+            if domain_name in nonimplicit_base_pairs_domain_names:
                 continue
 
             # populate implicit bounded_domains
@@ -4590,10 +4585,10 @@ def nupack_4_complex_secondary_structure_constraint(
             # Assertions checks that domain_name was not previously seen.
             # This is to check that the non-competition requirement on
             # implicit domains was properly checked earlier in input validation.
-            assert domain_addr not in implicit_seen_domains
-            implicit_seen_domains[domain_addr] = strand_domain_address
+            assert domain_name not in implicit_seen_domains
+            implicit_seen_domains[domain_name] = strand_domain_address
 
-            complementary_domain_name = Domain.complementary_domain_name(domain_addr)
+            complementary_domain_name = Domain.complementary_domain_name(domain_name)
             if complementary_domain_name in implicit_seen_domains:
                 complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
                 all_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
@@ -4654,7 +4649,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
     def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
         bps = _violation_base_pairs(strand_complex)
-        err_sq = 0
+        err_sq = 0.0
         for bp in bps:
             e = base_type_probability_threshold[bp.base_pair_type] - bp.base_pairing_probability
             assert e > 0
