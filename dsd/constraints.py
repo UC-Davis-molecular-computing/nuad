@@ -3298,9 +3298,7 @@ class _AdjacentDuplexType(Enum):
     #                       c*    d*
     TOP_RIGHT_BOUND_OVERHANG = auto()
 
-# TODO(benlee12): Add whatever makes ascii art fixed length (see scadnano python repo)
-# Get sphinx working so that I can test docstrings
-# Ex: https://github.com/UC-Davis-molecular-computing/scadnano-python-package/blob/b6cd6984c66e766b20b5a7a34654d3ca3fba42bf/scadnano/origami_rectangle.py#L64
+# TODO(benlee12): Document this stuff
 
 default_interior_to_strand_probability = 0.98
 default_adjacent_to_exterior_base_pair = 0.95
@@ -4374,6 +4372,7 @@ class _BasePair:
 
 BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
 BasePairAddress = Tuple[BaseAddress, BaseAddress]
+BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 
 # TODO: specify base pair in complex 
 # TODO: specify base in complex (for unpaired bases) 
@@ -4401,8 +4400,8 @@ def nupack_4_complex_secondary_structure_constraint(
 
         # TODO: Docstring for this should mention that they apply to first complex given
         # TODO: mypy and check if BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
-        nonimplicit_base_pairs: Optional[Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]]] = None,
-        all_base_pairs: Optional[Iterable[Tuple[StrandDomainAddress, StrandDomainAddress]]] = None,
+        nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
+        all_base_pairs: Optional[Iterable[BoundDomains]] = None,
         # TODO
         base_pair_prob: Dict[BasePairAddress, float] = field(default_factory=dict),
         base_unpaired_prob: Dict[BaseAddress, float] = field(default_factory=dict),
