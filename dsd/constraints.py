@@ -3319,6 +3319,9 @@ default_four_arm_junction_probability = 0.84
 default_five_arm_junction_probability = 0.77
 default_unpaired_probability = 0.95
 default_other_probability = 0.70
+# TODO: Detect mismatch and bulge loop
+default_mismatch_probability = 0.76
+default_bulge_loop_probability = 0.65
 
 class BasePairType(Enum):
     """
