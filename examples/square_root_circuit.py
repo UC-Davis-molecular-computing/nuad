@@ -48,6 +48,9 @@ def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int, inputs: L
 def reporter_gate(gate_name: int, input: int) -> SeesawGate:
     return SeesawGate(gate_name=gate_name, inputs=[input], has_threshold=True, has_fuel=False, is_reporter=True)
 
+def input_gate(gate_name: int, input) -> SeesawGate:
+    return SeesawGate(gate_name=gate_name, inputs=[input], has_threshold=True, has_fuel=True)
+
 def convert_seesaw_gates_to_strands_and_constraints(seesaw_gates: List[SeesawGate]) -> Tuple[List[dc.Strand], List[dc.ComplexConstraint]]:
     strands: List[dc.Strand] = []
     for seesaw_gate in seesaw_gates:
@@ -75,33 +78,26 @@ seesaw_gates = [
     *and_or_gate(integrating_gate_name=53, amplifying_gate_name=5, inputs=[18, 22]),
     reporter_gate(gate_name=6, input=5),
     *and_or_gate(integrating_gate_name=20, amplifying_gate_name=8, inputs=[35, 38]),
-    SeesawGate(gate_name=13, inputs=[26]),
-    SeesawGate(gate_name=26, inputs=[33, 37]),
-    SeesawGate(gate_name=18, inputs=[34]),
-    SeesawGate(gate_name=21, inputs=[36]),
-    SeesawGate(gate_name=22, inputs=[39]),
-    SeesawGate(gate_name=23, inputs=[1]),
-    SeesawGate(gate_name=24, inputs=[13]),
-    SeesawGate(gate_name=25, inputs=[8]),
-    SeesawGate(gate_name=27, inputs=[40]),
-    SeesawGate(gate_name=28, inputs=[41]),
-    SeesawGate(gate_name=29, inputs=[42]),
-    SeesawGate(gate_name=30, inputs=[43]),
-    SeesawGate(gate_name=31, inputs=[44]),
-    SeesawGate(gate_name=33, inputs=[49]),
-    SeesawGate(gate_name=34, inputs=[28, 33, 37]),
-    SeesawGate(gate_name=35, inputs=[50]),
-    SeesawGate(gate_name=36, inputs=[29, 35, 38]),
-    SeesawGate(gate_name=37, inputs=[51]),
-    SeesawGate(gate_name=38, inputs=[52]),
-    SeesawGate(gate_name=39, inputs=[29, 31]),
-    SeesawGate(gate_name=40, inputs=[30, 28]),
-    SeesawGate(gate_name=41, inputs=[46, 48]),
-    SeesawGate(gate_name=42, inputs=[45, 47]),
-    SeesawGate(gate_name=43, inputs=[33, 38]),
-    SeesawGate(gate_name=44, inputs=[35, 37]),
+    *and_or_gate(integrating_gate_name=26, amplifying_gate_name=13, inputs=[33, 37]),
+    *and_or_gate(integrating_gate_name=34, amplifying_gate_name=18, inputs=[28, 33, 37]),
+    *and_or_gate(integrating_gate_name=36, amplifying_gate_name=21, inputs=[29, 35, 38]),
+    reporter_gate(gate_name=23, input=1),
+    reporter_gate(gate_name=24, input=13),
+    reporter_gate(gate_name=25, input=8),
+    *and_or_gate(integrating_gate_name=39, amplifying_gate_name=22, inputs=[29, 31]),
+    *and_or_gate(integrating_gate_name=40, amplifying_gate_name=27, inputs=[30, 28]),
+    *and_or_gate(integrating_gate_name=41, amplifying_gate_name=28, inputs=[46, 48]),
+    *and_or_gate(integrating_gate_name=42, amplifying_gate_name=29, inputs=[45, 47]),
+    *and_or_gate(integrating_gate_name=43, amplifying_gate_name=30, inputs=[33, 38]),
+    *and_or_gate(integrating_gate_name=44, amplifying_gate_name=31, inputs=[35, 37]),
+    input_gate(gate_name=33, input=49),
+    input_gate(gate_name=35, input=50),
+    input_gate(gate_name=37, input=51),
+    input_gate(gate_name=38, input=52),
 ]
 
+print(len(seesaw_gates))
+exit
 
 
 strands: List[dc.Strand] = []
