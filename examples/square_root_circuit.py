@@ -289,7 +289,7 @@ seesaw_gates = [
 seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
 strands = seesaw_circuit.strands
 
-for s in strands:
+for s in sorted(strands, key=lambda s: s.name):
     print(s)
 exit(0)
 
