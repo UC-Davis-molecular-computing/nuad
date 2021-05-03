@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import List, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Tuple
 
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
@@ -21,6 +21,43 @@ def four_g_constraint(strand: List[dc.Strand]) -> dc.StrandConstraint:
                                 evaluate=four_g_constraint_evaluate ,
                                 strands=tuple(strands),
                                 summary=four_g_constraint_summary)
+
+
+@dataclass
+class SeesawCircuit:
+    """Class for keeping track of a seesaw circuit and its DNA representation."""
+    seesaw_gates: List['SeesawGate']
+    strands: List[dc.Strand] = field(init=False)
+    constraints: List[dc.ComplexConstraint] = field(init=False)
+
+    def __post_init__(self) -> None:
+        signal_strands: Dict[Tuple[int, int], dc.Strand] = {}
+        gate_base_strands: Dict[int, dc.Strand] = {}
+        threshold_base_strands: Dict[Tuple[int, int], dc.Strand] = {}
+        waste_strands: Dict[int, dc.Strand] = {}
+        reporter_base_strands: Dict[int, dc.Strand] = {}
+
+        input_gate_complexes: List[Tuple[dc.Strand, ...]] = []
+        output_gate_complexes: List[Tuple[dc.Strand, ...]] = []
+        threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
+        threshold_signal_complexes: List[Tuple[dc.Strand, ...]] = []
+        reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
+        reporter_signal_complexes: List[Tuple[dc.Strand, ...]] = []
+
+        self.strands = (list(signal_strands.values())
+                        + list(gate_base_strands.values())
+                        + list(threshold_base_strands.values())
+                        + list(waste_strands.values())
+                        + list(reporter_base_strands.values()))
+        self.constraints = [dc.nupack_4_complex_secondary_structure_constraint(strand_complexes=cs) for cs in [
+            input_gate_complexes,
+            output_gate_complexes,
+            threshold_waste_complexes,
+            threshold_signal_complexes,
+            reporter_waste_complexes,
+            reporter_signal_complexes,
+        ]]
+
 
 @dataclass(frozen=True)
 class SeesawGate:
@@ -51,28 +88,6 @@ def reporter_gate(gate_name: int, input: int) -> SeesawGate:
 def input_gate(gate_name: int, input) -> SeesawGate:
     return SeesawGate(gate_name=gate_name, inputs=[input], has_threshold=True, has_fuel=True)
 
-def convert_seesaw_gates_to_strands_and_constraints(seesaw_gates: List[SeesawGate]) -> Tuple[List[dc.Strand], List[dc.ComplexConstraint]]:
-    strands: List[dc.Strand] = []
-    for seesaw_gate in seesaw_gates:
-        strands += seesaw_gate.get_strands()
-
-    input_gate_cssc: dc.ComplexConstraint
-    output_gate_cssc: dc.ComplexConstraint
-    threshold_waste_cssc: dc.ComplexConstraint
-    threshold_signal_cssc: dc.ComplexConstraint
-    reporter_waste_cssc: dc.ComplexConstraint
-    reporter_signal_cssc: dc.ComplexConstraint
-
-    constraints = [
-        input_gate_cssc,
-        output_gate_cssc,
-        threshold_waste_cssc,
-        threshold_signal_cssc,
-        reporter_waste_cssc,
-        reporter_signal_cssc,
-    ]
-    return (strands, constraints)
-
 seesaw_gates = [
     *and_or_gate(integrating_gate_name=10, amplifying_gate_name=1, inputs=[21, 27]),
     *and_or_gate(integrating_gate_name=53, amplifying_gate_name=5, inputs=[18, 22]),
@@ -96,18 +111,12 @@ seesaw_gates = [
     input_gate(gate_name=38, input=52),
 ]
 
-print(len(seesaw_gates))
-exit
 
-
-strands: List[dc.Strand] = []
-complex_constraints: List[dc.ComplexConstraint] = []
-
-(s, c) = convert_seesaw_gates_to_strands_and_constraints(seesaw_gates)
-
+seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
+strands = seesaw_circuit.strands
 
 design = dc.Design(strands=strands,
-                   complex_constraints=complex_constraints,
+                   complex_constraints=seesaw_circuit.constraints,
                    strand_constraints=[four_g_constraint(strands)],
                   )
 
