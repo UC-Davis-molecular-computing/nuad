@@ -122,6 +122,32 @@ def fuel_strand(gate: int) -> dc.Strand:
     return signal_strand(gate3p=gate, gate5p=FUEL_DOMAIN, name=f'fuel {gate}')
 
 
+def gate_base_strand(gate: int) -> dc.Strand:
+    """Returns a gate base strand with recognition domain `gate`.
+
+    .. code-block:: none
+
+           T*      S{gate}  s{gate}  T*
+           |          |        |     |
+        [=====--=============--==--=====>
+
+    :param gate: Gate to be identified by the recognition domain
+    :type gate: int
+    :return: Gate base strand
+    :rtype: dc.Strand
+    """
+    dsup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
+    dsub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
+    s: dc.Strand = dc.Strand(
+        [TOEHOLD_COMPLEMENT, dsup, dsub, TOEHOLD_COMPLEMENT],
+        name=f'gate base {gate}')
+    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
+    s.domains[1].pool = SUP_REG_DOMAIN_POOL
+    s.domains[2].pool = SUB_REG_DOMAIN_POOL
+    s.domains[3].pool = TOEHOLD_DOMAIN_POOL
+    return s
+
+
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA
     strand sequence.
@@ -215,6 +241,9 @@ class SeesawCircuit:
 
         for gate in gates_with_fuel:
             fuel_strands[gate] = fuel_strand(gate)
+
+        for gate in all_gates:
+            gate_base_strands[gate] = gate_base_strand(gate)
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
