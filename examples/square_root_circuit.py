@@ -43,25 +43,31 @@ sup_reg_domain_constraints = [
     three_letter_code_constraint
 ]
 SUP_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'SUP_REG_DOMAIN_POOL', SUP_REG_DOMAIN_LENGTH, numpy_constraints=sup_reg_domain_constraints)
+    'SUP_REG_DOMAIN_POOL', SUP_REG_DOMAIN_LENGTH,
+    numpy_constraints=sup_reg_domain_constraints)
 
 sub_reg_domain_constraints: List[dc.NumpyConstraint] = [
     three_letter_code_constraint
 ]
 SUB_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH, numpy_constraints=sub_reg_domain_constraints)
+    'SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH,
+    numpy_constraints=sub_reg_domain_constraints)
 
 toehold_domain_contraints: List[dc.NumpyConstraint] = [
     no_gggg_constraint,
 ]
 TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, numpy_constraints=toehold_domain_contraints)
+    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH,
+    numpy_constraints=toehold_domain_contraints)
 
 FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
 
 
-def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str], name: str = '') -> dc.Strand:
+def signal_strand(
+        gate3p: Union[int, str],
+        gate5p: Union[int, str],
+        name: str = '') -> dc.Strand:
     """Returns a signal strand with recognition domains
     gate3p and gate5p on the 3' and 5' respectively
 
@@ -71,9 +77,11 @@ def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str], name: str = 
             |           |     |          |         |
         <=============--==--=====--=============--==]
 
-    :param gate3p: Gate to be identified by the recognition domain on the 3' end
+    :param gate3p: Gate to be identified by the recognition domain on the 3'
+                   end
     :type gate3p: Union[int, str]
-    :param gate5p: Gate to be identified by the recognition domain on the 5' end
+    :param gate5p: Gate to be identified by the recognition domain on the 5'
+                   end
     :type gate5p: Union[int, str]
     :param name: Name of the strand, defaults to 'signal {gate3p} {gate5p}'
     :type name: str, optional
@@ -115,8 +123,8 @@ def fuel_strand(gate: int) -> dc.Strand:
 
 
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
-    """Returns a StrandConstraint that prevents a run of four Gs on a DNA strand
-    sequence.
+    """Returns a StrandConstraint that prevents a run of four Gs on a DNA
+    strand sequence.
 
     :param strands: List of strands to check
     :type strands: List[dc.Strand]
@@ -130,7 +138,11 @@ def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
             return 0
 
     def gggg_constraint_summary(strand: dc.Strand):
-        violation_str = "" if 'GGGG' not in strand.sequence() else "** violation**"
+        violation_str: str
+        if 'GGGG' not in strand.sequence():
+            violation_str = ''
+        else:
+            violation_str = "** violation**"
         return f"{strand.name}: {strand.sequence()}{violation_str}"
 
     return dc.StrandConstraint(description="GGGGConstraint",
@@ -142,7 +154,8 @@ def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
 
 @dataclass
 class SeesawCircuit:
-    """Class for keeping track of a seesaw circuit and its DNA representation."""
+    """Class for keeping track of a seesaw circuit and its DNA representation.
+    """
     seesaw_gates: List['SeesawGate']
     strands: List[dc.Strand] = field(init=False)
     constraints: List[dc.ComplexConstraint] = field(init=False)
@@ -239,9 +252,10 @@ class SeesawGate:
         raise NotImplemented
 
 
-def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int, inputs: List[int]) -> Tuple[SeesawGate, SeesawGate]:
-    """Returns two SeesawGate objects (the integrating gate and amplifying gate) that
-    implements the AND or OR gate
+def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int,
+                inputs: List[int]) -> Tuple[SeesawGate, SeesawGate]:
+    """Returns two SeesawGate objects (the integrating gate and amplifying
+    gate) that implements the AND or OR gate
 
     :param integrating_gate_name: Name for integrating gate
     :type integrating_gate_name: int
@@ -253,9 +267,11 @@ def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int, inputs: L
     :rtype: Tuple[SeesawGate, SeesawGate]
     """
     integrating_gate = SeesawGate(
-        gate_name=integrating_gate_name, inputs=inputs, has_threshold=False, has_fuel=False)
-    amplifying_gate = SeesawGate(gate_name=amplifying_gate_name, inputs=[
-                                 integrating_gate_name], has_threshold=True, has_fuel=True)
+        gate_name=integrating_gate_name, inputs=inputs, has_threshold=False,
+        has_fuel=False)
+    amplifying_gate = SeesawGate(
+        gate_name=amplifying_gate_name, inputs=[integrating_gate_name],
+        has_threshold=True, has_fuel=True)
     return (integrating_gate, amplifying_gate)
 
 
@@ -269,7 +285,9 @@ def reporter_gate(gate_name: int, input: int) -> SeesawGate:
     :return: SeesawGate for a reporter
     :rtype: SeesawGate
     """
-    return SeesawGate(gate_name=gate_name, inputs=[input], has_threshold=True, has_fuel=False, is_reporter=True)
+    return SeesawGate(
+        gate_name=gate_name, inputs=[input],
+        has_threshold=True, has_fuel=False, is_reporter=True)
 
 
 def input_gate(gate_name: int, input: int) -> SeesawGate:
@@ -282,7 +300,9 @@ def input_gate(gate_name: int, input: int) -> SeesawGate:
     :return: SeesawGate
     :rtype: SeesawGate
     """
-    return SeesawGate(gate_name=gate_name, inputs=[input], has_threshold=True, has_fuel=True)
+    return SeesawGate(
+        gate_name=gate_name, inputs=[input],
+        has_threshold=True, has_fuel=True)
 
 
 seesaw_gates = [
