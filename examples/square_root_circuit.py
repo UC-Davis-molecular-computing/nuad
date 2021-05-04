@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
@@ -19,8 +19,8 @@ import dsd.constraints as dc
 #        sup-domain  sub-domain
 #           |         |
 # 3'--=============--==--5'
-REG_DOMAIN_PREFIX = 'S'
-REG_DOMAIN_SUB_PREFIX = REG_DOMAIN_PREFIX.lower()
+SUP_REG_DOMAIN_PREFIX = 'S'
+SUB_REG_DOMAIN_PREFIX = SUP_REG_DOMAIN_PREFIX.lower()
 REG_DOMAIN_LENGTH = 15
 SUB_REG_DOMAIN_LENGTH = 2
 SUP_REG_DOMAIN_LENGTH = REG_DOMAIN_LENGTH - SUB_REG_DOMAIN_LENGTH
@@ -29,6 +29,9 @@ SUP_REG_DOMAIN_LENGTH = REG_DOMAIN_LENGTH - SUB_REG_DOMAIN_LENGTH
 TOEHOLD_DOMAIN = 'T'
 TOEHOLD_COMPLEMENT = f'{TOEHOLD_DOMAIN}*'
 TOEHOLD_LENGTH = 5
+
+# Constants -- Fuel domain
+FUEL_DOMAIN = 'f'
 
 # NumpyConstraints
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
@@ -51,8 +54,9 @@ toehold_domain_contraints: List[dc.NumpyConstraint] = [
 ]
 TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, numpy_constraints=toehold_domain_contraints)
 
+FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
 
-def signal_strand(gate3p: int, gate5p: int) -> dc.Strand:
+def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str], name: str = '') -> dc.Strand:
     """Returns a signal strand with recognition domains
     gate3p and gate5p on the 3' and 5' respectively
 
@@ -63,17 +67,21 @@ def signal_strand(gate3p: int, gate5p: int) -> dc.Strand:
         <=============--==--=====--=============--==]
 
     :param gate3p: Gate to be identified by the recognition domain on the 3' end
-    :type gate3p: int
+    :type gate3p: Union[int, str]
     :param gate5p: Gate to be identified by the recognition domain on the 5' end
-    :type gate5p: int
+    :type gate5p: Union[int, str]
+    :param name: Name of the strand, defaults to 'signal {gate3p} {gate5p}'
+    :type name: str, optional
     :return: Strand
     :rtype: dc.Strand
     """
-    d3p_sup = f'{REG_DOMAIN_PREFIX}{gate3p}'
-    d3p_sub = f'{REG_DOMAIN_SUB_PREFIX}{gate3p}'
-    d5p_sup = f'{REG_DOMAIN_PREFIX}{gate5p}'
-    d5p_sub = f'{REG_DOMAIN_SUB_PREFIX}{gate5p}'
-    s: dc.Strand = dc.Strand([d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=f'signal {gate3p} {gate5p}')
+    d3p_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate3p}'
+    d3p_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate3p}'
+    d5p_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate5p}'
+    d5p_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate5p}'
+    if name == '':
+        name = f'signal {gate3p} {gate5p}'
+    s: dc.Strand = dc.Strand([d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
     s.domains[0].pool = SUB_REG_DOMAIN_POOL
     s.domains[1].pool = SUP_REG_DOMAIN_POOL
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
@@ -81,6 +89,24 @@ def signal_strand(gate3p: int, gate5p: int) -> dc.Strand:
     s.domains[4].pool = SUP_REG_DOMAIN_POOL
 
     return s
+
+
+def fuel_strand(gate: int) -> dc.Strand:
+    """Returns a fuel strand with recognition domain `gate`.
+
+    .. code-block:: none
+
+          S{g3p}      s{g3p}  T         Sf         sf
+            |           |     |          |         |
+        <=============--==--=====--=============--==]
+
+    :param gate: The name of the gate that this fuel strand will fuel.
+    :type gate: int
+    :return: Fuel strand
+    :rtype: dc.Strand
+    """
+    return signal_strand(gate3p=gate, gate5p=FUEL_DOMAIN, name=f'fuel {gate}')
+
 
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA strand
@@ -132,10 +158,10 @@ class SeesawCircuit:
 
         # Set of all input, gate pairs
         signal_strand_gates: Set[Tuple[int, int]] = set()
-        # Set of all gates
-        all_gates: Set[int] = set()
         # Set of all gates with fuel
         gates_with_fuel: Set[int] = set()
+        # Set of all gates
+        all_gates: Set[int] = set()
         # Set of all gates with threshold
         gates_with_threshold: Set[int] = set()
         # Set of all reporter gates
@@ -167,6 +193,9 @@ class SeesawCircuit:
 
         for (input, gate) in signal_strand_gates:
             signal_strands[(input, gate)] = signal_strand(input, gate)
+
+        for gate in gates_with_fuel:
+            fuel_strands[gate] = fuel_strand(gate)
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
