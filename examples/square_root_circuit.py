@@ -178,6 +178,29 @@ def threshold_base_strand(input: int, gate: int) -> dc.Strand:
     return s
 
 
+def waste_strand(gate: int) -> dc.Strand:
+    """Returns a waste strand for a thresholding/reporting reaction involving
+    the seesaw gate labeled `gate`
+
+    .. code-block:: none
+
+            S{gate}   s{gate}
+               |        |
+        <=============--==]
+
+    :param gate: Name of gate
+    :type gate: int
+    :return: Waste strand
+    :rtype: dc.Strand
+    """
+    d_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}'
+    d_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}'
+    s: dc.Strand = dc.Strand([d_sub, d_sup], name=f'waste {gate}')
+    s.domains[0].pool = SUB_REG_DOMAIN_POOL
+    s.domains[1].pool = SUP_REG_DOMAIN_POOL
+    return s
+
+
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA
     strand sequence.
@@ -238,7 +261,9 @@ class SeesawCircuit:
         # Set of all gates
         all_gates: Set[int] = set()
         # Set of all input, gate pairs with threshold
-        gates_with_threshold: Set[Tuple[int, int]] = set()
+        input_gates_with_threshold: Set[Tuple[int, int]] = set()
+        # Set of all gates with threshold
+        gates_with_threshold: Set[int] = set()
         # Set of all reporter gates
         all_reporter_gates: Set[int] = set()
 
@@ -255,8 +280,12 @@ class SeesawCircuit:
                 signal_strand_gates.add((input, gate_name))
 
                 if seesaw_gate.has_threshold:
-                    assert gate_name not in gates_with_threshold
-                    gates_with_threshold.add((input, gate_name))
+                    assert gate_name not in input_gates_with_threshold
+                    input_gates_with_threshold.add((input, gate_name))
+
+            if seesaw_gate.has_threshold:
+                assert gate_name not in gates_with_threshold
+                gates_with_threshold.add(gate_name)
 
             if seesaw_gate.has_fuel:
                 assert gate_name not in gates_with_fuel
@@ -264,6 +293,7 @@ class SeesawCircuit:
 
             if seesaw_gate.is_reporter:
                 assert gate_name not in all_reporter_gates
+                assert seesaw_gate.has_threshold
                 all_reporter_gates.add(gate_name)
 
         signal_strands = {(input, gate): signal_strand(input, gate)
@@ -275,7 +305,10 @@ class SeesawCircuit:
                              for gate in all_gates}
 
         threshold_base_strands = {(input, gate): threshold_base_strand(
-            input, gate) for input, gate in gates_with_threshold}
+            input, gate) for input, gate in input_gates_with_threshold}
+
+        waste_strands = {gate: waste_strand(gate)
+                         for gate in gates_with_threshold}
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
