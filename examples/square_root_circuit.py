@@ -127,7 +127,7 @@ def gate_base_strand(gate: int) -> dc.Strand:
 
     .. code-block:: none
 
-           T*      S{gate}  s{gate}  T*
+           T*      S{gate}* s{gate}* T*
            |          |        |     |
         [=====--=============--==--=====>
 
@@ -141,6 +141,36 @@ def gate_base_strand(gate: int) -> dc.Strand:
     s: dc.Strand = dc.Strand(
         [TOEHOLD_COMPLEMENT, dsup, dsub, TOEHOLD_COMPLEMENT],
         name=f'gate base {gate}')
+    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
+    s.domains[1].pool = SUP_REG_DOMAIN_POOL
+    s.domains[2].pool = SUB_REG_DOMAIN_POOL
+    s.domains[3].pool = TOEHOLD_DOMAIN_POOL
+    return s
+
+
+def threshold_base_strand(input: int, gate: int) -> dc.Strand:
+    """Returns a threshold base strand for seesaw gate labeled `gate` that
+    thresholds `input`
+
+    .. code-block:: none
+
+     s{input}* T*      S{gate}*    s{gate}*
+         |     |          |        |
+        [==--=====--=============--==>
+
+    :param input: Name of input that is being thresholded
+    :type input: int
+    :param gate: Name of gate
+    :type gate: int
+    :return: Threshold base strand
+    :rtype: dc.Strand
+    """
+    d_input_sub = f'{SUB_REG_DOMAIN_PREFIX}{input}*'
+    d_gate_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
+    d_gate_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
+    s: dc.Strand = dc.Strand(
+        [d_input_sub, TOEHOLD_COMPLEMENT, d_gate_sup, d_gate_sub],
+        name=f'threshold base {input} {gate}')
     s.domains[0].pool = TOEHOLD_DOMAIN_POOL
     s.domains[1].pool = SUP_REG_DOMAIN_POOL
     s.domains[2].pool = SUB_REG_DOMAIN_POOL
@@ -207,8 +237,8 @@ class SeesawCircuit:
         gates_with_fuel: Set[int] = set()
         # Set of all gates
         all_gates: Set[int] = set()
-        # Set of all gates with threshold
-        gates_with_threshold: Set[int] = set()
+        # Set of all input, gate pairs with threshold
+        gates_with_threshold: Set[Tuple[int, int]] = set()
         # Set of all reporter gates
         all_reporter_gates: Set[int] = set()
 
@@ -224,19 +254,19 @@ class SeesawCircuit:
                 assert (input, gate_name) not in signal_strand_gates
                 signal_strand_gates.add((input, gate_name))
 
+                if seesaw_gate.has_threshold:
+                    assert gate_name not in gates_with_threshold
+                    gates_with_threshold.add((input, gate_name))
+
             if seesaw_gate.has_fuel:
                 assert gate_name not in gates_with_fuel
                 gates_with_fuel.add(gate_name)
-
-            if seesaw_gate.has_threshold:
-                assert gate_name not in gates_with_threshold
-                gates_with_threshold.add(gate_name)
 
             if seesaw_gate.is_reporter:
                 assert gate_name not in all_reporter_gates
                 all_reporter_gates.add(gate_name)
 
-        for (input, gate) in signal_strand_gates:
+        for input, gate in signal_strand_gates:
             signal_strands[(input, gate)] = signal_strand(input, gate)
 
         for gate in gates_with_fuel:
@@ -244,6 +274,10 @@ class SeesawCircuit:
 
         for gate in all_gates:
             gate_base_strands[gate] = gate_base_strand(gate)
+
+        for input, gate in gates_with_threshold:
+            threshold_base_strands[(input, gate)
+                                   ] = threshold_base_strand(input, gate)
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
