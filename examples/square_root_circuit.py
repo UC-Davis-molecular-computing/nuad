@@ -42,19 +42,24 @@ sup_reg_domain_constraints = [
     no_gggg_constraint,
     three_letter_code_constraint
 ]
-SUP_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('SUP_REG_DOMAIN_POOL',SUP_REG_DOMAIN_LENGTH, numpy_constraints=sup_reg_domain_constraints)
+SUP_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
+    'SUP_REG_DOMAIN_POOL', SUP_REG_DOMAIN_LENGTH, numpy_constraints=sup_reg_domain_constraints)
 
 sub_reg_domain_constraints: List[dc.NumpyConstraint] = [
     three_letter_code_constraint
 ]
-SUB_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH, numpy_constraints=sub_reg_domain_constraints)
+SUB_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
+    'SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH, numpy_constraints=sub_reg_domain_constraints)
 
 toehold_domain_contraints: List[dc.NumpyConstraint] = [
     no_gggg_constraint,
 ]
-TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, numpy_constraints=toehold_domain_contraints)
+TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
+    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, numpy_constraints=toehold_domain_contraints)
 
-FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool('FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
+FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
+    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
+
 
 def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str], name: str = '') -> dc.Strand:
     """Returns a signal strand with recognition domains
@@ -81,7 +86,8 @@ def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str], name: str = 
     d5p_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate5p}'
     if name == '':
         name = f'signal {gate3p} {gate5p}'
-    s: dc.Strand = dc.Strand([d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
+    s: dc.Strand = dc.Strand(
+        [d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
     s.domains[0].pool = SUB_REG_DOMAIN_POOL
     s.domains[1].pool = SUP_REG_DOMAIN_POOL
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
