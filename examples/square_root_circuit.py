@@ -266,18 +266,16 @@ class SeesawCircuit:
                 assert gate_name not in all_reporter_gates
                 all_reporter_gates.add(gate_name)
 
-        for input, gate in signal_strand_gates:
-            signal_strands[(input, gate)] = signal_strand(input, gate)
+        signal_strands = {(input, gate): signal_strand(input, gate)
+                          for input, gate in signal_strand_gates}
 
-        for gate in gates_with_fuel:
-            fuel_strands[gate] = fuel_strand(gate)
+        fuel_strands = {gate: fuel_strand(gate) for gate in gates_with_fuel}
 
-        for gate in all_gates:
-            gate_base_strands[gate] = gate_base_strand(gate)
+        gate_base_strands = {gate: gate_base_strand(gate)
+                             for gate in all_gates}
 
-        for input, gate in gates_with_threshold:
-            threshold_base_strands[(input, gate)
-                                   ] = threshold_base_strand(input, gate)
+        threshold_base_strands = {(input, gate): threshold_base_strand(
+            input, gate) for input, gate in gates_with_threshold}
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
