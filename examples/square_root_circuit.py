@@ -427,58 +427,61 @@ def input_gate(gate_name: int, input: int) -> SeesawGate:
         has_threshold=True, has_fuel=True)
 
 
-seesaw_gates = [
-    *and_or_gate(integrating_gate_name=10,
-                 amplifying_gate_name=1, inputs=[21, 27]),
-    *and_or_gate(integrating_gate_name=53,
-                 amplifying_gate_name=5, inputs=[18, 22]),
-    reporter_gate(gate_name=6, input=5),
-    *and_or_gate(integrating_gate_name=20,
-                 amplifying_gate_name=8, inputs=[35, 38]),
-    *and_or_gate(integrating_gate_name=26,
-                 amplifying_gate_name=13, inputs=[33, 37]),
-    *and_or_gate(integrating_gate_name=34,
-                 amplifying_gate_name=18, inputs=[28, 33, 37]),
-    *and_or_gate(integrating_gate_name=36,
-                 amplifying_gate_name=21, inputs=[29, 35, 38]),
-    reporter_gate(gate_name=23, input=1),
-    reporter_gate(gate_name=24, input=13),
-    reporter_gate(gate_name=25, input=8),
-    *and_or_gate(integrating_gate_name=39,
-                 amplifying_gate_name=22, inputs=[29, 31]),
-    *and_or_gate(integrating_gate_name=40,
-                 amplifying_gate_name=27, inputs=[30, 28]),
-    *and_or_gate(integrating_gate_name=41,
-                 amplifying_gate_name=28, inputs=[46, 48]),
-    *and_or_gate(integrating_gate_name=42,
-                 amplifying_gate_name=29, inputs=[45, 47]),
-    *and_or_gate(integrating_gate_name=43,
-                 amplifying_gate_name=30, inputs=[33, 38]),
-    *and_or_gate(integrating_gate_name=44,
-                 amplifying_gate_name=31, inputs=[35, 37]),
-    input_gate(gate_name=33, input=49),
-    input_gate(gate_name=35, input=50),
-    input_gate(gate_name=37, input=51),
-    input_gate(gate_name=38, input=52),
-]
+def main() -> None:
+    seesaw_gates = [
+        *and_or_gate(integrating_gate_name=10,
+                     amplifying_gate_name=1, inputs=[21, 27]),
+        *and_or_gate(integrating_gate_name=53,
+                     amplifying_gate_name=5, inputs=[18, 22]),
+        reporter_gate(gate_name=6, input=5),
+        *and_or_gate(integrating_gate_name=20,
+                     amplifying_gate_name=8, inputs=[35, 38]),
+        *and_or_gate(integrating_gate_name=26,
+                     amplifying_gate_name=13, inputs=[33, 37]),
+        *and_or_gate(integrating_gate_name=34,
+                     amplifying_gate_name=18, inputs=[28, 33, 37]),
+        *and_or_gate(integrating_gate_name=36,
+                     amplifying_gate_name=21, inputs=[29, 35, 38]),
+        reporter_gate(gate_name=23, input=1),
+        reporter_gate(gate_name=24, input=13),
+        reporter_gate(gate_name=25, input=8),
+        *and_or_gate(integrating_gate_name=39,
+                     amplifying_gate_name=22, inputs=[29, 31]),
+        *and_or_gate(integrating_gate_name=40,
+                     amplifying_gate_name=27, inputs=[30, 28]),
+        *and_or_gate(integrating_gate_name=41,
+                     amplifying_gate_name=28, inputs=[46, 48]),
+        *and_or_gate(integrating_gate_name=42,
+                     amplifying_gate_name=29, inputs=[45, 47]),
+        *and_or_gate(integrating_gate_name=43,
+                     amplifying_gate_name=30, inputs=[33, 38]),
+        *and_or_gate(integrating_gate_name=44,
+                     amplifying_gate_name=31, inputs=[35, 37]),
+        input_gate(gate_name=33, input=49),
+        input_gate(gate_name=35, input=50),
+        input_gate(gate_name=37, input=51),
+        input_gate(gate_name=38, input=52),
+    ]
+
+    seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
+    strands = seesaw_circuit.strands
+
+    for s in sorted(strands, key=lambda s: s.name):
+        print(s)
+    exit(0)
+
+    design = dc.Design(strands=strands,
+                       complex_constraints=seesaw_circuit.constraints,
+                       strand_constraints=[gggg_constraint(strands)],
+                       )
+
+    ds.search_for_dna_sequences(design=design,
+                                # weigh_violations_equally=True,
+                                report_delay=0.0,
+                                out_directory='output/square_root_circuit',
+                                report_only_violations=False,
+                                )
 
 
-seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
-strands = seesaw_circuit.strands
-
-for s in sorted(strands, key=lambda s: s.name):
-    print(s)
-exit(0)
-
-design = dc.Design(strands=strands,
-                   complex_constraints=seesaw_circuit.constraints,
-                   strand_constraints=[gggg_constraint(strands)],
-                   )
-
-
-ds.search_for_dna_sequences(design=design,
-                            # weigh_violations_equally=True,
-                            report_delay=0.0,
-                            out_directory='output/square_root_circuit',
-                            report_only_violations=False,
-                            )
+if __name__ == '__main__':
+    main()
