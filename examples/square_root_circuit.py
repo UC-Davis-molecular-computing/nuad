@@ -201,6 +201,31 @@ def waste_strand(gate: int) -> dc.Strand:
     return s
 
 
+def reporter_base_strand(gate) -> dc.Strand:
+    """Returns a reporter base strand for seesaw gate labeled `gate`
+
+    .. code-block:: none
+
+           T*     S{gate}*   s{gate}*
+           |          |        |
+        [=====--=============--==>
+
+    :param gate: Name of gate
+    :type gate: [type]
+    :return: Reporter base strand
+    :rtype: dc.Strand
+    """
+    d_sup = f'{SUP_REG_DOMAIN_POOL}{gate}*'
+    d_sub = f'{SUB_REG_DOMAIN_POOL}{gate}*'
+
+    s: dc.Strand = dc.Strand(
+        [TOEHOLD_COMPLEMENT, d_sup, d_sub], name=f'reporter {gate}')
+    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
+    s.domains[1].pool = SUP_REG_DOMAIN_POOL
+    s.domains[2].pool = SUB_REG_DOMAIN_POOL
+    return s
+
+
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA
     strand sequence.
@@ -309,6 +334,9 @@ class SeesawCircuit:
 
         waste_strands = {gate: waste_strand(gate)
                          for gate in gates_with_threshold}
+
+        reporter_base_strands = {gate: reporter_base_strand(gate)
+                                 for gate in all_reporter_gates}
 
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
