@@ -265,10 +265,10 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, ..
     assert input_gate_complexes
     template_complex = input_gate_complexes[0]
     assert len(template_complex) == 2
-    template_input_signal_strand = template_complex[0]
-    template_gate_base_strand = template_complex[1]
-    addr_T = template_input_signal_strand.address_of_first_domain_occurence('T')
-    addr_T_star = template_gate_base_strand.address_of_first_domain_occurence('T*')
+    template_top_strand = template_complex[0]
+    template_bot_strand = template_complex[1]
+    addr_T = template_top_strand.address_of_first_domain_occurence('T')
+    addr_T_star = template_bot_strand.address_of_first_domain_occurence('T*')
     return dc.nupack_4_complex_secondary_structure_constraint(
         strand_complexes=input_gate_complexes,
         nonimplicit_base_pairs=[(addr_T, addr_T_star)]
@@ -401,7 +401,9 @@ class SeesawCircuit:
 
         self.constraints = []
         if input_gate_complexes:
-            self.constraints.append(input_gate_complex_constraint(input_gate_complexes))
+            self.constraints.append(
+                input_gate_complex_constraint(
+                    input_gate_complexes))
 
 
 # TODO: Add outputs field that will be set after processing all seesaw gate.
