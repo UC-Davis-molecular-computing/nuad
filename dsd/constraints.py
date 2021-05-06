@@ -4493,12 +4493,12 @@ def nupack_4_complex_secondary_structure_constraint(
                                  f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
                                  f"{len(template_strand.domains)} domains."
                                 )
-            for d in range(1, len(strand.domains)):
+            for d in range(1, len(other_strand.domains)):
                 domain_length: int = other_strand.domains[d].length
                 template_domain_length: int = template_strand.domains[d].length
                 if domain_length != template_domain_length:
-                    raise ValueError(f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the "
-                                     f"provided template ({template_strand}: domain at index {d} is length"
+                    raise ValueError(f"Strand {other_strand} (the strand at index {s} of the complex located at index {i} of strand_complexes) does not match the "
+                                     f"provided template ({template_strand}): domain at index {d} is length "
                                      f"{domain_length}, but expected {template_domain_length}.")
 
     # Maps domain pairs
@@ -4551,8 +4551,8 @@ def nupack_4_complex_secondary_structure_constraint(
         domain_name_complement = Domain.complementary_domain_name(domain_name)
         if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
             assert domain_name not in nonimplicit_base_pairs_domain_names
-            raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex."
-                                "Violating domain: {domain_name_complement}")
+            raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
+                             f"Violating domain: {domain_name_complement}")
     ## End Input Validation ##
 
     ## Start populating base_pair_probs ##
