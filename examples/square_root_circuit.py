@@ -275,6 +275,37 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, ..
     )
 
 
+def output_gate_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
+    """Returns a gate:output complex constraint
+
+    .. code-block:: none
+
+                   S{gate}  s{gate}  T      S{output}    s{output}
+                      |        |     |          |         |
+               <=============--==--=====--=============--==]
+                |||||||||||||  ||  |||||
+        [=====--=============--==--=====>
+           |          |        |     |
+           T*      S{gate}* s{gate}* T*
+
+    :param output_gate_complexes: List of gate:output complexes
+    :type output_gate_complexes: List[Tuple[dc.Strand, ...]]
+    :return: A complex constraint on the base-pairing probabilities
+    :rtype: dc.ComplexConstraint
+    """
+    assert gate_output_complexes
+    template_complex = gate_output_complexes[0]
+    assert len(template_complex) == 2
+    template_top_strand = template_complex[0]
+    template_bot_strand = template_complex[1]
+    addr_T = template_top_strand.address_of_first_domain_occurence('T')
+    addr_T_star = template_bot_strand.address_of_last_domain_occurence('T*')
+    return dc.nupack_4_complex_secondary_structure_constraint(
+        strand_complexes=gate_output_complexes,
+        nonimplicit_base_pairs=[(addr_T, addr_T_star)]
+    )
+
+
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA
     strand sequence
@@ -322,7 +353,7 @@ class SeesawCircuit:
         reporter_base_strands: Dict[int, dc.Strand] = {}
 
         input_gate_complexes: List[Tuple[dc.Strand, ...]] = []
-        output_gate_complexes: List[Tuple[dc.Strand, ...]] = []
+        gate_output_complexes: List[Tuple[dc.Strand, ...]] = []
         threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         threshold_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
@@ -392,6 +423,18 @@ class SeesawCircuit:
             g = gate_base_strands[gate]
             input_gate_complexes.append((s, g))
 
+        for gate, output in signal_strand_gates:
+            if gate in gate_base_strands:
+                s = signal_strands[(gate, output)]
+                g = gate_base_strands[gate]
+                gate_output_complexes.append((s, g))
+
+        for gate in fuel_strands:
+            if gate in fuel_strands:
+                f = fuel_strands[gate]
+                g = gate_base_strands[gate]
+                gate_output_complexes.append((f, g))
+
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
                         + list(gate_base_strands.values())
@@ -400,10 +443,18 @@ class SeesawCircuit:
                         + list(reporter_base_strands.values()))
 
         self.constraints = []
+
         if input_gate_complexes:
             self.constraints.append(
                 input_gate_complex_constraint(
                     input_gate_complexes))
+
+        if gate_output_complexes:
+            self.constraints.append(
+                output_gate_complex_constraint(
+                    gate_output_complexes
+                )
+            )
 
 
 # TODO: Add outputs field that will be set after processing all seesaw gate.
