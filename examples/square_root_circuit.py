@@ -64,6 +64,24 @@ FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
 
 
+def set_domain_pool(domain: dc.Domain, domain_pool: dc.DomainPool) -> None:
+    """Assigns domain_pool to domain. If domain already has a domain pool, this
+    function asserts that the pool matches the domain_pool.
+
+    :param domain: Domain to be assigned a pool
+    :type domain: dc.Domain
+    :param domain_pool: Pool to assign to Domain
+    :type domain_pool: dc.DomainPool
+    """
+    if domain.pool_:
+        if domain.pool is not domain_pool:
+            raise AssertionError(f'Assigning pool {domain_pool} to domain '
+                                 f'{domain} but {domain} already has domain '
+                                 f'pool {domain_pool}')
+    else:
+        domain.pool = domain_pool
+
+
 def signal_strand(
         gate3p: Union[int, str],
         gate5p: Union[int, str],
@@ -96,11 +114,11 @@ def signal_strand(
         name = f'signal {gate3p} {gate5p}'
     s: dc.Strand = dc.Strand(
         [d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
-    s.domains[0].pool = SUB_REG_DOMAIN_POOL
-    s.domains[1].pool = SUP_REG_DOMAIN_POOL
-    s.domains[2].pool = TOEHOLD_DOMAIN_POOL
-    s.domains[3].pool = SUB_REG_DOMAIN_POOL
-    s.domains[4].pool = SUP_REG_DOMAIN_POOL
+    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[2], TOEHOLD_DOMAIN_POOL)
+    set_domain_pool(s.domains[3], SUB_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[4], SUP_REG_DOMAIN_POOL)
 
     return s
 
@@ -141,10 +159,10 @@ def gate_base_strand(gate: int) -> dc.Strand:
     s: dc.Strand = dc.Strand(
         [TOEHOLD_COMPLEMENT, dsup, dsub, TOEHOLD_COMPLEMENT],
         name=f'gate base {gate}')
-    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
-    s.domains[1].pool = SUP_REG_DOMAIN_POOL
-    s.domains[2].pool = SUB_REG_DOMAIN_POOL
-    s.domains[3].pool = TOEHOLD_DOMAIN_POOL
+    set_domain_pool(s.domains[0], TOEHOLD_DOMAIN_POOL)
+    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[2], SUB_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[3], TOEHOLD_DOMAIN_POOL)
     return s
 
 
@@ -171,10 +189,10 @@ def threshold_base_strand(input: int, gate: int) -> dc.Strand:
     s: dc.Strand = dc.Strand(
         [d_input_sub, TOEHOLD_COMPLEMENT, d_gate_sup, d_gate_sub],
         name=f'threshold base {input} {gate}')
-    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
-    s.domains[1].pool = SUP_REG_DOMAIN_POOL
-    s.domains[2].pool = SUB_REG_DOMAIN_POOL
-    s.domains[3].pool = TOEHOLD_DOMAIN_POOL
+    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[1], TOEHOLD_DOMAIN_POOL)
+    set_domain_pool(s.domains[2], SUP_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[3], SUB_REG_DOMAIN_POOL)
     return s
 
 
@@ -196,8 +214,8 @@ def waste_strand(gate: int) -> dc.Strand:
     d_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}'
     d_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}'
     s: dc.Strand = dc.Strand([d_sub, d_sup], name=f'waste {gate}')
-    s.domains[0].pool = SUB_REG_DOMAIN_POOL
-    s.domains[1].pool = SUP_REG_DOMAIN_POOL
+    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
     return s
 
 
@@ -220,15 +238,46 @@ def reporter_base_strand(gate) -> dc.Strand:
 
     s: dc.Strand = dc.Strand(
         [TOEHOLD_COMPLEMENT, d_sup, d_sub], name=f'reporter {gate}')
-    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
-    s.domains[1].pool = SUP_REG_DOMAIN_POOL
-    s.domains[2].pool = SUB_REG_DOMAIN_POOL
+    set_domain_pool(s.domains[0], TOEHOLD_DOMAIN_POOL)
+    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
+    set_domain_pool(s.domains[2], SUB_REG_DOMAIN_POOL)
     return s
+
+
+def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
+    """Returns a input:gate complex constraint
+
+    .. code-block:: none
+
+          S{input}  s{input}  T       S{gate}    s{gate}
+            |           |     |          |         |
+        <=============--==--=====--=============--==]
+                            |||||  |||||||||||||  ||
+                           [=====--=============--==--=====>
+                              |          |        |     |
+                              T*      S{gate}* s{gate}* T*
+
+    :param input_gate_complexes: List of input:gate complexes
+    :type input_gate_complexes: List[Tuple[dc.Strand, ...]]
+    :return: A complex constraint on the base-pairing probabilities
+    :rtype: dc.ComplexConstraint
+    """
+    assert input_gate_complexes
+    template_complex = input_gate_complexes[0]
+    assert len(template_complex) == 2
+    template_input_signal_strand = template_complex[0]
+    template_gate_base_strand = template_complex[1]
+    addr_T = template_input_signal_strand.address_of_first_domain_occurence('T')
+    addr_T_star = template_gate_base_strand.address_of_first_domain_occurence('T*')
+    return dc.nupack_4_complex_secondary_structure_constraint(
+        strand_complexes=input_gate_complexes,
+        nonimplicit_base_pairs=[(addr_T, addr_T_star)]
+    )
 
 
 def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
     """Returns a StrandConstraint that prevents a run of four Gs on a DNA
-    strand sequence.
+    strand sequence
 
     :param strands: List of strands to check
     :type strands: List[dc.Strand]
@@ -292,7 +341,7 @@ class SeesawCircuit:
         # Set of all reporter gates
         all_reporter_gates: Set[int] = set()
 
-        # Populate sets
+        # Populate sets TODO: refactor this loop into multiple function
         for seesaw_gate in self.seesaw_gates:
             gate_name = seesaw_gate.gate_name
 
@@ -338,23 +387,24 @@ class SeesawCircuit:
         reporter_base_strands = {gate: reporter_base_strand(gate)
                                  for gate in all_reporter_gates}
 
+        for input, gate in signal_strand_gates:
+            s = signal_strands[(input, gate)]
+            g = gate_base_strands[gate]
+            input_gate_complexes.append((s, g))
+
         self.strands = (list(signal_strands.values())
                         + list(fuel_strands.values())
                         + list(gate_base_strands.values())
                         + list(threshold_base_strands.values())
                         + list(waste_strands.values())
                         + list(reporter_base_strands.values()))
-        func = dc.nupack_4_complex_secondary_structure_constraint
-        self.constraints = list(map(func, filter(lambda c: len(c) > 0, [
-            input_gate_complexes,
-            output_gate_complexes,
-            threshold_waste_complexes,
-            threshold_signal_complexes,
-            reporter_waste_complexes,
-            reporter_signal_complexes,
-        ])))
+
+        self.constraints = []
+        if input_gate_complexes:
+            self.constraints.append(input_gate_complex_constraint(input_gate_complexes))
 
 
+# TODO: Add outputs field that will be set after processing all seesaw gate.
 @dataclass(frozen=True)
 class SeesawGate:
     """Class for keeping track of seesaw gate and its input."""
@@ -363,15 +413,6 @@ class SeesawGate:
     has_threshold: bool
     has_fuel: bool
     is_reporter: bool = False
-
-    def get_signal_strands(self) -> List[dc.Strand]:
-        raise NotImplemented
-
-    def get_gate_strand(self) -> dc.Strand:
-        raise NotImplemented
-
-    def get_strands(self) -> List[dc.Strand]:
-        raise NotImplemented
 
 
 def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int,
@@ -466,8 +507,12 @@ def main() -> None:
     seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
     strands = seesaw_circuit.strands
 
+    # Uncomment below for debugging:
     for s in sorted(strands, key=lambda s: s.name):
         print(s)
+
+    for c in seesaw_circuit.constraints:
+        print(c)
     exit(0)
 
     design = dc.Design(strands=strands,
