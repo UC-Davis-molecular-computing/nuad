@@ -63,6 +63,9 @@ TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
 FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
 
+# Alias
+dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
+
 
 def set_domain_pool(domain: dc.Domain, domain_pool: dc.DomainPool) -> None:
     """Assigns domain_pool to domain. If domain already has a domain pool, this
@@ -269,10 +272,11 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
     template_bot_strand = template_complex[1]
     addr_T = template_top_strand.address_of_first_domain_occurence('T')
     addr_T_star = template_bot_strand.address_of_first_domain_occurence('T*')
-    return dc.nupack_4_complex_secondary_structure_constraint(
-        strand_complexes=cast(List[Tuple[dc.Strand,...]], input_gate_complexes),
-        nonimplicit_base_pairs=[(addr_T, addr_T_star)]
-    )
+    return dc_complex_constraint(
+        strand_complexes=cast(
+            List[Tuple[dc.Strand, ...]],
+            input_gate_complexes),
+        nonimplicit_base_pairs=[(addr_T, addr_T_star)])
 
 
 def output_gate_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
@@ -300,7 +304,7 @@ def output_gate_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     template_bot_strand = template_complex[1]
     addr_T = template_top_strand.address_of_first_domain_occurence('T')
     addr_T_star = template_bot_strand.address_of_last_domain_occurence('T*')
-    return dc.nupack_4_complex_secondary_structure_constraint(
+    return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
         nonimplicit_base_pairs=[(addr_T, addr_T_star)]
     )
@@ -342,14 +346,21 @@ class SeesawCircuit:
     """
     seesaw_gates: List['SeesawGate']
     strands: List[dc.Strand] = field(init=False, default_factory=list)
-    constraints: List[dc.ComplexConstraint] = field(init=False, default_factory=list)
+    constraints: List[dc.ComplexConstraint] = field(
+        init=False, default_factory=list)
 
-    signal_strands: Dict[Tuple[int, int], dc.Strand] = field(init=False, default_factory=dict)
-    fuel_strands: Dict[int, dc.Strand] = field(init=False, default_factory=dict)
-    gate_base_strands: Dict[int, dc.Strand] = field(init=False, default_factory=dict)
-    threshold_base_strands: Dict[Tuple[int, int], dc.Strand] = field(init=False, default_factory=dict)
-    waste_strands: Dict[int, dc.Strand] = field(init=False, default_factory=dict)
-    reporter_base_strands: Dict[int, dc.Strand] = field(init=False, default_factory=dict)
+    signal_strands: Dict[Tuple[int, int], dc.Strand] = field(
+        init=False, default_factory=dict)
+    fuel_strands: Dict[int, dc.Strand] = field(
+        init=False, default_factory=dict)
+    gate_base_strands: Dict[int, dc.Strand] = field(
+        init=False, default_factory=dict)
+    threshold_base_strands: Dict[Tuple[int, int], dc.Strand] = field(
+        init=False, default_factory=dict)
+    waste_strands: Dict[int, dc.Strand] = field(
+        init=False, default_factory=dict)
+    reporter_base_strands: Dict[int, dc.Strand] = field(
+        init=False, default_factory=dict)
 
     def _set_gate_base_strands(self) -> None:
         """Sets self.gate_base_strands
@@ -366,7 +377,7 @@ class SeesawCircuit:
             gates.add(gate_name)
 
         self.gate_base_strands = {gate: gate_base_strand(gate)
-                             for gate in gates}
+                                  for gate in gates}
 
     def _set_signal_strands(self) -> None:
         """Sets self.signal_strands
@@ -398,11 +409,13 @@ class SeesawCircuit:
             if seesaw_gate.has_fuel:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in gates_with_fuel:
-                    raise ValueError(f'Invalid seesaw circuit: '
-                                    'Multiple gates labeled {gate_name} found')
+                    raise ValueError(
+                        f'Invalid seesaw circuit: '
+                        'Multiple gates labeled {gate_name} found')
                 gates_with_fuel.add(gate_name)
 
-        self.fuel_strands = {gate: fuel_strand(gate) for gate in gates_with_fuel}
+        self.fuel_strands = {gate: fuel_strand(
+            gate) for gate in gates_with_fuel}
 
     def _set_threshold_base_strands(self) -> None:
         """Sets self.threshold_base_strands
@@ -415,8 +428,9 @@ class SeesawCircuit:
             if seesaw_gate.has_threshold:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in input_gate_pairs_with_threshold:
-                    raise ValueError(f'Invalid seesaw circuit: '
-                                    'Multiple gates labeled {gate_name} found')
+                    raise ValueError(
+                        f'Invalid seesaw circuit: '
+                        'Multiple gates labeled {gate_name} found')
                 for input in seesaw_gate.inputs:
                     assert (input, gate_name) not in input_gate_pairs_with_threshold
                     input_gate_pairs_with_threshold.add((input, gate_name))
@@ -436,12 +450,13 @@ class SeesawCircuit:
             if seesaw_gate.has_threshold:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in gates_with_threshold:
-                    raise ValueError(f'Invalid seesaw circuit: '
-                                    'Multiple gates labeled {gate_name} found')
+                    raise ValueError(
+                        f'Invalid seesaw circuit: '
+                        'Multiple gates labeled {gate_name} found')
                 gates_with_threshold.add(gate_name)
 
         self.waste_strands = {gate: waste_strand(gate)
-                         for gate in gates_with_threshold}
+                              for gate in gates_with_threshold}
 
     def _set_reporter_gates(self) -> None:
         """Sets self.reporter_gates
@@ -454,12 +469,29 @@ class SeesawCircuit:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in reporter_gates:
-                    raise ValueError(f'Invalid seesaw circuit: '
-                                    'Multiple gates labeled {gate_name} found')
+                    raise ValueError(
+                        f'Invalid seesaw circuit: '
+                        'Multiple gates labeled {gate_name} found')
                 reporter_gates.add(gate_name)
 
         self.reporter_base_strands = {gate: reporter_base_strand(gate)
-                                 for gate in reporter_gates}
+                                      for gate in reporter_gates}
+
+    def _set_strands(self) -> None:
+        """Sets self.strands
+        """
+        self._set_gate_base_strands()
+        self._set_signal_strands()
+        self._set_fuel_strands()
+        self._set_threshold_base_strands()
+        self._set_waste_strands()
+        self._set_reporter_gates()
+        self.strands = (list(self.signal_strands.values())
+                        + list(self.fuel_strands.values())
+                        + list(self.gate_base_strands.values())
+                        + list(self.threshold_base_strands.values())
+                        + list(self.waste_strands.values())
+                        + list(self.reporter_base_strands.values()))
 
     def _add_input_gate_complex_constraint(self) -> None:
         """Adds input:gate complexes to self.constraint
@@ -469,7 +501,9 @@ class SeesawCircuit:
             g = self.gate_base_strands[gate]
             input_gate_complexes.append((s, g))
 
-        self.constraints.append(input_gate_complex_constraint(input_gate_complexes))
+        self.constraints.append(
+            input_gate_complex_constraint(
+                input_gate_complexes))
 
     def _add_gate_output_complex_constriant(self) -> None:
         """Adds gate:output complexes to self.constraint
@@ -493,31 +527,25 @@ class SeesawCircuit:
             )
         )
 
-    def _set_strands(self) -> None:
-        """Sets self.strands
+    def _add_threshold_complex_constraint(self) -> None:
+        """Adds threshold complexes to self.constraint
         """
-        self._set_gate_base_strands()
-        self._set_signal_strands()
-        self._set_fuel_strands()
-        self._set_threshold_base_strands()
-        self._set_waste_strands()
-        self._set_reporter_gates()
-        self.strands = (list(self.signal_strands.values())
-                        + list(self.fuel_strands.values())
-                        + list(self.gate_base_strands.values())
-                        + list(self.threshold_base_strands.values())
-                        + list(self.waste_strands.values())
-                        + list(self.reporter_base_strands.values()))
+        threshold_complexes: List[Tuple[dc.Strand, ...]] = []
+        for (_, gate), threshold_base_strand in self.threshold_base_strands.items():
+            waste_strand = self.waste_strands[gate]
+            threshold_complexes.append((waste_strand, threshold_base_strand))
+
+        self.constraints.append(dc_complex_constraint(threshold_complexes))
 
     def _set_constraints(self) -> None:
         """Sets self.constraints (self.strands must be set)
         """
-        threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         threshold_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         reporter_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         self._add_input_gate_complex_constraint()
         self._add_gate_output_complex_constriant()
+        self._add_threshold_complex_constraint()
 
     def __post_init__(self) -> None:
         self._set_strands()
