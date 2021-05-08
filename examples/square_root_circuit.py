@@ -537,15 +537,26 @@ class SeesawCircuit:
 
         self.constraints.append(dc_complex_constraint(threshold_complexes))
 
+    def _add_threshold_waste_complex_constraint(self) -> None:
+        """Adds threshold waste complexes to self.constraint
+        """
+        threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
+        for (input, gate), threshold_base_strand in self.threshold_base_strands.items():
+            signal_strand = self.signal_strands[(input, gate)]
+            threshold_waste_complexes.append((signal_strand, threshold_base_strand))
+
+        self.constraints.append(dc_complex_constraint(threshold_waste_complexes))
+
+
     def _set_constraints(self) -> None:
         """Sets self.constraints (self.strands must be set)
         """
-        threshold_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         reporter_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         self._add_input_gate_complex_constraint()
         self._add_gate_output_complex_constriant()
         self._add_threshold_complex_constraint()
+        self._add_threshold_waste_complex_constraint()
 
     def __post_init__(self) -> None:
         self._set_strands()
