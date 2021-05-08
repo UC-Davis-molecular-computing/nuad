@@ -276,10 +276,11 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
         strand_complexes=cast(
             List[Tuple[dc.Strand, ...]],
             input_gate_complexes),
-        nonimplicit_base_pairs=[(addr_T, addr_T_star)])
+        nonimplicit_base_pairs=[(addr_T, addr_T_star)],
+        description="input:gate Complex")
 
 
-def output_gate_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
+def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
     """Returns a gate:output complex constraint
 
     .. code-block:: none
@@ -306,7 +307,8 @@ def output_gate_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     addr_T_star = template_bot_strand.address_of_last_domain_occurence('T*')
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
-        nonimplicit_base_pairs=[(addr_T, addr_T_star)]
+        nonimplicit_base_pairs=[(addr_T, addr_T_star)],
+        description="gate:output Complex"
     )
 
 
@@ -359,7 +361,7 @@ class SeesawCircuit:
         init=False, default_factory=dict)
     waste_strands: Dict[int, dc.Strand] = field(
         init=False, default_factory=dict)
-    reporter_base_strands: Dict[int, dc.Strand] = field(
+    reporter_base_strands: Dict[Tuple[int, int], dc.Strand] = field(
         init=False, default_factory=dict)
 
     def _set_gate_base_strands(self) -> None:
@@ -464,7 +466,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all reporter gates
-        reporter_gates: Set[int] = set()
+        reporter_gates: Set[Tuple[int,int]] = set()
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
@@ -472,10 +474,12 @@ class SeesawCircuit:
                     raise ValueError(
                         f'Invalid seesaw circuit: '
                         'Multiple gates labeled {gate_name} found')
-                reporter_gates.add(gate_name)
+                inputs = seesaw_gate.inputs
+                assert len(inputs) == 1
+                reporter_gates.add((inputs[0], gate_name))
 
-        self.reporter_base_strands = {gate: reporter_base_strand(gate)
-                                      for gate in reporter_gates}
+        self.reporter_base_strands = {(input, gate): reporter_base_strand(gate)
+                                      for input, gate in reporter_gates}
 
     def _set_strands(self) -> None:
         """Sets self.strands
@@ -522,7 +526,7 @@ class SeesawCircuit:
                 gate_output_complexes.append((f, g))
 
         self.constraints.append(
-            output_gate_complex_constraint(
+            gate_output_complex_constraint(
                 gate_output_complexes
             )
         )
@@ -535,7 +539,7 @@ class SeesawCircuit:
             waste_strand = self.waste_strands[gate]
             threshold_complexes.append((waste_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_complexes))
+        self.constraints.append(dc_complex_constraint(threshold_complexes, description="Threshold Complex"))
 
     def _add_threshold_waste_complex_constraint(self) -> None:
         """Adds threshold waste complexes to self.constraint
@@ -545,18 +549,38 @@ class SeesawCircuit:
             signal_strand = self.signal_strands[(input, gate)]
             threshold_waste_complexes.append((signal_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_waste_complexes))
+        self.constraints.append(dc_complex_constraint(threshold_waste_complexes, description="Threshold Waste Complex"))
+
+    def _add_reporter_complex_constraint(self) -> None:
+        """Adds reporter complexes to self.constraint
+        """
+        reporter_complexes: List[Tuple[dc.Strand, ...]] = []
+        for (_, gate), reporter_base_strand in self.reporter_base_strands.items():
+            waste_strand = self.waste_strands[gate]
+            reporter_complexes.append((waste_strand, reporter_base_strand))
+
+        self.constraints.append(dc_complex_constraint(reporter_complexes, description="Reporter Complex"))
+
+    def _add_reporter_waste_complex_constraint(self) -> None:
+        """Adds reporter waste complexes to self.constraint
+        """
+        reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
+        for (input, gate), reporter_base_strand in self.reporter_base_strands.items():
+            signal_strand = self.signal_strands[(input, gate)]
+            reporter_waste_complexes.append((signal_strand, reporter_base_strand))
+
+        self.constraints.append(dc_complex_constraint(reporter_waste_complexes, description="Reporter Waste Complex"))
 
 
     def _set_constraints(self) -> None:
         """Sets self.constraints (self.strands must be set)
         """
-        reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
-        reporter_signal_complexes: List[Tuple[dc.Strand, ...]] = []
         self._add_input_gate_complex_constraint()
         self._add_gate_output_complex_constriant()
         self._add_threshold_complex_constraint()
         self._add_threshold_waste_complex_constraint()
+        self._add_reporter_complex_constraint()
+        self._add_reporter_waste_complex_constraint()
 
     def __post_init__(self) -> None:
         self._set_strands()
@@ -667,12 +691,12 @@ def main() -> None:
     strands = seesaw_circuit.strands
 
     # Uncomment below for debugging:
-    for s in sorted(strands, key=lambda s: s.name):
-        print(s)
+    # for s in sorted(strands, key=lambda s: s.name):
+    #     print(s)
 
-    for c in seesaw_circuit.constraints:
-        print(c)
-    exit(0)
+    # for c in seesaw_circuit.constraints:
+    #     print(c)
+    # exit(0)
 
     design = dc.Design(strands=strands,
                        complex_constraints=seesaw_circuit.constraints,
