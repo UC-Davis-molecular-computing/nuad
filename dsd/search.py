@@ -1156,9 +1156,9 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param max_iterations:
         Maximum number of iterations of search to perform.
     :param max_domains_to_change:
-        Maximum number of :any:`constraint.Domain`'s to change at a time. A number between 1 and
+        Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
         `max_domains_to_change` is selected uniformly at random, and then that many
-        :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraint.Constraint`'s
+        :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
         that they violated.
     :param num_digits_update:
         Number of digits to use when writing update number in filenames. By default,

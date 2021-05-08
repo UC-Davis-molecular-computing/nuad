@@ -1337,6 +1337,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     def assign_dna_from_pool(self, rng: np.random.Generator) -> None:
         """
         Assigns a random DNA sequence from this :any:`Strand`'s :any:`StrandPool`.
+
         :param rng:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         """
