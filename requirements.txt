@@ -1,3 +1,4 @@
 numpy
 psutil
 ordered_set
+scadnano
