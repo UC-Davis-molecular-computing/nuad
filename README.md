@@ -4,6 +4,9 @@
 
 dsd stands for "DNA sequence designer". It is a Python library that enables one to specify constraints on a DNA nanostructure made from synthetic DNA. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The dsd library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
 
+## API documentation
+The API documentation is on readthedocs: https://dnadsd.readthedocs.io/
+
 
 ## Installation
 dsd requires Python version 3.6 or higher. Currently, it cannot be installed using pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/dsd/issues/12)). 
