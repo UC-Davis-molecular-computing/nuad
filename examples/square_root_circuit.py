@@ -34,20 +34,30 @@ TOEHOLD_LENGTH = 5
 FUEL_DOMAIN = 'f'
 
 # NumpyConstraints
+ILLEGAL_SUBSTRINGS_FOUR = ['G'*4, 'C'*4]
+ILLEGAL_SUBSTRINGS_FIVE = ['A'*5, 'T'*5]
+ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
+
+
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
-no_gggg_constraint = dc.ForbiddenSubstringConstraint(['G'*4, 'C'*4])
+no_gggg_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
+no_aaaaa_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
+
+# TODO: 30% to 70% C-content
+# TODO:  For any two sequences in the pool, we require at least 30% of bases are
+# different, and the longest run of matches is at most 35% of the domain length.
 
 # Domain pools
 sup_reg_domain_constraints = [
     no_gggg_constraint,
-    three_letter_code_constraint
+    three_letter_code_constraint,
 ]
 SUP_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'SUP_REG_DOMAIN_POOL', SUP_REG_DOMAIN_LENGTH,
     numpy_constraints=sup_reg_domain_constraints)
 
 sub_reg_domain_constraints: List[dc.NumpyConstraint] = [
-    three_letter_code_constraint
+    three_letter_code_constraint,
 ]
 SUB_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH,
@@ -312,34 +322,42 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     )
 
 
-def gggg_constraint(strands: List[dc.Strand]) -> dc.StrandConstraint:
-    """Returns a StrandConstraint that prevents a run of four Gs on a DNA
-    strand sequence
+def strand_substring_constraint(strands: List[dc.Strand], substrings: List[str]) -> dc.StrandConstraint:
+    """Returns a strand constraint that restricts the substrings in the strand
+    sequence
 
-    :param strands: List of strands to check
+    :param strands: Strands to apply constraint on
     :type strands: List[dc.Strand]
-    :return: StrandConstraint
+    :param substrings: Substrings to disallow
+    :type substrings: List[str]
+    :return: [description]
     :rtype: dc.StrandConstraint
     """
-    def gggg_constraint_evaluate(strand: dc.Strand):
-        if 'GGGG' in strand.sequence():
+    def violated(strand: dc.Strand):
+        for substring in substrings:
+            if substring in strand.sequence():
+                return True
+        return False
+
+    def evaluate(strand: dc.Strand):
+        if violated(strand):
             return 1000
         else:
             return 0
 
-    def gggg_constraint_summary(strand: dc.Strand):
+    def summary(strand: dc.Strand):
         violation_str: str
-        if 'GGGG' not in strand.sequence():
+        if violated(strand):
             violation_str = ''
         else:
             violation_str = "** violation**"
         return f"{strand.name}: {strand.sequence()}{violation_str}"
 
-    return dc.StrandConstraint(description="GGGGConstraint",
-                               short_description="GGGGConstraint",
-                               evaluate=gggg_constraint_evaluate,
+    return dc.StrandConstraint(description="Strand Substring Constraint",
+                               short_description="Strand Substring Constraint",
+                               evaluate=evaluate,
                                strands=tuple(strands),
-                               summary=gggg_constraint_summary)
+                               summary=summary)
 
 
 @dataclass
@@ -700,7 +718,7 @@ def main() -> None:
 
     design = dc.Design(strands=strands,
                        complex_constraints=seesaw_circuit.constraints,
-                       strand_constraints=[gggg_constraint(strands)],
+                       strand_constraints=[strand_substring_constraint(strands, ILLEGAL_SUBSTRINGS)],
                        )
 
     ds.search_for_dna_sequences(design=design,
