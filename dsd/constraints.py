@@ -1388,6 +1388,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     #              in the order they appear in this :any:`Strand`.
     #     """
 
+    def address_of_domain(self, domain_idx: int) -> 'StrandDomainAddress':
+        """Returns :any:`StrandDomainAddress` of the domain located at domain_idx
+
+        :rparam domain_idx: Index of domain
+        """
+        return StrandDomainAddress(self, domain_idx)
+
     def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> 'StrandDomainAddress':
         """
         Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name.
@@ -3922,8 +3929,22 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                         #    #-------------------------###-------------------------------------#
                         #        complementary_addr            complementary_5n_addr
 
-                        # Assuming non-competitive, then this must be internal base pair
-                        return BasePairType.INTERIOR_TO_STRAND
+                        # Assuming non-competitive, then this must be internal base pair or
+                        # if the domain is length 2 and the 5' type is not interior, then
+                        # it is adjacent to exterior base pair type
+                        domain = domain_addr.strand.domains[domain_addr.domain_idx]
+                        domain_next_to_interior_base_pair = domain_addr.neighbor_5p() is not None and complementary_addr.neighbor_3p() is not None
+                        if domain.length == 2 and not domain_next_to_interior_base_pair:
+                            #   domain_addr == adjacent_5n_addr        adjacent_addr
+                            #     |                                       |
+                            #    [--###-------------------------------------#
+                            #     ||   |||||||||||||||||||||||||||||||||||||
+                            #    <--###-------------------------------------#
+                            #     |                              |
+                            # complementary_addr       complementary_5n_addr
+                            return BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
+                        else:
+                            return BasePairType.INTERIOR_TO_STRAND
                     else:
                         # Since adjacent_5n_addr does not equal domain_addr,
                         # must be a bound overhang:

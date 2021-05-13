@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from math import ceil, floor
 from typing import Dict, List, Set, Tuple, Union, cast
 
 import dsd.search as ds  # type: ignore
@@ -42,10 +43,25 @@ ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
 no_gggg_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
 no_aaaaa_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
+def c_content_constraint(length: int) -> dc.BaseCountConstraint:
+    """Returns a BaseCountConstraint that enforces 30% to 70% C-content
 
-# TODO: 30% to 70% C-content
+    :param length: Length of DNA sequence
+    :type length: int
+    :return: BaseCountConstraint
+    :rtype: dc.BaseCountConstraint
+    """
+    high_count = floor(0.7 * length)
+    low_count = ceil(0.3 * length)
+    return dc.BaseCountConstraint('C', high_count, low_count)
+
+
+# TODO: 30% to 70% C-content on non-fuel strands
 # TODO:  For any two sequences in the pool, we require at least 30% of bases are
-# different, and the longest run of matches is at most 35% of the domain length.
+# different - Use a DomainPairConstraint
+# and the longest run of matches is at most 35% of the domain length - Use a
+# DomainPairConstraint
+# * Check that the domain pairs are same length and both long domains
 
 # Domain pools
 sup_reg_domain_constraints = [
@@ -71,7 +87,7 @@ TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     numpy_constraints=toehold_domain_contraints)
 
 FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint])
+    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
 
 # Alias
 dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
@@ -287,7 +303,8 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
             List[Tuple[dc.Strand, ...]],
             input_gate_complexes),
         nonimplicit_base_pairs=[(addr_T, addr_T_star)],
-        description="input:gate Complex")
+        description="input:gate Complex",
+        short_description="input:gate")
 
 
 def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
@@ -318,7 +335,8 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
         nonimplicit_base_pairs=[(addr_T, addr_T_star)],
-        description="gate:output Complex"
+        description="gate:output Complex",
+        short_description="gate:output"
     )
 
 
@@ -557,7 +575,7 @@ class SeesawCircuit:
             waste_strand = self.waste_strands[gate]
             threshold_complexes.append((waste_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_complexes, description="Threshold Complex"))
+        self.constraints.append(dc_complex_constraint(threshold_complexes, description="Threshold Complex", short_description="threshold"))
 
     def _add_threshold_waste_complex_constraint(self) -> None:
         """Adds threshold waste complexes to self.constraint
@@ -567,7 +585,7 @@ class SeesawCircuit:
             signal_strand = self.signal_strands[(input, gate)]
             threshold_waste_complexes.append((signal_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_waste_complexes, description="Threshold Waste Complex"))
+        self.constraints.append(dc_complex_constraint(threshold_waste_complexes, description="Threshold Waste Complex", short_description="threshold waste"))
 
     def _add_reporter_complex_constraint(self) -> None:
         """Adds reporter complexes to self.constraint
@@ -577,7 +595,7 @@ class SeesawCircuit:
             waste_strand = self.waste_strands[gate]
             reporter_complexes.append((waste_strand, reporter_base_strand))
 
-        self.constraints.append(dc_complex_constraint(reporter_complexes, description="Reporter Complex"))
+        self.constraints.append(dc_complex_constraint(reporter_complexes, description="Reporter Complex", short_description="reporter"))
 
     def _add_reporter_waste_complex_constraint(self) -> None:
         """Adds reporter waste complexes to self.constraint
@@ -587,7 +605,7 @@ class SeesawCircuit:
             signal_strand = self.signal_strands[(input, gate)]
             reporter_waste_complexes.append((signal_strand, reporter_base_strand))
 
-        self.constraints.append(dc_complex_constraint(reporter_waste_complexes, description="Reporter Waste Complex"))
+        self.constraints.append(dc_complex_constraint(reporter_waste_complexes, description="Reporter Waste Complex", short_description="reporter waste"))
 
 
     def _set_constraints(self) -> None:
@@ -724,8 +742,8 @@ def main() -> None:
     ds.search_for_dna_sequences(design=design,
                                 # weigh_violations_equally=True,
                                 report_delay=0.0,
+                                restart=True,
                                 out_directory='output/square_root_circuit',
-                                report_only_violations=False,
                                 )
 
 
