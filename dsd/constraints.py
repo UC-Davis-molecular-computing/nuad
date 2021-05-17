@@ -943,8 +943,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         if self.pool_ is not None and new_pool is not self.pool_:
             raise ValueError(f'Assigning pool {new_pool} to domain '
-                                 f'{self} but {self} already has domain '
-                                 f'pool {self.pool_}')
+                             f'{self} but {self} already has domain '
+                             f'pool {self.pool_}')
         self.pool_ = new_pool
 
     @property
@@ -1041,7 +1041,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :param domain_name: name of domain
         """
         return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
-
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -2550,6 +2549,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
+
 @dataclass(frozen=True, eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
     complexes: Tuple[Tuple[Strand, ...], ...] = None
@@ -3319,6 +3319,7 @@ class _AdjacentDuplexType(Enum):
 
 # TODO(benlee12): Document this stuff
 
+
 default_interior_to_strand_probability = 0.98
 default_adjacent_to_exterior_base_pair = 0.95
 default_blunt_end_probability = 0.33
@@ -3341,6 +3342,7 @@ default_other_probability = 0.70
 # TODO: Detect mismatch and bulge loop
 default_mismatch_probability = 0.76
 default_bulge_loop_probability = 0.65
+
 
 class BasePairType(Enum):
     """
@@ -3418,7 +3420,6 @@ class BasePairType(Enum):
                   a*      b*       c*     d*
     """
 
-
     INTERIOR_TO_STRAND = auto()
     """
     Base pair is located inside of a strand but not next
@@ -3436,7 +3437,6 @@ class BasePairType(Enum):
          base pair
 
     """
-
 
     ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()
     """
@@ -3467,7 +3467,6 @@ class BasePairType(Enum):
         base pair
     """
 
-
     BLUNT_END = auto()
     """
     Base pair is located at the end of both strands.
@@ -3481,7 +3480,6 @@ class BasePairType(Enum):
              |
          base pair
     """
-
 
     NICK_3P = auto()
     """
@@ -3498,7 +3496,6 @@ class BasePairType(Enum):
 
     """
 
-
     NICK_5P = auto()
     """
     Base pair is located at a nick involving the 3' end of the strand.
@@ -3512,8 +3509,6 @@ class BasePairType(Enum):
              |
          base pair
     """
-
-
 
     DANGLE_3P = auto()
     """
@@ -3530,7 +3525,6 @@ class BasePairType(Enum):
          base pair
     """
 
-
     DANGLE_5P = auto()
     """
     Base pair is located at the end of a strand with a dangle on the
@@ -3546,7 +3540,6 @@ class BasePairType(Enum):
          base pair
     """
 
-
     DANGLE_5P_3P = auto()
     """
     Base pair is located with dangle at both the 3' and 5' end.
@@ -3560,7 +3553,6 @@ class BasePairType(Enum):
              |
          base pair
     """
-
 
     OVERHANG_ON_THIS_STRAND_3P = auto()
     """
@@ -3661,7 +3653,6 @@ class BasePairType(Enum):
          base pair
     """
 
-
     OVERHANG_ON_BOTH_STRANDS_5P = auto()
     """
     Base pair's 5' end is an overhang and adjacent strand also has an overhang.
@@ -3680,7 +3671,6 @@ class BasePairType(Enum):
               | |
               # #
     """
-
 
     THREE_ARM_JUNCTION = auto()
     """
@@ -3701,7 +3691,6 @@ class BasePairType(Enum):
              |
          base pair
     """
-
 
     FOUR_ARM_JUNCTION = auto()
     """
@@ -3740,13 +3729,10 @@ class BasePairType(Enum):
     Probabilities specify how unlikely a base is to be paired with another base.
     """
 
-
     OTHER = auto()
     """
     Other base pair types.
     """
-
-
 
     def default_pair_probability(self) -> float:
         if self is BasePairType.INTERIOR_TO_STRAND:
@@ -3792,6 +3778,7 @@ class BasePairType(Enum):
 
 # TODO: document StrandDomainAddress
 
+
 @dataclass
 class StrandDomainAddress:
     """An addressing scheme for specifying a domain on a strand.
@@ -3806,7 +3793,8 @@ class StrandDomainAddress:
     """
 
     @classmethod
-    def address_of_nth_domain_occurence(cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
+    def address_of_nth_domain_occurence(
+            cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
         if n < 1:
             raise ValueError(f'n needs to be at least 1')
         domain_names = strand.domain_names_tuple()
@@ -3864,6 +3852,7 @@ class StrandDomainAddress:
 
     def __repr__(self) -> str:
         return self.__str__() + f' hash: {self.__hash__()}'
+
 
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                                          all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
@@ -4005,16 +3994,16 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             #     complementary_addr    complementary_5n_addr
             return BasePairType.NICK_3P
         elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
-                #                                #
-                #                                |
-                #                                | adjacent_5n_addr
-                #                                |
-                #                                #
-                #             domain_addr        #        adjacent_addr
-                #    #-------------------------> #-------------------------------------#
-                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
-                #    #-------------------------###-------------------------------------#
-                #     complementary_addr    complementary_5n_addr
+            #                                #
+            #                                |
+            #                                | adjacent_5n_addr
+            #                                |
+            #                                #
+            #             domain_addr        #        adjacent_addr
+            #    #-------------------------> #-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_addr    complementary_5n_addr
             return BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P
         elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
             #                              # #
@@ -4160,7 +4149,6 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             domain_3n_complementary_3n_addr_is_bound: Optional[bool] = None
             if domain_3n_complementary_3n_addr is not None:
                 domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
-
 
             # Not an internal base pair since domain_addr's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
@@ -4369,6 +4357,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             else:
                 raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_addr}')
 
+
 @dataclass(frozen=True)
 class _BasePairDomainEndpoint:
     """A base pair endpoint in the context of the domain it resides on.
@@ -4406,12 +4395,13 @@ class _BasePair:
     base_pairing_probability: float
     base_pair_type: BasePairType
 
+
 BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
 BasePairAddress = Tuple[BaseAddress, BaseAddress]
 BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 
-# TODO: specify base pair in complex 
-# TODO: specify base in complex (for unpaired bases) 
+# TODO: specify base pair in complex
+# TODO: specify base in complex (for unpaired bases)
 # Two ways to specify base
 # * global address (NUPACK indexing)
 # * StrandDomainAddress + base offset in that domain (0 means 5', -1 means 3')
@@ -4425,6 +4415,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 #   Dictionary for upper_bound
 #     * Dict[BasePairAddress, float]  base_pair_probabilities_upper_bound
 #     * Dict[BaseAddress, float]      base_unpaired_probabilities_upper_bound
+
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
@@ -4492,7 +4483,8 @@ def nupack_4_complex_secondary_structure_constraint(
         from nupack import complex_analysis as nupack_complex_analysis
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
-        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+        raise ImportError(
+            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     ## Start Input Validation ##
     if len(strand_complexes) == 0:
@@ -4501,7 +4493,8 @@ def nupack_4_complex_secondary_structure_constraint(
     strand_complex_template = strand_complexes[0]
 
     if (type(strand_complex_template) is not tuple):
-        raise ValueError(f"First element in strand_complexes was not a tuple of Strands. Please provide a tuple of Strands.")
+        raise ValueError(
+            f"First element in strand_complexes was not a tuple of Strands. Please provide a tuple of Strands.")
 
     for strand in strand_complex_template:
         if type(strand) is not Strand:
@@ -4512,27 +4505,29 @@ def nupack_4_complex_secondary_structure_constraint(
         if (type(strand_complex) is not tuple):
             raise ValueError(f"Element at index {i} was not a tuple of Strands. Please provide a tuple of Strands.")
         if len(strand_complex) != len(strand_complex_template):
-            raise ValueError(f"Inconsistent complex structures: Complex at index {i} contained {len(strand_complex)} strands, "
-                             f"but complex at index 0 contained {len(strand_complex_template)} strands."
-                            )
+            raise ValueError(
+                f"Inconsistent complex structures: Complex at index {i} contained {len(strand_complex)} strands, "
+                f"but complex at index 0 contained {len(strand_complex_template)} strands.")
         for s in range(len(strand_complex)):
             other_strand: Strand = strand_complex[s]
             template_strand: Strand = strand_complex_template[s]
             if (type(other_strand) is not Strand):
-                raise ValueError(f"Complex at index {i} contained non-Strand object at index {s}: {type(other_strand)}")
+                raise ValueError(
+                    f"Complex at index {i} contained non-Strand object at index {s}: {type(other_strand)}")
             if len(other_strand.domains) != len(template_strand.domains):
-                raise ValueError(f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
-                                 f"({template_strand}). "
-                                 f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
-                                 f"{len(template_strand.domains)} domains."
-                                )
+                raise ValueError(
+                    f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
+                    f"({template_strand}). "
+                    f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
+                    f"{len(template_strand.domains)} domains.")
             for d in range(1, len(other_strand.domains)):
                 domain_length: int = other_strand.domains[d].length
                 template_domain_length: int = template_strand.domains[d].length
                 if domain_length != template_domain_length:
-                    raise ValueError(f"Strand {other_strand} (the strand at index {s} of the complex located at index {i} of strand_complexes) does not match the "
-                                     f"provided template ({template_strand}): domain at index {d} is length "
-                                     f"{domain_length}, but expected {template_domain_length}.")
+                    raise ValueError(
+                        f"Strand {other_strand} (the strand at index {s} of the complex located at index {i} of strand_complexes) does not match the "
+                        f"provided template ({template_strand}): domain at index {d} is length "
+                        f"{domain_length}, but expected {template_domain_length}.")
 
     # Maps domain pairs
     all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
@@ -4556,7 +4551,6 @@ def nupack_4_complex_secondary_structure_constraint(
             all_bound_domain_addresses[addr1] = addr2
             all_bound_domain_addresses[addr2] = addr1
 
-
     # Input validation checks:
     #
     # No repeated strand
@@ -4570,8 +4564,8 @@ def nupack_4_complex_secondary_structure_constraint(
     for strand in strand_complex_template:
         if strand in seen_strands:
             raise ValueError(f"Multiple instances of a strand in a complex is not allowed."
-                              " Please make a separate Strand object with the same Domain objects in the same order"
-                              " but a different strand name")
+                             " Please make a separate Strand object with the same Domain objects in the same order"
+                             " but a different strand name")
         seen_strands.add(strand)
         for idx, domain in enumerate(strand.domains):
             is_starred = idx in strand.starred_domain_indices
@@ -4584,12 +4578,14 @@ def nupack_4_complex_secondary_structure_constraint(
         domain_name_complement = Domain.complementary_domain_name(domain_name)
         if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
             assert domain_name not in nonimplicit_base_pairs_domain_names
-            raise ValueError(f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
-                             f"Violating domain: {domain_name_complement}")
+            raise ValueError(
+                f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
+                f"Violating domain: {domain_name_complement}")
     ## End Input Validation ##
 
     ## Start populating base_pair_probs ##
-    base_type_probability_threshold: Dict[BasePairType, float] = {} if base_pair_prob_by_type is None else base_pair_prob_by_type.copy()
+    base_type_probability_threshold: Dict[BasePairType, float] = {
+    } if base_pair_prob_by_type is None else base_pair_prob_by_type.copy()
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
@@ -4674,8 +4670,8 @@ def nupack_4_complex_secondary_structure_constraint(
         d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr, all_bound_domain_addresses)
         d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr, all_bound_domain_addresses)
 
-        base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(*base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
-
+        base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(
+            *base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
@@ -4704,16 +4700,18 @@ def nupack_4_complex_secondary_structure_constraint(
             j = bp.base_index2
             p = bp.base_pairing_probability
             t = bp.base_pair_type
-            summary_list.append(f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+            summary_list.append(
+                f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
-
 
     def _violation_base_pairs(strand_complex: Tuple[Strand, ...]) -> List[_BasePair]:
         nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
-        nupack_complex_set = NupackComplexSet(nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
-        nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=['pairs'], model=nupack_model)
+        nupack_complex_set = NupackComplexSet(
+            nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
+        nupack_complex_analysis_result = nupack_complex_analysis(
+            nupack_complex_set, compute=['pairs'], model=nupack_model)
         pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
         nupack_complex_result: np.ndarray = pairs.to_array()
 
@@ -4753,13 +4751,19 @@ def nupack_4_complex_secondary_structure_constraint(
 
             d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
             if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
-                bps.append(_BasePair(domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p], d1_5p_d2_3p_ext_bp_type))
+                bps.append(
+                    _BasePair(
+                        domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p],
+                        d1_5p_d2_3p_ext_bp_type))
             expected_paired_idxs.add(domain1_5p)
             expected_paired_idxs.add(domain2_3p)
 
             d1_3p_d2_5p_ext_bp_prob_thres = base_type_probability_threshold[d1_3p_d2_5p_ext_bp_type]
             if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
-                bps.append(_BasePair(domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p], d1_3p_d2_5p_ext_bp_type))
+                bps.append(
+                    _BasePair(
+                        domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p],
+                        d1_3p_d2_5p_ext_bp_type))
             expected_paired_idxs.add(domain1_3p)
             expected_paired_idxs.add(domain2_5p)
             # Check if base pairs interior to domain (note ascending base pair indices
@@ -4787,7 +4791,6 @@ def nupack_4_complex_secondary_structure_constraint(
                 if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND or i == domain_length - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
                     prob_thres = border_internal_base_pair_prob
                     bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
-
 
                 if nupack_complex_result[row][col] < prob_thres:
                     bps.append(_BasePair(row, col, nupack_complex_result[row][col], bp_type))
