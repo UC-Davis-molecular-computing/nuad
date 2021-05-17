@@ -3359,18 +3359,37 @@ class BasePairType(Enum):
     * "|" indicates a bases are bound (forming a base pair).
       Any "-" not connected by "|" is unbound
 
-    Ocassionally, domains will be vertical in the case of overhangs.
-    In this case, "-" and "|" have opposite meanings
+    **Domain Example**:
 
-    Ex:
+    The following represents an unbound domain of length 5
 
     .. code-block:: none
 
-        #
-        |
-        |
-        |
-        #
+        #-----#
+
+    The following represents bound domains of length 5
+
+    .. code-block:: none
+
+        #-----#
+         |||||
+        #-----#
+
+
+    Ocassionally, domains will be vertical in the case of overhangs.
+    In this case, "-" and "|" have opposite meanings
+
+    **Vertical Domain Example**:
+
+    .. code-block:: none
+
+        # #
+        |-|
+        |-|
+        |-|
+        |-|
+        |-|
+        # #
 
     **Formatting**:
 
@@ -3391,6 +3410,7 @@ class BasePairType(Enum):
                   a*     b*     c*     d*
 
     **Consecutive "#"**:
+
     In some cases, extra "#" are needed to to make space for ascii art.
     We consider any consecutive "#"s to be equivalent "##".
     The following is consider equivalent to the example above
@@ -3403,7 +3423,7 @@ class BasePairType(Enum):
       strand1  <-----###-----####-----##-----]
                   a*      b*       c*     d*
 
-    Note that only consecutive "#"s is consider equivalent to "$$".
+    Note that only consecutive "#"s is consider equivalent to "##".
     The following example is not equivalent to the strands above because
     the "#  #" between b and c are seperated by spaces, so they are
     not equivalent to "##", meaning that b and c neednot be adjacent.
@@ -3425,7 +3445,7 @@ class BasePairType(Enum):
     Base pair is located inside of a strand but not next
     to a base pair that resides on the end of a strand.
 
-    Similar to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` but usually breathes less.
+    Similar base-pairing probability compared to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` but usually breathes less.
 
     .. code-block:: none
 
@@ -3443,7 +3463,7 @@ class BasePairType(Enum):
     Base pair is located inside of a strand and next
     to a base pair that resides on the end of a strand.
 
-    Similar to :py:attr:`INTERIOR_TO_STRAND` but usually breathes more.
+    Similar base-pairing probability compared to :py:attr:`INTERIOR_TO_STRAND` but usually breathes more.
 
     .. code-block:: none
 
@@ -3856,7 +3876,16 @@ class StrandDomainAddress:
 
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                                          all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
-    # determine which case is at 3'-adjacent to this base pair
+    """Returns the BasePairType that corresponds to the base pair that sits on the
+    3' end of provided domain.
+
+    :param domain_addr: The address of the domain that contains the interested
+    :type domain_addr: StrandDomainAddress
+    :param all_bound_domain_addresses: A mapping of all the domain pairs in complex
+    :type all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]
+    :return: BasePairType of base pair on 3' end of domain
+    :rtype: BasePairType
+    """
     # Declare domain variables:
     #                              # #
     #                              |-|
@@ -4355,7 +4384,8 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                     # Could possibly be n-arm junction
                     return BasePairType.OTHER
             else:
-                raise ValueError(f'Unexpected ExteriorBasePairType at 3\' end of domain {domain_addr}')
+                # Should not make it here
+                assert False
 
 
 @dataclass(frozen=True)
