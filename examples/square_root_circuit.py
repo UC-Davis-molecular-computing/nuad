@@ -5,6 +5,18 @@ from typing import Dict, List, Set, Tuple, Union, cast
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
 
+# TODO:
+# 1. Figure out bug with reporter complex
+# 2. If in library, fix it and write unit test
+# 3. Make a dev branch
+# 4. Close complex constraint issue
+#   a. Maybe tweak defaults
+#   b. Undetected base pair types default to OTHER
+# 5. Permissions for commiting to main
+# 6. Add a version number somewhere
+# 7. Github Action for Github Releases, unit testing, doc test
+# 8. Make branch to test out idea for Domain Tuple Constraint
+
 # Constants
 
 # Constants -- Recognition domain
@@ -43,6 +55,8 @@ ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
 no_gggg_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
 no_aaaaa_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
+
+
 def c_content_constraint(length: int) -> dc.BaseCountConstraint:
     """Returns a BaseCountConstraint that enforces 30% to 70% C-content
 
@@ -87,7 +101,8 @@ TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     numpy_constraints=toehold_domain_contraints)
 
 FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH, [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
+    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH,
+    [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
 
 # Alias
 dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
@@ -143,6 +158,7 @@ def signal_strand(
         name = f'signal {gate3p} {gate5p}'
     s: dc.Strand = dc.Strand(
         [d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
+
     set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
     set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
     set_domain_pool(s.domains[2], TOEHOLD_DOMAIN_POOL)
@@ -262,8 +278,8 @@ def reporter_base_strand(gate) -> dc.Strand:
     :return: Reporter base strand
     :rtype: dc.Strand
     """
-    d_sup = f'{SUP_REG_DOMAIN_POOL}{gate}*'
-    d_sub = f'{SUB_REG_DOMAIN_POOL}{gate}*'
+    d_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
+    d_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
 
     s: dc.Strand = dc.Strand(
         [TOEHOLD_COMPLEMENT, d_sup, d_sub], name=f'reporter {gate}')
@@ -285,6 +301,18 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
                            [=====--=============--==--=====>
                               |          |        |     |
                               T*      S{gate}* s{gate}* T*
+
+              S2        s2    T          S5       s5
+                       21
+         34          22|20 19  15 14          2  10
+         |           | ||  |   |  |           |  ||
+        <=============-==--=====--=============--==]
+                           |||||  |||||||||||||  ||
+                          [=====--=============--==--=====>
+                           |   |  |           |  ||  |   |
+                           35  39 40          52 |54 55  59
+                                                 53
+                             T*         S5*      s5*   T*
 
     :param input_gate_complexes: List of input:gate complexes
     :type input_gate_complexes: List[Tuple[dc.Strand, ...]]
@@ -320,6 +348,18 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
            |          |        |     |
            T*      S{gate}* s{gate}* T*
 
+                    S5         s5    T        S6 / S7  s6 / s7
+                               21
+                34          22 |20 19  15 14          2  10
+                |           |  ||  |   |  |           |  ||
+               <=============--==--=====--=============--==]
+                |||||||||||||  ||  |||||
+        [=====--=============--==--=====>
+         |   |  |           |  ||  |   |
+         35  39 40          52 |54 55  59
+                               53
+           T*         S5*      s5*   T*
+
     :param output_gate_complexes: List of gate:output complexes
     :type output_gate_complexes: List[Tuple[dc.Strand, ...]]
     :return: A complex constraint on the base-pairing probabilities
@@ -340,7 +380,9 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     )
 
 
-def strand_substring_constraint(strands: List[dc.Strand], substrings: List[str]) -> dc.StrandConstraint:
+def strand_substring_constraint(
+        strands: List[dc.Strand],
+        substrings: List[str]) -> dc.StrandConstraint:
     """Returns a strand constraint that restricts the substrings in the strand
     sequence
 
@@ -359,7 +401,7 @@ def strand_substring_constraint(strands: List[dc.Strand], substrings: List[str])
 
     def evaluate(strand: dc.Strand):
         if violated(strand):
-            return 1000
+            return 100
         else:
             return 0
 
@@ -502,7 +544,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all reporter gates
-        reporter_gates: Set[Tuple[int,int]] = set()
+        reporter_gates: Set[Tuple[int, int]] = set()
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
@@ -569,44 +611,116 @@ class SeesawCircuit:
 
     def _add_threshold_complex_constraint(self) -> None:
         """Adds threshold complexes to self.constraint
+
+        .. code-block:: none
+
+                              S5       s5
+                        14          2  10
+                        |           |  ||
+                       <=============--==]
+                        |||||||||||||  ||
+            [==--=====--=============--==>
+             ||  |   |  |           |  ||
+            15|  17  21 22          34 |36
+              16                      35
+             s2*   T*        S5*       s5*
         """
         threshold_complexes: List[Tuple[dc.Strand, ...]] = []
         for (_, gate), threshold_base_strand in self.threshold_base_strands.items():
             waste_strand = self.waste_strands[gate]
             threshold_complexes.append((waste_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_complexes, description="Threshold Complex", short_description="threshold"))
+        self.constraints.append(
+            dc_complex_constraint(
+                threshold_complexes,
+                description="Threshold Complex",
+                short_description="threshold"))
 
     def _add_threshold_waste_complex_constraint(self) -> None:
         """Adds threshold waste complexes to self.constraint
+
+        .. code-block:: none
+
+
+                 S2        s2    T          S5       s5
+                           21
+             34          22|20 19  15 14          2  10
+             |           | ||  |   |  |           |  ||
+            <=============-==--=====--=============--==]
+                           ||  |||||  |||||||||||||  ||
+                          [==--=====--=============--==>
+                           ||  |   |  |           |  ||
+                          35|  37  41 42          54 |56
+                            36                       55
+                           s2*   T*        S5*       s5*
         """
         threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         for (input, gate), threshold_base_strand in self.threshold_base_strands.items():
             signal_strand = self.signal_strands[(input, gate)]
-            threshold_waste_complexes.append((signal_strand, threshold_base_strand))
+            threshold_waste_complexes.append(
+                (signal_strand, threshold_base_strand))
 
-        self.constraints.append(dc_complex_constraint(threshold_waste_complexes, description="Threshold Waste Complex", short_description="threshold waste"))
+        self.constraints.append(
+            dc_complex_constraint(
+                threshold_waste_complexes,
+                description="Threshold Waste Complex",
+                short_description="threshold waste"))
 
     def _add_reporter_complex_constraint(self) -> None:
         """Adds reporter complexes to self.constraint
+
+        .. code-block:: none
+
+                          S6       s6
+                    14          2  10
+                    |           |  ||
+                   <=============--==]
+                    |||||||||||||  ||
+            [=====--=============--==>
+             |   |  |           |  ||
+             15  19 20          32 |34
+                                   33
+               T*        S6*       s6*
         """
         reporter_complexes: List[Tuple[dc.Strand, ...]] = []
         for (_, gate), reporter_base_strand in self.reporter_base_strands.items():
             waste_strand = self.waste_strands[gate]
             reporter_complexes.append((waste_strand, reporter_base_strand))
 
-        self.constraints.append(dc_complex_constraint(reporter_complexes, description="Reporter Complex", short_description="reporter"))
+        self.constraints.append(
+            dc_complex_constraint(
+                reporter_complexes,
+                description="Reporter Complex",
+                short_description="reporter"))
 
     def _add_reporter_waste_complex_constraint(self) -> None:
         """Adds reporter waste complexes to self.constraint
+
+        .. code-block:: none
+
+                  S5        s5    T          S6       s6
+                            21
+             34          22 |20 19  15 14          2  10
+             |           |  ||  |   |  |           |  ||
+            <=============--==--=====--=============--==]
+                                |||||  |||||||||||||  ||
+                               [=====--=============--==>
+                                |   |  |           |  ||
+                                35  39 40          52 |54
+                                                      53
+                                  T*        S6*       s6*
         """
         reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
         for (input, gate), reporter_base_strand in self.reporter_base_strands.items():
             signal_strand = self.signal_strands[(input, gate)]
-            reporter_waste_complexes.append((signal_strand, reporter_base_strand))
+            reporter_waste_complexes.append(
+                (signal_strand, reporter_base_strand))
 
-        self.constraints.append(dc_complex_constraint(reporter_waste_complexes, description="Reporter Waste Complex", short_description="reporter waste"))
-
+        self.constraints.append(
+            dc_complex_constraint(
+                reporter_waste_complexes,
+                description="Reporter Waste Complex",
+                short_description="reporter waste"))
 
     def _set_constraints(self) -> None:
         """Sets self.constraints (self.strands must be set)
@@ -734,10 +848,11 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    design = dc.Design(strands=strands,
-                       complex_constraints=seesaw_circuit.constraints,
-                       strand_constraints=[strand_substring_constraint(strands, ILLEGAL_SUBSTRINGS)],
-                       )
+    design = dc.Design(
+        strands=strands, complex_constraints=seesaw_circuit.constraints,
+        strand_constraints=[
+            strand_substring_constraint(
+                strands, ILLEGAL_SUBSTRINGS)],)
 
     ds.search_for_dna_sequences(design=design,
                                 # weigh_violations_equally=True,

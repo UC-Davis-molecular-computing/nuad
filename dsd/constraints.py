@@ -838,6 +838,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     :py:meth:`DomainPool.generate_sequence` will not be called to generate sequences for the :any:`Domain`;
     instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this 
     :any:`Domain`.
+
+    A possible use case is that one strand represents a subsequence of M13 of length 300,
+    of which there are 7249 possible DNA sequences to assign based on the different
+    rotations of M13. If this strand is bound to several other strands, it will have
+    several domains, but they cannot be set independently of each other.
+    Only the entire strand can be assigned at once, changing every domain at once,
+    so the domains are dependent on this strand's assigned sequence.
     """
 
     def __post_init__(self) -> None:
@@ -932,7 +939,12 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     def pool(self, new_pool: DomainPool) -> None:
         """
         :param new_pool: new :any:`DomainPool` to set
+        :raises ValueError: if :py:data:`Domain.pool_` is not None and is not same object as `new_pool`
         """
+        if self.pool_ is not None and new_pool is not self.pool_:
+            raise ValueError(f'Assigning pool {new_pool} to domain '
+                                 f'{self} but {self} already has domain '
+                                 f'pool {self.pool_}')
         self.pool_ = new_pool
 
     @property
