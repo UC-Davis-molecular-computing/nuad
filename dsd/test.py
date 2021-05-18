@@ -104,6 +104,52 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
                 top_a, all_bound_domain_addresses),
             BasePairType.MISMATCH)
 
+    def test_bulge_loop_3p(self):
+        """Test BULGE_LOOP_3P is properly classified
+
+        .. code-block:: none
+
+               c    b    a
+            <=====--=--=====]
+             |||||     |||||
+            [=====-----=====>
+               c*        a*
+        """
+        top_strand = construct_strand(['a', 'b', 'c'], [5, 1, 5])
+        bot_strand = construct_strand(['c*', 'a*'], [5, 5])
+
+        all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
+
+        top_a = top_strand.address_of_domain(0)
+
+        self.assertEqual(
+            _exterior_base_type_of_domain_3p_end(
+                top_a, all_bound_domain_addresses),
+            BasePairType.BULGE_LOOP_3P)
+
+    def test_bulge_loop_5p(self):
+        """Test BULGE_LOOP_5P is properly classified
+
+        .. code-block:: none
+
+               c    b    a
+            <=====--=--=====]
+             |||||     |||||
+            [=====-----=====>
+               c*        a*
+        """
+        top_strand = construct_strand(['a', 'c'], [5, 5])
+        bot_strand = construct_strand(['c*', 'd', 'a*'], [5, 1, 5])
+
+        all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
+
+        top_a = top_strand.address_of_domain(0)
+
+        self.assertEqual(
+            _exterior_base_type_of_domain_3p_end(
+                top_a, all_bound_domain_addresses),
+            BasePairType.BULGE_LOOP_5P)
+
 
 if __name__ == '__main__':
     unittest.main()
