@@ -857,7 +857,7 @@ def main() -> None:
     ds.search_for_dna_sequences(design=design,
                                 # weigh_violations_equally=True,
                                 report_delay=0.0,
-                                restart=True,
+                                # restart=True,
                                 out_directory='output/square_root_circuit',
                                 )
 

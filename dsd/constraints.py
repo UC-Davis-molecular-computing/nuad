@@ -3321,27 +3321,69 @@ class _AdjacentDuplexType(Enum):
 
 
 default_interior_to_strand_probability = 0.98
+"""Default probability threshold for :py:attr:`BasePairType.INTERIOR_TO_STRAND`"""
 default_adjacent_to_exterior_base_pair = 0.95
+"""Default probability threshold for :py:attr:`BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR`"""
+
 default_blunt_end_probability = 0.33
+"""Default probability threshold for :py:attr:`BasePairType.BLUNT_END`"""
+
 default_nick_3p_probability = 0.79
+"""Default probability threshold for :py:attr:`BasePairType.NICK_3P`"""
+
 default_nick_5p_probability = 0.73
+"""Default probability threshold for :py:attr:`BasePairType.NICK_5P`"""
+
 default_dangle_3p_probability = 0.51
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_3P`"""
+
 default_dangle_5p_probability = 0.57
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_5P`"""
+
 default_dangle_5p_3p_probability = 0.73
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_5P_3P`"""
+
 default_overhang_on_this_strand_3p_probability = 0.82
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_THIS_STRAND_3P`"""
+
 default_overhang_on_this_strand_5p_probability = 0.79
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_THIS_STRAND_5P`"""
+
 default_overhang_on_adjacent_strand_3p_probability = 0.55
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P`"""
+
 default_overhang_on_adjacent_strand_5p_probability = 0.49
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P`"""
+
 default_overhang_on_both_strand_3p_probability = 0.61
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_BOTH_STRANDS_3P`"""
+
 default_overhang_on_both_strand_5p_probability = 0.55
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_BOTH_STRANDS_5P`"""
+
 default_three_arm_junction_probability = 0.69
+"""Default probability threshold for :py:attr:`BasePairType.THREE_ARM_JUNCTION`"""
+
 default_four_arm_junction_probability = 0.84
+"""Default probability threshold for :py:attr:`BasePairType.FOUR_ARM_JUNCTION`"""
+
 default_five_arm_junction_probability = 0.77
-default_unpaired_probability = 0.95
-default_other_probability = 0.70
-# TODO: Detect mismatch and bulge loop
+"""Default probability threshold for :py:attr:`BasePairType.FIVE_ARM_JUNCTION`"""
+
 default_mismatch_probability = 0.76
-default_bulge_loop_probability = 0.65
+"""Default probability threshold for :py:attr:`BasePairType.MISMATCH`"""
+
+default_bulge_loop_3p_probability = 0.69
+"""Default probability threshold for :py:attr:`BasePairType.BULGE_LOOP_3P`"""
+
+default_bulge_loop_5p_probability = 0.65
+"""Default probability threshold for :py:attr:`BasePairType.BULGE_LOOP_5P`"""
+
+default_unpaired_probability = 0.95
+"""Default probability threshold for :py:attr:`BasePairType.UNPAIRED`"""
+
+default_other_probability = 0.70
+"""Default probability threshold for :py:attr:`BasePairType.OTHER`"""
 
 
 class BasePairType(Enum):
@@ -3740,6 +3782,54 @@ class BasePairType(Enum):
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
 
     Base pair is located next to a five-arm-junction.
+    """
+
+    MISMATCH = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`DANGLE_5P_3P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----##-##-----#
+         |||||     |||||
+        #-----##-##-----#
+             ^
+             |
+         base pair
+    """
+
+    BULGE_LOOP_3P = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_3P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----##-##-----#
+         |||||     |||||
+        #-----#####-----#
+             ^
+             |
+         base pair
+    """
+
+    BULGE_LOOP_5P = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_5P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----#####-----#
+         |||||     |||||
+        #-----##-##-----#
+             ^
+             |
+         base pair
     """
 
     UNPAIRED = auto()
