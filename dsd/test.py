@@ -81,6 +81,7 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
                 top_a, all_bound_domain_addresses),
             BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR)
 
+    @unittest.skip('MISMATCH detection has not been implemented')
     def test_mismatch(self):
         """Test MISMATCH is properly classified
 
@@ -104,6 +105,7 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
                 top_a, all_bound_domain_addresses),
             BasePairType.MISMATCH)
 
+    @unittest.skip('BULGE_LOOP_3P detection has not been implemented')
     def test_bulge_loop_3p(self):
         """Test BULGE_LOOP_3P is properly classified
 
@@ -127,6 +129,7 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
                 top_a, all_bound_domain_addresses),
             BasePairType.BULGE_LOOP_3P)
 
+    @unittest.skip('BULGE_LOOP_5P detection has not been implemented')
     def test_bulge_loop_5p(self):
         """Test BULGE_LOOP_5P is properly classified
 
