@@ -1,7 +1,7 @@
 from typing import Dict, List
 import unittest
 from dsd import constraints
-from dsd.constraints import Domain, _exterior_base_type_of_domain_3p_end, Strand, DomainPool, BasePairType
+from dsd.constraints import _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, Strand, DomainPool, BasePairType
 
 POOL_1 = DomainPool('POOL_1', 1)
 POOL_2 = DomainPool('POOL_2', 2)
@@ -73,16 +73,8 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
         bot_strand = construct_strand(['b*', 'a*'], [13, 2])
 
         top_a = top_strand.address_of_domain(0)
-        top_b = top_strand.address_of_domain(1)
-        bot_a = bot_strand.address_of_domain(1)
-        bot_b = bot_strand.address_of_domain(0)
 
-        all_bound_domain_addresses = {
-            top_a: bot_a,
-            bot_a: top_a,
-            top_b: bot_b,
-            bot_b: top_b,
-        }
+        all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
         self.assertEqual(
             _exterior_base_type_of_domain_3p_end(
@@ -104,17 +96,8 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
         bot_strand = construct_strand(['c*', 'd', 'a*'], [5, 1, 5])
 
         top_a = top_strand.address_of_domain(0)
-        top_c = top_strand.address_of_domain(2)
 
-        bot_c = bot_strand.address_of_domain(0)
-        bot_a = bot_strand.address_of_domain(2)
-
-        all_bound_domain_addresses = {
-            top_a: bot_a,
-            bot_a: top_a,
-            top_c: bot_c,
-            bot_c: top_c,
-        }
+        all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
         self.assertEqual(
             _exterior_base_type_of_domain_3p_end(

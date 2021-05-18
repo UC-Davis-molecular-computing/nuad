@@ -4541,6 +4541,72 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 #     * Dict[BaseAddress, float]      base_unpaired_probabilities_upper_bound
 
 
+def _get_implicitly_bound_domain_addresses(
+        strand_complex: Tuple[Strand, ...],
+        nonimplicit_base_pairs_domain_names: Set[str] = None) -> Dict[
+        StrandDomainAddress, StrandDomainAddress]:
+    """Returns a map of all the implicitly bound domain addresses
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :param nonimplicit_base_pairs_domain_names: Set of all domain names to ignore in this search, defaults to None
+    :type nonimplicit_base_pairs_domain_names: Set[str], optional
+    :return: Map of all implicitly bound domain addresses
+    :rtype: Dict[StrandDomainAddress, StrandDomainAddress]
+    """
+    if nonimplicit_base_pairs_domain_names is None:
+        nonimplicit_base_pairs_domain_names = set()
+
+    implicitly_bound_domain_addresses = {}
+    implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
+    for strand in strand_complex:
+        for domain_idx, domain in enumerate(strand.domains):
+            # Get domain_name
+            domain_name = domain.name
+            if domain_idx in strand.starred_domain_indices:
+                domain_name = domain.starred_name
+
+            # Move on to next domain if it was paired via nonimplicit_base_pairs
+            if domain_name in nonimplicit_base_pairs_domain_names:
+                continue
+
+            # populate implicit bounded_domains
+            strand_domain_address = StrandDomainAddress(strand, domain_idx)
+            # Assertions checks that domain_name was not previously seen.
+            # This is to check that the non-competition requirement on
+            # implicit domains was properly checked earlier in input validation.
+            assert domain_name not in implicit_seen_domains
+            implicit_seen_domains[domain_name] = strand_domain_address
+
+            complementary_domain_name = Domain.complementary_domain_name(domain_name)
+            if complementary_domain_name in implicit_seen_domains:
+                complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
+                implicitly_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
+                implicitly_bound_domain_addresses[complementary_strand_domain_address] = strand_domain_address
+
+    return implicitly_bound_domain_addresses
+
+
+def _get_addr_to_starting_base_pair_idx(strand_complex: Tuple[Strand, ...]) -> Dict[StrandDomainAddress, int]:
+    """Returns a mapping between StrandDomainAddress and the base index of the
+    5' end base of the domain
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :return: Map of StrandDomainAddress to starting base index
+    :rtype: Dict[StrandDomainAddress, int]
+    """
+    # Fill addr_to_starting_base_pair_idx and all_bound_domain_addresses
+    addr_to_starting_base_pair_idx = {}
+    domain_base_index = 0
+    for strand in strand_complex:
+        for domain_idx, domain in enumerate(strand.domains):
+            addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
+            domain_base_index += domain.length
+
+    return addr_to_starting_base_pair_idx
+
+
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
         # TODO: Documentation, indicate that despite name of this argument, UNPAIRED
@@ -4715,39 +4781,10 @@ def nupack_4_complex_secondary_structure_constraint(
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
     ## End populating base_pair_probs ##
 
-    # Will be used for identifying base pair idx for non-implicit base pairs
-    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = {}
-
-    # Fill addr_to_starting_base_pair_idx and all_bound_domain_addresses
-    domain_base_index = 0
-    implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
-    for strand in strand_complex_template:
-        for domain_idx, domain in enumerate(strand.domains):
-            addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
-            domain_base_index += domain.length
-
-            # Get domain_name
-            domain_name = domain.name
-            if domain_idx in strand.starred_domain_indices:
-                domain_name = domain.starred_name
-
-            # Move on to next domain if it was paired via nonimplicit_base_pairs
-            if domain_name in nonimplicit_base_pairs_domain_names:
-                continue
-
-            # populate implicit bounded_domains
-            strand_domain_address = StrandDomainAddress(strand, domain_idx)
-            # Assertions checks that domain_name was not previously seen.
-            # This is to check that the non-competition requirement on
-            # implicit domains was properly checked earlier in input validation.
-            assert domain_name not in implicit_seen_domains
-            implicit_seen_domains[domain_name] = strand_domain_address
-
-            complementary_domain_name = Domain.complementary_domain_name(domain_name)
-            if complementary_domain_name in implicit_seen_domains:
-                complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
-                all_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
-                all_bound_domain_addresses[complementary_strand_domain_address] = strand_domain_address
+    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
+                                         int] = _get_addr_to_starting_base_pair_idx(strand_complex_template)
+    all_bound_domain_addresses.update(_get_implicitly_bound_domain_addresses(
+        strand_complex_template, nonimplicit_base_pairs_domain_names))
 
     # Set of all bound domain endpoints to check.
     base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
