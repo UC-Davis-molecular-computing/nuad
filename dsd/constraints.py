@@ -72,10 +72,10 @@ _length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_a
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
 """
-Global logger instance used throughout dsd. 
+Global logger instance used throughout dsd.
 
 Call ``logger.removeHandler(logger.handlers[0])`` to stop screen output (assuming that you haven't added
-or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and 
+or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and
 removing it will stop screen output).
 
 Call ``logger.addHandler(logging.FileHandler(filename))`` to direct to a file.
@@ -132,8 +132,8 @@ Constraint that applies to a DNA sequence; the difference between this an a :any
 that these are applied before a sequence is assigned to a :any:`Domain`, so the constraint can only
 be based on the DNA sequence, and not, for instance, on the :any:`Domain`'s :any:`DomainPool`.
 
-Consequently :any:`SequenceConstraint`'s, like :any:`NumpyConstraint`'s, are treated differently than 
-subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceConstraint`'s or 
+Consequently :any:`SequenceConstraint`'s, like :any:`NumpyConstraint`'s, are treated differently than
+subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceConstraint`'s or
 :any:`NumpyConstraint`'s is never allowed to be assigned into any :any:`Domain`.
 
 The difference with :any:`NumpyConstraint` is that a :any:`NumpyConstraint` requires one to express the
@@ -369,9 +369,9 @@ class BaseAtPositionConstraint(NumpyConstraint):
     bases: Union[str, Collection[str]]
     """
     Base(s) to require at position :py:data:`BasePositionConstraint.position`.
-    
+
     Can either be a single base, or a collection (e.g., list, tuple, set).
-    If several bases are specified, the base at :py:data:`BasePositionConstraint.position` 
+    If several bases are specified, the base at :py:data:`BasePositionConstraint.position`
     must be one of the bases in :py:data:`BasePositionConstraint.bases`.
     """
 
@@ -409,7 +409,7 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
     substrings: Union[str, Collection[str]]
     """
     Substring(s) to forbid.
-    
+
     Can either be a single substring, or a collection (e.g., list, tuple, set).
     If a collection, all substrings must have the same length.
     """
@@ -519,8 +519,8 @@ class DomainPool(JSONSerializable):
     :any:`NumpyConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
-    
-    The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied 
+
+    The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied
     efficiently to many sequences at once, represented as a numpy 2D array of bytes (via the class
     :any:`np.DNASeqList`), so they are done in large batches in advance.
     In contrast, the constraints in :py:data:`DomainPool.sequence_constraints` are done on Python strings
@@ -536,11 +536,11 @@ class DomainPool(JSONSerializable):
     :any:`SequenceConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
-    
+
     See :py:data:`DomainPool.numpy_constraints` for an explanation of the difference between them.
-    
+
     See :py:data:`DomainPool.domain_constraints` for an explanation of the difference between them.
-    
+
     Optional; default is empty.
     """
 
@@ -549,16 +549,16 @@ class DomainPool(JSONSerializable):
         compare=False, hash=False, default_factory=list, repr=False)
     """
     :any:`DomainConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
-    
-    Unlike a :any:`SequenceConstraint`, which sees only the DNA sequence, 
+
+    Unlike a :any:`SequenceConstraint`, which sees only the DNA sequence,
     a :any:`DomainConstraint` is given the full :any:`Domain`. Generally a :any:`SequenceConstraint`
-    is applied before assigning a DNA sequence to a :any:`Domain`, 
+    is applied before assigning a DNA sequence to a :any:`Domain`,
     to see if the sequence is even "legal" on its own.
     A :any:`DomainConstraint` is generally one that requires more information about the :any:`Domain`
-    (such as its :any:`DomainPool`), but unlike other types of constraints, can still be applied 
-    without referencing information outside of the :any:`Domain` 
+    (such as its :any:`DomainPool`), but unlike other types of constraints, can still be applied
+    without referencing information outside of the :any:`Domain`
     (e.g., the :any:`Strand` the :any:`Domain` is in).
-    
+
     Optional; default is empty.
     """
 
@@ -791,7 +791,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
     name: str
     """
-    Name of the :any:`Domain`. 
+    Name of the :any:`Domain`.
     This is the "unstarred" version of the name, and it cannot end in `*`.
     """
 
@@ -819,8 +819,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     Optional generic "label" object to associate to this :any:`Domain`.
 
     Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int) 
-    that is naturally JSON serializable. (Calling 
+    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
+    that is naturally JSON serializable. (Calling
     `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
     on the object should succeed without having to specify a custom encoder.)
     """
@@ -829,14 +829,14 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     """
     Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
     However, if using a :any:`StrandPool`, which assigns a DNA sequence to a whole :any:`Strand`, then
-    this will be marked as True (dependent). 
-    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent, 
+    this will be marked as True (dependent).
+    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent,
     since it must be set along with other :any;`Domain`'s in the same :any:`Strand`.
-    
-    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored 
-    in the field :py:data:`DomainPool.length`. But that pool's method 
+
+    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored
+    in the field :py:data:`DomainPool.length`. But that pool's method
     :py:meth:`DomainPool.generate_sequence` will not be called to generate sequences for the :any:`Domain`;
-    instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this 
+    instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this
     :any:`Domain`.
 
     A possible use case is that one strand represents a subsequence of M13 of length 300,
@@ -1116,7 +1116,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """The :any:`Domain`'s on this :any:`Strand`, in order from 5' end to 3' end."""
 
     starred_domain_indices: FrozenSet[int]
-    """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains` 
+    """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains`
     on this :any:`Strand` that are starred."""
 
     group: StrandGroup
@@ -1131,15 +1131,15 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     Optional generic "label" object to associate to this :any:`Strand`.
 
     Useful for associating extra information with the :any:`Strand` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int) 
-    that is naturally JSON serializable. (Calling 
+    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
+    that is naturally JSON serializable. (Calling
     `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
     on the object should succeed without having to specify a custom encoder.)
     """
 
     pool: Optional[StrandPool] = None
     """
-    :any:`StrandPool` used to select DNA sequences for this :any:`Strand`. Note that this is incompatible 
+    :any:`StrandPool` used to select DNA sequences for this :any:`Strand`. Note that this is incompatible
     with using a :any:`DomainPool` for any :any:`Domain` on this :any:`Strand`.
     """
 
@@ -1467,8 +1467,8 @@ class ConstraintReport:
 
     constraint: Optional['Constraint']
     """
-    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available 
-    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be 
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
+    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
     automatically inserted by the report generating code."""
 
     content: str
@@ -1478,13 +1478,13 @@ class ConstraintReport:
 
     num_violations: int
     """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
     violated the constraint.
     """
 
     num_checks: int
     """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
     were checked against the constraint.
     """
 
@@ -1557,14 +1557,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     domains: List[Domain[DomainLabel]] = field(init=False)
     """
     List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
-    
+
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
     strand_groups: Dict[StrandGroup, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
     Dict mapping each :any:`StrandGroup` to a list of the :any:`Strand`'s in this :any:`Design` in the group.
-    
+
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
@@ -1818,7 +1818,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = self.summary_of_complex_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
-                      f'unrecognized type {type(constraint)}'
+                f'unrecognized type {type(constraint)}'
             report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
 
         report.constraint = constraint
@@ -1920,8 +1920,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(fixed_domain, False)
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
-                       f'{summary} ' \
-                       f'{"" if passed else " **violation**"}'
+                    f'{summary} ' \
+                    f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -1948,8 +1948,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(strand, False)
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
-                       f'{summary} ' \
-                       f'{"" if passed else " **violation**"}'
+                    f'{summary} ' \
+                    f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -2360,7 +2360,7 @@ def add_header_to_content_of_summary(report: ConstraintReport) -> str:
 {delim}
 * {report.constraint.description}
 * checks:     {report.num_checks}
-* violations: {report.num_violations}  
+* violations: {report.num_violations}
 {indented_content}'''
     return summary
 
@@ -2393,20 +2393,20 @@ class Constraint(ABC, Generic[DesignPart]):
 
     weight: float = 1.0
     """
-    Weight of the problem; the higher the total weight of all the :any:`Constraint`'s a :any:`Domain` 
-    has caused, the greater likelihood its sequence is changed when stochastically searching for sequences 
+    Weight of the problem; the higher the total weight of all the :any:`Constraint`'s a :any:`Domain`
+    has caused, the greater likelihood its sequence is changed when stochastically searching for sequences
     to satisfy all constraints.
     """
 
     weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 3)
     """
-    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative 
-    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure 
+    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative
+    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
     energy exceeding a threshold, it will return the difference between the energy and the threshold.
     It is then passed through the weight_transfer_function.
     The default is the cubed ReLU function: f(x) = max(0, x^3).
-    This "punishes" more severe violations more, i.e., it would 
-    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its 
+    This "punishes" more severe violations more, i.e., it would
+    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
 
@@ -2440,8 +2440,8 @@ class Constraint(ABC, Generic[DesignPart]):
 
 
 _no_summary_string = f"No summary for this constraint. " \
-                     f"To generate one, pass a function as the parameter named " \
-                     f'"summary" when creating the Constraint.'
+    f"To generate one, pass a function as the parameter named " \
+    f'"summary" when creating the Constraint.'
 
 
 @dataclass(frozen=True, eq=False)
@@ -2568,7 +2568,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     evaluate: Callable[[Domain, Domain],
                        float] = lambda _, __: 0.0
     """
-    Pairwise check to perform on :any:`Domain`'s. 
+    Pairwise check to perform on :any:`Domain`'s.
     Returns True if and only if the pair satisfies the constraint.
     """
 
@@ -2603,8 +2603,8 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     evaluate: Callable[[Strand, Strand],
                        float] = lambda _, __: 0.0
     """
-    Pairwise evaluation to perform on :any:`Strand`'s. 
-    Returns float indicating how much the constraint is violated,  
+    Pairwise evaluation to perform on :any:`Strand`'s.
+    Returns float indicating how much the constraint is violated,
     or 0.0 if the constraint is satisfied.
     """
 
@@ -2639,8 +2639,8 @@ class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
     evaluate: Callable[[Tuple[Strand, ...]],
                        float] = lambda _, __: 0.0
     """
-    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s). 
-    Returns float indicating how much the constraint is violated,  
+    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
+    Returns float indicating how much the constraint is violated,
     or 0.0 if the constraint is satisfied.
     """
 
@@ -2688,7 +2688,7 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     evaluate: Callable[[Iterable[Tuple[Domain, Domain]]],
                        List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
     """
-    Pairwise check to perform on :any:`Domain`'s. 
+    Pairwise check to perform on :any:`Domain`'s.
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
@@ -2722,7 +2722,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     evaluate: Callable[[Iterable[Tuple[Strand, Strand]]],
                        List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
     """
-    Pairwise check to perform on :any:`Strand`'s. 
+    Pairwise check to perform on :any:`Strand`'s.
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
@@ -3023,7 +3023,7 @@ def nupack_strand_secondary_structure_constraint(
             strand_group_name_to_threshold = {strand_group.name: value
                                               for strand_group, value in threshold.items()}
             description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
-                          f'as follows:\n{strand_group_name_to_threshold}'
+                f'as follows:\n{strand_group_name_to_threshold}'
         else:
             raise AssertionError('threshold must be one of float or dict')
 
@@ -3090,7 +3090,7 @@ def nupack_domain_pair_constraint(
                                                   for (domain_pool1, domain_pool2), value in
                                                   threshold.items()}
             description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
-                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
+                f'as follows:\n{domain_pool_name_pair_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -3197,7 +3197,7 @@ def nupack_strand_pair_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -4988,10 +4988,10 @@ def cpu_count(logical: bool = False) -> int:
     except ModuleNotFoundError:
         logger.warning('''\
 psutil package not installed. Using os package to determine number of cores.
-WARNING: this will count the number of logical cores, but the number of 
-physical scores is a more effective number to use. It is recommended to 
+WARNING: this will count the number of logical cores, but the number of
+physical scores is a more effective number to use. It is recommended to
 install the package psutil to help determine the number of physical cores
-and make parallel processing more efficient: 
+and make parallel processing more efficient:
   https://pypi.org/project/psutil/''')
         import os
         count = os.cpu_count()
@@ -5054,7 +5054,7 @@ def rna_duplex_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -5226,7 +5226,7 @@ def rna_cofold_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
