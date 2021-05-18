@@ -3,11 +3,6 @@ import unittest
 from dsd import constraints
 from dsd.constraints import _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, Strand, DomainPool, BasePairType
 
-POOL_1 = DomainPool('POOL_1', 1)
-POOL_2 = DomainPool('POOL_2', 2)
-POOL_5 = DomainPool('POOL_5', 5)
-POOL_13 = DomainPool('POOL_13', 13)
-
 _domain_pools: Dict[int, DomainPool] = {}
 
 
