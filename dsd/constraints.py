@@ -812,6 +812,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     """
     Whether this :any:`Domain`'s DNA sequence is fixed, i.e., cannot be changed by the
     search algorithm :py:meth:`search.search_for_dna_sequences`.
+
+    Note: If a domain is fixed then all of its subdomains must also be fixed.
     """
 
     label: Optional[DomainLabel] = None
@@ -847,7 +849,25 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     so the domains are dependent on this strand's assigned sequence.
     """
 
+    subdomains: List["Domain"] = field(default_factory=list)
+    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
+    """
+
+    parent: Optional["Domain"] = field(init=False, default=None)
+    """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based on the
+    :py:data:`Domain.subdomains` of other domains in the same tree.
+    """
+
+    # TODO: Add private methods set_subdomain_sequence and set_parent_sequence called in response to setter sequence
+    # TODO: Test case: one long strand, make it have a single long domain, and it consist of shorter domains
+    # TODO: And other test cases...
+
     def __post_init__(self) -> None:
+        # TODO: Check that if domain is fixed, all of its subdomains are fixed
+        # TODO: Check that every root to leaf path has one fixed or independent (ensuring that every part of the
+        #       sequence is assigned, although in the future, might allow for multiple independents/fixed in a path)
+        # TODO: Check no cycles (i.e. subdomain graph is a tree) (maybe bfs of dfs)
+        # TODO: Set parent field.
         if self.name.endswith('*'):
             raise ValueError('Domain name cannot end with *\n'
                              f'domain name = {self.name}')
