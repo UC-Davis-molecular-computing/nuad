@@ -1419,9 +1419,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         idx = -1
         occurences = 0
 
-        itr = range(len(domain_names))
-        if not forward:
-            itr = reversed(itr)
+        itr = range(0, len(domain_names)) if forward else range(len(domain_names) - 1, -1, -1)
 
         for i in itr:
             if domain_names[i] == domain_name:
@@ -3883,6 +3881,12 @@ class BasePairType(Enum):
             return default_other_probability
         elif self is BasePairType.UNPAIRED:
             return default_unpaired_probability
+        elif self is BasePairType.BULGE_LOOP_3P:
+            return default_bulge_loop_3p_probability
+        elif self is BasePairType.BULGE_LOOP_5P:
+            return default_bulge_loop_5p_probability
+        elif self is BasePairType.MISMATCH:
+            return default_mismatch_probability
         else:
             assert False
 
