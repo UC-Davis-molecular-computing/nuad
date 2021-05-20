@@ -3905,6 +3905,11 @@ class StrandDomainAddress:
     """
 
     def neighbor_5p(self) -> Optional['StrandDomainAddress']:
+        """Returns 5' domain neighbor. If domain is 5' end of strand, returns None
+
+        :return: StrandDomainAddress of 5' neighbor or None if no 5' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
         idx = self.domain_idx - 1
         if idx >= 0:
             return StrandDomainAddress(self.strand, idx)
@@ -3912,17 +3917,24 @@ class StrandDomainAddress:
             return None
 
     def neighbor_3p(self) -> Optional['StrandDomainAddress']:
+        """Returns 3' domain neighbor. If domain is 3' end of strand, returns None
+
+        :return: StrandDomainAddress of 3' neighbor or None if no 3' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
         idx = self.domain_idx + 1
         if idx < len(self.strand.domains):
             return StrandDomainAddress(self.strand, idx)
         else:
             return None
 
-    def domain_unstarred_name(self) -> str:
-        return self.strand.domains[self.domain_idx].name
+    def domain(self) -> Domain:
+        """Returns domain referenced by this address.
 
-    def domain_base_length(self) -> int:
-        return self.strand.domains[self.domain_idx].length
+        :return: domain
+        :rtype: Domain
+        """
+        return self.strand.domains[self.domain_idx]
 
     def __hash__(self) -> int:
         return hash((self.strand, self.domain_idx))
@@ -4656,18 +4668,18 @@ def _get_base_pair_domain_endpoints_to_check(
     base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
 
     for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
-        domain_base_length = domain_addr.domain_base_length()
-        assert domain_base_length == comple_addr.domain_base_length()
+        domain_base_length = domain_addr.domain().length
+        assert domain_base_length == comple_addr.domain().length
 
         if domain_addr not in addr_to_starting_base_pair_idx:
-            if domain_addr.domain_unstarred_name() in nonimplicit_base_pairs_domain_names:
+            if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:
                 raise ValueError(f'StrandDomainAddress {domain_addr} is not found in given complex')
             else:
                 print(f'StrandDomainAddress {domain_addr} is not found in given complex')
                 assert False
 
         if comple_addr not in addr_to_starting_base_pair_idx:
-            if comple_addr.domain_unstarred_name() in nonimplicit_base_pairs_domain_names:
+            if comple_addr.domain().name in nonimplicit_base_pairs_domain_names:
                 raise ValueError(f'StrandDomainAddress {comple_addr} is not found in given complex')
             else:
                 print(f'StrandDomainAddress {comple_addr} is not found in given complex')
