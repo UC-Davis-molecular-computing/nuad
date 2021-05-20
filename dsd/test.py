@@ -266,6 +266,47 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         actual = _get_base_pair_domain_endpoints_to_check(gate_output_complex, nonimplicit_base_pairs)
         self.assertEqual(actual, expected)
 
+    def test_seesaw_threshold_complex(self):
+        """Test endpoints for seesaw threshold omplex
+
+        .. code-block:: none
+
+                                S{gate}  s{gate}
+                            14          2  10
+                            |           |  ||
+                           <=============--==]
+                            |||||||||||||  ||
+                [==--=====--=============--==>
+                 ||  |   |  |           |  ||
+                 15|  17  21 22          34 |36
+                 16                      35
+            s{input}*  T*      S{gate}*    s{gate}*
+
+                            DANGLE_5P      ADJACENT_TO_EXTERIOR_BASE_PAIR
+                            |              |
+                           <=============--==]
+                            |||||||||||||  ||
+                [==--=====--=============--==>
+                                        |   |
+                       INTERIOR_TO_STRAND   BLUNT_END
+        """
+        waste_strand = construct_strand(['sg', 'Sg'], [2, 13])
+        threshold_base_strand = construct_strand(['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
+        threshold_complex = [waste_strand, threshold_base_strand]
+
+        expected = set([
+            _BasePairDomainEndpoint(
+                domain1_5p_index=2, domain2_3p_index=34, domain_base_length=13,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.DANGLE_5P),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=0, domain2_3p_index=36, domain_base_length=2,
+                domain1_5p_domain2_base_pair_type=BasePairType.BLUNT_END,
+                domain1_3p_domain1_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR), ])
+
+        actual = _get_base_pair_domain_endpoints_to_check(threshold_complex)
+        self.assertEqual(actual, expected)
+
 
 if __name__ == '__main__':
     unittest.main()
