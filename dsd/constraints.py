@@ -3315,8 +3315,6 @@ class _AdjacentDuplexType(Enum):
     #                       c*    d*
     TOP_RIGHT_BOUND_OVERHANG = auto()
 
-# TODO(benlee12): Document this stuff
-
 
 default_interior_to_strand_probability = 0.98
 """Default probability threshold for :py:attr:`BasePairType.INTERIOR_TO_STRAND`"""
@@ -3905,36 +3903,6 @@ class StrandDomainAddress:
     domain_idx: int
     """order in which domain appears in :py:data:`StrandDomainAddress.strand`
     """
-
-    @classmethod
-    def address_of_nth_domain_occurence(
-            cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
-        if n < 1:
-            raise ValueError(f'n needs to be at least 1')
-        domain_names = strand.domain_names_tuple()
-        idx = -1
-        occurences = 0
-
-        itr = iter(range(0, len(domain_names), 1 if forward else -1))
-
-        for i in itr:
-            if domain_names[i] == domain_str:
-                occurences += 1
-                if occurences == n:
-                    idx = i
-                    break
-        if idx == -1:
-            raise ValueError(f'{strand} contained less than {n} occurrences of domain {domain_str}')
-
-        return cls(strand, idx)
-
-    @classmethod
-    def address_of_first_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1)
-
-    @classmethod
-    def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
 
     def neighbor_5p(self) -> Optional['StrandDomainAddress']:
         idx = self.domain_idx - 1
