@@ -1,7 +1,7 @@
 from typing import Dict, List
 import unittest
 from dsd import constraints
-from dsd.constraints import _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, Strand, DomainPool, BasePairType
+from dsd.constraints import _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -147,6 +147,66 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
             _exterior_base_type_of_domain_3p_end(
                 top_a, all_bound_domain_addresses),
             BasePairType.BULGE_LOOP_5P)
+
+
+class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
+    def test_seesaw_input_gate_complex(self):
+        """Test endpoints for seesaw gate input:gate complex
+
+        .. code-block:: none
+
+          S{input}  s{input}  T       S{gate}    s{gate}
+            |           |     |          |         |
+        <=============--==--=====--=============--==]
+                            |||||  |||||||||||||  ||
+                           [=====--=============--==--=====>
+                              |          |        |     |
+                              T*      S{gate}* s{gate}* T*
+
+                       21
+         34          22|20 19  15 14          2  10
+         |           | ||  |   |  |           |  ||
+        <=============-==--=====--=============--==]
+                           |||||  |||||||||||||  ||
+                          [=====--=============--==--=====>
+                           |   |  |           |  ||  |   |
+                           35  39 40          52 |54 55  59
+                                                 53
+
+                    DANGLE_3P INTERIOR_TO_STRAND ADJACENT_TO_EXTERIOR_BASE_PAIR
+                           |      |              |
+        <=============-==--=====--=============--==]
+                           |||||  |||||||||||||  ||
+                          [=====--=============--==--=====>
+                               |              |   |
+                              INTERIOR_TO_STRAND  DANGLE_3P
+        """
+        input_strand = construct_strand(['sg', 'Sg', 'T', 'si', 'Si'], [2, 13, 5, 2, 13])
+        gate_base_strand = construct_strand(['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
+        input_gate_complex = [input_strand, gate_base_strand]
+
+        input_t = input_strand.address_of_domain(2)
+        gate_base_t = gate_base_strand.address_of_domain(0)
+        nonimplicit_base_pairs = [
+            (input_t, gate_base_t)
+        ]
+
+        expected = set([
+            _BasePairDomainEndpoint(
+                domain1_5p_index=15, domain2_3p_index=39, domain_base_length=5,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.DANGLE_3P),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=2, domain2_3p_index=52, domain_base_length=13,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.INTERIOR_TO_STRAND),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=0, domain2_3p_index=54, domain_base_length=2,
+                domain1_5p_domain2_base_pair_type=BasePairType.DANGLE_3P,
+                domain1_3p_domain1_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR), ])
+
+        actual = _get_base_pair_domain_endpoints_to_check(input_gate_complex, nonimplicit_base_pairs)
+        self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__':
