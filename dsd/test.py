@@ -208,6 +208,64 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         actual = _get_base_pair_domain_endpoints_to_check(input_gate_complex, nonimplicit_base_pairs)
         self.assertEqual(actual, expected)
 
+    def test_seesaw_gate_output_complex(self):
+        """Test endpoints for seesaw gate gate:output complex
+
+        .. code-block:: none
+
+                   S{gate}  s{gate}  T      S{output}    s{output}
+                      |        |     |          |         |
+               <=============--==--=====--=============--==]
+                |||||||||||||  ||  |||||
+        [=====--=============--==--=====>
+           |          |        |     |
+           T*      S{gate}* s{gate}* T*
+
+                               21
+                34          22 |20 19  15 14          2  10
+                |           |  ||  |   |  |           |  ||
+               <=============--==--=====--=============--==]
+                |||||||||||||  ||  |||||
+        [=====--=============--==--=====>
+         |   |  |           |  ||  |   |
+         35  39 40          52 |54 55  59
+                               53
+
+                DANGLE_5P      INTERIOR_TO_STRAND
+                |              |   |
+               <=============--==--=====--=============--==]
+                |||||||||||||  ||  |||||
+        [=====--=============--==--=====>
+                            |   |      |
+               INTERIOR_TO_STRAND      DANGLE_5P
+        """
+        output_strand = construct_strand(['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
+        gate_base_strand = construct_strand(['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
+        gate_output_complex = [output_strand, gate_base_strand]
+
+        output_t = output_strand.address_of_domain(2)
+        gate_base_t = gate_base_strand.address_of_domain(3)
+        nonimplicit_base_pairs = [
+            (output_t, gate_base_t)
+        ]
+
+        expected = set([
+            _BasePairDomainEndpoint(
+                domain1_5p_index=22, domain2_3p_index=52, domain_base_length=13,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.DANGLE_5P),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=20, domain2_3p_index=54, domain_base_length=2,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.INTERIOR_TO_STRAND),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=15, domain2_3p_index=59, domain_base_length=5,
+                domain1_5p_domain2_base_pair_type=BasePairType.DANGLE_5P,
+                domain1_3p_domain1_base_pair_type=BasePairType.INTERIOR_TO_STRAND), ])
+
+        actual = _get_base_pair_domain_endpoints_to_check(gate_output_complex, nonimplicit_base_pairs)
+        self.assertEqual(actual, expected)
+
 
 if __name__ == '__main__':
     unittest.main()
