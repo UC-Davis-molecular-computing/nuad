@@ -1,9 +1,15 @@
 from typing import Dict, List
 import unittest
 from dsd import constraints
-from dsd.constraints import _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType
+from dsd.constraints import _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
 
 _domain_pools: Dict[int, DomainPool] = {}
+
+
+def clear_domains_interned() -> None:
+    """Clear interned domains.
+    """
+    constraints._domains_interned.clear()
 
 
 def assign_domain_pool_of_size(length: int) -> DomainPool:
@@ -47,7 +53,7 @@ def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Stra
 
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
     def setUp(self):
-        constraints._domains_interned = {}
+        clear_domains_interned()
 
     def test_adjacent_to_exterior_base_pair_on_length_2_domain(self):
         """Test that base pair on domain of length two is properly classified as
@@ -444,6 +450,34 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
 
         actual = _get_base_pair_domain_endpoints_to_check(reporter_waste_complex)
         self.assertEqual(actual, expected)
+
+
+class TestStrandDomainAddress(unittest.TestCase):
+    def setUp(self):
+        clear_domains_interned()
+        self.strand = construct_strand(['a', 'b', 'c'], [10, 20, 30])
+        self.addr = StrandDomainAddress(self.strand, 1)
+
+    def test_init(self):
+        self.assertEqual(self.addr.strand, self.strand)
+        self.assertEqual(self.addr.domain_idx, 1)
+
+    def test_neighbor_5p(self):
+        self.assertEqual(self.addr.neighbor_5p(), StrandDomainAddress(self.strand, 0))
+
+    def test_neighbor_5p_none(self):
+        addr = StrandDomainAddress(self.strand, 0)
+        self.assertEqual(addr.neighbor_5p(), None)
+
+    def test_neighbor_3p(self):
+        self.assertEqual(self.addr.neighbor_3p(), StrandDomainAddress(self.strand, 2))
+
+    def test_neighbor_3p_none(self):
+        addr = StrandDomainAddress(self.strand, 2)
+        self.assertEqual(addr.neighbor_3p(), None)
+
+    def test_domain(self):
+        self.assertEqual(self.addr.domain(), self.strand.domains[1])
 
 
 if __name__ == '__main__':
