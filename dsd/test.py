@@ -267,7 +267,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         self.assertEqual(actual, expected)
 
     def test_seesaw_threshold_complex(self):
-        """Test endpoints for seesaw threshold omplex
+        """Test endpoints for seesaw threshold complex
 
         .. code-block:: none
 
@@ -305,6 +305,57 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                 domain1_3p_domain1_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR), ])
 
         actual = _get_base_pair_domain_endpoints_to_check(threshold_complex)
+        self.assertEqual(actual, expected)
+
+    def test_seesaw_threshold_waste_complex(self):
+        """Test endpoints for seesaw threshold waste complex
+
+        .. code-block:: none
+
+            S{input}  s{input}   T      S{gate}    s{gate}
+                          21
+             34          22|20 19  15 14          2  10
+             |           | ||  |   |  |           |  ||
+            <=============-==--=====--=============--==]
+                           ||  |||||  |||||||||||||  ||
+                          [==--=====--=============--==>
+                           ||  |   |  |           |  ||
+                          35|  37  41 42          54 |56
+                            36                       55
+                      s{input}*  T*      S{gate}*    s{gate}*
+
+                   DANGLE_3P   INTERIOR_TO_STRAND    ADJACENT_TO_EXTERIOR_BASE_PAIR
+                           |   |      |              |
+            <=============-==--=====--=============--==]
+                           ||  |||||  |||||||||||||  ||
+                          [==--=====--=============--==>
+                            |      |              |   |
+                            |     INTERIOR_TO_STRAND  BLUNT_END
+                            ADJACENT_TO_EXTERIOR_BASE_PAIR
+        """
+        input_strand = construct_strand(['sg', 'Sg', 'T', 'si', 'Si'], [2, 13, 5, 2, 13])
+        threshold_base_strand = construct_strand(['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
+        threshold_waste_complex = [input_strand, threshold_base_strand]
+
+        expected = set([
+            _BasePairDomainEndpoint(
+                domain1_5p_index=20, domain2_3p_index=36, domain_base_length=2,
+                domain1_5p_domain2_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR,
+                domain1_3p_domain1_base_pair_type=BasePairType.DANGLE_3P),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=15, domain2_3p_index=41, domain_base_length=5,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.INTERIOR_TO_STRAND),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=2, domain2_3p_index=54, domain_base_length=13,
+                domain1_5p_domain2_base_pair_type=BasePairType.INTERIOR_TO_STRAND,
+                domain1_3p_domain1_base_pair_type=BasePairType.INTERIOR_TO_STRAND),
+            _BasePairDomainEndpoint(
+                domain1_5p_index=0, domain2_3p_index=56, domain_base_length=2,
+                domain1_5p_domain2_base_pair_type=BasePairType.BLUNT_END,
+                domain1_3p_domain1_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR), ])
+
+        actual = _get_base_pair_domain_endpoints_to_check(threshold_waste_complex)
         self.assertEqual(actual, expected)
 
 
