@@ -737,7 +737,6 @@ class SeesawCircuit:
         self._set_constraints()
 
 
-# TODO: Add outputs field that will be set after processing all seesaw gate.
 @dataclass(frozen=True)
 class SeesawGate:
     """Class for keeping track of seesaw gate and its input."""
