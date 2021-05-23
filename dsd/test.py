@@ -1,7 +1,7 @@
 from typing import Dict, List
 import unittest
 from dsd import constraints
-from dsd.constraints import _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
+from dsd.constraints import Domain, _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -478,6 +478,28 @@ class TestStrandDomainAddress(unittest.TestCase):
 
     def test_domain(self):
         self.assertEqual(self.addr.domain(), self.strand.domains[1])
+
+
+class TestSubdomains(unittest.TestCase):
+    def test_init(self):
+        """
+        Test constructing a domain with subdomains
+
+        .. code-block:: none
+
+                       a
+            <====================]
+
+                 b      c      d      e
+            <--=====--=====--=====--=====]
+        """
+        b = Domain('b', assign_domain_pool_of_size(5))
+        c = Domain('c', assign_domain_pool_of_size(5))
+        d = Domain('d', assign_domain_pool_of_size(5))
+        e = Domain('e', assign_domain_pool_of_size(5))
+
+        a = Domain('a', assign_domain_pool_of_size(20), subdomains=[b, c, d, e])
+        self.assertListEqual(a.subdomains, [b, c, d, e])
 
 
 if __name__ == '__main__':
