@@ -97,13 +97,14 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
 
     return -dg if negate else dg
 
+
 @lru_cache(maxsize=10_000)
 def pfunc4(seqs: Union[str, Tuple[str, ...]],
-          temperature: float = default_temperature,
-          sodium: float = default_sodium,
-          magnesium: float = default_magnesium,
-          adjust: bool = True,
-          negate: bool = False) -> float:
+           temperature: float = default_temperature,
+           sodium: float = default_sodium,
+           magnesium: float = default_magnesium,
+           adjust: bool = True,
+           negate: bool = False) -> float:
     """Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
@@ -128,7 +129,8 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
         from nupack import pfunc as nupack_pfunc
         from nupack import Model
     except ModuleNotFoundError:
-        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+        raise ImportError(
+            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
@@ -258,7 +260,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     """
     # print(f'rna_duplex_multiple.lru_cache = {rna_duplex_multiple.cache_info()}')
 
-    # NB: the string NA_parameter_set needs to be exactly the intended filename; 
+    # NB: the string NA_parameter_set needs to be exactly the intended filename;
     # e.g. any extra whitespace characters cause RNAduplex to default to RNA parameter set
     # without warning the user!
 
@@ -413,7 +415,7 @@ def binding_complement(seq: str, temperature: float = default_temperature, subtr
     """Computes the (partition function) free energy of a strand with its perfect WC complement."""
     seq1 = seq
     seq2 = wc(seq)
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
     if seq1 > seq2:
@@ -433,13 +435,13 @@ def secondary_structure_single_strand(seq: str, temperature: float = default_tem
 
 def binding(seq1: str, seq2: str, temperature: float = default_temperature, negate: bool = False) -> float:
     """Computes the (partition function) free energy of association between two strands."""
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function so it's safe to swap the order
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc((seq1, seq2), temperature, negate) - (
-            pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
+        pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
 
 
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
