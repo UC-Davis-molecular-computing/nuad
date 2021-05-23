@@ -4818,9 +4818,14 @@ def nupack_4_complex_secondary_structure_constraint(
     :param temperature:
         Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
-    :param weight: [description], defaults to 1.0
-    :type weight: float, optional
-    :param weight_transfer_function: [description], defaults to lambdax:x
+    :param weight:
+        See :py:data:`Constraint.weight`, defaults to 1.0
+    :type weight:
+        float, optional
+    :param weight_transfer_function:
+        Weight transfer function to use. By default, f(x) = x is used, where x
+        is the sum of the squared errors of each base pair that violates the
+        threshold.
     :type weight_transfer_function: Callable[[float], float], optional
     :param description: [description], defaults to None
     :type description: Optional[str], optional
