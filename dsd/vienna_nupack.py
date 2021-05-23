@@ -26,6 +26,10 @@ global_thread_pool = ThreadPool()
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 default_temperature = 37.0
+"""Default temperature used to specify a `NUPACK 4 model`_.
+
+.. _NUPACK 4 model: https://piercelab-caltech.github.io/nupack-docs/model/
+"""
 default_magnesium = 0.0125
 default_sodium = 0.05
 
@@ -97,13 +101,14 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
 
     return -dg if negate else dg
 
+
 @lru_cache(maxsize=10_000)
 def pfunc4(seqs: Union[str, Tuple[str, ...]],
-          temperature: float = default_temperature,
-          sodium: float = default_sodium,
-          magnesium: float = default_magnesium,
-          adjust: bool = True,
-          negate: bool = False) -> float:
+           temperature: float = default_temperature,
+           sodium: float = default_sodium,
+           magnesium: float = default_magnesium,
+           adjust: bool = True,
+           negate: bool = False) -> float:
     """Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
@@ -128,7 +133,8 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
         from nupack import pfunc as nupack_pfunc
         from nupack import Model
     except ModuleNotFoundError:
-        raise ImportError('NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+        raise ImportError(
+            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     model = Model(sodium=sodium, magnesium=magnesium, celsius=temperature, material='dna')
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
@@ -258,7 +264,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     """
     # print(f'rna_duplex_multiple.lru_cache = {rna_duplex_multiple.cache_info()}')
 
-    # NB: the string NA_parameter_set needs to be exactly the intended filename; 
+    # NB: the string NA_parameter_set needs to be exactly the intended filename;
     # e.g. any extra whitespace characters cause RNAduplex to default to RNA parameter set
     # without warning the user!
 
@@ -416,7 +422,7 @@ def binding_complement(seq: str, temperature: float = default_temperature, subtr
     """
     seq1 = seq
     seq2 = wc(seq)
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
     if seq1 > seq2:
@@ -437,7 +443,7 @@ def binding_complement4(seq: str, temperature: float = default_temperature, sodi
     """
     seq1 = seq
     seq2 = wc(seq)
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
     if seq1 > seq2:
@@ -445,7 +451,8 @@ def binding_complement4(seq: str, temperature: float = default_temperature, sodi
     association_energy = pfunc4((seq1, seq2), temperature, sodium, magnesium, negate)
     if subtract_indv:
         # ddG_reaction == dG(products) - dG(reactants)
-        association_energy -= (pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium, magnesium, negate))
+        association_energy -= (pfunc4(seq1, temperature, sodium, magnesium, negate) +
+                               pfunc4(seq2, temperature, sodium, magnesium, negate))
     return association_energy
 
 
@@ -458,9 +465,9 @@ def secondary_structure_single_strand(seq: str, temperature: float = default_tem
     return pfunc((seq,), temperature, negate)
 
 
-def secondary_structure_single_strand4(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
-                                       magnesium: float = default_magnesium,
-                                       negate: bool = False) -> float:
+def secondary_structure_single_strand4(
+        seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
+        magnesium: float = default_magnesium, negate: bool = False) -> float:
     """Computes the (partition function) free energy of single-strand secondary structure.
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -473,13 +480,13 @@ def binding(seq1: str, seq2: str, temperature: float = default_temperature, nega
 
     NUPACK version 2 or 3 must be installed and on the PATH.
     """
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function so it's safe to swap the order
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc((seq1, seq2), temperature, negate) - (
-            pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
+        pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
 
 
 def binding4(seq1: str, seq2: str, temperature: float = default_temperature,  sodium: float = default_sodium,
@@ -488,13 +495,13 @@ def binding4(seq1: str, seq2: str, temperature: float = default_temperature,  so
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are 
+    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function so it's safe to swap the order
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc4((seq1, seq2), temperature, sodium, magnesium, negate) - (
-            pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium, magnesium, negate))
+        pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium, magnesium, negate))
 
 
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
@@ -544,8 +551,9 @@ def domain_no_sec_struct4(seq: str, temperature: float, sodium: float,
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     if threaded:
-        results = [global_thread_pool.apply_async(secondary_structure_single_strand4, args=(s, temperature, sodium, magnesium))
-                   for s in (seq, wc(seq))]
+        results = [global_thread_pool.apply_async(
+            secondary_structure_single_strand4, args=(s, temperature, sodium, magnesium))
+            for s in (seq, wc(seq))]
         e_seq, e_wcseq = [result.get() for result in results]
         return e_seq <= individual and e_wcseq <= individual
     else:
@@ -624,7 +632,9 @@ def domain_orthogonal4(seq: str, seqs: Sequence[str], temperature: float,  sodiu
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     if threaded:
-        results = [global_thread_pool.apply_async(binding4, args=(s, s, temperature, sodium, magnesium)) for s in (seq, wc(seq))]
+        results = [
+            global_thread_pool.apply_async(binding4, args=(s, s, temperature, sodium, magnesium))
+            for s in (seq, wc(seq))]
         energies = [result.get() for result in results]
         if max(energies) > orthogonality:
             return False
