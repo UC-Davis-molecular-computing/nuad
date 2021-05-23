@@ -4711,39 +4711,17 @@ def _get_base_pair_domain_endpoints_to_check(
 
     return base_pair_domain_endpoints_to_check
 
-# TODO: specify base pair/base (for unpaired base) in complex
-# Two ways to specify base:
-# * global address (NUPACK indexing)
-# * StrandDomainAddress + base offset in that domain (0 means 5', -1 means 3')
-# Base pair is a pair of ^
-# Union[int, Tuple[StrandDomainAddress, int]]
-#
-# Optional parameter for nupack_4_complex_secondary_structure_constraint:
-#   Dictionary for lower_bound
-#     * Dict[BasePairAddress, float]  base_pair_probabilities
-#     * Dict[BaseAddress, float]      base_unpaired_probabilities
-#   Dictionary for upper_bound
-#     * Dict[BasePairAddress, float]  base_pair_probabilities_upper_bound
-#     * Dict[BaseAddress, float]      base_unpaired_probabilities_upper_bound
-
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
-        # TODO: Docstring for this should mention that they apply to first complex given
         nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
         all_base_pairs: Optional[Iterable[BoundDomains]] = None,
-        # TODO
-        # TODO: Documentation, indicate that despite name of this argument, UNPAIRED
-        # can be used to specify probability threshold for unpaired bases.
         base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
-        # TODO
         base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
-
         base_pair_prob: Dict[BasePairAddress, float] = None,
         base_unpaired_prob: Dict[BaseAddress, float] = None,
         base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
         base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
-
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -4761,6 +4739,9 @@ def nupack_4_complex_secondary_structure_constraint(
         List of nonimplicit base pairs that cannot be inferred because multiple
         instances of the same :py:class:`Domain` exist in complex.
 
+        The :py:attr:`StrandDomainAddress.strand` field of each address should
+        reference a strand in the first complex in ``strand_complexes``.
+
         For example,
         if one :py:class:`Strand` has one T :py:class:`Domain` and another
         strand in the complex has two T* :py:class:`Domain` s, then the intended
@@ -4773,6 +4754,7 @@ def nupack_4_complex_secondary_structure_constraint(
         infered based on the name of :py:class:`Domain` s in the complex as well
         as base pairs specified in ``nonimplicit_base_pairs``.
 
+
         **TODO**: This has not been implemented yet, and the behavior is as if this
         parameter is always ``None`` (binding graph is always inferred).
     :type all_base_pairs:
@@ -4782,11 +4764,17 @@ def nupack_4_complex_secondary_structure_constraint(
         All :py:class:`BasePairType` comes with a default
         such as :py:data:`default_interior_to_strand_probability` which will be
         used if a lower bound is not specified for a particular type.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
     :type base_pair_prob_by_type:
         Optional[Dict[BasePairType, float]]
     :param base_pair_prob_by_type_upper_bound:
         Probability upper bounds for each :py:class:`BasePairType`.
         By default, no upper bound is set.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
 
         **TODO**: This has not been implemented yet.
     :type base_pair_prob_by_type_upper_bound:
@@ -4800,8 +4788,8 @@ def nupack_4_complex_secondary_structure_constraint(
         Optional[Dict[BasePairAddress, float]]
     :param base_unpaired_prob:
         Probability lower bounds for each :py:class:`BaseAddress` representing
-        unpaired bases. These lower bounds take precedence over the probabilities
-        specified by ``base_pair_prob_by_type``.
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type[BasePairType.UNPAIRED]``.
     :type base_unpaired_prob:
         Optional[Dict[BaseAddress, float]]
     :param base_pair_prob_upper_bound:
@@ -4811,8 +4799,8 @@ def nupack_4_complex_secondary_structure_constraint(
         Optional[Dict[BasePairAddress, float]]
     :param base_unpaired_prob_upper_bound:
         Probability upper bounds for each :py:class:`BaseAddress` representing
-        unpaired bases. These lower bounds take precedence over the probabilities
-        specified by ``base_pair_prob_by_type_upper_bound``.
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type_upper_bound[BasePairType.UNPAIRED]``.
     :type base_unpaired_prob_upper_bound:
         Optional[Dict[BaseAddress, float]]
     :param temperature:
@@ -4854,33 +4842,6 @@ def nupack_4_complex_secondary_structure_constraint(
     :return: ComplexConstraint
     :rtype: ComplexConstraint
     """
-    # TODO: change doc strings
-    # TODO: Upper bound probability
-    # TODO: all_base_pairs (dsd does not add any base pairs)
-
-    # :param exterior_base_pair_prob:
-    #     Probability threshold for exterior base pairs
-    # :param internal_base_pair_prob:
-    #     Probability threshold for internal base pairs
-    # :param unpaired_base_pair_prob:
-    #     Probability threshold for unpaired bases
-    # :param domain_binding:
-    #     Maps which domains should be binded. If None, then all complementary domains will be binded,
-    #     but requires that each complementary domain has only one domain.
-    # :param temperature:
-    #     Temperature in Celsius
-    # :param weight:
-    #     How much to weigh this :any:`Constraint`.
-    # :param weight_transfer_function:
-    #     See :py:data:`Constraint.weight_transfer_function`.
-    # :param threaded:
-    #     Whether to use threading to parallelize evaluating this constraint.
-    # :param description:
-    #     Detailed description of constraint suitable for report.
-    # :param short_description:
-    #     Short description of constraint suitable for logging to stdout.
-    # :return:
-    #     The :any:`ComplexConstraint`.
     try:
         from nupack import Complex as NupackComplex
         from nupack import Model as NupackModel
