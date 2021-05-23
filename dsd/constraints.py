@@ -4839,16 +4839,19 @@ def nupack_4_complex_secondary_structure_constraint(
         **TODO**: Implement this
     :type threaded:
         bool, optional
-    :raises ImportError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :raises ValueError: [description]
-    :return: [description]
+    :raises ImportError:
+        If NUPACK 4 is not installed.
+    :raises ValueError:
+        If ``strand_complexes`` is not valid. In order for ``strand_complexes`` to
+        be valid, ``strand_complexes`` must:
+
+        * Consist of complexes (tuples of :py:class:`Strand` objects)
+        * Each complex must be of the same motif
+
+            * Same number of :py:class:`Strand` s in each complex
+            * Same number of :py:class:`Domain` s in each :py:class:`Strand`
+            * Same number of bases in each :py:class:`Domain`
+    :return: ComplexConstraint
     :rtype: ComplexConstraint
     """
     # TODO: change doc strings
@@ -4888,7 +4891,7 @@ def nupack_4_complex_secondary_structure_constraint(
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     ## Start Input Validation ##
     if len(strand_complexes) == 0:
