@@ -4827,12 +4827,18 @@ def nupack_4_complex_secondary_structure_constraint(
         is the sum of the squared errors of each base pair that violates the
         threshold.
     :type weight_transfer_function: Callable[[float], float], optional
-    :param description: [description], defaults to None
-    :type description: Optional[str], optional
-    :param short_description: [description], defaults to 'complex_secondary_structure_nupack'
-    :type short_description: str, optional
-    :param threaded: [description], defaults to False
-    :type threaded: bool, optional
+    :param description:
+        See :py:data:`Constraint.description`, defaults to None
+    :type description:
+        Optional[str], optional
+    :param short_description:
+        See :py:data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
+    :type short_description:
+        str, optional
+    :param threaded:
+        **TODO**: Implement this
+    :type threaded:
+        bool, optional
     :raises ImportError: [description]
     :raises ValueError: [description]
     :raises ValueError: [description]
