@@ -4771,37 +4771,52 @@ def nupack_4_complex_secondary_structure_constraint(
     :param all_base_pairs:
         List of all base pairs in complex. If not provided, then base pairs are
         infered based on the name of :py:class:`Domain` s in the complex as well
-        as base pairs specified in `nonimplicit_base_pairs`.
+        as base pairs specified in ``nonimplicit_base_pairs``.
 
-        TODO: This has not been implemented yet, and the behavior is as if this
-        parameter is always `None` (binding graph is always inferred).
-    :type all_base_pairs: Optional[Iterable[BoundDomains]], optional
+        **TODO**: This has not been implemented yet, and the behavior is as if this
+        parameter is always ``None`` (binding graph is always inferred).
+    :type all_base_pairs:
+        Optional[Iterable[BoundDomains]]
     :param base_pair_prob_by_type:
         Probability lower bounds for each :py:class:`BasePairType`.
         All :py:class:`BasePairType` comes with a default
-        such as :py:data:`default_interior_to_strand_probability`.
+        such as :py:data:`default_interior_to_strand_probability` which will be
+        used if a lower bound is not specified for a particular type.
     :type base_pair_prob_by_type:
         Optional[Dict[BasePairType, float]]
     :param base_pair_prob_by_type_upper_bound:
         Probability upper bounds for each :py:class:`BasePairType`.
         By default, no upper bound is set.
 
-        TODO: This has not been implemented yet.
+        **TODO**: This has not been implemented yet.
     :type base_pair_prob_by_type_upper_bound:
         Dict[BasePairType, float], optional
     :param base_pair_prob:
         Probability lower bounds for each :py:class:`BasePairAddress` which takes
-        precedence over probabilities specified by `base_pair_prob_by_type`.
+        precedence over probabilities specified by ``base_pair_prob_by_type``.
 
-        # TODO: Implement this.
-    :type base_pair_prob: Optional[Dict[BasePairAddress, float]]
-    :param base_unpaired_prob: [description], defaults to field(default_factory=dict)
-    :type base_unpaired_prob: Optional[Dict[BaseAddress, float]]
-    :param base_pair_prob_upper_bound: [description], defaults to field(default_factory=dict)
-    :type base_pair_prob_upper_bound: Optional[Dict[BasePairAddress, float]]
-    :param base_unpaired_prob_upper_bound: [description], defaults to field(default_factory=dict)
-    :type base_unpaired_prob_upper_bound: Optional[Dict[BaseAddress, float]]
-    :param temperature: [description], defaults to dv.default_temperature
+        **TODO**: This has not been implemented yet.
+    :type base_pair_prob:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob:
+        Probability lower bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probabilities
+        specified by ``base_pair_prob_by_type``.
+    :type base_unpaired_prob:
+        Optional[Dict[BaseAddress, float]]
+    :param base_pair_prob_upper_bound:
+        Probability upper bounds for each :py:class`BasePairAddress` which takes
+        precedence over probabilties specified by ``base_pair_prob_by_type_upper_bound``.
+    :type base_pair_prob_upper_bound:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob_upper_bound:
+        Probability upper bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probabilities
+        specified by ``base_pair_prob_by_type_upper_bound``.
+    :type base_unpaired_prob_upper_bound:
+        Optional[Dict[BaseAddress, float]]
+    :param temperature:
+        Temperature specified in °C, defaults to :py:data:`dv.default_temperature`.
     :type temperature: float, optional
     :param weight: [description], defaults to 1.0
     :type weight: float, optional
