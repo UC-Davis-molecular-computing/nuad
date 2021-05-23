@@ -5,18 +5,6 @@ from typing import Dict, List, Set, Tuple, Union, cast
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
 
-# TODO:
-# 1. Figure out bug with reporter complex
-# 2. If in library, fix it and write unit test
-# 3. Make a dev branch
-# 4. Close complex constraint issue
-#   a. Maybe tweak defaults
-#   b. Undetected base pair types default to OTHER
-# 5. Permissions for commiting to main
-# 6. Add a version number somewhere
-# 7. Github Action for Github Releases, unit testing, doc test
-# 8. Make branch to test out idea for Domain Tuple Constraint
-
 # Constants
 
 # Constants -- Recognition domain
@@ -737,7 +725,6 @@ class SeesawCircuit:
         self._set_constraints()
 
 
-# TODO: Add outputs field that will be set after processing all seesaw gate.
 @dataclass(frozen=True)
 class SeesawGate:
     """Class for keeping track of seesaw gate and its input."""

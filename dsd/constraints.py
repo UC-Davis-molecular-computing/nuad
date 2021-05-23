@@ -2998,6 +2998,8 @@ def nupack_strand_secondary_structure_constraint(
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
 
+    NUPACK version 2 or 3 must be installed and on the PATH.
+
     :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
         :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
         one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
@@ -3058,6 +3060,86 @@ def nupack_strand_secondary_structure_constraint(
                             summary=summary)
 
 
+def nupack_4_strand_secondary_structure_constraint(
+        threshold: Union[float, Dict[StrandGroup, float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        threaded: bool = False,
+        description: Optional[str] = None,
+        short_description: str = 'strand_ss_nupack',
+        strands: Optional[Iterable[Strand]] = None,
+        negate: bool = False) -> StrandConstraint:
+    """
+    Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
+    NUPACK's pfunc executable.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
+        one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature: temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param negate: whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        how much to weigh this :any:`Constraint`
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threadds to parallelize.
+    :param strands:
+        Strands to check; if not specified, all strands are checked.
+    :param description: detailed description of constraint suitable for putting in report; if not specified
+        a reasonable default is chosen
+    :param short_description: short description of constraint suitable for logging to stdout
+    :return: constraint
+    """
+
+    def evaluate(strand: Strand) -> float:
+        threshold_value = convert_threshold(threshold, strand.group)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        logger.debug(
+            f'strand ss threshold: {threshold_value:6.2f} '
+            f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        return max(0.0, excess)
+
+    def summary(strand: Strand) -> str:
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        return f'{energy:6.2f} kcal/mol'
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {strand_group.name: value
+                                              for strand_group, value in threshold.items()}
+            description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
+                          f'as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise AssertionError('threshold must be one of float or dict')
+
+    if strands is not None:
+        strands = tuple(strands)
+
+    return StrandConstraint(description=description,
+                            short_description=short_description,
+                            weight=weight,
+                            weight_transfer_function=weight_transfer_function,
+                            evaluate=evaluate,
+                            threaded=threaded,
+                            strands=strands,
+                            summary=summary)
+
+
 def nupack_domain_pair_constraint(
         threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
         temperature: float = dv.default_temperature,
@@ -3072,6 +3154,8 @@ def nupack_domain_pair_constraint(
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
     are compared.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param threshold:
         Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
@@ -3167,6 +3251,121 @@ def nupack_domain_pair_constraint(
                                 threaded=threaded)
 
 
+def nupack_4_domain_pair_constraint(
+        threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        threaded: bool = False,
+        threaded4: bool = False,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'dom_pair_nupack',
+        negate: bool = False) -> DomainPairConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
+    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
+    are compared.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`DomainPool`'s to a float; when a :any:`Domain` in :any:`DomainPool` ``dp1`` is compared to
+        one in ``dp2``, the threshold used is ``threshold[(dp1, dp2)]``
+    :param temperature:
+        Temperature in Celsius
+    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
+    :param threaded:
+        Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
+        :py:data:`DomainPairConstraint.threaded`)
+    :param threaded4:
+        Whether to test the four pairs in different threads, allowing the calls to NUPACK to be parallelized.
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        Detailed description of constraint suitable for summary report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :return:
+        The :any:`DomainPairConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK energy of domain pair exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            domain_pool_name_pair_to_threshold = {(domain_pool1.name, domain_pool2.name): value
+                                                  for (domain_pool1, domain_pool2), value in
+                                                  threshold.items()}
+            description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
+                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    num_threads = cpu_count()
+    thread_pool = ThreadPool(processes=num_threads)
+
+    def binding_closure(seq_pair: Tuple[str, str]) -> float:
+        return dv.binding4(seq_pair[0], seq_pair[1], temperature, sodium, magnesium, negate)
+
+    def evaluate(domain1: Domain, domain2: Domain) -> float:
+        threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
+        seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+
+        energies: List[float]
+        if threaded4:
+            energies = thread_pool.map(binding_closure, seq_pairs)
+        else:
+            energies = []
+            for seq1, seq2 in seq_pairs:
+                energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
+                energies.append(energy)
+
+        excesses: List[float] = []
+        for energy, (name1, name2) in zip(energies, name_pairs):
+            logger.debug(
+                f'domain pair threshold: {threshold_value:6.2f} '
+                f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+            excess = threshold_value - energy
+            if negate:
+                excess = -excess
+            excesses.append(excess)
+
+        max_excess = max(excesses)
+        return max(0.0, max_excess)
+
+    def summary(domain1: Domain, domain2: Domain) -> str:
+        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+        energies = []
+        for seq1, seq2 in seq_pairs:
+            energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
+            energies.append(energy)
+        max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
+        lines = [f'{name1:{max_name_length}}, '
+                 f'{name2:{max_name_length}}: '
+                 f' {energy:6.2f} kcal/mol'
+                 for (name1, name2), energy in zip(domain_name_pairs, energies)]
+        return '\n  ' + '\n  '.join(lines)
+
+    return DomainPairConstraint(description=description,
+                                short_description=short_description,
+                                weight=weight,
+                                weight_transfer_function=weight_transfer_function,
+                                evaluate=evaluate,
+                                summary=summary,
+                                threaded=threaded)
+
+
 def nupack_strand_pair_constraint(
         threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
         temperature: float = dv.default_temperature,
@@ -3180,6 +3379,8 @@ def nupack_strand_pair_constraint(
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
+
+    NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param threshold:
         Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
@@ -3334,8 +3535,6 @@ class _AdjacentDuplexType(Enum):
     #                    #-----###---#
     #                       c*    d*
     TOP_RIGHT_BOUND_OVERHANG = auto()
-
-# TODO(benlee12): Document this stuff
 
 
 default_interior_to_strand_probability = 0.98
@@ -3910,8 +4109,6 @@ class BasePairType(Enum):
         else:
             assert False
 
-# TODO: document StrandDomainAddress
-
 
 @dataclass
 class StrandDomainAddress:
@@ -3926,37 +4123,12 @@ class StrandDomainAddress:
     """order in which domain appears in :py:data:`StrandDomainAddress.strand`
     """
 
-    @classmethod
-    def address_of_nth_domain_occurence(
-            cls, strand: Strand, domain_str: str, n: int, forward=True) -> 'StrandDomainAddress':
-        if n < 1:
-            raise ValueError(f'n needs to be at least 1')
-        domain_names = strand.domain_names_tuple()
-        idx = -1
-        occurences = 0
-
-        itr = iter(range(0, len(domain_names), 1 if forward else -1))
-
-        for i in itr:
-            if domain_names[i] == domain_str:
-                occurences += 1
-                if occurences == n:
-                    idx = i
-                    break
-        if idx == -1:
-            raise ValueError(f'{strand} contained less than {n} occurrences of domain {domain_str}')
-
-        return cls(strand, idx)
-
-    @classmethod
-    def address_of_first_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1)
-
-    @classmethod
-    def address_of_last_domain_occurence(cls, strand: Strand, domain_str: str) -> 'StrandDomainAddress':
-        return cls.address_of_nth_domain_occurence(strand, domain_str, 1, forward=False)
-
     def neighbor_5p(self) -> Optional['StrandDomainAddress']:
+        """Returns 5' domain neighbor. If domain is 5' end of strand, returns None
+
+        :return: StrandDomainAddress of 5' neighbor or None if no 5' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
         idx = self.domain_idx - 1
         if idx >= 0:
             return StrandDomainAddress(self.strand, idx)
@@ -3964,17 +4136,24 @@ class StrandDomainAddress:
             return None
 
     def neighbor_3p(self) -> Optional['StrandDomainAddress']:
+        """Returns 3' domain neighbor. If domain is 3' end of strand, returns None
+
+        :return: StrandDomainAddress of 3' neighbor or None if no 3' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
         idx = self.domain_idx + 1
         if idx < len(self.strand.domains):
             return StrandDomainAddress(self.strand, idx)
         else:
             return None
 
-    def domain_unstarred_name(self) -> str:
-        return self.strand.domains[self.domain_idx].name
+    def domain(self) -> Domain:
+        """Returns domain referenced by this address.
 
-    def domain_base_length(self) -> int:
-        return self.strand.domains[self.domain_idx].length
+        :return: domain
+        :rtype: Domain
+        """
+        return self.strand.domains[self.domain_idx]
 
     def __hash__(self) -> int:
         return hash((self.strand, self.domain_idx))
@@ -4544,24 +4723,15 @@ class _BasePair:
 
 
 BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
+"""Represents a reference to a base. Can be either specified as a NUPACK base
+index or an index of a dsd :py:class:`StrandDomainAddress`:
+"""
 BasePairAddress = Tuple[BaseAddress, BaseAddress]
+"""Represents a reference to a base pair
+"""
 BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
-
-# TODO: specify base pair in complex
-# TODO: specify base in complex (for unpaired bases)
-# Two ways to specify base
-# * global address (NUPACK indexing)
-# * StrandDomainAddress + base offset in that domain (0 means 5', -1 means 3')
-# Base pair is a pair of ^
-# Union[int, Tuple[StrandDomainAddress, int]]
-#
-# Optional parameter for nupack_4_complex_secondary_structure_constraint:
-#   Dictionary for lower_bound
-#     * Dict[BasePairAddress, float]  base_pair_probabilities
-#     * Dict[BaseAddress, float]      base_unpaired_probabilities
-#   Dictionary for upper_bound
-#     * Dict[BasePairAddress, float]  base_pair_probabilities_upper_bound
-#     * Dict[BaseAddress, float]      base_unpaired_probabilities_upper_bound
+"""Represents bound domains
+"""
 
 
 def _get_implicitly_bound_domain_addresses(
@@ -4708,18 +4878,18 @@ def _get_base_pair_domain_endpoints_to_check(
     base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
 
     for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
-        domain_base_length = domain_addr.domain_base_length()
-        assert domain_base_length == comple_addr.domain_base_length()
+        domain_base_length = domain_addr.domain().length
+        assert domain_base_length == comple_addr.domain().length
 
         if domain_addr not in addr_to_starting_base_pair_idx:
-            if domain_addr.domain_unstarred_name() in nonimplicit_base_pairs_domain_names:
+            if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:
                 raise ValueError(f'StrandDomainAddress {domain_addr} is not found in given complex')
             else:
                 print(f'StrandDomainAddress {domain_addr} is not found in given complex')
                 assert False
 
         if comple_addr not in addr_to_starting_base_pair_idx:
-            if comple_addr.domain_unstarred_name() in nonimplicit_base_pairs_domain_names:
+            if comple_addr.domain().name in nonimplicit_base_pairs_domain_names:
                 raise ValueError(f'StrandDomainAddress {comple_addr} is not found in given complex')
             else:
                 print(f'StrandDomainAddress {comple_addr} is not found in given complex')
@@ -4765,22 +4935,14 @@ def _get_base_pair_domain_endpoints_to_check(
 
 def nupack_4_complex_secondary_structure_constraint(
         strand_complexes: List[Tuple[Strand, ...]],
-        # TODO: Documentation, indicate that despite name of this argument, UNPAIRED
-        # can be used to specify probability threshold for unpaired bases.
-        base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
-        # TODO
-        base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = field(default_factory=dict),
-
-        # TODO: Docstring for this should mention that they apply to first complex given
-        # TODO: mypy and check if BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
         nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
         all_base_pairs: Optional[Iterable[BoundDomains]] = None,
-        # TODO
-        base_pair_prob: Dict[BasePairAddress, float] = field(default_factory=dict),
-        base_unpaired_prob: Dict[BaseAddress, float] = field(default_factory=dict),
-        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = field(default_factory=dict),
-        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = field(default_factory=dict),
-
+        base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
+        base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
+        base_pair_prob: Dict[BasePairAddress, float] = None,
+        base_unpaired_prob: Dict[BaseAddress, float] = None,
+        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
+        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -4788,37 +4950,118 @@ def nupack_4_complex_secondary_structure_constraint(
         short_description: str = 'complex_secondary_structure_nupack',
         threaded: bool = False,
 ) -> ComplexConstraint:
-    # TODO: change doc strings
-    # TODO: Upper bound probability
-    # TODO: all_base_pairs (dsd does not add any base pairs)
-    """
-    Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
+    """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
-    :param complexes:
+    :param strand_complexes:
         Iterable of :any:`Strand` tuples
-    :param exterior_base_pair_prob:
-        Probability threshold for exterior base pairs
-    :param internal_base_pair_prob:
-        Probability threshold for internal base pairs
-    :param unpaired_base_pair_prob:
-        Probability threshold for unpaired bases
-    :param domain_binding:
-        Maps which domains should be binded. If None, then all complementary domains will be binded,
-        but requires that each complementary domain has only one domain.
+    :type strand_complexes:
+        List[Tuple[Strand, ...]]
+    :param nonimplicit_base_pairs:
+        List of nonimplicit base pairs that cannot be inferred because multiple
+        instances of the same :py:class:`Domain` exist in complex.
+
+        The :py:attr:`StrandDomainAddress.strand` field of each address should
+        reference a strand in the first complex in ``strand_complexes``.
+
+        For example,
+        if one :py:class:`Strand` has one T :py:class:`Domain` and another
+        strand in the complex has two T* :py:class:`Domain` s, then the intended
+        binding graph cannot be inferred and must be stated explicitly in this
+        field.
+    :type nonimplicit_base_pairs:
+        Optional[Iterable[BoundDomains]]
+    :param all_base_pairs:
+        List of all base pairs in complex. If not provided, then base pairs are
+        infered based on the name of :py:class:`Domain` s in the complex as well
+        as base pairs specified in ``nonimplicit_base_pairs``.
+
+
+        **TODO**: This has not been implemented yet, and the behavior is as if this
+        parameter is always ``None`` (binding graph is always inferred).
+    :type all_base_pairs:
+        Optional[Iterable[BoundDomains]]
+    :param base_pair_prob_by_type:
+        Probability lower bounds for each :py:class:`BasePairType`.
+        All :py:class:`BasePairType` comes with a default
+        such as :py:data:`default_interior_to_strand_probability` which will be
+        used if a lower bound is not specified for a particular type.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
+    :type base_pair_prob_by_type:
+        Optional[Dict[BasePairType, float]]
+    :param base_pair_prob_by_type_upper_bound:
+        Probability upper bounds for each :py:class:`BasePairType`.
+        By default, no upper bound is set.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
+
+        **TODO**: This has not been implemented yet.
+    :type base_pair_prob_by_type_upper_bound:
+        Dict[BasePairType, float], optional
+    :param base_pair_prob:
+        Probability lower bounds for each :py:class:`BasePairAddress` which takes
+        precedence over probabilities specified by ``base_pair_prob_by_type``.
+
+        **TODO**: This has not been implemented yet.
+    :type base_pair_prob:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob:
+        Probability lower bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type[BasePairType.UNPAIRED]``.
+    :type base_unpaired_prob:
+        Optional[Dict[BaseAddress, float]]
+    :param base_pair_prob_upper_bound:
+        Probability upper bounds for each :py:class`BasePairAddress` which takes
+        precedence over probabilties specified by ``base_pair_prob_by_type_upper_bound``.
+    :type base_pair_prob_upper_bound:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob_upper_bound:
+        Probability upper bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type_upper_bound[BasePairType.UNPAIRED]``.
+    :type base_unpaired_prob_upper_bound:
+        Optional[Dict[BaseAddress, float]]
     :param temperature:
-        Temperature in Celsius
+        Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
+    :type temperature: float, optional
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :py:data:`Constraint.weight`, defaults to 1.0
+    :type weight:
+        float, optional
     :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param threaded:
-        Whether to use threading to parallelize evaluating this constraint.
+        Weight transfer function to use. By default, f(x) = x is used, where x
+        is the sum of the squared errors of each base pair that violates the
+        threshold.
+    :type weight_transfer_function: Callable[[float], float], optional
     :param description:
-        Detailed description of constraint suitable for report.
+        See :py:data:`Constraint.description`, defaults to None
+    :type description:
+        Optional[str], optional
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
-    :return:
-        The :any:`ComplexConstraint`.
+        See :py:data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
+    :type short_description:
+        str, optional
+    :param threaded:
+        **TODO**: Implement this
+    :type threaded:
+        bool, optional
+    :raises ImportError:
+        If NUPACK 4 is not installed.
+    :raises ValueError:
+        If ``strand_complexes`` is not valid. In order for ``strand_complexes`` to
+        be valid, ``strand_complexes`` must:
+
+        * Consist of complexes (tuples of :py:class:`Strand` objects)
+        * Each complex must be of the same motif
+
+            * Same number of :py:class:`Strand` s in each complex
+            * Same number of :py:class:`Domain` s in each :py:class:`Strand`
+            * Same number of bases in each :py:class:`Domain`
+    :return: ComplexConstraint
+    :rtype: ComplexConstraint
     """
     try:
         from nupack import Complex as NupackComplex
@@ -4830,7 +5073,7 @@ def nupack_4_complex_secondary_structure_constraint(
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     ## Start Input Validation ##
     if len(strand_complexes) == 0:
@@ -5025,6 +5268,91 @@ def nupack_4_complex_secondary_structure_constraint(
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
+
+
+def nupack_4_strand_pair_constraint(
+        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'strand_pair_nupack',
+        threaded: bool = False,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        negate: bool = False) -> StrandPairConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    NUPACK's pfunc executable.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float;
+        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
+        the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature:
+        Temperature in Celsius
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threading to parallelize evaluating this constraint.
+    :param description:
+        Detailed description of constraint suitable for report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+    :return:
+        The :any:`StrandPairConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+                                              for (strand_group1, strand_group2), value in threshold.items()}
+            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    def evaluate(strand1: Strand, strand2: Strand) -> float:
+        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        logger.debug(
+            f'strand pair threshold: {threshold_value:6.2f} '
+            f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        return max(0.0, excess)
+
+    def summary(strand1: Strand, strand2: Strand) -> str:
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        return f'{energy:6.2f} kcal/mol'
+
+    if pairs is not None:
+        pairs = tuple(pairs)
+
+    return StrandPairConstraint(description=description,
+                                short_description=short_description,
+                                weight=weight,
+                                weight_transfer_function=weight_transfer_function,
+                                threaded=threaded,
+                                pairs=pairs,
+                                evaluate=evaluate,
+                                summary=summary)
 
 
 def chunker(sequence: Sequence[T], chunk_length: Optional[int] = None, num_chunks: Optional[int] = None) -> \
