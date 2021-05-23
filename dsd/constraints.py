@@ -4816,7 +4816,7 @@ def nupack_4_complex_secondary_structure_constraint(
     :type base_unpaired_prob_upper_bound:
         Optional[Dict[BaseAddress, float]]
     :param temperature:
-        Temperature specified in °C, defaults to :py:data:`dv.default_temperature`.
+        Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
     :param weight: [description], defaults to 1.0
     :type weight: float, optional
