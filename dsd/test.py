@@ -493,10 +493,10 @@ class TestSubdomains(unittest.TestCase):
                  b      c      d      e
             <--=====--=====--=====--=====]
         """
-        b = Domain('b', assign_domain_pool_of_size(5))
-        c = Domain('c', assign_domain_pool_of_size(5))
-        d = Domain('d', assign_domain_pool_of_size(5))
-        e = Domain('e', assign_domain_pool_of_size(5))
+        b = Domain('b', assign_domain_pool_of_size(5), dependent=True)
+        c = Domain('c', assign_domain_pool_of_size(5), dependent=True)
+        d = Domain('d', assign_domain_pool_of_size(5), dependent=True)
+        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
 
         a = Domain('a', assign_domain_pool_of_size(20), subdomains=[b, c, d, e])
         self.assertListEqual(a.subdomains, [b, c, d, e])
