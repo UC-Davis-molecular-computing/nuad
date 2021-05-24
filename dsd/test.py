@@ -503,7 +503,7 @@ class TestSubdomains(unittest.TestCase):
 
     def test_construct_fixed_domain_with_fixed_subdomains(self):
         """
-        Test constructing a domain with fixed subdomains
+        Test constructing a fixed domain with fixed subdomains
 
         .. code-block:: none
 
