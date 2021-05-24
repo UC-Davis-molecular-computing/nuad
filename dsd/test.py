@@ -600,6 +600,34 @@ class TestSubdomains(unittest.TestCase):
 
         self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=False, subdomains=[b, c])
 
+    def test_error_strand_with_unassignable_subsequence(self):
+        """
+        Test that constructing a strand with an unassignable subsequence raises
+        a ValueError.
+
+        This happens due to when no independent domain assigns a sequence for a
+        portion of a strand
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             e   f g   h
+        """
+        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
+        f = Domain('f', assign_domain_pool_of_size(5), dependent=True)
+        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+
+        b = Domain('b', assign_domain_pool_of_size(10), dependent=True, subdomains=[e, f])
+        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+
+        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[b, C])
+
+        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
+
 
 if __name__ == '__main__':
     unittest.main()
