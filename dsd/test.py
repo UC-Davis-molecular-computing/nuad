@@ -501,6 +501,53 @@ class TestSubdomains(unittest.TestCase):
         a = Domain('a', assign_domain_pool_of_size(20), subdomains=[b, c, d, e])
         self.assertListEqual(a.subdomains, [b, c, d, e])
 
+    def test_construct_fixed_domain_with_fixed_subdomains(self):
+        """
+        Test constructing a domain with fixed subdomains
+
+        .. code-block:: none
+
+               [a]
+               / \
+             [b] [c]
+        """
+        b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
+        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+
+        a = Domain('a', assign_domain_pool_of_size(9), fixed=True, subdomains=[b, c])
+        self.assertTrue(a.fixed)
+
+    def test_inferred_fixed_domain_with_fixed_subdomains(self):
+        """
+        Test constructing a domain with fixed subdomains
+
+        .. code-block:: none
+
+               [a]
+               / \
+             [b] [c]
+        """
+        b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
+        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+
+        a = Domain('a', assign_domain_pool_of_size(9), subdomains=[b, c])
+        self.assertTrue(a.fixed)
+
+    def test_error_construct_fixed_domain_with_unfixed_subdomain(self):
+        """
+        Test constructing a domain with fixed subdomains
+
+        .. code-block:: none
+
+               [a]
+               / \
+              b  [c]
+        """
+        b = Domain('b', assign_domain_pool_of_size(5), fixed=False)
+        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+
+        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=True, subdomains=[b, c])
+
 
 if __name__ == '__main__':
     unittest.main()
