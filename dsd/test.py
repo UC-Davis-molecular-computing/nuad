@@ -600,6 +600,32 @@ class TestSubdomains(unittest.TestCase):
 
         self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=False, subdomains=[b, c])
 
+    def test_construst_strand(self):
+        """
+        Test strand construction with nested subdomains
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+        """
+        E = Domain('e', assign_domain_pool_of_size(5), dependent=False)
+        F = Domain('f', assign_domain_pool_of_size(5), dependent=False)
+        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+
+        b = Domain('b', assign_domain_pool_of_size(10), dependent=True, subdomains=[E, F])
+        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+
+        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[b, C])
+
+        # Test that constructor runs without errors
+        strand = Strand(domains=[a], starred_domain_indices=[])
+        self.assertEqual(strand.domains[0], a)
+
     def test_error_strand_with_unassignable_subsequence(self):
         """
         Test that constructing a strand with an unassignable subsequence raises
