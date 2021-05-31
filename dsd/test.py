@@ -654,6 +654,23 @@ class TestSubdomains(unittest.TestCase):
 
         self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
 
+    def test_error_cycle(self):
+        """
+        Test that constructing a domain with a cycle in its subdomain graph
+        rasies a ValueError.
+
+        .. code-block:: none
+
+            a
+            |
+            b
+            |
+            a
+        """
+        a = Domain('a', assign_domain_pool_of_size(5))
+        b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a])
+        a.subdomains = [b]
+
 
 if __name__ == '__main__':
     unittest.main()
