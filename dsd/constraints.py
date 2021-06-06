@@ -885,7 +885,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     # TODO: And other test cases...
 
     def __post_init__(self) -> None:
-        # TODO: Check no cycles (i.e. subdomain graph is a tree) (maybe bfs of dfs)
         if self.name.endswith('*'):
             raise ValueError('Domain name cannot end with *\n'
                              f'domain name = {self.name}')
@@ -1158,6 +1157,30 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                         f"Domain {self} is dependent and could not find exactly one independent subdomain "
                         f"in subdomain graph rooted at subdomain {sd}. The following error was found: {e}")
 
+    def _check_acyclic_subdomain_graph(self, seen_domains: Optional[Set["Domain"]] = None) -> None:
+        """Check to see if domain's subdomain graph contains a cycle.
+
+        :param seen_domains: All the domains seen so far (used by implementation)
+        :type seen_domains: Optional[Set["Domain"]]
+        :raises ValueError: Cycle found.
+        """
+        if len(self._subdomains) > 0:
+            if seen_domains is None:
+                seen_domains = set()
+
+            if self in seen_domains:
+                raise ValueError(f"Domain {self} found twice in DFS")
+            else:
+                seen_domains.add(self)
+
+            for sd in self._subdomains:
+                try:
+                    sd._check_acyclic_subdomain_graph(seen_domains)
+                except ValueError as e:
+                    raise ValueError(f"Cycle found in subdomain graph rooted at {self}. "
+                                     f"Propogated from subdomain {sd}: {e}"
+                                     )
+
 
 _domains_interned: Dict[str, Domain] = {}
 
@@ -1328,6 +1351,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
         for d in domains:
+            d._check_acyclic_subdomain_graph()
             d._check_exactly_one_independent_subdomain_all_paths()
 
         self.domains = list(domains)  # type: ignore
