@@ -499,7 +499,11 @@ class TestSubdomains(unittest.TestCase):
         e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
 
         a = Domain('a', assign_domain_pool_of_size(20), subdomains=[b, c, d, e])
-        self.assertListEqual(a.subdomains, [b, c, d, e])
+        self.assertListEqual([b, c, d, e], a.subdomains)
+        self.assertEqual(a, b.parent)
+        self.assertEqual(a, c.parent)
+        self.assertEqual(a, d.parent)
+        self.assertEqual(a, e.parent)
 
     def test_construct_fixed_domain_with_fixed_subdomains(self):
         """
@@ -517,23 +521,6 @@ class TestSubdomains(unittest.TestCase):
         a = Domain('a', assign_domain_pool_of_size(9), fixed=True, subdomains=[b, c])
         self.assertTrue(a.fixed)
 
-    def test_inferred_fixed_domain_with_fixed_subdomains(self):
-        """
-        Test that constructing a domain with fixed subdomains should automatically
-        set domain's fixed field to True
-
-        .. code-block:: none
-
-               [a]
-               / \
-             [b] [c]
-        """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
-
-        a = Domain('a', assign_domain_pool_of_size(9), subdomains=[b, c])
-        self.assertTrue(a.fixed)
-
     def test_construct_unfixed_domain_with_unfixed_subdomain(self):
         """
         Test constructing an unfixed domain with a unfixed subdomain should
@@ -549,23 +536,6 @@ class TestSubdomains(unittest.TestCase):
         c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
 
         a = Domain('a', assign_domain_pool_of_size(9), subdomains=[b, c], fixed=False)
-        self.assertFalse(a.fixed)
-
-    def test_inferred_unfixed_domain_with_unfixed_subdomain(self):
-        """
-        Test that constructing a domain with a unfixed subdomain should
-        set domain's fixed to False.
-
-        .. code-block:: none
-
-                a
-               / \
-              b  [c]
-        """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=False)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
-
-        a = Domain('a', assign_domain_pool_of_size(9), subdomains=[b, c])
         self.assertFalse(a.fixed)
 
     def test_error_construct_fixed_domain_with_unfixed_subdomain(self):
@@ -669,7 +639,10 @@ class TestSubdomains(unittest.TestCase):
         """
         a = Domain('a', assign_domain_pool_of_size(5))
         b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a])
+        # TODO: need setter here to set parent field
         a.subdomains = [b]
+
+        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
 
 
 if __name__ == '__main__':

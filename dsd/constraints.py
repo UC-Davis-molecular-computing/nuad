@@ -795,13 +795,22 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     This is the "unstarred" version of the name, and it cannot end in `*`.
     """
 
-    pool_: Optional[DomainPool] = field(default=None, compare=False, hash=False)
+    _pool: Optional[DomainPool] = field(init=False, default=None, compare=False, hash=False)
     """
     Each :any:`Domain` in the same :any:`DomainPool` as this one share a set of properties, such as
     length and individual :any:`DomainConstraint`'s.
     """
 
-    sequence_: Optional[str] = field(default=None, compare=False, hash=False)
+    # TODO: Change name to "_sequence", add init=False
+    # TODO: `set_sequence`
+    #        - if fixed, error
+    #        - if dependent, error
+    # TODO: `set_sequence_recursive_up`
+
+    #        - if parent is not none, make recursive call to set_sequence_recursive_up
+    # TODO: `set_sequence_recursive_down`
+    #        - iterate over children, call set_sequence
+    _sequence: Optional[str] = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
     DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
     variant; the starred variant has the Watson-Crick complement,
@@ -849,7 +858,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     so the domains are dependent on this strand's assigned sequence.
     """
 
-    subdomains: List["Domain"] = field(default_factory=list)
+    _subdomains: List["Domain"] = field(init=False, default_factory=list)
     """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
     """
 
@@ -857,6 +866,19 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based on the
     :py:data:`Domain.subdomains` of other domains in the same tree.
     """
+
+    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None, fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False, subdomains: Optional[List["Domain"]] = None) -> None:
+        if subdomains is None:
+            subdomains = []
+        self.name = name
+        self._pool = pool
+        self._sequence = sequence
+        self.fixed = fixed
+        self.label = label
+        self.dependent = dependent
+        self._subdomains = subdomains
+
+        self.__post_init__()
 
     # TODO: Add private methods set_subdomain_sequence and set_parent_sequence called in response to setter sequence
     # TODO: Test case: one long strand, make it have a single long domain, and it consist of shorter domains
@@ -867,10 +889,26 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         # TODO: Check that every root to leaf path has one fixed or independent (ensuring that every part of the
         #       sequence is assigned, although in the future, might allow for multiple independents/fixed in a path)
         # TODO: Check no cycles (i.e. subdomain graph is a tree) (maybe bfs of dfs)
-        # TODO: Set parent field.
         if self.name.endswith('*'):
             raise ValueError('Domain name cannot end with *\n'
                              f'domain name = {self.name}')
+
+        if self.fixed:
+            for sd in self._subdomains:
+                if not sd.fixed:
+                    raise ValueError(f'Domain is fixed, but subdomain {sd} is not fixed')
+        else:
+            contains_no_non_fixed_subdomains = True
+            for sd in self._subdomains:
+                if not sd.fixed:
+                    contains_no_non_fixed_subdomains = False
+                    break
+            if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
+                raise ValueError(f'Domain is not fixed, but all subdomains are fixed')
+
+        # Set parent field for all subdomains.
+        for subdomain in self._subdomains:
+            subdomain.parent = self
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
@@ -879,10 +917,10 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             by calling ``json.dumps(d)``.
         """
         dct: Dict[str, Any] = {name_key: self.name}
-        if self.pool_ is not None:
-            dct[domain_pool_key] = self.pool_.to_json_serializable(suppress_indent)
+        if self._pool is not None:
+            dct[domain_pool_key] = self._pool.to_json_serializable(suppress_indent)
         if self.has_sequence():
-            dct[sequence_key] = self.sequence_
+            dct[sequence_key] = self._sequence
             if self.fixed:
                 dct[fixed_key] = True
         if self.label is not None:
@@ -932,7 +970,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             pool = None
 
         domain: Domain[DomainLabel] = Domain(
-            name=name, sequence_=sequence, fixed=fixed, pool_=pool, label=label)
+            name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
 
     def __hash__(self) -> int:
@@ -951,9 +989,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: :any:`DomainPool` of this :any:`Domain`
         """
-        if self.pool_ is None:
+        if self._pool is None:
             raise ValueError(f'pool has not been set for Domain {self.name}')
-        return self.pool_
+        return self._pool
 
     @pool.setter
     def pool(self, new_pool: DomainPool) -> None:
@@ -961,11 +999,21 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :param new_pool: new :any:`DomainPool` to set
         :raises ValueError: if :py:data:`Domain.pool_` is not None and is not same object as `new_pool`
         """
-        if self.pool_ is not None and new_pool is not self.pool_:
+        if self._pool is not None and new_pool is not self._pool:
             raise ValueError(f'Assigning pool {new_pool} to domain '
                              f'{self} but {self} already has domain '
-                             f'pool {self.pool_}')
-        self.pool_ = new_pool
+                             f'pool {self._pool}')
+        self._pool = new_pool
+
+    @property
+    def subdomains(self) -> List["Domain"]:
+        return self._subdomains
+
+    @pool.setter
+    def subdomains(self, new_subdomains: List["Domain"]) -> None:
+        self._subdomains = new_subdomains
+        for s in new_subdomains:
+            s.parent = self
 
     @property
     def length(self) -> int:
@@ -973,10 +1021,10 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: Length of this domain (delegates to pool)
         :raises ValueError: if no :any:`DomainPool` has been set for this :any:`Domain`
         """
-        if self.pool_ is None:
+        if self._pool is None:
             raise ValueError('No DomainPool has been set for this Domain, so it has no length yet.\n'
                              'Assign a DomainPool (which has a length field) to give this Domain a length.')
-        return self.pool_.length
+        return self._pool.length
 
     @property
     def sequence(self) -> str:
@@ -984,9 +1032,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: DNA sequence of this domain (unstarred version)
         :raises ValueError: If no sequence has been assigned.
         """
-        if self.sequence_ is None:
+        if self._sequence is None:
             raise ValueError(f'sequence has not been set for Domain {self.name}')
-        return self.sequence_
+        return self._sequence
 
     @sequence.setter
     def sequence(self, new_sequence: str) -> None:
@@ -995,11 +1043,11 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         if self.fixed:
             raise ValueError('cannot assign a new sequence to this Domain; its sequence is fixed as '
-                             f'{self.sequence_}')
+                             f'{self._sequence}')
         if len(new_sequence) != self.length:
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
                              f'it is length {len(new_sequence)}, but this domain is length {self.length}')
-        self.sequence_ = new_sequence
+        self._sequence = new_sequence
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -1010,7 +1058,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
         :param fixed_sequence: new fixed DNA sequence to set
         """
-        self.sequence_ = fixed_sequence
+        self._sequence = fixed_sequence
         self.fixed = True
 
     @property
@@ -1052,7 +1100,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: Whether a DNA sequence has been assigned to this :any:`Domain`.
         """
-        return self.sequence_ is not None
+        return self._sequence is not None
 
     @staticmethod
     def complementary_domain_name(domain_name: str) -> str:
@@ -1612,7 +1660,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domain_pools = defaultdict(list)
         for domain in self.domains:
-            if domain.pool_ is not None:
+            if domain._pool is not None:
                 self.domain_pools[domain.pool].append(domain)
 
         self.domains_by_name = {}
@@ -2215,7 +2263,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         if sc_domain.name[-1] == '*':
                             domain_sequence = dv.wc(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
-                            dsd_domain.sequence_ = domain_sequence
+                            dsd_domain._sequence = domain_sequence
                             dsd_domain.fixed = fix_assigned_sequences
 
                 # set domain labels
@@ -2959,8 +3007,8 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 raise ValueError(f'domain {domain2.name} is fixed in one but not the other:\n'
                                  f'design1 domain {domain1.name} fixed = {domain1.fixed},\n'
                                  f'design2 domain {domain2.name} fixed = {domain2.fixed}')
-            if (domain1.pool_ is not None
-                    and domain2.pool_ is not None
+            if (domain1._pool is not None
+                    and domain2._pool is not None
                     and domain1.pool.name != domain2.pool.name):
                 raise ValueError(f'domain {domain2.name} pool name does not match:'
                                  f'design1 domain {domain1.name} pool = {domain1.pool.name},\n'

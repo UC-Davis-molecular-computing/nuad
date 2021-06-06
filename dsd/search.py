@@ -1152,11 +1152,11 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
                 domain_to_strand[domain] = strand
         else:
             for domain in strand.domains:
-                if domain.pool_ is None and not domain.fixed:
+                if domain._pool is None and not domain.fixed:
                     raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
                                      f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
                                      f'For non-fixed domains, exactly one of these must be None.')
-                elif domain.fixed and domain.pool_ is not None:
+                elif domain.fixed and domain._pool is not None:
                     raise ValueError(f'for strand {strand.name}, it has a '
                                      f'domain {domain.name} that is fixed, even though that Domain has a '
                                      f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.')

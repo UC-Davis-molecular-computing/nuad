@@ -105,7 +105,7 @@ def set_domain_pool(domain: dc.Domain, domain_pool: dc.DomainPool) -> None:
     :param domain_pool: Pool to assign to Domain
     :type domain_pool: dc.DomainPool
     """
-    if domain.pool_:
+    if domain._pool:
         if domain.pool is not domain_pool:
             raise AssertionError(f'Assigning pool {domain_pool} to domain '
                                  f'{domain} but {domain} already has domain '
