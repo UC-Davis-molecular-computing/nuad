@@ -1009,7 +1009,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     def subdomains(self) -> List["Domain"]:
         return self._subdomains
 
-    @pool.setter
+    @subdomains.setter
     def subdomains(self, new_subdomains: List["Domain"]) -> None:
         self._subdomains = new_subdomains
         for s in new_subdomains:
@@ -1109,6 +1109,57 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :param domain_name: name of domain
         """
         return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
+
+    def _is_independent(self) -> bool:
+        """Return true if self is independent (not dependent or fixed).
+
+        :return: [description]
+        :rtype: bool
+        """
+        return not self.dependent or self.fixed
+
+    def _contains_any_independent_subdomain_recursively(self) -> bool:
+        """Returns true if the subdomain graph rooted at this domain contains
+        at least one independent subdomain.
+
+        :rtype: bool
+        """
+        if self._is_independent():
+            return True
+
+        for sd in self._subdomains:
+            if sd._contains_any_independent_subdomain_recursively():
+                return True
+
+        return False
+
+    def _check_exactly_one_independent_subdomain_all_paths(self) -> None:
+        """Checks if all paths in the subdomains graph from the self to
+        a leaf subdomain contains exactly one independent (dependent = False or
+        fixed = True) subdomain (could be this one).
+
+        :raises ValueError: if condition is not satisfied
+        """
+        self_independent = not self.dependent or self.fixed
+
+        if self_independent:
+            # Since this domain is independent, check that there are no more independent subdomains in any children recursively
+            for sd in self._subdomains:
+                if sd._contains_any_independent_subdomain_recursively():
+                    # Too many independent subdomains in this path
+                    raise ValueError(f"Domain {self} is independent, but subdomain {sd} already contains an "
+                                     f"independent subdomain in its subdomain graph")
+        else:
+            if len(self._subdomains) == 0:
+                raise ValueError(f"Domain {self} is dependent and does not contain any subdomains.")
+            # Since this domain is dependent, check that each subdomain has exactly one independent subdomain in all paths.
+            for sd in self._subdomains:
+                try:
+                    sd._check_exactly_one_independent_subdomain_all_paths()
+                except ValueError as e:
+                    raise ValueError(
+                        f"Domain {self} is dependent and could not find exactly one independent subdomain "
+                        f"in subdomain graph rooted at subdomain {sd}. The following error was found: {e}")
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -1283,6 +1334,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
         self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
+
+        for d in self.domains:
+            d._check_exactly_one_independent_subdomain_all_paths()
 
     def __hash__(self) -> int:
         # return hash(self.domain_names_concatenated())
