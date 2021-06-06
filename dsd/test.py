@@ -664,9 +664,8 @@ class TestSubdomains(unittest.TestCase):
             |
             a
         """
-        a = Domain('a', assign_domain_pool_of_size(5))
-        b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a])
-        # TODO: need setter here to set parent field
+        a = Domain('a', assign_domain_pool_of_size(5), dependent=True)
+        b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a], dependent=True)
         a.subdomains = [b]
 
         self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
