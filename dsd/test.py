@@ -624,6 +624,33 @@ class TestSubdomains(unittest.TestCase):
 
         self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
 
+    def test_error_strand_with_redundant_independence(self):
+        """
+        Test that constructing a strand with an redundant indepndence in subdomain
+        graph raises a ValueError.
+
+        Below, in the path from F to a, two independent subdomains are found: F and B
+
+        .. code-block:: none
+
+                  a
+                /   \
+               B     C
+              / \   / \
+             e   F g   h
+        """
+        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
+        F = Domain('F', assign_domain_pool_of_size(5), dependent=False)
+        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+
+        B = Domain('B', assign_domain_pool_of_size(10), dependent=False, subdomains=[e, F])
+        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+
+        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[B, C])
+
+        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
+
     def test_error_cycle(self):
         """
         Test that constructing a domain with a cycle in its subdomain graph
