@@ -885,9 +885,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     # TODO: And other test cases...
 
     def __post_init__(self) -> None:
-        # TODO: Check that if domain is fixed, all of its subdomains are fixed
-        # TODO: Check that every root to leaf path has one fixed or independent (ensuring that every part of the
-        #       sequence is assigned, although in the future, might allow for multiple independents/fixed in a path)
         # TODO: Check no cycles (i.e. subdomain graph is a tree) (maybe bfs of dfs)
         if self.name.endswith('*'):
             raise ValueError('Domain name cannot end with *\n'
@@ -1328,15 +1325,17 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
+        # Check that each base in the sequence is assigned by exactly one
+        # independent subdomain.
+        for d in domains:
+            d._check_exactly_one_independent_subdomain_all_paths()
+
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
 
         self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
-
-        for d in self.domains:
-            d._check_exactly_one_independent_subdomain_all_paths()
 
     def __hash__(self) -> int:
         # return hash(self.domain_names_concatenated())
