@@ -4958,7 +4958,65 @@ def _get_addr_to_starting_base_pair_idx(strand_complex: Tuple[Strand, ...]) -> D
     return addr_to_starting_base_pair_idx
 
 
+def _leafify_domain(domain: Domain) -> List[Domain]:
+    """Returns the list of all leaf subdomains that make up domain
+
+    :param domain: Domain
+    :type domain: Domain
+    :return: List of leaf subdomains
+    :rtype: List[Domain]
+    """
+    if len(domain.subdomains) == 0:
+        return [domain]
+    else:
+        ret = []
+        for sd in domain.subdomains:
+            ret += _leafify_domain(sd)
+        return ret
+
+
+def _leafify_strand(strand: Strand) -> Strand:
+    """Creates a new strand that is made of the subdomains of strand.
+    """
+    leafify_domains: List[List[Domain]] = [_leafify_domain(d) for d in strand.domains]
+    new_domains: List[Domain] = []
+    new_starred_domain_indices: List[int] = []
+    new_starred_domain_idx = 0
+    for (idx, leaf_domain_list) in enumerate(leafify_domains):
+        if idx in strand.starred_domain_indices:
+            new_domains.extend(reversed(leaf_domain_list))
+            # Star every single subdomain that made up original starred domain
+            for i in range(new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)):
+                new_starred_domain_indices.append(i)
+        else:
+            new_domains.extend(leaf_domain_list)
+
+        new_starred_domain_idx += len(leaf_domain_list)
+    return Strand(domains=new_domains, starred_domain_indices=new_starred_domain_indices, name=f"leafifed {strand.name}")
+
+
 def _get_base_pair_domain_endpoints_to_check(
+        strand_complex: Tuple[Strand, ...],
+        nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
+    """Returns the set of all the _BasePairDomainEndpoint to check
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
+    :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
+    :raises ValueError: If there are multiple instances of the same strand in a complex
+    :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
+    :raises ValueError: If address given in nonimplicit_base_pairs is not found
+    :return: Set of all the _BasePairDomainEndpoint to check
+    :rtype: Set[_BasePairDomainEndpoint]
+    """
+    # Need to convert strands into strands lowest level subdomains
+    leafify_strand_complex = tuple([_leafify_strand(strand) for strand in strand_complex])
+    return __get_base_pair_domain_endpoints_to_check(
+        leafify_strand_complex, nonimplicit_base_pairs=nonimplicit_base_pairs)
+
+
+def __get_base_pair_domain_endpoints_to_check(
         strand_complex: Tuple[Strand, ...],
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
