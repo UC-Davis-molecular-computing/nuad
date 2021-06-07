@@ -4975,24 +4975,46 @@ def _leafify_domain(domain: Domain) -> List[Domain]:
         return ret
 
 
-def _leafify_strand(strand: Strand) -> Strand:
-    """Creates a new strand that is made of the subdomains of strand.
+def _leafify_strand(
+        strand: Strand, addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
+    """Create a new strand that is made of the leaf subdomains. Also updates an
+    addr_translation_table which maps StrandDomainAddress from old strand to new
+    strand. Since a domain may consist of multiple subdomains, a single StrandDomainAddress
+    may map to a list of StrandDomainAddresses, listed in 5' to 3' order.
+
+    :param strand: Strand
+    :type strand: Strand
+    :param addr_translation_table: Maps old StrandDomainAddress to new StrandDomainAddress
+    :type addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]
+    :return: Leafified strand
+    :rtype: Strand
     """
     leafify_domains: List[List[Domain]] = [_leafify_domain(d) for d in strand.domains]
     new_domains: List[Domain] = []
     new_starred_domain_indices: List[int] = []
     new_starred_domain_idx = 0
+    addr_translation_table_without_strand: Dict[int, List[int]] = {}
     for (idx, leaf_domain_list) in enumerate(leafify_domains):
+        new_domain_indices = []
+        for i in range(new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)):
+            new_domain_indices.append(i)
+
+        addr_translation_table_without_strand[idx] = new_domain_indices
         if idx in strand.starred_domain_indices:
             new_domains.extend(reversed(leaf_domain_list))
             # Star every single subdomain that made up original starred domain
-            for i in range(new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)):
-                new_starred_domain_indices.append(i)
+            new_starred_domain_indices.extend(new_domain_indices)
         else:
             new_domains.extend(leaf_domain_list)
 
         new_starred_domain_idx += len(leaf_domain_list)
-    return Strand(domains=new_domains, starred_domain_indices=new_starred_domain_indices, name=f"leafifed {strand.name}")
+    new_strand: Strand = Strand(domains=new_domains, starred_domain_indices=new_starred_domain_indices,
+                                name=f"leafifed {strand.name}")
+    for idx, new_idxs in addr_translation_table_without_strand.items():
+        new_addrs = [StrandDomainAddress(new_strand, new_idx) for new_idx in new_idxs]
+        addr_translation_table[StrandDomainAddress(strand, idx)] = new_addrs
+
+    return new_strand
 
 
 def _get_base_pair_domain_endpoints_to_check(
@@ -5010,10 +5032,24 @@ def _get_base_pair_domain_endpoints_to_check(
     :return: Set of all the _BasePairDomainEndpoint to check
     :rtype: Set[_BasePairDomainEndpoint]
     """
+    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
+
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = tuple([_leafify_strand(strand) for strand in strand_complex])
+    leafify_strand_complex = tuple([_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
+
+    new_nonimplicit_base_pairs = []
+    if nonimplicit_base_pairs:
+        for bp in nonimplicit_base_pairs:
+            (addr1, addr2) = bp
+            new_addr1_list = addr_translation_table[addr1]
+            new_addr2_list = list(reversed(addr_translation_table[addr2]))
+
+            assert len(new_addr1_list) == len(new_addr2_list)
+            for idx in range(len(new_addr1_list)):
+                new_nonimplicit_base_pairs.append((new_addr1_list[idx], new_addr2_list[idx]))
+
     return __get_base_pair_domain_endpoints_to_check(
-        leafify_strand_complex, nonimplicit_base_pairs=nonimplicit_base_pairs)
+        leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs)
 
 
 def __get_base_pair_domain_endpoints_to_check(
