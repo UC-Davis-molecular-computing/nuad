@@ -1044,6 +1044,21 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
                              f'it is length {len(new_sequence)}, but this domain is length {self.length}')
         self._sequence = new_sequence
+        self._set_subdomain_sequences(new_sequence)
+
+    def _set_subdomain_sequences(self, new_sequence: str) -> None:
+        """Sets sequence for all subdomains.
+
+        :param new_sequence: Sequence assigned to this domain.
+        :type new_sequence: str
+        """
+        sequence_idx = 0
+        for sd in self._subdomains:
+            sd_len = sd.length
+            sd_sequence = new_sequence[sequence_idx: sequence_idx + sd_len]
+            sd._sequence = sd_sequence
+            sd._set_subdomain_sequences(sd_sequence)
+            sequence_idx += sd_len
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
