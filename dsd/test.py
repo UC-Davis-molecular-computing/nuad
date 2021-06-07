@@ -187,11 +187,18 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                                |              |   |
                               INTERIOR_TO_STRAND  DANGLE_3P
         """
-        input_strand = construct_strand(['sg', 'Sg', 'T', 'si', 'Si'], [2, 13, 5, 2, 13])
-        gate_base_strand = construct_strand(['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
+        ssg = Domain('ssg', assign_domain_pool_of_size(13), dependent=True)
+        sg = Domain('sg', assign_domain_pool_of_size(2), dependent=True)
+        Sg = Domain('Sg', assign_domain_pool_of_size(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_size(5))
+        ssi = Domain('ssi', assign_domain_pool_of_size(13), dependent=True)
+        si = Domain('si', assign_domain_pool_of_size(2), dependent=True)
+        Si = Domain('Si', assign_domain_pool_of_size(15), subdomains=[si, ssi])
+        input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
+        gate_base_strand = Strand(domains=[T, Sg, T], starred_domain_indices=[0, 1, 2])
         input_gate_complex = [input_strand, gate_base_strand]
 
-        input_t = input_strand.address_of_domain(2)
+        input_t = input_strand.address_of_domain(1)
         gate_base_t = gate_base_strand.address_of_domain(0)
         nonimplicit_base_pairs = [
             (input_t, gate_base_t)
