@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from math import ceil, floor
-from typing import Dict, List, Set, Tuple, Union, cast
+from typing import Dict, Iterable, List, Set, Tuple, Union, cast
 
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
@@ -62,6 +62,55 @@ def c_content_constraint(length: int) -> dc.BaseCountConstraint:
 # and the longest run of matches is at most 35% of the domain length - Use a
 # DomainPairConstraint
 # * Check that the domain pairs are same length and both long domains
+
+def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairConstraint:
+    """
+    For any two sequences in the pool, we require at least 30% of bases are
+    different and the longest run of matches is at most 35% of the domain length
+
+    :param domains: Domains to compare
+    :type domains: Iterable[dc.Domain]
+    :return: DomainPairConstraint
+    :rtype: dc.DomainPairConstraint
+    """
+    def evaluate(domain1: dc.Domain, domain2: dc.Domain) -> float:
+        num_of_matches = 0
+        run_of_matches = 0
+        assert domain1.length == domain2.length
+        length = domain1.length
+        run_of_matches_limit = ceil(0.35 * length)
+        num_of_matches_limit = ceil(0.7 * length)
+        for i in range(domain1.length):
+            if domain1.sequence[i] == domain2.sequence[i]:
+                num_of_matches += 1
+                run_of_matches += 1
+            else:
+                run_of_matches = 0
+            if num_of_matches > num_of_matches_limit or run_of_matches > run_of_matches_limit:
+                return 100
+        return 0
+
+    def summary(domain1: dc.Domain, domain2: dc.Domain) -> str:
+        if evaluate(domain1, domain2) > 0:
+            return (f'Too many matches between {domain1} and {domain2}'
+                    f'Domain 1: {domain1.sequence}'
+                    f'Domain 2: {domain2.sequence}')
+        else:
+            return (f'Sufficient difference between {domain1} and {domain2}'
+                    f'Domain 1: {domain1.sequence}'
+                    f'Domain 2: {domain2.sequence}')
+
+    pairs: List[Tuple[dc.Domain, dc.Domain]] = []
+    for d1 in domains:
+        for d2 in domains:
+            if d1 is not d2:
+                pairs.append((d1, d2))
+
+    return dc.DomainPairConstraint(
+        pairs=tuple(pairs),
+        evaluate=evaluate, summary=summary, description='base difference constraint',
+        short_description='base difference constraint')
+
 
 # Domain pools
 sup_reg_domain_constraints = [
@@ -834,11 +883,15 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    design = dc.Design(
-        strands=strands, complex_constraints=seesaw_circuit.constraints,
-        strand_constraints=[
-            strand_substring_constraint(
-                strands, ILLEGAL_SUBSTRINGS)],)
+    reg_domains = []
+    for domain in all_domains.values():
+        if domain.length == REG_DOMAIN_LENGTH:
+            reg_domains.append(domain)
+
+    domain_pair_constraints = [base_difference_constraint(reg_domains)]
+    design = dc.Design(strands=strands, complex_constraints=seesaw_circuit.constraints,
+                       domain_pair_constraints=domain_pair_constraints,
+                       strand_constraints=[strand_substring_constraint(strands, ILLEGAL_SUBSTRINGS)],)
 
     ds.search_for_dna_sequences(design=design,
                                 # weigh_violations_equally=True,
