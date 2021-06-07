@@ -1152,6 +1152,16 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
         return False
 
+    def _check_subdomain_graph_is_uniquely_assignable(self) -> None:
+        """Checks that the subdomain graph that this domain is part of is
+        uniquely assignable. Meaning that all paths from the root to the
+        leaf of the subdomain graph contains exaclty one independent subdomain.
+        """
+        if self.parent is None:
+            self._check_exactly_one_independent_subdomain_all_paths()
+        else:
+            self.parent._check_subdomain_graph_is_uniquely_assignable()
+
     def _check_exactly_one_independent_subdomain_all_paths(self) -> None:
         """Checks if all paths in the subdomains graph from the self to
         a leaf subdomain contains exactly one independent (dependent = False or
@@ -1373,9 +1383,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
-        for d in domains:
+        for d in cast(List[Domain], domains):
             d._check_acyclic_subdomain_graph()
-            d._check_exactly_one_independent_subdomain_all_paths()
+            d._check_subdomain_graph_is_uniquely_assignable()
 
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
