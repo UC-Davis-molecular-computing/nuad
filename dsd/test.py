@@ -737,6 +737,22 @@ class TestSubdomains(unittest.TestCase):
         with self.assertRaises(ValueError):
             a.sequence = 'A' * 15
 
+    def test_construct_strand_using_dependent_subdomain(self) -> None:
+        """Test constructing a strand using a dependent subdomain (not parent)
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+
+        Test constructing a strand using g.
+        """
+        g = self.sample_nested_domains()['g']
+        Strand(domains=[g], starred_domain_indices=[])
+
 
 if __name__ == '__main__':
     unittest.main()
