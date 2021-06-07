@@ -1043,6 +1043,14 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         if len(new_sequence) != self.length:
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
                              f'it is length {len(new_sequence)}, but this domain is length {self.length}')
+        # Check that total length of subdomains (if used) adds up domain length.
+        if len(self._subdomains) != 0:
+            sd_total_length = 0
+            for sd in self._subdomains:
+                sd_total_length += sd.length
+            if sd_total_length != self.length:
+                raise ValueError(f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
+                                 f'length of {sd_total_length}')
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
 
