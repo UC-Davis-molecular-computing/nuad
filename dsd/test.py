@@ -670,6 +670,55 @@ class TestSubdomains(unittest.TestCase):
 
         self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
 
+    def sample_nested_domains(self) -> Dict[str, Domain]:
+        """Returns domains with the following subdomain hierarchy:
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+
+        :return: Map of domain name to domain object.
+        :rtype: Dict[str, Domain]
+        """
+        E: Domain = Domain('E', assign_domain_pool_of_size(5), dependent=False)
+        F: Domain = Domain('F', assign_domain_pool_of_size(6), dependent=False)
+        g: Domain = Domain('g', assign_domain_pool_of_size(7), dependent=True)
+        h: Domain = Domain('h', assign_domain_pool_of_size(8), dependent=True)
+
+        b: Domain = Domain('b', assign_domain_pool_of_size(11), dependent=True, subdomains=[E, F])
+        C: Domain = Domain('C', assign_domain_pool_of_size(15), dependent=False, subdomains=[g, h])
+
+        a: Domain = Domain('a', assign_domain_pool_of_size(26), dependent=True, subdomains=[b, C])
+        return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
+
+    def test_assign_dna_sequence_to_parent(self):
+        """
+        Test assigning dna sequence to parent (a) and propagating it downwards
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+        """
+        domains = self.sample_nested_domains()
+        sequence = 'CATAGCTTTCTTGTTCTGATCGGAAC'
+        a = domains['a']
+        a.sequence = sequence
+        self.assertEqual(sequence, a.sequence)
+        self.assertEqual(sequence[0: 11], domains['b'].sequence)
+        self.assertEqual(sequence[11:], domains['C'].sequence)
+        self.assertEqual(sequence[0:5], domains['E'].sequence)
+        self.assertEqual(sequence[5:11], domains['F'].sequence)
+        self.assertEqual(sequence[11:18], domains['g'].sequence)
+        self.assertEqual(sequence[18:], domains['h'].sequence)
+
 
 if __name__ == '__main__':
     unittest.main()
