@@ -1,9 +1,16 @@
 from dataclasses import dataclass, field
 from math import ceil, floor
 from typing import Dict, Iterable, List, Set, Tuple, Union, cast
+import itertools
 
 import dsd.search as ds  # type: ignore
 import dsd.constraints as dc
+
+# TODO: Go over each constraint, using NUPACK
+#   - check pfunc for each strand
+#   - check every pair of signal strands not in same complex (use binding4)
+#   - check every complex is well-formed (print base-pair probabilties and MFE)
+
 
 # Constants
 
@@ -63,6 +70,8 @@ def c_content_constraint(length: int) -> dc.BaseCountConstraint:
 # DomainPairConstraint
 # * Check that the domain pairs are same length and both long domains
 
+# TODO: Add this constraint to library, making limits controable by parameters.
+# TODO: Make return value smooth
 def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairConstraint:
     """
     For any two sequences in the pool, we require at least 30% of bases are
@@ -78,8 +87,8 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
         run_of_matches = 0
         assert domain1.length == domain2.length
         length = domain1.length
-        run_of_matches_limit = ceil(0.35 * length)
-        num_of_matches_limit = ceil(0.7 * length)
+        run_of_matches_limit = 0.35 * length
+        num_of_matches_limit = 0.7 * length
         for i in range(domain1.length):
             if domain1.sequence[i] == domain2.sequence[i]:
                 num_of_matches += 1
@@ -100,11 +109,7 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
                     f'Domain 1: {domain1.sequence}'
                     f'Domain 2: {domain2.sequence}')
 
-    pairs: List[Tuple[dc.Domain, dc.Domain]] = []
-    for d1 in domains:
-        for d2 in domains:
-            if d1 is not d2:
-                pairs.append((d1, d2))
+    pairs = itertools.combinations(domains, 2)
 
     return dc.DomainPairConstraint(
         pairs=tuple(pairs),
@@ -158,12 +163,12 @@ def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
     :rtype: Domain
     """
     if f'S{gate}' not in all_domains:
-        d3p_sup: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=True)
-        d3p_sub: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=True)
-        d3p: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d3p_sub, d3p_sup])
+        d3p_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=True)
+        d3p_2: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=True)
+        d3p: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d3p_2, d3p_13])
 
-        all_domains[f'ss{gate}'] = d3p_sup
-        all_domains[f's{gate}'] = d3p_sub
+        all_domains[f'ss{gate}'] = d3p_13
+        all_domains[f's{gate}'] = d3p_2
         all_domains[f'S{gate}'] = d3p
 
     return all_domains[f'S{gate}']

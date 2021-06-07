@@ -1028,8 +1028,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: DNA sequence of this domain (unstarred version)
         :raises ValueError: If no sequence has been assigned.
         """
-        if self._sequence is None:
-            raise ValueError(f'sequence has not been set for Domain {self.name}')
+        if self._sequence is None or '?' in self._sequence:
+            raise ValueError(f'sequence has not been set for Domain {self.name}\n'
+                             f'sequence: {self._sequence}')
         return self._sequence
 
     @sequence.setter
@@ -1053,6 +1054,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                                  f'length of {sd_total_length}')
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
+        self._set_parent_sequence(new_sequence)
+        # TODO: Propagate sequence to parent, using "?" temporarily for unassigned parts of sequence
+        #       assert eror if "?" is used for comparision
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -1067,6 +1071,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             sd._sequence = sd_sequence
             sd._set_subdomain_sequences(sd_sequence)
             sequence_idx += sd_len
+
+    def _set_parent_sequence(self, new_sequence: str) -> None:
+        if self.parent is not None:
+            if self.parent._sequence is None:
+                self.parent._sequence = '?' * self.parent.length
+            # Add up lengths of subdomains, add new_sequence
+            idx = self.parent._subdomains
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
