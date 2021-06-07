@@ -27,8 +27,6 @@ SUB_REG_DOMAIN_LENGTH = 2
 SUP_REG_DOMAIN_LENGTH = REG_DOMAIN_LENGTH - SUB_REG_DOMAIN_LENGTH
 
 # Constants -- Toehold domain
-TOEHOLD_DOMAIN = 'T'
-TOEHOLD_COMPLEMENT = f'{TOEHOLD_DOMAIN}*'
 TOEHOLD_LENGTH = 5
 
 # Constants -- Fuel domain
@@ -92,8 +90,34 @@ FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH,
     [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
 
+TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
+
 # Alias
 dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
+
+# Stores all domains used in design
+all_domains: Dict[str, dc.Domain] = {'T': TOEHOLD_DOMAIN}
+
+
+def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
+    """Returns a signal domain with S{gate} and stores it to all_domains for
+    future use.
+
+    :param gate: Gate.
+    :type gate: str
+    :return: Domain
+    :rtype: Domain
+    """
+    if f'S{gate}' not in all_domains:
+        d3p_sup: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=True)
+        d3p_sub: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=True)
+        d3p: dc.Domain = dc.Domain(f'S{gate}', subdomains=[d3p_sub, d3p_sup])
+
+        all_domains[f'ss{gate}'] = d3p_sup
+        all_domains[f's{gate}'] = d3p_sub
+        all_domains[f'S{gate}'] = d3p
+
+    return all_domains[f'S{gate}']
 
 
 def set_domain_pool(domain: dc.Domain, domain_pool: dc.DomainPool) -> None:
@@ -123,7 +147,8 @@ def signal_strand(
 
     .. code-block:: none
 
-          S{g3p}      s{g3p}  T       S{g5p}    s{g5p}
+                S{g3p}                       S{g5p}
+          ss{g3p}      s{g3p}  T       ss{g5p}    s{g5p}
             |           |     |          |         |
         <=============--==--=====--=============--==]
 
@@ -138,22 +163,12 @@ def signal_strand(
     :return: Strand
     :rtype: dc.Strand
     """
-    d3p_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate3p}'
-    d3p_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate3p}'
-    d5p_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate5p}'
-    d5p_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate5p}'
+    d3p = get_signal_domain(gate3p)
+    d5p = get_signal_domain(gate5p)
+
     if name == '':
         name = f'signal {gate3p} {gate5p}'
-    s: dc.Strand = dc.Strand(
-        [d5p_sub, d5p_sup, TOEHOLD_DOMAIN, d3p_sub, d3p_sup], name=name)
-
-    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[2], TOEHOLD_DOMAIN_POOL)
-    set_domain_pool(s.domains[3], SUB_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[4], SUP_REG_DOMAIN_POOL)
-
-    return s
+    return dc.Strand(domains=[d5p, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
 
 
 def fuel_strand(gate: int) -> dc.Strand:
@@ -161,7 +176,7 @@ def fuel_strand(gate: int) -> dc.Strand:
 
     .. code-block:: none
 
-          S{g3p}      s{g3p}  T         Sf         sf
+         ss{g3p}      s{g3p}  T        ssf         sf
             |           |     |          |         |
         <=============--==--=====--=============--==]
 
@@ -177,9 +192,9 @@ def gate_base_strand(gate: int) -> dc.Strand:
     """Returns a gate base strand with recognition domain `gate`.
 
     .. code-block:: none
-
-           T*      S{gate}* s{gate}* T*
-           |          |        |     |
+                        S{gate}*
+           T*      ss{gate}* s{gate}* T*
+           |          |        |      |
         [=====--=============--==--=====>
 
     :param gate: Gate to be identified by the recognition domain
@@ -187,15 +202,11 @@ def gate_base_strand(gate: int) -> dc.Strand:
     :return: Gate base strand
     :rtype: dc.Strand
     """
-    dsup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
-    dsub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
+    d = get_signal_domain(gate)
     s: dc.Strand = dc.Strand(
-        [TOEHOLD_COMPLEMENT, dsup, dsub, TOEHOLD_COMPLEMENT],
+        domains=[TOEHOLD_DOMAIN, d, TOEHOLD_DOMAIN],
+        starred_domain_indices=[0, 1, 2],
         name=f'gate base {gate}')
-    set_domain_pool(s.domains[0], TOEHOLD_DOMAIN_POOL)
-    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[2], SUB_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[3], TOEHOLD_DOMAIN_POOL)
     return s
 
 
@@ -205,7 +216,7 @@ def threshold_base_strand(input: int, gate: int) -> dc.Strand:
 
     .. code-block:: none
 
-     s{input}* T*      S{gate}*    s{gate}*
+     s{input}* T*      ss{gate}*   s{gate}*
          |     |          |        |
         [==--=====--=============--==>
 
@@ -216,16 +227,14 @@ def threshold_base_strand(input: int, gate: int) -> dc.Strand:
     :return: Threshold base strand
     :rtype: dc.Strand
     """
-    d_input_sub = f'{SUB_REG_DOMAIN_PREFIX}{input}*'
-    d_gate_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
-    d_gate_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
+    # Note, this assumes that this input signal domain has already been built
+    d_input_sub = all_domains[f's{input}']
+    d_gate = get_signal_domain(gate)
+
     s: dc.Strand = dc.Strand(
-        [d_input_sub, TOEHOLD_COMPLEMENT, d_gate_sup, d_gate_sub],
+        domains=[d_input_sub, TOEHOLD_DOMAIN, d_gate],
+        starred_domain_indices=[0, 1, 2],
         name=f'threshold base {input} {gate}')
-    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[1], TOEHOLD_DOMAIN_POOL)
-    set_domain_pool(s.domains[2], SUP_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[3], SUB_REG_DOMAIN_POOL)
     return s
 
 
@@ -235,7 +244,7 @@ def waste_strand(gate: int) -> dc.Strand:
 
     .. code-block:: none
 
-            S{gate}   s{gate}
+            ss{gate}   s{gate}
                |        |
         <=============--==]
 
@@ -244,11 +253,7 @@ def waste_strand(gate: int) -> dc.Strand:
     :return: Waste strand
     :rtype: dc.Strand
     """
-    d_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}'
-    d_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}'
-    s: dc.Strand = dc.Strand([d_sub, d_sup], name=f'waste {gate}')
-    set_domain_pool(s.domains[0], SUB_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
+    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], name=f'waste {gate}')
     return s
 
 
@@ -257,7 +262,7 @@ def reporter_base_strand(gate) -> dc.Strand:
 
     .. code-block:: none
 
-           T*     S{gate}*   s{gate}*
+           T*     ss{gate}*   s{gate}*
            |          |        |
         [=====--=============--==>
 
@@ -266,14 +271,8 @@ def reporter_base_strand(gate) -> dc.Strand:
     :return: Reporter base strand
     :rtype: dc.Strand
     """
-    d_sup = f'{SUP_REG_DOMAIN_PREFIX}{gate}*'
-    d_sub = f'{SUB_REG_DOMAIN_PREFIX}{gate}*'
-
     s: dc.Strand = dc.Strand(
-        [TOEHOLD_COMPLEMENT, d_sup, d_sub], name=f'reporter {gate}')
-    set_domain_pool(s.domains[0], TOEHOLD_DOMAIN_POOL)
-    set_domain_pool(s.domains[1], SUP_REG_DOMAIN_POOL)
-    set_domain_pool(s.domains[2], SUB_REG_DOMAIN_POOL)
+        domains=[TOEHOLD_DOMAIN, get_signal_domain(gate)], starred_domain_indices=[0, 1], name=f'reporter {gate}')
     return s
 
 
