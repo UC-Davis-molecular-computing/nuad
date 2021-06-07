@@ -86,8 +86,8 @@ TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH,
     numpy_constraints=toehold_domain_contraints)
 
-FUEL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'FUEL_DOMAIN_POOL', REG_DOMAIN_LENGTH,
+SIGNAL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
+    'SIGNAL_DOMAIN_POOL', REG_DOMAIN_LENGTH,
     [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
 
 TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
@@ -111,7 +111,7 @@ def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
     if f'S{gate}' not in all_domains:
         d3p_sup: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=True)
         d3p_sub: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=True)
-        d3p: dc.Domain = dc.Domain(f'S{gate}', subdomains=[d3p_sub, d3p_sup])
+        d3p: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d3p_sub, d3p_sup])
 
         all_domains[f'ss{gate}'] = d3p_sup
         all_domains[f's{gate}'] = d3p_sub
@@ -253,7 +253,7 @@ def waste_strand(gate: int) -> dc.Strand:
     :return: Waste strand
     :rtype: dc.Strand
     """
-    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], name=f'waste {gate}')
+    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], starred_domain_indices=[], name=f'waste {gate}')
     return s
 
 
