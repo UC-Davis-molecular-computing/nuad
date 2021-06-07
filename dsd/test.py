@@ -339,8 +339,16 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                             |     INTERIOR_TO_STRAND  BLUNT_END
                             ADJACENT_TO_EXTERIOR_BASE_PAIR
         """
-        input_strand = construct_strand(['sg', 'Sg', 'T', 'si', 'Si'], [2, 13, 5, 2, 13])
-        threshold_base_strand = construct_strand(['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
+        ssg = Domain('ssg', assign_domain_pool_of_size(13), dependent=True)
+        sg = Domain('sg', assign_domain_pool_of_size(2), dependent=True)
+        Sg = Domain('Sg', assign_domain_pool_of_size(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_size(5))
+        ssi = Domain('ssi', assign_domain_pool_of_size(13), dependent=True)
+        si = Domain('si', assign_domain_pool_of_size(2), dependent=True)
+        Si = Domain('Si', assign_domain_pool_of_size(15), subdomains=[si, ssi])
+
+        input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
+        threshold_base_strand = Strand(domains=[si, T, Sg], starred_domain_indices=[0, 1, 2])
         threshold_waste_complex = [input_strand, threshold_base_strand]
 
         expected = set([
