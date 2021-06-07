@@ -719,6 +719,24 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(sequence[11:18], domains['g'].sequence)
         self.assertEqual(sequence[18:], domains['h'].sequence)
 
+    def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
+        """
+        Test error is raised if assigning dna sequence to domain when subdomains
+        length do not add up to domain length.
+
+        .. code-block:: none
+
+                  a
+                /   \
+               B     C
+        """
+        B: Domain = Domain('B', assign_domain_pool_of_size(10), dependent=False)
+        C: Domain = Domain('C', assign_domain_pool_of_size(20), dependent=False)
+
+        a: Domain = Domain('a', assign_domain_pool_of_size(15), dependent=True, subdomains=[B, C])
+        with self.assertRaises(ValueError):
+            a.sequence = 'A' * 15
+
 
 if __name__ == '__main__':
     unittest.main()
