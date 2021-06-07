@@ -1480,9 +1480,12 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
         original_sequences[domain] = domain.sequence
         domain.sequence = domain.pool.generate_sequence(rng)
 
+    dependent_domains = [domain for domain in domains_changed if domain.dependent]
+    for domain in dependent_domains:
+        original_sequences[domain] = domain.sequence
+
     # Commented out code below due to redefinition of dependent
     # for dependent domains, ensure each strand is only changed once
-    # dependent_domains = [domain for domain in domains_changed if domain.dependent]
     # strands_dependent = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
     # for strand in strands_dependent:
     #     for domain in strand.domains:
