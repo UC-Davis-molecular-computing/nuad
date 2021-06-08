@@ -734,6 +734,55 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(sequence[11:18], domains['g'].sequence)
         self.assertEqual(sequence[18:], domains['h'].sequence)
 
+    def test_assign_dna_sequence_to_leaf(self):
+        """
+        Test assigning dna sequence to E, F and propgate upward to b
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+        """
+        domains = self.sample_nested_domains()
+        E = domains['E']
+        F = domains['F']
+        E.sequence = 'CATAG'
+        F.sequence = 'CTTTCC'
+        self.assertEqual('CATAG', E.sequence)
+        self.assertEqual('CTTTCC', F.sequence)
+        self.assertEqual('CATAGCTTTCC', domains['b'].sequence)
+
+    def test_assign_dna_sequence_mixed(self):
+        """
+        Test assigning dna sequence to E, F, and C and propgate to entire tree.
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+        """
+        domains = self.sample_nested_domains()
+        E = domains['E']
+        F = domains['F']
+        C = domains['C']
+        E.sequence = 'CATAG'
+        F.sequence = 'CTTTCT'
+        C.sequence = 'TGTTCTGATCGGAAC'
+
+        self.assertEqual('CATAG''CTTTCT''TGTTCTGATCGGAAC', domains['a'].sequence)
+        self.assertEqual('CATAG''CTTTCT', domains['b'].sequence)
+        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence)
+        self.assertEqual('CATAG', domains['E'].sequence)
+        self.assertEqual('CTTTCT', domains['F'].sequence)
+        self.assertEqual('TGTTCTG', domains['g'].sequence)
+        self.assertEqual('ATCGGAAC', domains['h'].sequence)
+
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
         """
         Test error is raised if assigning dna sequence to domain when subdomains

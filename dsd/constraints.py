@@ -1055,8 +1055,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
-        # TODO: Propagate sequence to parent, using "?" temporarily for unassigned parts of sequence
-        #       assert eror if "?" is used for comparision
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -1073,11 +1071,26 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             sequence_idx += sd_len
 
     def _set_parent_sequence(self, new_sequence: str) -> None:
-        if self.parent is not None:
-            if self.parent._sequence is None:
-                self.parent._sequence = '?' * self.parent.length
+        """Set parent sequence and propagate upwards
+
+        :param new_sequence: new sequence
+        :type new_sequence: str
+        """
+        parent = self.parent
+        if parent is not None:
+            if parent._sequence is None:
+                parent._sequence = '?' * parent.length
             # Add up lengths of subdomains, add new_sequence
-            idx = self.parent._subdomains
+            idx = 0
+            assert self in parent._subdomains
+            for sd in parent._subdomains:
+                if sd == self:
+                    break
+                else:
+                    idx += sd.length
+            old_sequence = parent._sequence
+            parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
+            parent._set_parent_sequence(parent._sequence)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
