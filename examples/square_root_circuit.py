@@ -14,138 +14,41 @@ import dsd.constraints as dc
 
 # Constants
 
-# Constants -- Recognition domain
-#
-# A recognition domain is made of two domains, a sub-domain for extending
-# toeholds for thresholding reaction and the rest of the domain (called a
-# sup-domain). The 3' end of the domain is located on the sup-domain while
-# the 5' end of the domain is located on the sub-domain
-#
-# Assuming a total length of 15, and the sub-domain is length 2, then
-# the sup-domain length is 13.
-#
-#        sup-domain  sub-domain
-#           |         |
-# 3'--=============--==--5'
-SUP_REG_DOMAIN_PREFIX = 'S'
-SUB_REG_DOMAIN_PREFIX = SUP_REG_DOMAIN_PREFIX.lower()
-REG_DOMAIN_LENGTH = 15
-SUB_REG_DOMAIN_LENGTH = 2
-SUP_REG_DOMAIN_LENGTH = REG_DOMAIN_LENGTH - SUB_REG_DOMAIN_LENGTH
-
 # Constants -- Toehold domain
+SIGNAL_DOMAIN_LENGTH = 15
+EXTENDED_TOEHOLD_LENGTH = 2
 TOEHOLD_LENGTH = 5
 
-# Constants -- Fuel domain
-FUEL_DOMAIN = 'f'
-
-# NumpyConstraints
+# Constants -- Illegal DNA Base sequences
 ILLEGAL_SUBSTRINGS_FOUR = ['G'*4, 'C'*4]
 ILLEGAL_SUBSTRINGS_FIVE = ['A'*5, 'T'*5]
 ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 
-
+# NumpyConstraints
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
 no_gggg_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
 no_aaaaa_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
-
-
-def c_content_constraint(length: int) -> dc.BaseCountConstraint:
-    """Returns a BaseCountConstraint that enforces 30% to 70% C-content
-
-    :param length: Length of DNA sequence
-    :type length: int
-    :return: BaseCountConstraint
-    :rtype: dc.BaseCountConstraint
-    """
-    high_count = floor(0.7 * length)
-    low_count = ceil(0.3 * length)
-    return dc.BaseCountConstraint('C', high_count, low_count)
-
-
-# TODO: Add this constraint to library, making limits controable by parameters.
-# TODO: Make return value smooth
-def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairConstraint:
-    """
-    For any two sequences in the pool, we require at least 30% of bases are
-    different and the longest run of matches is at most 35% of the domain length
-
-    :param domains: Domains to compare
-    :type domains: Iterable[dc.Domain]
-    :return: DomainPairConstraint
-    :rtype: dc.DomainPairConstraint
-    """
-    def evaluate(domain1: dc.Domain, domain2: dc.Domain) -> float:
-        num_of_matches = 0
-        run_of_matches = 0
-        assert len(domain1.sequence) == len(domain2.sequence)
-        length = len(domain1.sequence)
-        run_of_matches_limit = 0.35 * length
-        num_of_matches_limit = 0.7 * length
-        for i in range(length):
-            if domain1.sequence[i] == domain2.sequence[i]:
-                num_of_matches += 1
-                run_of_matches += 1
-            else:
-                run_of_matches = 0
-            if num_of_matches > num_of_matches_limit or run_of_matches > run_of_matches_limit:
-                return 100
-        return 0
-
-    def summary(domain1: dc.Domain, domain2: dc.Domain) -> str:
-        if evaluate(domain1, domain2) > 0:
-            return (f'Too many matches between {domain1} and {domain2}'
-                    f'Domain 1: {domain1.sequence}'
-                    f'Domain 2: {domain2.sequence}')
-        else:
-            return (f'Sufficient difference between {domain1} and {domain2}'
-                    f'Domain 1: {domain1.sequence}'
-                    f'Domain 2: {domain2.sequence}')
-
-    pairs = itertools.combinations(domains, 2)
-
-    return dc.DomainPairConstraint(
-        pairs=tuple(pairs),
-        evaluate=evaluate, summary=summary, description='base difference constraint',
-        short_description='base difference constraint')
+c_content_constraint = dc.BaseCountConstraint('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH), ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
 
 
 # Domain pools
-sup_reg_domain_constraints = [
-    no_gggg_constraint,
-    three_letter_code_constraint,
-]
-SUP_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'SUP_REG_DOMAIN_POOL', SUP_REG_DOMAIN_LENGTH,
-    numpy_constraints=sup_reg_domain_constraints)
-
-sub_reg_domain_constraints: List[dc.NumpyConstraint] = [
-    three_letter_code_constraint,
-]
-SUB_REG_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'SUB_REG_DOMAIN_POOL', SUB_REG_DOMAIN_LENGTH,
-    numpy_constraints=sub_reg_domain_constraints)
-
-toehold_domain_contraints: List[dc.NumpyConstraint] = [
-    no_gggg_constraint,
-]
+SUBDOMAIN_SS_POOL: dc.DomainPool = dc.DomainPool(f'SUBDOMAIN_SS_POOL', SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
+SUBDOMAIN_S_POOL: dc.DomainPool = dc.DomainPool(f'SUBDOMAIN_S_POOL', EXTENDED_TOEHOLD_LENGTH)
 TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH,
-    numpy_constraints=toehold_domain_contraints)
+    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, [three_letter_code_constraint])
 
 SIGNAL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
-    'SIGNAL_DOMAIN_POOL', REG_DOMAIN_LENGTH,
-    [three_letter_code_constraint, c_content_constraint(REG_DOMAIN_LENGTH)])
+    'SIGNAL_DOMAIN_POOL', SIGNAL_DOMAIN_LENGTH,
+    [three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint, no_gggg_constraint])
 
-TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
 
 # Alias
 dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
 
 # Stores all domains used in design
-all_domains: Dict[str, dc.Domain] = {'T': TOEHOLD_DOMAIN}
-
-all_domains_length_15: Set[dc.Domain] = set()
+TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
+recognition_domains_and_subdomains: Dict[str, dc.Domain] = {}
+recognition_domains: Set[dc.Domain] = set()
 
 
 def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
@@ -157,18 +60,18 @@ def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
     :return: Domain
     :rtype: Domain
     """
-    if f'S{gate}' not in all_domains:
-        d_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=False)
-        d_2: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=False)
+    if f'S{gate}' not in recognition_domains_and_subdomains:
+        d_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL, dependent=False)
+        d_2: dc.Domain = dc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL, dependent=False)
         d: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, dependent=True, subdomains=[d_2, d_13])
 
-        all_domains[f'ss{gate}'] = d_13
-        all_domains[f's{gate}'] = d_2
-        all_domains[f'S{gate}'] = d
-        assert d not in all_domains_length_15
-        all_domains_length_15.add(d)
+        recognition_domains_and_subdomains[f'ss{gate}'] = d_13
+        recognition_domains_and_subdomains[f's{gate}'] = d_2
+        recognition_domains_and_subdomains[f'S{gate}'] = d
+        assert d not in recognition_domains
+        recognition_domains.add(d)
 
-    return all_domains[f'S{gate}']
+    return recognition_domains_and_subdomains[f'S{gate}']
 
 
 def set_domain_pool(domain: dc.Domain, domain_pool: dc.DomainPool) -> None:
@@ -235,11 +138,11 @@ def fuel_strand(gate: int) -> dc.Strand:
     :rtype: dc.Strand
     """
     d3p = get_signal_domain(gate)
-    if 'fuel' not in all_domains:
+    if 'fuel' not in recognition_domains_and_subdomains:
         f: dc.Domain = dc.Domain('fuel', sequence='CATTTTTTTTTTTCA', fixed=True)
-        all_domains['fuel'] = f
-        all_domains_length_15.add(f)
-    fuel = all_domains['fuel']
+        recognition_domains_and_subdomains['fuel'] = f
+        recognition_domains.add(f)
+    fuel = recognition_domains_and_subdomains['fuel']
 
     name = f'fuel_{gate}'
     return dc.Strand(domains=[fuel, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
@@ -285,7 +188,7 @@ def threshold_bottom_strand(input: int, gate: int) -> dc.Strand:
     :rtype: dc.Strand
     """
     # Note, this assumes that this input signal domain has already been built
-    d_input_sub = all_domains[f's{input}']
+    d_input_sub = recognition_domains_and_subdomains[f's{input}']
     d_gate = get_signal_domain(gate)
 
     s: dc.Strand = dc.Strand(
@@ -917,7 +820,7 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    domain_pair_constraints = [base_difference_constraint(all_domains_length_15)]
+    domain_pair_constraints = [base_difference_constraint(recognition_domains)]
     design = dc.Design(strands=strands, complex_constraints=seesaw_circuit.constraints,
                        domain_pair_constraints=domain_pair_constraints,
                        strand_constraints=[strand_substring_constraint(strands, ILLEGAL_SUBSTRINGS)],)
