@@ -775,11 +775,22 @@ class TestSubdomains(unittest.TestCase):
         F.sequence = 'CTTTCT'
         C.sequence = 'TGTTCTGATCGGAAC'
 
+        # Assert initial assignment is correct
         self.assertEqual('CATAG''CTTTCT''TGTTCTGATCGGAAC', domains['a'].sequence)
         self.assertEqual('CATAG''CTTTCT', domains['b'].sequence)
         self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence)
         self.assertEqual('CATAG', domains['E'].sequence)
         self.assertEqual('CTTTCT', domains['F'].sequence)
+        self.assertEqual('TGTTCTG', domains['g'].sequence)
+        self.assertEqual('ATCGGAAC', domains['h'].sequence)
+
+        # Assert subsequent reassignment is correct
+        F.sequence = 'ATGTTT'
+        self.assertEqual('CATAG''ATGTTT''TGTTCTGATCGGAAC', domains['a'].sequence)
+        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence)
+        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence)
+        self.assertEqual('CATAG', domains['E'].sequence)
+        self.assertEqual('ATGTTT', domains['F'].sequence)
         self.assertEqual('TGTTCTG', domains['g'].sequence)
         self.assertEqual('ATCGGAAC', domains['h'].sequence)
 
