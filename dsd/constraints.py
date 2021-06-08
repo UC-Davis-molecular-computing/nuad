@@ -1128,22 +1128,22 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         return self.starred_name if starred else self.name
 
-    def get_sequence(self, starred: bool) -> str:
+    def concrete_sequence(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the sequence
         :return: The value :py:data:`Domain.sequence` or :py:data:`Domain.starred_sequence`, depending on
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        if self.sequence is None:
-            raise ValueError('no DNA sequence has been assigned to this Domain')
         return dv.wc(self.sequence) if starred else self.sequence
 
     def has_sequence(self) -> bool:
         """
-        :return: Whether a DNA sequence has been assigned to this :any:`Domain`.
+        :return: Whether a complete DNA sequence has been assigned to this :any:`Domain`.
+                 If this domain has subdomains, False if any subdomain has not been assigned
+                 a sequence.
         """
-        return self._sequence is not None
+        return self._sequence is not None and '?' not in self._sequence
 
     @staticmethod
     def complementary_domain_name(domain_name: str) -> str:
@@ -1237,6 +1237,29 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                     raise ValueError(f"Cycle found in subdomain graph rooted at {self}. "
                                      f"Propogated from subdomain {sd}: {e}"
                                      )
+
+    def all_domains_in_tree(self) -> List["Domain"]:
+        domains = self._get_all_domains_from_parent()
+        domains.extend(self._get_all_domains_from_this_subtree())
+        return domains
+
+    def _get_all_domains_from_parent(self) -> List["Domain"]:
+        domains = []
+
+        parent = self.parent
+        if parent is not None:
+            parent_domains = parent._get_all_domains_from_this_subtree(excluded_subdomain=self)
+            domains.extend(parent_domains)
+            domains.extend(parent._get_all_domains_from_parent())
+
+        return domains
+
+    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) -> List["Domain"]:
+        domains = [self]
+        for sd in self._subdomains:
+            if sd != excluded_subdomain:
+                domains.extend(sd._get_all_domains_from_this_subtree())
+        return domains
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -1537,7 +1560,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         seqs = []
         for idx, domain in enumerate(self.domains):
             starred = idx in self.starred_domain_indices
-            seqs.append(domain.get_sequence(starred))
+            seqs.append(domain.concrete_sequence(starred))
         delim = ' ' if spaces_between_domains else ''
         return delim.join(seqs)
 
@@ -1783,10 +1806,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
 
     def __post_init__(self) -> None:
+
+        # Get domains not explicitly listed on strands that are part of domain tree.
+        domains = []
+        for strand in self.strands:
+            for domain_in_strand in strand.domains:
+                domains.extend(domain_in_strand.all_domains_in_tree())
+
         # XXX: be careful; original version used set to remove duplications, but that has unspecified
         # insertion order, even though Python 3.7 dicts preserve insertion order:
         # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
-        self.domains = remove_duplicates(domain for strand in self.strands for domain in strand.domains)
+        self.domains = remove_duplicates(domains)
 
         self.strand_groups = defaultdict(list)
         for strand in self.strands:
@@ -2486,7 +2516,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if dsd_domain is None:
                 raise AssertionError(f'expected domain_name {domain_name} to be a key in domains_by_name '
                                      f'{list(self.domains_by_name.keys())}')
-            domain_sequence = dsd_domain.get_sequence(starred)
+            domain_sequence = dsd_domain.concrete_sequence(starred)
             sequence_list.append(domain_sequence)
         strand_sequence = ''.join(sequence_list)
         sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False,
@@ -2537,12 +2567,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 # if there are any '?' wildcards, then all of them should be wildcards
                 assert sc_domain_sequence == wildcard * len(sc_domain_sequence)
                 # if not assigned in sc_strand, we assign from dsd
-                domain_sequence = dsd_domain.get_sequence(starred)
+                domain_sequence = dsd_domain.concrete_sequence(starred)
             else:
                 # otherwise we stick with the sequence that was already assigned in sc_domain
                 domain_sequence = sc_domain_sequence
                 # but let's make sure dsd didn't actually change that sequence; it should have been fixed
-                dsd_domain_sequence = dsd_domain.get_sequence(starred)
+                dsd_domain_sequence = dsd_domain.concrete_sequence(starred)
                 if domain_sequence != dsd_domain_sequence:
                     raise AssertionError(f'\n    domain_sequence = {domain_sequence} is unequal to\n'
                                          f'dsd_domain_sequence = {dsd_domain_sequence}')
@@ -6030,8 +6060,8 @@ def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Dom
     domains: List[Tuple[Domain, Domain]] = []
     for d1, d2 in domain_pairs:
         for starred1, starred2 in itertools.product([False, True], repeat=2):
-            seq1 = d1.get_sequence(starred1)
-            seq2 = d2.get_sequence(starred2)
+            seq1 = d1.concrete_sequence(starred1)
+            seq2 = d2.concrete_sequence(starred2)
             name1 = d1.get_name(starred1)
             name2 = d2.get_name(starred2)
             sequence_pairs.append((seq1, seq2))

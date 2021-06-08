@@ -163,9 +163,9 @@ def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
     :rtype: Domain
     """
     if f'S{gate}' not in all_domains:
-        d3p_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=True)
-        d3p_2: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=True)
-        d3p: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d3p_2, d3p_13])
+        d3p_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUP_REG_DOMAIN_POOL, dependent=False)
+        d3p_2: dc.Domain = dc.Domain(f's{gate}', pool=SUB_REG_DOMAIN_POOL, dependent=False)
+        d3p: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, dependent=True, subdomains=[d3p_2, d3p_13])
 
         all_domains[f'ss{gate}'] = d3p_13
         all_domains[f's{gate}'] = d3p_2
@@ -221,7 +221,7 @@ def signal_strand(
     d5p = get_signal_domain(gate5p)
 
     if name == '':
-        name = f'signal {gate3p} {gate5p}'
+        name = f'signal_{gate3p}_{gate5p}'
     return dc.Strand(domains=[d5p, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
 
 
@@ -239,7 +239,7 @@ def fuel_strand(gate: int) -> dc.Strand:
     :return: Fuel strand
     :rtype: dc.Strand
     """
-    return signal_strand(gate3p=gate, gate5p=FUEL_DOMAIN, name=f'fuel {gate}')
+    return signal_strand(gate3p=gate, gate5p=FUEL_DOMAIN, name=f'fuel_{gate}')
 
 
 def gate_base_strand(gate: int) -> dc.Strand:
@@ -288,12 +288,12 @@ def threshold_base_strand(input: int, gate: int) -> dc.Strand:
     s: dc.Strand = dc.Strand(
         domains=[d_input_sub, TOEHOLD_DOMAIN, d_gate],
         starred_domain_indices=[0, 1, 2],
-        name=f'threshold base {input} {gate}')
+        name=f'threshold_base_{input}_{gate}')
     return s
 
 
-def waste_strand(gate: int) -> dc.Strand:
-    """Returns a waste strand for a thresholding/reporting reaction involving
+def threshold_top_strand(gate: int) -> dc.Strand:
+    """Returns a waste strand for a thresholding reaction involving
     the seesaw gate labeled `gate`
 
     .. code-block:: none
@@ -307,11 +307,33 @@ def waste_strand(gate: int) -> dc.Strand:
     :return: Waste strand
     :rtype: dc.Strand
     """
-    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], starred_domain_indices=[], name=f'waste {gate}')
+    s: dc.Strand = dc.Strand(
+        domains=[get_signal_domain(gate)],
+        starred_domain_indices=[],
+        name=f'threshold_top_{gate}')
     return s
 
 
-def reporter_base_strand(gate) -> dc.Strand:
+def reporter_top_strand(gate: int) -> dc.Strand:
+    """Returns a waste strand for a reporting reaction involving
+    the seesaw gate labeled `gate`
+
+    .. code-block:: none
+
+            ss{gate}   s{gate}
+               |        |
+        <=============--==]
+
+    :param gate: Name of gate
+    :type gate: int
+    :return: Waste strand
+    :rtype: dc.Strand
+    """
+    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], starred_domain_indices=[], name=f'reporter_top_{gate}')
+    return s
+
+
+def reporter_bottom_strand(gate) -> dc.Strand:
     """Returns a reporter base strand for seesaw gate labeled `gate`
 
     .. code-block:: none
@@ -326,7 +348,9 @@ def reporter_base_strand(gate) -> dc.Strand:
     :rtype: dc.Strand
     """
     s: dc.Strand = dc.Strand(
-        domains=[TOEHOLD_DOMAIN, get_signal_domain(gate)], starred_domain_indices=[0, 1], name=f'reporter {gate}')
+        domains=[TOEHOLD_DOMAIN, get_signal_domain(gate)],
+        starred_domain_indices=[0, 1],
+        name=f'reporter_bottom_{gate}')
     return s
 
 
@@ -576,7 +600,7 @@ class SeesawCircuit:
                         'Multiple gates labeled {gate_name} found')
                 gates_with_threshold.add(gate_name)
 
-        self.waste_strands = {gate: waste_strand(gate)
+        self.waste_strands = {gate: threshold_top_strand(gate)
                               for gate in gates_with_threshold}
 
     def _set_reporter_gates(self) -> None:
@@ -597,7 +621,7 @@ class SeesawCircuit:
                 assert len(inputs) == 1
                 reporter_gates.add((inputs[0], gate_name))
 
-        self.reporter_base_strands = {(input, gate): reporter_base_strand(gate)
+        self.reporter_base_strands = {(input, gate): reporter_bottom_strand(gate)
                                       for input, gate in reporter_gates}
 
     def _set_strands(self) -> None:

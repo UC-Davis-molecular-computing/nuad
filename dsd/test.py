@@ -843,8 +843,9 @@ class TestSubdomains(unittest.TestCase):
         C: Domain = Domain('C', assign_domain_pool_of_size(20), dependent=False)
         a: Domain = Domain('a', assign_domain_pool_of_size(30), dependent=True, subdomains=[B, C])
 
-        strand: Strand = Strand(domains=[a], starred_domain_indices=[])
-        design = Design(strands=[strand])
+        strand_a: Strand = Strand(domains=[a], starred_domain_indices=[])
+        strand_b: Strand = Strand(domains=[B], starred_domain_indices=[])
+        design = Design(strands=[strand_a, strand_b])
         domains = design.domains
         self.assertEqual(3, len(domains))
         self.assertIn(a, domains)
