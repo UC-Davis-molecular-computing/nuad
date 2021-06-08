@@ -784,7 +784,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual('TGTTCTG', domains['g'].sequence)
         self.assertEqual('ATCGGAAC', domains['h'].sequence)
 
-        # Assert subsequent reassignment is correct
+        # Assert subsequent reassignment to leaf is correct
         F.sequence = 'ATGTTT'
         self.assertEqual('CATAG''ATGTTT''TGTTCTGATCGGAAC', domains['a'].sequence)
         self.assertEqual('CATAG''ATGTTT', domains['b'].sequence)
@@ -793,6 +793,16 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual('ATGTTT', domains['F'].sequence)
         self.assertEqual('TGTTCTG', domains['g'].sequence)
         self.assertEqual('ATCGGAAC', domains['h'].sequence)
+
+        # Assert subsequent reassignment to internal node is correct
+        C.sequence = 'GGGGGGGGGGGGGGG'
+        self.assertEqual('CATAG''ATGTTT''GGGGGGGGGGGGGGG', domains['a'].sequence)
+        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence)
+        self.assertEqual('GGGGGGGGGGGGGGG', domains['C'].sequence)
+        self.assertEqual('CATAG', domains['E'].sequence)
+        self.assertEqual('ATGTTT', domains['F'].sequence)
+        self.assertEqual('GGGGGGG', domains['g'].sequence)
+        self.assertEqual('GGGGGGGG', domains['h'].sequence)
 
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
         """
