@@ -1,7 +1,7 @@
 from typing import Dict, List
 import unittest
 from dsd import constraints
-from dsd.constraints import Domain, _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
+from dsd.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -837,6 +837,19 @@ class TestSubdomains(unittest.TestCase):
         """
         g = self.sample_nested_domains()['g']
         Strand(domains=[g], starred_domain_indices=[])
+
+    def test_design_finds_independent_subdomains(self) -> None:
+        B: Domain = Domain('B', assign_domain_pool_of_size(10), dependent=False)
+        C: Domain = Domain('C', assign_domain_pool_of_size(20), dependent=False)
+        a: Domain = Domain('a', assign_domain_pool_of_size(30), dependent=True, subdomains=[B, C])
+
+        strand: Strand = Strand(domains=[a], starred_domain_indices=[])
+        design = Design(strands=[strand])
+        domains = design.domains
+        self.assertEqual(3, len(domains))
+        self.assertIn(a, domains)
+        self.assertIn(B, domains)
+        self.assertIn(C, domains)
 
 
 if __name__ == '__main__':
