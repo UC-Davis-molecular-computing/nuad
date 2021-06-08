@@ -63,13 +63,6 @@ def c_content_constraint(length: int) -> dc.BaseCountConstraint:
     return dc.BaseCountConstraint('C', high_count, low_count)
 
 
-# TODO: 30% to 70% C-content on non-fuel strands
-# TODO:  For any two sequences in the pool, we require at least 30% of bases are
-# different - Use a DomainPairConstraint
-# and the longest run of matches is at most 35% of the domain length - Use a
-# DomainPairConstraint
-# * Check that the domain pairs are same length and both long domains
-
 # TODO: Add this constraint to library, making limits controable by parameters.
 # TODO: Make return value smooth
 def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairConstraint:
