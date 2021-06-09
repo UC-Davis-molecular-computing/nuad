@@ -47,6 +47,7 @@ dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
 
 # Stores all domains used in design
 TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
+FUEL_DOMAIN: dc.Domain = dc.Domain('fuel', sequence='CATTTTTTTTTTTCA', fixed=True)
 recognition_domains_and_subdomains: Dict[str, dc.Domain] = {}
 recognition_domains: Set[dc.Domain] = set()
 
@@ -61,9 +62,9 @@ def get_signal_domain(gate: Union[int, str]) -> dc.Domain:
     :rtype: Domain
     """
     if f'S{gate}' not in recognition_domains_and_subdomains:
-        d_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL, dependent=False)
-        d_2: dc.Domain = dc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL, dependent=False)
-        d: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, dependent=True, subdomains=[d_2, d_13])
+        d_13: dc.Domain = dc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL, dependent=True)
+        d_2: dc.Domain = dc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL, dependent=True)
+        d: dc.Domain = dc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, dependent=False, subdomains=[d_2, d_13])
 
         recognition_domains_and_subdomains[f'ss{gate}'] = d_13
         recognition_domains_and_subdomains[f's{gate}'] = d_2
@@ -138,11 +139,7 @@ def fuel_strand(gate: int) -> dc.Strand:
     :rtype: dc.Strand
     """
     d3p = get_signal_domain(gate)
-    if 'fuel' not in recognition_domains_and_subdomains:
-        f: dc.Domain = dc.Domain('fuel', sequence='CATTTTTTTTTTTCA', fixed=True)
-        recognition_domains_and_subdomains['fuel'] = f
-        recognition_domains.add(f)
-    fuel = recognition_domains_and_subdomains['fuel']
+    fuel = FUEL_DOMAIN
 
     name = f'fuel_{gate}'
     return dc.Strand(domains=[fuel, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
@@ -349,6 +346,50 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
         description="gate:output Complex",
         short_description="gate:output"
     )
+
+
+def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairConstraint:
+    """
+    For any two sequences in the pool, we require at least 30% of bases are
+    different and the longest run of matches is at most 35% of the domain length
+    :param domains: Domains to compare
+    :type domains: Iterable[dc.Domain]
+    :return: DomainPairConstraint
+    :rtype: dc.DomainPairConstraint
+    """
+    def evaluate(domain1: dc.Domain, domain2: dc.Domain) -> float:
+        num_of_matches = 0
+        run_of_matches = 0
+        assert len(domain1.sequence) == len(domain2.sequence)
+        length = len(domain1.sequence)
+        run_of_matches_limit = 0.35 * length
+        num_of_matches_limit = 0.7 * length
+        for i in range(length):
+            if domain1.sequence[i] == domain2.sequence[i]:
+                num_of_matches += 1
+                run_of_matches += 1
+            else:
+                run_of_matches = 0
+            if num_of_matches > num_of_matches_limit or run_of_matches > run_of_matches_limit:
+                return 100
+        return 0
+
+    def summary(domain1: dc.Domain, domain2: dc.Domain) -> str:
+        if evaluate(domain1, domain2) > 0:
+            return (f'Too many matches between {domain1} and {domain2}\n'
+                    f'\t{domain1}: {domain1.sequence}\n'
+                    f'\t{domain2}: {domain2.sequence}\n')
+        else:
+            return (f'Sufficient difference between {domain1} and {domain2}\n'
+                    f'\t{domain1}: {domain1.sequence}\n'
+                    f'\t{domain2}: {domain2.sequence}\n')
+
+    pairs = itertools.combinations(domains, 2)
+
+    return dc.DomainPairConstraint(
+        pairs=tuple(pairs),
+        evaluate=evaluate, summary=summary, description='base difference constraint',
+        short_description='base difference constraint')
 
 
 def strand_substring_constraint(
@@ -811,6 +852,10 @@ def main() -> None:
 
     seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
     strands = seesaw_circuit.strands
+    non_fuel_strands = []
+    for s in strands:
+        if FUEL_DOMAIN not in s.domains:
+            non_fuel_strands.append(s)
 
     # Uncomment below for debugging:
     # for s in sorted(strands, key=lambda s: s.name):
@@ -820,10 +865,9 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    domain_pair_constraints = [base_difference_constraint(recognition_domains)]
     design = dc.Design(strands=strands, complex_constraints=seesaw_circuit.constraints,
-                       domain_pair_constraints=domain_pair_constraints,
-                       strand_constraints=[strand_substring_constraint(strands, ILLEGAL_SUBSTRINGS)],)
+                       domain_pair_constraints=[base_difference_constraint(recognition_domains)],
+                       strand_constraints=[strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)],)
 
     ds.search_for_dna_sequences(design=design,
                                 # weigh_violations_equally=True,
