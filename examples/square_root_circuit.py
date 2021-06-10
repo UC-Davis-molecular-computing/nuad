@@ -519,7 +519,7 @@ class SeesawCircuit:
         # Set of all input, gate pairs with threshold
         input_gate_pairs_with_threshold: Set[Tuple[int, int]] = set()
         for seesaw_gate in self.seesaw_gates:
-            if seesaw_gate.has_threshold:
+            if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in input_gate_pairs_with_threshold:
                     raise ValueError(
@@ -532,27 +532,47 @@ class SeesawCircuit:
         self.threshold_bottom_strands = {(input, gate): threshold_bottom_strand(
             input, gate) for input, gate in input_gate_pairs_with_threshold}
 
-    def _set_waste_strands(self) -> None:
-        """Sets self.waste_strands
+    def _set_threshold_top_strands(self) -> None:
+        """Sets self.threshold_top_strands
 
         :raises ValueError: If duplicate gate name found
         """
         # Set of all gates with threshold
-        gates_with_threshold: Set[int] = set()
+        gates_with_threshold_but_not_reporter: Set[int] = set()
 
         for seesaw_gate in self.seesaw_gates:
-            if seesaw_gate.has_threshold:
+            if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
-                if gate_name in gates_with_threshold:
+                if gate_name in gates_with_threshold_but_not_reporter:
                     raise ValueError(
                         f'Invalid seesaw circuit: '
                         'Multiple gates labeled {gate_name} found')
-                gates_with_threshold.add(gate_name)
+                gates_with_threshold_but_not_reporter.add(gate_name)
 
         self.threshold_top_strands = {gate: threshold_top_strand(gate)
-                                      for gate in gates_with_threshold}
+                                      for gate in gates_with_threshold_but_not_reporter}
 
-    def _set_reporter_gates(self) -> None:
+    def _set_reporter_top_strands(self) -> None:
+        """Sets self.reporter_top_strands
+
+        :raises ValueError: If duplicate gate name found
+        """
+        # Set of all gates that are reporter
+        gates_that_are_reporter: Set[int] = set()
+
+        for seesaw_gate in self.seesaw_gates:
+            if seesaw_gate.is_reporter:
+                gate_name = seesaw_gate.gate_name
+                if gate_name in gates_that_are_reporter:
+                    raise ValueError(
+                        f'Invalid seesaw circuit: '
+                        'Multiple gates labeled {gate_name} found')
+                gates_that_are_reporter.add(gate_name)
+
+        self.reporter_top_strands = {gate: reporter_top_strand(gate)
+                                     for gate in gates_that_are_reporter}
+
+    def _set_reporter_bottom_strands(self) -> None:
         """Sets self.reporter_gates
 
         :raises ValueError: If duplicate gate name found
@@ -580,14 +600,16 @@ class SeesawCircuit:
         self._set_signal_strands()
         self._set_fuel_strands()
         self._set_threshold_bottom_strands()
-        self._set_waste_strands()
-        self._set_reporter_gates()
+        self._set_threshold_top_strands()
+        self._set_reporter_bottom_strands()
+        self._set_reporter_top_strands()
         self.strands = (list(self.signal_strands.values())
                         + list(self.fuel_strands.values())
                         + list(self.gate_base_strands.values())
                         + list(self.threshold_bottom_strands.values())
                         + list(self.threshold_top_strands.values())
-                        + list(self.reporter_bottom_strands.values()))
+                        + list(self.reporter_bottom_strands.values())
+                        + list(self.reporter_top_strands.values()))
 
     def _add_input_gate_complex_constraint(self) -> None:
         """Adds input:gate complexes to self.constraint
@@ -698,7 +720,7 @@ class SeesawCircuit:
         """
         reporter_complexes: List[Tuple[dc.Strand, ...]] = []
         for (_, gate), reporter_bottom_strand in self.reporter_bottom_strands.items():
-            waste_strand = self.threshold_top_strands[gate]
+            waste_strand = self.reporter_top_strands[gate]
             reporter_complexes.append((waste_strand, reporter_bottom_strand))
 
         self.constraints.append(
