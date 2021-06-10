@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from math import ceil, floor
-from typing import Dict, Iterable, List, Set, Tuple, Union, cast
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 import itertools
 
 import dsd.search as ds  # type: ignore
@@ -303,7 +303,9 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
         short_description="input:gate")
 
 
-def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, ...]]) -> dc.ComplexConstraint:
+def gate_output_complex_constraint(
+        gate_output_complexes: List[Tuple[dc.Strand, ...]],
+        base_pair_prob_by_type: Optional[Dict[dc.BasePairType, float]] = None) -> dc.ComplexConstraint:
     """Returns a gate:output complex constraint
 
     .. code-block:: none
@@ -343,7 +345,7 @@ def gate_output_complex_constraint(gate_output_complexes: List[Tuple[dc.Strand, 
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
         nonimplicit_base_pairs=[(addr_T, addr_T_star)],
-        description="gate:output Complex",
+        base_pair_prob_by_type=base_pair_prob_by_type, description="gate:output Complex",
         short_description="gate:output"
     )
 
@@ -633,15 +635,29 @@ class SeesawCircuit:
                 g = self.gate_base_strands[gate]
                 gate_output_complexes.append((s, g))
 
+        self.constraints.append(
+            gate_output_complex_constraint(
+                gate_output_complexes
+            )
+        )
+
+    def _add_gate_fuel_complex_constriant(self) -> None:
+        """Adds gate:fuel complexes to self.constraint
+        """
+        gate_output_complexes: List[Tuple[dc.Strand, ...]] = []
+
         for gate in self.fuel_strands:
             if gate in self.fuel_strands:
                 f = self.fuel_strands[gate]
                 g = self.gate_base_strands[gate]
                 gate_output_complexes.append((f, g))
 
+        # TODO: Make it so that only specific base pairs have lower threshold (such as base index 1)
+        #       which is an A that can bind to any T but it doesn't matter which.
         self.constraints.append(
             gate_output_complex_constraint(
-                gate_output_complexes
+                gate_output_complexes,
+                base_pair_prob_by_type={dc.BasePairType.UNPAIRED: 0.8}
             )
         )
 
