@@ -1,9 +1,9 @@
 import argparse
 from dataclasses import dataclass
 from typing import List, Iterable
-from itertools import chain
+from itertools import chain, combinations
 from functools import reduce
-from dsd.vienna_nupack import pfunc4
+from dsd.vienna_nupack import pfunc4, binding4
 
 
 @dataclass
@@ -69,6 +69,9 @@ threshold_bottom_strands: List[ThresholdBottomStrand] = []
 threshold_top_strands: List[ThresholdTopStrand] = []
 reporter_bottom_strands: List[ReporterBottomStrand] = []
 reporter_top_strands: List[ReporterTopStrand] = []
+strand_iterators: List[Iterable[Strand]] = [signal_strands, fuel_strands, gate_base_strands, threshold_bottom_strands,
+                                            threshold_top_strands, reporter_bottom_strands, reporter_top_strands]
+longest_strand_name_length: int
 
 
 def process_line(line: str) -> None:
@@ -124,9 +127,11 @@ def process_line(line: str) -> None:
 
 
 def strands() -> Iterable[Strand]:
-    return chain(
-        signal_strands, fuel_strands, gate_base_strands, threshold_bottom_strands, threshold_top_strands,
-        reporter_bottom_strands, reporter_top_strands)
+    return chain(*strand_iterators)
+
+
+def format_strand_name(name) -> str:
+    return f'{name: <{longest_strand_name_length}}'
 
 
 def main():
@@ -143,11 +148,17 @@ def main():
     print(f'Done processing {filename}')
 
     print('Calculating pfunc...')
-
+    global longest_strand_name_length
     longest_strand_name_length = reduce(lambda acc, cur: max(acc, len(cur.name)), strands(), 0)
     for strand in strands():
         pfunc4_val = pfunc4(strand.sequence)
-        print(f'{strand.name: <{longest_strand_name_length}} | pfunc: {pfunc4_val}')
+        print(f'{format_strand_name(strand.name)} | pfunc: {pfunc4_val}')
+
+    print('Calculating binding between strands...')
+    for itr in strand_iterators:
+        for (strand1, strand2) in combinations(itr, 2):
+            binding_val = binding4(strand1.sequence, strand2.sequence)
+            print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val}')
 
 
 if __name__ == '__main__':
