@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import List, Iterable, Dict
 from itertools import chain, combinations
 from functools import reduce
+from collections import defaultdict
 from dsd.vienna_nupack import pfunc4, binding4
 from nupack import Model, Complex, ComplexSet, SetSpec, complex_analysis
 from nupack import Strand as NupackStrand
@@ -192,6 +193,12 @@ def main():
     global longest_strand_name_length
     longest_strand_name_length = reduce(lambda acc, cur: max(acc, len(cur.name)), strands(), 0)
 
+    gate_5p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
+    gate_3p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
+    for s in signal_strands:
+        gate_5p_to_signal_strands[s.gate_5p].append(s)
+        gate_3p_to_signal_strands[s.gate_3p].append(s)
+
     print(f'Done processing {filename}')
 
     print('\nCalculating pfunc...')
@@ -205,21 +212,20 @@ def main():
     for strand1, strand2 in combinations(chain(signal_strands, fuel_strands), 2):
         calculate_and_print_binding(strand1, strand2)
 
-    gate_to_reporter_bottom_strand: Dict[int, SignalStrand] = {s.gate: s for s in reporter_bottom_strands}
-
     print('\nCalculating base-pairing probabilities and MFE for each input:gate complex')
-    gate_5p_to_signal_strand: Dict[str, SignalStrand] = {s.gate_5p: s for s in signal_strands}
+
     for gate_base_strand in gate_base_strands:
-        assert gate_base_strand.gate in gate_5p_to_signal_strand
-        output_strand = gate_5p_to_signal_strand[gate_base_strand.gate]
-        calculate_and_print_pairs_and_mfe([output_strand, gate_base_strand])
+        assert gate_base_strand.gate in gate_5p_to_signal_strands
+        output_strands = gate_5p_to_signal_strands[gate_base_strand.gate]
+        for output_strand in output_strands:
+            calculate_and_print_pairs_and_mfe([output_strand, gate_base_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each gate:output complex')
-    gate_3p_to_signal_strand: Dict[str, SignalStrand] = {s.gate_3p: s for s in signal_strands}
     for gate_base_strand in gate_base_strands:
-        assert gate_base_strand.gate in gate_3p_to_signal_strand
-        input_strand = gate_3p_to_signal_strand[gate_base_strand.gate]
-        calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
+        assert gate_base_strand.gate in gate_3p_to_signal_strands
+        input_strands = gate_3p_to_signal_strands[gate_base_strand.gate]
+        for input_strand in input_strands:
+            calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each gate:fuel complex')
     gate_to_gate_base_strand: Dict[str, GateBaseStrand] = {s.gate: s for s in gate_base_strands}
@@ -227,6 +233,17 @@ def main():
         assert fuel_strand.gate_3p in gate_to_gate_base_strand
         gate_base_strand = gate_to_gate_base_strand[fuel_strand.gate_3p]
         calculate_and_print_pairs_and_mfe([fuel_strand, gate_base_strand])
+
+    print('\nCalculating base-pairing probabilities and MFE for each threshold complex')
+    # gate_to_threshold_top_strand = {s.gate: s for s in threshold_top_strands}
+    # for threshold_bottom_strand in threshold_bottom_strands:
+    #     assert threshold_bottom_strand.gate in gate_to_threshold_top_strand
+    #     threshold_top_strand = gate_to_threshold_top_strand[threshold_bottom_strand.gate]
+    #     calculate_and_print_pairs_and_mfe([threshold_top_strand, threshold_bottom_strand])
+    print('\nCalculating base-pairing probabilities and MFE for each threshold waste complex')
+    gate_to_reporter_bottom_strand: Dict[int, SignalStrand] = {s.gate: s for s in reporter_bottom_strands}
+    print('\nCalculating base-pairing probabilities and MFE for each reporter complex')
+    print('\nCalculating base-pairing probabilities and MFE for each reporter waste complex')
 
     # print('\nCalculating binding between same strand type...')
     # for itr in strand_iterators:
