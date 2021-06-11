@@ -1017,6 +1017,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: Length of this domain (delegates to pool)
         :raises ValueError: if no :any:`DomainPool` has been set for this :any:`Domain`
         """
+        if self.fixed and self._sequence is not None:
+            return len(self._sequence)
         if self._pool is None:
             raise ValueError('No DomainPool has been set for this Domain, so it has no length yet.\n'
                              'Assign a DomainPool (which has a length field) to give this Domain a length.')

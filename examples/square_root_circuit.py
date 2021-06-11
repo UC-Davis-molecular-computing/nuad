@@ -305,7 +305,8 @@ def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc
 
 def gate_output_complex_constraint(
         gate_output_complexes: List[Tuple[dc.Strand, ...]],
-        base_pair_prob_by_type: Optional[Dict[dc.BasePairType, float]] = None) -> dc.ComplexConstraint:
+        base_pair_prob_by_type: Optional[Dict[dc.BasePairType, float]] = None,
+        description: str = 'gate:output') -> dc.ComplexConstraint:
     """Returns a gate:output complex constraint
 
     .. code-block:: none
@@ -345,8 +346,8 @@ def gate_output_complex_constraint(
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
         nonimplicit_base_pairs=[(addr_T, addr_T_star)],
-        base_pair_prob_by_type=base_pair_prob_by_type, description="gate:output Complex",
-        short_description="gate:output"
+        base_pair_prob_by_type=base_pair_prob_by_type, description=f"{description} Complex",
+        short_description=f"{description}"
     )
 
 
@@ -470,7 +471,8 @@ class SeesawCircuit:
             if gate_name in gates:
                 raise ValueError(f'Invalid seesaw circuit: '
                                  'Multiple gates labeled {gate_name} found')
-            gates.add(gate_name)
+            if not seesaw_gate.is_reporter:
+                gates.add(gate_name)
 
         self.gate_base_strands = {gate: gate_base_strand(gate)
                                   for gate in gates}
@@ -618,8 +620,9 @@ class SeesawCircuit:
         """
         input_gate_complexes = []
         for (input, gate), s in self.signal_strands.items():
-            g = self.gate_base_strands[gate]
-            input_gate_complexes.append((s, g))
+            if gate in self.gate_base_strands:
+                g = self.gate_base_strands[gate]
+                input_gate_complexes.append((s, g))
 
         self.constraints.append(
             input_gate_complex_constraint(
@@ -657,7 +660,8 @@ class SeesawCircuit:
         self.constraints.append(
             gate_output_complex_constraint(
                 gate_output_complexes,
-                base_pair_prob_by_type={dc.BasePairType.UNPAIRED: 0.8}
+                base_pair_prob_by_type={dc.BasePairType.UNPAIRED: 0.8},
+                description='gate:fuel'
             )
         )
 
@@ -779,6 +783,7 @@ class SeesawCircuit:
         """
         self._add_input_gate_complex_constraint()
         self._add_gate_output_complex_constriant()
+        self._add_gate_fuel_complex_constriant()
         self._add_threshold_complex_constraint()
         self._add_threshold_waste_complex_constraint()
         self._add_reporter_complex_constraint()

@@ -217,16 +217,9 @@ def main():
     print('\nCalculating base-pairing probabilities and MFE for each gate:output complex')
     gate_3p_to_signal_strand: Dict[str, SignalStrand] = {s.gate_3p: s for s in signal_strands}
     for gate_base_strand in gate_base_strands:
-        # TODO: remove this if statement
-        if gate_base_strand.gate in gate_3p_to_signal_strand:
-            assert gate_base_strand.gate in gate_3p_to_signal_strand
-            input_strand = gate_3p_to_signal_strand[gate_base_strand.gate]
-            calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
-        else:
-            # TODO: remove this else statement
-            # this assertion checks that the only cause of not finding a gate base strand's gate
-            # in signal strand map is that it belongs to a reporter bottom strand
-            assert gate_base_strand.gate in gate_to_reporter_bottom_strand
+        assert gate_base_strand.gate in gate_3p_to_signal_strand
+        input_strand = gate_3p_to_signal_strand[gate_base_strand.gate]
+        calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each gate:fuel complex')
     gate_to_gate_base_strand: Dict[str, GateBaseStrand] = {s.gate: s for s in gate_base_strands}
