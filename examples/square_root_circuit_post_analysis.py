@@ -1,6 +1,7 @@
 import argparse
 from dataclasses import dataclass
-from typing import List, Iterable, Dict
+from square_root_circuit import reporter_top_strand
+from typing import List, Iterable, Dict, Tuple
 from itertools import chain, combinations
 from functools import reduce
 from collections import defaultdict
@@ -195,9 +196,15 @@ def main():
 
     gate_5p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
     gate_3p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
+    gate_3p_gate_5p_to_signal_strands: Dict[Tuple[str, str], SignalStrand] = {}
+    global signal_strands
     for s in signal_strands:
-        gate_5p_to_signal_strands[s.gate_5p].append(s)
-        gate_3p_to_signal_strands[s.gate_3p].append(s)
+        gate_5p = s.gate_5p
+        gate_3p = s.gate_3p
+        gate_5p_to_signal_strands[gate_5p].append(s)
+        gate_3p_to_signal_strands[gate_3p].append(s)
+        assert (gate_3p, gate_5p) not in gate_3p_gate_5p_to_signal_strands
+        gate_3p_gate_5p_to_signal_strands[(gate_3p, gate_5p)] = s
 
     print(f'Done processing {filename}')
 
@@ -213,7 +220,6 @@ def main():
         calculate_and_print_binding(strand1, strand2)
 
     print('\nCalculating base-pairing probabilities and MFE for each input:gate complex')
-
     for gate_base_strand in gate_base_strands:
         assert gate_base_strand.gate in gate_5p_to_signal_strands
         output_strands = gate_5p_to_signal_strands[gate_base_strand.gate]
@@ -235,15 +241,32 @@ def main():
         calculate_and_print_pairs_and_mfe([fuel_strand, gate_base_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each threshold complex')
-    # gate_to_threshold_top_strand = {s.gate: s for s in threshold_top_strands}
-    # for threshold_bottom_strand in threshold_bottom_strands:
-    #     assert threshold_bottom_strand.gate in gate_to_threshold_top_strand
-    #     threshold_top_strand = gate_to_threshold_top_strand[threshold_bottom_strand.gate]
-    #     calculate_and_print_pairs_and_mfe([threshold_top_strand, threshold_bottom_strand])
+    gate_to_threshold_top_strand = {s.gate: s for s in threshold_top_strands}
+    for threshold_bottom_strand in threshold_bottom_strands:
+        assert threshold_bottom_strand.gate in gate_to_threshold_top_strand
+        threshold_top_strand = gate_to_threshold_top_strand[threshold_bottom_strand.gate]
+        calculate_and_print_pairs_and_mfe([threshold_top_strand, threshold_bottom_strand])
+
     print('\nCalculating base-pairing probabilities and MFE for each threshold waste complex')
-    gate_to_reporter_bottom_strand: Dict[int, SignalStrand] = {s.gate: s for s in reporter_bottom_strands}
+    for threshold_bottom_strand in threshold_bottom_strands:
+        assert (threshold_bottom_strand.input, threshold_bottom_strand.gate) in gate_3p_gate_5p_to_signal_strands
+        signal_strand = gate_3p_gate_5p_to_signal_strands[(
+            threshold_bottom_strand.input, threshold_bottom_strand.gate)]
+        calculate_and_print_pairs_and_mfe([signal_strand, threshold_bottom_strand])
+
     print('\nCalculating base-pairing probabilities and MFE for each reporter complex')
+    gate_to_reporter_top_strand: Dict[int, ReporterTopStrand] = {s.gate: s for s in reporter_top_strands}
+    for reporter_bottom_strand in reporter_bottom_strands:
+        assert reporter_bottom_strand.gate in gate_to_reporter_top_strand
+        reporter_top_strand = gate_to_reporter_top_strand[reporter_bottom_strand.gate]
+        calculate_and_print_pairs_and_mfe([reporter_top_strand, reporter_bottom_strand])
+
     print('\nCalculating base-pairing probabilities and MFE for each reporter waste complex')
+    for reporter_bottom_strand in reporter_bottom_strands:
+        signal_strands = gate_5p_to_signal_strands[reporter_bottom_strand.gate]
+        assert len(signal_strands) == 1
+        signal_strand = signal_strands[0]
+        calculate_and_print_pairs_and_mfe([signal_strand, reporter_bottom_strand])
 
     # print('\nCalculating binding between same strand type...')
     # for itr in strand_iterators:
