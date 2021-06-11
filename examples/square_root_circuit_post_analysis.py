@@ -134,6 +134,11 @@ def format_strand_name(name) -> str:
     return f'{name: <{longest_strand_name_length}}'
 
 
+def calculate_and_print_binding(strand1: Strand, strand2: Strand) -> None:
+    binding_val = binding4(strand1.sequence, strand2.sequence)
+    print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val}')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Runs analysis of square root circuit DNA sequences.')
     parser.add_argument('filename', help='The sequence.txt file.')
@@ -154,11 +159,21 @@ def main():
         pfunc4_val = pfunc4(strand.sequence)
         print(f'{format_strand_name(strand.name)} | pfunc: {pfunc4_val}')
 
-    print('Calculating binding between strands...')
+    print('Calculating binding between same strand type...')
     for itr in strand_iterators:
         for (strand1, strand2) in combinations(itr, 2):
-            binding_val = binding4(strand1.sequence, strand2.sequence)
-            print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val}')
+            calculate_and_print_binding(strand1, strand2)
+
+    for signal_strand in signal_strands:
+        print('Calculating binding between non-complex signal strands and gate base strands')
+        for gate_base_strand in gate_base_strands:
+            gate = gate_base_strand.gate
+            if signal_strand.gate_3p != gate and signal_strand.gate_5p != gate:
+                calculate_and_print_binding(signal_strand, gate_base_strand)
+
+        print('Calculating binding between signal strands and fuel strands')
+        for fuel_strand in fuel_strands:
+            calculate_and_print_binding(signal_strand, fuel_strand)
 
 
 if __name__ == '__main__':
