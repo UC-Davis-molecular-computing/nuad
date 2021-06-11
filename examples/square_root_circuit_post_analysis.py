@@ -134,9 +134,16 @@ def format_strand_name(name) -> str:
     return f'{name: <{longest_strand_name_length}}'
 
 
-def calculate_and_print_binding(strand1: Strand, strand2: Strand) -> None:
+binding_width = 5
+binding_percision = 5
+
+
+def calculate_and_print_binding(strand1: Strand, strand2: Strand, is_expected_to_bind: bool = False) -> None:
+    is_expected_to_bind_str = ''
+    if is_expected_to_bind:
+        is_expected_to_bind_str = '(expected to bind)'
     binding_val = binding4(strand1.sequence, strand2.sequence)
-    print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val}')
+    print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val: {binding_width}.{binding_percision}} {is_expected_to_bind_str}')
 
 
 def main():
@@ -165,15 +172,25 @@ def main():
             calculate_and_print_binding(strand1, strand2)
 
     for signal_strand in signal_strands:
+        print('Calculating binding between signal strands and [fuel strands and threshold/reporter top strands]')
+        for other_strand in chain(fuel_strands, threshold_top_strands, reporter_top_strands):
+            calculate_and_print_binding(signal_strand, other_strand)
+
         print('Calculating binding between non-complex signal strands and gate base strands')
         for gate_base_strand in gate_base_strands:
             gate = gate_base_strand.gate
-            if signal_strand.gate_3p != gate and signal_strand.gate_5p != gate:
-                calculate_and_print_binding(signal_strand, gate_base_strand)
+            expected_to_bind = signal_strand.gate_3p == gate or signal_strand.gate_5p == gate
+            calculate_and_print_binding(signal_strand, gate_base_strand, is_expected_to_bind=expected_to_bind)
 
-        print('Calculating binding between signal strands and fuel strands')
-        for fuel_strand in fuel_strands:
-            calculate_and_print_binding(signal_strand, fuel_strand)
+        print('Calculating binding between non-complex signal strands and threshold bottom strands')
+        for threshold_bottom_strand in threshold_bottom_strands:
+            expected_to_bind = signal_strand.gate_3p == threshold_bottom_strand.input and signal_strand.gate_5p == threshold_bottom_strand.gate
+            calculate_and_print_binding(signal_strand, gate_base_strand, is_expected_to_bind=expected_to_bind)
+
+        print('Calculating binding between non-complex signal strands and reporter bottom strands')
+        for reporter_bottom_strand in reporter_bottom_strands:
+            expected_to_bind = signal_strand.gate_5p == reporter_bottom_strand.gate
+            calculate_and_print_binding(signal_strand, reporter_bottom_strand, is_expected_to_bind=expected_to_bind)
 
 
 if __name__ == '__main__':
