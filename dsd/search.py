@@ -1152,11 +1152,11 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
                 domain_to_strand[domain] = strand
         else:
             for domain in strand.domains:
-                if domain.pool_ is None and not domain.fixed:
+                if domain._pool is None and not domain.fixed:
                     raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
                                      f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
                                      f'For non-fixed domains, exactly one of these must be None.')
-                elif domain.fixed and domain.pool_ is not None:
+                elif domain.fixed and domain._pool is not None:
                     raise ValueError(f'for strand {strand.name}, it has a '
                                      f'domain {domain.name} that is fixed, even though that Domain has a '
                                      f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.')
@@ -1480,16 +1480,20 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
         original_sequences[domain] = domain.sequence
         domain.sequence = domain.pool.generate_sequence(rng)
 
-    # for dependent domains, ensure each strand is only changed once
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
-    strands_dependent = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
-    for strand in strands_dependent:
-        for domain in strand.domains:
-            assert domain not in original_sequences
-            original_sequences[domain] = domain.sequence
-            if domain not in domains_changed:
-                domains_changed.append(domain)
-        strand.assign_dna_from_pool(rng)
+    for domain in dependent_domains:
+        original_sequences[domain] = domain.sequence
+
+    # Commented out code below due to redefinition of dependent
+    # for dependent domains, ensure each strand is only changed once
+    # strands_dependent = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
+    # for strand in strands_dependent:
+    #     for domain in strand.domains:
+    #         assert domain not in original_sequences
+    #         original_sequences[domain] = domain.sequence
+    #         if domain not in domains_changed:
+    #             domains_changed.append(domain)
+    #     strand.assign_dna_from_pool(rng)
 
     return domains_changed, original_sequences
 
@@ -1798,10 +1802,11 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_st
                 else:
                     logger.info(skip_fixed_msg)
 
-    dependent_domains = [domain for domain in design.domains if domain.dependent]
-    dependent_strands = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
-    for strand in dependent_strands:
-        strand.assign_dna_from_pool(rng)
+    # Below lines have been commented out due to redefinition of dependent
+    # dependent_domains = [domain for domain in design.domains if domain.dependent]
+    # dependent_strands = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
+    # for strand in dependent_strands:
+    #     strand.assign_dna_from_pool(rng)
 
 
 _sentinel = object()
