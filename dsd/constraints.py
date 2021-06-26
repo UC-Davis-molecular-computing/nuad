@@ -867,7 +867,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     :py:data:`Domain.subdomains` of other domains in the same tree.
     """
 
-    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None, fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False, subdomains: Optional[List["Domain"]] = None) -> None:
+    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
+                 fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False,
+                 subdomains: Optional[List["Domain"]] = None) -> None:
         if subdomains is None:
             subdomains = []
         self.name = name
@@ -1052,8 +1054,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             for sd in self._subdomains:
                 sd_total_length += sd.length
             if sd_total_length != self.length:
-                raise ValueError(f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
-                                 f'length of {sd_total_length}')
+                raise ValueError(
+                    f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
+                    f'length of {sd_total_length}')
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
@@ -1256,7 +1259,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
         return domains
 
-    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) -> List["Domain"]:
+    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) -> List[
+        "Domain"]:
         domains = [self]
         for sd in self._subdomains:
             if sd != excluded_subdomain:
@@ -1633,7 +1637,8 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return StrandDomainAddress(self, domain_idx)
 
-    def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> 'StrandDomainAddress':
+    def address_of_nth_domain_occurence(self, domain_name: str, n: int,
+                                        forward=True) -> 'StrandDomainAddress':
         """
         Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name.
 
@@ -1672,6 +1677,11 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         starting from the 3' end.
         """
         return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
+
+
+Complex = Tuple[Strand, ...]
+"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
+:any:`Domain`'s."""
 
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
@@ -2050,7 +2060,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = self.summary_of_complex_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
-                f'unrecognized type {type(constraint)}'
+                      f'unrecognized type {type(constraint)}'
             report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
 
         report.constraint = constraint
@@ -2152,8 +2162,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(fixed_domain, False)
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
-                    f'{summary} ' \
-                    f'{"" if passed else " **violation**"}'
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -2180,8 +2190,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(strand, False)
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
-                    f'{summary} ' \
-                    f'{"" if passed else " **violation**"}'
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -2672,8 +2682,8 @@ class Constraint(ABC, Generic[DesignPart]):
 
 
 _no_summary_string = f"No summary for this constraint. " \
-    f"To generate one, pass a function as the parameter named " \
-    f'"summary" when creating the Constraint.'
+                     f"To generate one, pass a function as the parameter named " \
+                     f'"summary" when creating the Constraint.'
 
 
 @dataclass(frozen=True, eq=False)
@@ -3257,7 +3267,7 @@ def nupack_strand_secondary_structure_constraint(
             strand_group_name_to_threshold = {strand_group.name: value
                                               for strand_group, value in threshold.items()}
             description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
-                f'as follows:\n{strand_group_name_to_threshold}'
+                          f'as follows:\n{strand_group_name_to_threshold}'
         else:
             raise AssertionError('threshold must be one of float or dict')
 
@@ -3317,7 +3327,8 @@ def nupack_4_strand_secondary_structure_constraint(
 
     def evaluate(strand: Strand) -> float:
         threshold_value = convert_threshold(threshold, strand.group)
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         logger.debug(
             f'strand ss threshold: {threshold_value:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
@@ -3327,7 +3338,8 @@ def nupack_4_strand_secondary_structure_constraint(
         return max(0.0, excess)
 
     def summary(strand: Strand) -> str:
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
@@ -3406,7 +3418,7 @@ def nupack_domain_pair_constraint(
                                                   for (domain_pool1, domain_pool2), value in
                                                   threshold.items()}
             description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
-                f'as follows:\n{domain_pool_name_pair_to_threshold}'
+                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -3630,7 +3642,7 @@ def nupack_strand_pair_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -4385,7 +4397,8 @@ class StrandDomainAddress:
 
 
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
-                                         all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
+                                         all_bound_domain_addresses: Dict[
+                                             StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
     """Returns the BasePairType that corresponds to the base pair that sits on the
     3' end of provided domain.
 
@@ -4951,7 +4964,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 def _get_implicitly_bound_domain_addresses(
         strand_complex: Tuple[Strand, ...],
         nonimplicit_base_pairs_domain_names: Set[str] = None) -> Dict[
-        StrandDomainAddress, StrandDomainAddress]:
+    StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
     :param strand_complex: Tuple of strands representing strand complex
@@ -5032,7 +5045,8 @@ def _leafify_domain(domain: Domain) -> List[Domain]:
 
 
 def _leafify_strand(
-        strand: Strand, addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
+        strand: Strand,
+        addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
     """Create a new strand that is made of the leaf subdomains. Also updates an
     addr_translation_table which maps StrandDomainAddress from old strand to new
     strand. Since a domain may consist of multiple subdomains, a single StrandDomainAddress
@@ -5091,7 +5105,8 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = tuple([_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
+    leafify_strand_complex = tuple(
+        [_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:
@@ -5232,8 +5247,10 @@ def __get_base_pair_domain_endpoints_to_check(
         #                   d1_5p_d2_3p_ext_bp_type                        |
         #                                                                  |
         #                                                       d1_3p_d2_5p_ext_bp_type
-        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr, all_bound_domain_addresses)
-        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr, all_bound_domain_addresses)
+        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr,
+                                                                       all_bound_domain_addresses)
+        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr,
+                                                                       all_bound_domain_addresses)
 
         base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(
             *base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
@@ -5400,7 +5417,8 @@ def nupack_4_complex_secondary_structure_constraint(
     for i in range(1, len(strand_complexes)):
         strand_complex = strand_complexes[i]
         if (type(strand_complex) is not tuple):
-            raise ValueError(f"Element at index {i} was not a tuple of Strands. Please provide a tuple of Strands.")
+            raise ValueError(
+                f"Element at index {i} was not a tuple of Strands. Please provide a tuple of Strands.")
         if len(strand_complex) != len(strand_complex_template):
             raise ValueError(
                 f"Inconsistent complex structures: Complex at index {i} contained {len(strand_complex)} strands, "
@@ -5495,7 +5513,8 @@ def nupack_4_complex_secondary_structure_constraint(
         # Probability threshold
         internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
         unpaired_base_prob = base_type_probability_threshold[BasePairType.UNPAIRED]
-        border_internal_base_pair_prob = base_type_probability_threshold[BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
+        border_internal_base_pair_prob = base_type_probability_threshold[
+            BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
 
         # Tracks which bases are paired. Used to determine unpaired bases.
         expected_paired_idxs: Set[int] = set()
@@ -5783,7 +5802,7 @@ def rna_duplex_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -5955,7 +5974,7 @@ def rna_cofold_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')

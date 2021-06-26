@@ -44,7 +44,7 @@ from multiprocessing.pool import ThreadPool
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
     logger, DesignPart, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
-    ComplexConstraint, ConstraintWithComplexes, ComplexesConstraint
+    ComplexConstraint, ConstraintWithComplexes, Complex
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -223,7 +223,7 @@ def _violations_of_constraints(design: Design,
         violation_set = _ViolationSet()
     else:
         assert violation_set_old is not None
-        violation_set = violation_set_old.clone() # Keep old in case no improvement
+        violation_set = violation_set_old.clone()  # Keep old in case no improvement
         for domain_changed in domains_changed:
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
@@ -502,7 +502,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
         else all_pairs(all_strands, where=_at_least_one_strand_unfixed)
 
     # filter out those not containing domain_change if specified
-    strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = []
+    strand_pairs_to_check: List[Tuple[Strand, Strand]] = []
     if domains_changed is None:
         strand_pairs_to_check = strand_pairs_to_check_if_domain_changed_none
     else:
@@ -516,16 +516,16 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
 
 
 def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithComplexes) -> \
-        List[Tuple[Strand, ...]]:
+                                  constraint: ConstraintWithComplexes) -> \
+        Tuple[Complex]:
     """
     Similar to _determine_domain_pairs_to_check but for complexes.
     """
     # filter out those not containing domain_change if specified
-    complexes_to_check: List[Tuple[Strand, ...]] = []
     if domains_changed is None:
-        complexes_to_check = constraint.complexes
+        return constraint.complexes
     else:
+        complexes_to_check: List[Complex] = []
         for strand_complex in constraint.complexes:
             complex_added = False
             for strand in strand_complex:
@@ -539,7 +539,7 @@ def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
                     # Need to break out of checking each strand in complex since we added complex already
                     break
 
-    return complexes_to_check
+        return tuple(complexes_to_check)
 
 
 def _determine_strands_to_check(all_strands: Iterable[Strand],
@@ -917,17 +917,17 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 
 
 def _violations_of_complex_constraint(constraint: ComplexConstraint,
-                                          domains_changed: Optional[Iterable[Domain]],
-                                          current_weight_gap: Optional[float],
-                                          ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
-    complexes_to_check: Sequence[Tuple[Strand, Strand]] = \
+                                      domains_changed: Optional[Iterable[Domain]],
+                                      current_weight_gap: Optional[float],
+                                      ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+    complexes_to_check: Tuple[Complex] = \
         _determine_complexes_to_check(domains_changed, constraint)
 
     if log_names_of_domains_and_strands_checked:
         logger.debug(f'$ for complex constraint {constraint.description}, checking these complexes:')
         logger.debug(f'$ {pprint.pformat(complexes_to_check, indent=pprint_indent)}')
 
-    violating_complexes_weights: List[Optional[Tuple[Strand, ..., float]]] = []
+    violating_complexes_weights: List[Optional[Tuple[Complex, float]]] = []
 
     weight_discovered_here: float = 0.0
     quit_early = False
@@ -954,12 +954,12 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
     else:
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
 
-        def complex_weight_if_violates(strand_complex: Tuple[Strand, ...]) \
-                -> Optional[Tuple[Strand, Strand, float]]:
+        def complex_weight_if_violates(strand_complex_: Complex) \
+                -> Optional[Tuple[Complex, float]]:
             # return strand pair if it violates the constraint, else None
-            weight_ = constraint(strand_complex)
+            weight_ = constraint(strand_complex_)
             if weight_ > 0.0:
-                return strand_complex, weight_
+                return strand_complex_, weight_
             else:
                 return None
 
@@ -969,9 +969,9 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
         else:
             chunks = dc.chunker(complexes_to_check, chunk_size)
             for complex_chunk in chunks:
-                violating_complexes_chunk_with_none: List[Optional[Tuple[Strand, Strand, float]]] = \
+                violating_complexes_chunk_with_none: List[Optional[Tuple[Complex, float]]] = \
                     _thread_pool.map(complex_weight_if_violates, complex_chunk)
-                violating_complexes_chunk: List[Tuple[Strand, Strand, float]] = \
+                violating_complexes_chunk: List[Tuple[Complex, float]] = \
                     remove_none_from_list(violating_complexes_chunk_with_none)
                 violating_complexes_weights.extend(violating_complexes_chunk)
 
@@ -986,7 +986,7 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
                     break
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    violating_complex_weight: Optional[Tuple[Strand, Strand, float]]
+    violating_complex_weight: Optional[Tuple[Complex, float]]
     for violating_complex_weight in violating_complexes_weights:
         if violating_complex_weight is not None:
             strand_complex, weight = violating_complex_weight
@@ -1132,6 +1132,7 @@ class _Directories:
 def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
     # verify design is legal, and also build map of non-independent domains to the strand that contains them,
     # to help when changing DNA sequences for those Domains.
+    # TODO: we don't seem to use the dictionary any more, so we can probably get rid of that
 
     domain_to_strand: Dict[dc.Domain, dc.Strand] = {}
 
@@ -1152,10 +1153,12 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
                 domain_to_strand[domain] = strand
         else:
             for domain in strand.domains:
+                # noinspection PyProtectedMember
                 if domain._pool is None and not domain.fixed:
                     raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
                                      f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
                                      f'For non-fixed domains, exactly one of these must be None.')
+                # noinspection PyProtectedMember
                 elif domain.fixed and domain._pool is not None:
                     raise ValueError(f'for strand {strand.name}, it has a '
                                      f'domain {domain.name} that is fixed, even though that Domain has a '
@@ -1304,7 +1307,8 @@ def search_for_dna_sequences(*, design: dc.Design,
     """
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
-    domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
+    # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
+    _check_design(design)
 
     directories = _setup_directories(
         debug=debug_log_file, info=info_log_file, force_overwrite=force_overwrite,
@@ -1332,7 +1336,7 @@ def search_for_dna_sequences(*, design: dc.Design,
 
     try:
         if not restart:
-            assign_sequences_to_domains_randomly_from_pools(design=design, domain_to_strand=domain_to_strand,
+            assign_sequences_to_domains_randomly_from_pools(design=design,
                                                             rng=rng, overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
@@ -1358,8 +1362,7 @@ def search_for_dna_sequences(*, design: dc.Design,
             _check_cpu_count(cpu_count)
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
-                                                                    max_domains_to_change,
-                                                                    domain_to_strand, rng)
+                                                                    max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
@@ -1458,9 +1461,7 @@ def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restar
 
 
 def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_domains_to_change: int,
-                      domain_to_strand: Dict[Domain, Strand], rng: np.random.Generator,
-                      # design: Design
-                      ) -> Tuple[List[Domain], Dict[Domain, str]]:
+                      rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total weight of constraints it violates
     probs_opt = np.asarray(weights_opt)
     probs_opt /= probs_opt.sum()
@@ -1754,7 +1755,7 @@ def _log_constraint_summary(*, design: Design,
     logger.info(weight_str + all_constraints_str)
 
 
-def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_strand: Dict[Domain, Strand],
+def assign_sequences_to_domains_randomly_from_pools(design: Design,
                                                     rng: np.random.Generator = dn.default_rng,
                                                     overwrite_existing_sequences: bool = False) -> None:
     """
@@ -1765,9 +1766,6 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design, domain_to_st
 
     :param design:
         Design to which to assign DNA sequences.
-    :param domain_to_strand:
-        Indicates, for each dependent :any:`Domain`, the unique :any:`Strand` with a :any:`StrandPool` used
-        to assign DNA sequences to the :any:`Strand` (thus also to this :any:`Domain`).
     :param rng:
         numpy random number generator (type returned by numpy.random.default_rng()).
     :param overwrite_existing_sequences:
