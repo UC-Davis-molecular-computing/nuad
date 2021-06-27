@@ -251,8 +251,8 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""
         wcenergies = dn.calculate_wc_energies(seqs.seqarr, self.temperature)
-        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)
-        seqarr_pass = seqs.seqarr[within_range]
+        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)  # type: ignore
+        seqarr_pass = seqs.seqarr[within_range]  # type: ignore
         return dn.DNASeqList(seqarr=seqarr_pass)
 
 
@@ -4744,7 +4744,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #                              # #
                 if domain_3n_complementary_3n_addr_is_bound is None:
                     return BasePairType.NICK_5P
-                elif domain_3n_complementary_3n_addr_is_bound == False:
+                elif domain_3n_complementary_3n_addr_is_bound is False:
                     return BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P
                 else:
                     return BasePairType.OTHER
@@ -4796,7 +4796,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 
                 if domain_3n_complementary_3n_addr_is_bound is None:
                     return BasePairType.OVERHANG_ON_THIS_STRAND_5P
-                elif domain_3n_complementary_3n_addr_is_bound == False:
+                elif domain_3n_complementary_3n_addr_is_bound is False:
                     return BasePairType.OVERHANG_ON_BOTH_STRANDS_5P
                 else:
                     return BasePairType.OTHER
@@ -4961,10 +4961,9 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(
-        strand_complex: Tuple[Strand, ...],
-        nonimplicit_base_pairs_domain_names: Set[str] = None) -> Dict[
-    StrandDomainAddress, StrandDomainAddress]:
+def _get_implicitly_bound_domain_addresses(strand_complex: Tuple[Strand, ...],
+                                           nonimplicit_base_pairs_domain_names: Set[str] = None) \
+        -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
     :param strand_complex: Tuple of strands representing strand complex
@@ -5190,7 +5189,7 @@ def __get_base_pair_domain_endpoints_to_check(
             raise ValueError(
                 f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
                 f"Violating domain: {domain_name_complement}")
-    ## End Input Validation ##
+    # End Input Validation #
 
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
                                          int] = _get_addr_to_starting_base_pair_idx(strand_complex)
