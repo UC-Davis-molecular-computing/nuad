@@ -207,7 +207,7 @@ class RestrictBasesConstraint(NumpyConstraint):
     Note, however, that this is a constraint :any:`Domain`'s, not :any:`Strand`'s, so for a three-letter
     code to work, you must take care not to mixed :any:`Domain`'s on a :any:`Strand` that will use
     different alphabets.
-    """
+    """  # noqa
 
     bases: Collection[str]
     """Bases to use. Must be a strict subset of {'A', 'C', 'G', 'T'} with at least two bases."""
@@ -3375,7 +3375,9 @@ def nupack_domain_pair_constraint(
         weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
-        negate: bool = False) -> DomainPairConstraint:
+        negate: bool = False,
+        version4: bool = True,
+        ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
@@ -3406,6 +3408,8 @@ def nupack_domain_pair_constraint(
         Detailed description of constraint suitable for summary report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
+    :param version4:
+        Whether to use NUPACK version 4.
     :return:
         The :any:`DomainPairConstraint`.
     """
@@ -3426,8 +3430,12 @@ def nupack_domain_pair_constraint(
     num_threads = cpu_count()
     thread_pool = ThreadPool(processes=num_threads)
 
-    def binding_closure(seq_pair: Tuple[str, str]) -> float:
-        return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
+    if version4:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding4(seq_pair[0], seq_pair[1], temperature, negate)
+    else:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
 
     def evaluate(domain1: Domain, domain2: Domain) -> float:
         threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
@@ -3459,7 +3467,10 @@ def nupack_domain_pair_constraint(
         seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
         energies = []
         for seq1, seq2 in seq_pairs:
-            energy = dv.binding(seq1, seq2, temperature, negate)
+            if version4:
+                energy = dv.binding4(seq1, seq2, temperature, negate)
+            else:
+                energy = dv.binding(seq1, seq2, temperature, negate)
             energies.append(energy)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
         lines = [f'{name1:{max_name_length}}, '
@@ -5446,13 +5457,13 @@ def nupack_4_complex_secondary_structure_constraint(
     base_pair_domain_endpoints_to_check = _get_base_pair_domain_endpoints_to_check(
         strand_complex_template, nonimplicit_base_pairs=nonimplicit_base_pairs)
 
-    ## Start populating base_pair_probs ##
+    # Start populating base_pair_probs
     base_type_probability_threshold: Dict[BasePairType, float] = (
         {} if base_pair_prob_by_type is None else base_pair_prob_by_type.copy())
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
-    ## End populating base_pair_probs ##
+    # End populating base_pair_probs
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
