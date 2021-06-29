@@ -1074,7 +1074,7 @@ call search_for_dna_sequences with the parameter restart=True.
         done = False
         while not done:
             ans = input(f'Are you sure you wish to proceed with deleting the contents of\n'
-                        f'{directory}? [n]/y ')
+                        f'{directory} ([n]/y)? ')
             ans = ans.strip().lower()
             if ans in ['n', '']:
                 print('No problem! Exiting...')
