@@ -22,9 +22,7 @@ If you are using Windows, you can then run python code calling the dsd library f
 
 To install dsd:
 
-1. Install [numpy](https://numpy.org/install/) by typing `pip install numpy` at the command line (or `conda install numpy` if you use the [Anaconda](https://www.anaconda.com/) Python distribution).
-
-2. Download the git repo, by one of two methods:
+1. Download the git repo, by one of two methods:
     - type `git clone https://github.com/UC-Davis-molecular-computing/dsd.git` at the command line, or
     - on the page `https://github.com/UC-Davis-molecular-computing/dsd`, click on Code &rarr; Download Zip:
 
@@ -32,7 +30,7 @@ To install dsd:
 
       and then unzip somewhere on your file system.
 
-3. Add the directory `dsd` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) this is done by adding this line to your `~/.bashrc` file, where `/path/to/dsd` represents the path to the `dsd` directory:
+2. Add the directory `dsd` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) this is done by adding this line to your `~/.bashrc` file, where `/path/to/dsd` represents the path to the `dsd` directory:
 
     ```
     export PYTHONPATH="${PYTHONPATH}:/path/to/dsd"
@@ -40,8 +38,9 @@ To install dsd:
 
     In Windows (outside of Windows Subsystem for Linux), the `PYTHONPATH` environment variable can be adjusted by right-clicking "This PC" on the desktop &rarr; Properties &rarr; Advanced System Settings &rarr; Environment Variables.
 
-4. Install NUPACK (version 3 and/or 4) and ViennaRNA following their installation instructions. (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK 3 and/or ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so there is is no
-executable directory you need to add to `path`.
+3. Install the PYthon packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/dsd/blob/main/requirements.txt) by typing `pip install numpy ordered_set psutil scadnano` at the command line.
+
+4. Install NUPACK (version 3 and/or 4) and ViennaRNA following their installation instructions ([NUPACK](https://piercelab-caltech.github.io/nupack-docs/start/#installation-requirements) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html)). (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK 3 and/or ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so there is is no executable directory you need to add to `path`.
 
     To test that NUPACK 3 is installed correctly, type `pfunc` at the command line (the wsl command line if using Windows); the pfunc NUPACK 3 executable should be called.
     To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.

@@ -24,6 +24,7 @@ import logging
 import textwrap
 from multiprocessing.pool import ThreadPool
 from numbers import Number
+from enum import Enum, auto
 
 import numpy as np  # noqa
 from ordered_set import OrderedSet
@@ -71,10 +72,10 @@ _length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_a
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
 """
-Global logger instance used throughout dsd. 
+Global logger instance used throughout dsd.
 
 Call ``logger.removeHandler(logger.handlers[0])`` to stop screen output (assuming that you haven't added
-or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and 
+or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and
 removing it will stop screen output).
 
 Call ``logger.addHandler(logging.FileHandler(filename))`` to direct to a file.
@@ -131,8 +132,8 @@ Constraint that applies to a DNA sequence; the difference between this an a :any
 that these are applied before a sequence is assigned to a :any:`Domain`, so the constraint can only
 be based on the DNA sequence, and not, for instance, on the :any:`Domain`'s :any:`DomainPool`.
 
-Consequently :any:`SequenceConstraint`'s, like :any:`NumpyConstraint`'s, are treated differently than 
-subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceConstraint`'s or 
+Consequently :any:`SequenceConstraint`'s, like :any:`NumpyConstraint`'s, are treated differently than
+subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceConstraint`'s or
 :any:`NumpyConstraint`'s is never allowed to be assigned into any :any:`Domain`.
 
 The difference with :any:`NumpyConstraint` is that a :any:`NumpyConstraint` requires one to express the
@@ -206,7 +207,7 @@ class RestrictBasesConstraint(NumpyConstraint):
     Note, however, that this is a constraint :any:`Domain`'s, not :any:`Strand`'s, so for a three-letter
     code to work, you must take care not to mixed :any:`Domain`'s on a :any:`Strand` that will use
     different alphabets.
-    """
+    """  # noqa
 
     bases: Collection[str]
     """Bases to use. Must be a strict subset of {'A', 'C', 'G', 'T'} with at least two bases."""
@@ -250,8 +251,8 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""
         wcenergies = dn.calculate_wc_energies(seqs.seqarr, self.temperature)
-        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)
-        seqarr_pass = seqs.seqarr[within_range]
+        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)  # type: ignore
+        seqarr_pass = seqs.seqarr[within_range]  # type: ignore
         return dn.DNASeqList(seqarr=seqarr_pass)
 
 
@@ -368,9 +369,9 @@ class BaseAtPositionConstraint(NumpyConstraint):
     bases: Union[str, Collection[str]]
     """
     Base(s) to require at position :py:data:`BasePositionConstraint.position`.
-    
+
     Can either be a single base, or a collection (e.g., list, tuple, set).
-    If several bases are specified, the base at :py:data:`BasePositionConstraint.position` 
+    If several bases are specified, the base at :py:data:`BasePositionConstraint.position`
     must be one of the bases in :py:data:`BasePositionConstraint.bases`.
     """
 
@@ -408,7 +409,7 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
     substrings: Union[str, Collection[str]]
     """
     Substring(s) to forbid.
-    
+
     Can either be a single substring, or a collection (e.g., list, tuple, set).
     If a collection, all substrings must have the same length.
     """
@@ -518,8 +519,8 @@ class DomainPool(JSONSerializable):
     :any:`NumpyConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
-    
-    The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied 
+
+    The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied
     efficiently to many sequences at once, represented as a numpy 2D array of bytes (via the class
     :any:`np.DNASeqList`), so they are done in large batches in advance.
     In contrast, the constraints in :py:data:`DomainPool.sequence_constraints` are done on Python strings
@@ -535,11 +536,11 @@ class DomainPool(JSONSerializable):
     :any:`SequenceConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
-    
+
     See :py:data:`DomainPool.numpy_constraints` for an explanation of the difference between them.
-    
+
     See :py:data:`DomainPool.domain_constraints` for an explanation of the difference between them.
-    
+
     Optional; default is empty.
     """
 
@@ -548,16 +549,16 @@ class DomainPool(JSONSerializable):
         compare=False, hash=False, default_factory=list, repr=False)
     """
     :any:`DomainConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
-    
-    Unlike a :any:`SequenceConstraint`, which sees only the DNA sequence, 
+
+    Unlike a :any:`SequenceConstraint`, which sees only the DNA sequence,
     a :any:`DomainConstraint` is given the full :any:`Domain`. Generally a :any:`SequenceConstraint`
-    is applied before assigning a DNA sequence to a :any:`Domain`, 
+    is applied before assigning a DNA sequence to a :any:`Domain`,
     to see if the sequence is even "legal" on its own.
     A :any:`DomainConstraint` is generally one that requires more information about the :any:`Domain`
-    (such as its :any:`DomainPool`), but unlike other types of constraints, can still be applied 
-    without referencing information outside of the :any:`Domain` 
+    (such as its :any:`DomainPool`), but unlike other types of constraints, can still be applied
+    without referencing information outside of the :any:`Domain`
     (e.g., the :any:`Strand` the :any:`Domain` is in).
-    
+
     Optional; default is empty.
     """
 
@@ -754,7 +755,7 @@ def add_quotes(string: str) -> str:
     return f'"{string}"'
 
 
-def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
+def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys: str) -> Any:
     # should be called from function whose return type is the type being constructed from JSON, e.g.,
     # Design or Strand, given by ret_type. This helps give a useful error message
     for key in (main_key,) + legacy_keys:
@@ -790,17 +791,26 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
     name: str
     """
-    Name of the :any:`Domain`. 
+    Name of the :any:`Domain`.
     This is the "unstarred" version of the name, and it cannot end in `*`.
     """
 
-    pool_: Optional[DomainPool] = field(default=None, compare=False, hash=False)
+    _pool: Optional[DomainPool] = field(init=False, default=None, compare=False, hash=False)
     """
     Each :any:`Domain` in the same :any:`DomainPool` as this one share a set of properties, such as
     length and individual :any:`DomainConstraint`'s.
     """
 
-    sequence_: Optional[str] = field(default=None, compare=False, hash=False)
+    # TODO: Change name to "_sequence", add init=False
+    # TODO: `set_sequence`
+    #        - if fixed, error
+    #        - if dependent, error
+    # TODO: `set_sequence_recursive_up`
+
+    #        - if parent is not none, make recursive call to set_sequence_recursive_up
+    # TODO: `set_sequence_recursive_down`
+    #        - iterate over children, call set_sequence
+    _sequence: Optional[str] = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
     DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
     variant; the starred variant has the Watson-Crick complement,
@@ -811,6 +821,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     """
     Whether this :any:`Domain`'s DNA sequence is fixed, i.e., cannot be changed by the
     search algorithm :py:meth:`search.search_for_dna_sequences`.
+
+    Note: If a domain is fixed then all of its subdomains must also be fixed.
     """
 
     label: Optional[DomainLabel] = None
@@ -818,8 +830,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     Optional generic "label" object to associate to this :any:`Domain`.
 
     Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int) 
-    that is naturally JSON serializable. (Calling 
+    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
+    that is naturally JSON serializable. (Calling
     `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
     on the object should succeed without having to specify a custom encoder.)
     """
@@ -828,21 +840,73 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     """
     Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
     However, if using a :any:`StrandPool`, which assigns a DNA sequence to a whole :any:`Strand`, then
-    this will be marked as True (dependent). 
-    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent, 
+    this will be marked as True (dependent).
+    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent,
     since it must be set along with other :any;`Domain`'s in the same :any:`Strand`.
-    
-    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored 
-    in the field :py:data:`DomainPool.length`. But that pool's method 
+
+    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored
+    in the field :py:data:`DomainPool.length`. But that pool's method
     :py:meth:`DomainPool.generate_sequence` will not be called to generate sequences for the :any:`Domain`;
-    instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this 
+    instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this
     :any:`Domain`.
+
+    A possible use case is that one strand represents a subsequence of M13 of length 300,
+    of which there are 7249 possible DNA sequences to assign based on the different
+    rotations of M13. If this strand is bound to several other strands, it will have
+    several domains, but they cannot be set independently of each other.
+    Only the entire strand can be assigned at once, changing every domain at once,
+    so the domains are dependent on this strand's assigned sequence.
     """
+
+    _subdomains: List["Domain"] = field(init=False, default_factory=list)
+    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
+    """
+
+    parent: Optional["Domain"] = field(init=False, default=None)
+    """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based on the
+    :py:data:`Domain.subdomains` of other domains in the same tree.
+    """
+
+    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
+                 fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False,
+                 subdomains: Optional[List["Domain"]] = None) -> None:
+        if subdomains is None:
+            subdomains = []
+        self.name = name
+        self._pool = pool
+        self._sequence = sequence
+        self.fixed = fixed
+        self.label = label
+        self.dependent = dependent
+        self._subdomains = subdomains
+
+        self.__post_init__()
+
+    # TODO: Add private methods set_subdomain_sequence and set_parent_sequence called in response to setter sequence
+    # TODO: Test case: one long strand, make it have a single long domain, and it consist of shorter domains
+    # TODO: And other test cases...
 
     def __post_init__(self) -> None:
         if self.name.endswith('*'):
             raise ValueError('Domain name cannot end with *\n'
                              f'domain name = {self.name}')
+
+        if self.fixed:
+            for sd in self._subdomains:
+                if not sd.fixed:
+                    raise ValueError(f'Domain is fixed, but subdomain {sd} is not fixed')
+        else:
+            contains_no_non_fixed_subdomains = True
+            for sd in self._subdomains:
+                if not sd.fixed:
+                    contains_no_non_fixed_subdomains = False
+                    break
+            if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
+                raise ValueError(f'Domain is not fixed, but all subdomains are fixed')
+
+        # Set parent field for all subdomains.
+        for subdomain in self._subdomains:
+            subdomain.parent = self
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
@@ -851,10 +915,10 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             by calling ``json.dumps(d)``.
         """
         dct: Dict[str, Any] = {name_key: self.name}
-        if self.pool_ is not None:
-            dct[domain_pool_key] = self.pool_.to_json_serializable(suppress_indent)
+        if self._pool is not None:
+            dct[domain_pool_key] = self._pool.to_json_serializable(suppress_indent)
         if self.has_sequence():
-            dct[sequence_key] = self.sequence_
+            dct[sequence_key] = self._sequence
             if self.fixed:
                 dct[fixed_key] = True
         if self.label is not None:
@@ -904,7 +968,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             pool = None
 
         domain: Domain[DomainLabel] = Domain(
-            name=name, sequence_=sequence, fixed=fixed, pool_=pool, label=label)
+            name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
 
     def __hash__(self) -> int:
@@ -923,16 +987,31 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: :any:`DomainPool` of this :any:`Domain`
         """
-        if self.pool_ is None:
+        if self._pool is None:
             raise ValueError(f'pool has not been set for Domain {self.name}')
-        return self.pool_
+        return self._pool
 
     @pool.setter
     def pool(self, new_pool: DomainPool) -> None:
         """
         :param new_pool: new :any:`DomainPool` to set
+        :raises ValueError: if :py:data:`Domain.pool_` is not None and is not same object as `new_pool`
         """
-        self.pool_ = new_pool
+        if self._pool is not None and new_pool is not self._pool:
+            raise ValueError(f'Assigning pool {new_pool} to domain '
+                             f'{self} but {self} already has domain '
+                             f'pool {self._pool}')
+        self._pool = new_pool
+
+    @property
+    def subdomains(self) -> List["Domain"]:
+        return self._subdomains
+
+    @subdomains.setter
+    def subdomains(self, new_subdomains: List["Domain"]) -> None:
+        self._subdomains = new_subdomains
+        for s in new_subdomains:
+            s.parent = self
 
     @property
     def length(self) -> int:
@@ -940,10 +1019,12 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: Length of this domain (delegates to pool)
         :raises ValueError: if no :any:`DomainPool` has been set for this :any:`Domain`
         """
-        if self.pool_ is None:
+        if self.fixed and self._sequence is not None:
+            return len(self._sequence)
+        if self._pool is None:
             raise ValueError('No DomainPool has been set for this Domain, so it has no length yet.\n'
                              'Assign a DomainPool (which has a length field) to give this Domain a length.')
-        return self.pool_.length
+        return self._pool.length
 
     @property
     def sequence(self) -> str:
@@ -951,9 +1032,10 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: DNA sequence of this domain (unstarred version)
         :raises ValueError: If no sequence has been assigned.
         """
-        if self.sequence_ is None:
-            raise ValueError(f'sequence has not been set for Domain {self.name}')
-        return self.sequence_
+        if self._sequence is None or '?' in self._sequence:
+            raise ValueError(f'sequence has not been set for Domain {self.name}\n'
+                             f'sequence: {self._sequence}')
+        return self._sequence
 
     @sequence.setter
     def sequence(self, new_sequence: str) -> None:
@@ -962,11 +1044,60 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         if self.fixed:
             raise ValueError('cannot assign a new sequence to this Domain; its sequence is fixed as '
-                             f'{self.sequence_}')
+                             f'{self._sequence}')
         if len(new_sequence) != self.length:
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
                              f'it is length {len(new_sequence)}, but this domain is length {self.length}')
-        self.sequence_ = new_sequence
+        # Check that total length of subdomains (if used) adds up domain length.
+        if len(self._subdomains) != 0:
+            sd_total_length = 0
+            for sd in self._subdomains:
+                sd_total_length += sd.length
+            if sd_total_length != self.length:
+                raise ValueError(
+                    f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
+                    f'length of {sd_total_length}')
+        self._sequence = new_sequence
+        self._set_subdomain_sequences(new_sequence)
+        self._set_parent_sequence(new_sequence)
+
+    def _set_subdomain_sequences(self, new_sequence: str) -> None:
+        """Sets sequence for all subdomains.
+
+        :param new_sequence: Sequence assigned to this domain.
+        :type new_sequence: str
+        """
+        sequence_idx = 0
+        for sd in self._subdomains:
+            sd_len = sd.length
+            sd_sequence = new_sequence[sequence_idx: sequence_idx + sd_len]
+            sd._sequence = sd_sequence
+            sd._set_subdomain_sequences(sd_sequence)
+            sequence_idx += sd_len
+
+    def _set_parent_sequence(self, new_sequence: str) -> None:
+        """Set parent sequence and propagate upwards
+
+        :param new_sequence: new sequence
+        :type new_sequence: str
+        """
+        parent = self.parent
+        if parent is not None:
+            if parent._sequence is None:
+                parent._sequence = '?' * parent.length
+            # Add up lengths of subdomains, add new_sequence
+            idx = 0
+            assert self in parent._subdomains
+            sd: Optional[Domain] = None
+            for sd in parent._subdomains:
+                if sd == self:
+                    break
+                else:
+                    idx += sd.length
+            assert sd is not None
+            old_sequence = parent._sequence
+            parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
+            parent._set_parent_sequence(parent._sequence)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -977,7 +1108,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
         :param fixed_sequence: new fixed DNA sequence to set
         """
-        self.sequence_ = fixed_sequence
+        self._sequence = fixed_sequence
         self.fixed = True
 
     @property
@@ -1004,22 +1135,146 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         return self.starred_name if starred else self.name
 
-    def get_sequence(self, starred: bool) -> str:
+    def concrete_sequence(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the sequence
         :return: The value :py:data:`Domain.sequence` or :py:data:`Domain.starred_sequence`, depending on
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        if self.sequence is None:
-            raise ValueError('no DNA sequence has been assigned to this Domain')
         return dv.wc(self.sequence) if starred else self.sequence
 
     def has_sequence(self) -> bool:
         """
-        :return: Whether a DNA sequence has been assigned to this :any:`Domain`.
+        :return: Whether a complete DNA sequence has been assigned to this :any:`Domain`.
+                 If this domain has subdomains, False if any subdomain has not been assigned
+                 a sequence.
         """
-        return self.sequence_ is not None
+        return self._sequence is not None and '?' not in self._sequence
+
+    @staticmethod
+    def complementary_domain_name(domain_name: str) -> str:
+        """
+        Returns the name of the domain complementary to `domain_name`
+        :param domain_name: name of domain
+        """
+        return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
+
+    def _is_independent(self) -> bool:
+        """Return true if self is independent (not dependent or fixed).
+
+        :return: [description]
+        :rtype: bool
+        """
+        return not self.dependent or self.fixed
+
+    def _contains_any_independent_subdomain_recursively(self) -> bool:
+        """Returns true if the subdomain graph rooted at this domain contains
+        at least one independent subdomain.
+
+        :rtype: bool
+        """
+        if self._is_independent():
+            return True
+
+        for sd in self._subdomains:
+            if sd._contains_any_independent_subdomain_recursively():
+                return True
+
+        return False
+
+    def _check_subdomain_graph_is_uniquely_assignable(self) -> None:
+        """Checks that the subdomain graph that this domain is part of is
+        uniquely assignable. Meaning that all paths from the root to the
+        leaf of the subdomain graph contains exaclty one independent subdomain.
+        """
+        if self.parent is None:
+            self._check_exactly_one_independent_subdomain_all_paths()
+        else:
+            self.parent._check_subdomain_graph_is_uniquely_assignable()
+
+    def _check_exactly_one_independent_subdomain_all_paths(self) -> None:
+        """Checks if all paths in the subdomains graph from the self to
+        a leaf subdomain contains exactly one independent (dependent = False or
+        fixed = True) subdomain (could be this one).
+
+        :raises ValueError: if condition is not satisfied
+        """
+        self_independent = not self.dependent or self.fixed
+
+        if self_independent:
+            # Since this domain is independent, check that there are no more independent subdomains in any children recursively
+            for sd in self._subdomains:
+                if sd._contains_any_independent_subdomain_recursively():
+                    # Too many independent subdomains in this path
+                    raise ValueError(f"Domain {self} is independent, but subdomain {sd} already contains an "
+                                     f"independent subdomain in its subdomain graph")
+        else:
+            if len(self._subdomains) == 0:
+                raise ValueError(f"Domain {self} is dependent and does not contain any subdomains.")
+            # Since this domain is dependent, check that each subdomain has exactly one independent subdomain in all paths.
+            for sd in self._subdomains:
+                try:
+                    sd._check_exactly_one_independent_subdomain_all_paths()
+                except ValueError as e:
+                    raise ValueError(
+                        f"Domain {self} is dependent and could not find exactly one independent subdomain "
+                        f"in subdomain graph rooted at subdomain {sd}. The following error was found: {e}")
+
+    def _check_acyclic_subdomain_graph(self, seen_domains: Optional[Set["Domain"]] = None) -> None:
+        """Check to see if domain's subdomain graph contains a cycle.
+
+        :param seen_domains: All the domains seen so far (used by implementation)
+        :type seen_domains: Optional[Set["Domain"]]
+        :raises ValueError: Cycle found.
+        """
+        if len(self._subdomains) > 0:
+            if seen_domains is None:
+                seen_domains = set()
+
+            if self in seen_domains:
+                raise ValueError(f"Domain {self} found twice in DFS")
+            else:
+                seen_domains.add(self)
+
+            for sd in self._subdomains:
+                try:
+                    sd._check_acyclic_subdomain_graph(seen_domains)
+                except ValueError as e:
+                    raise ValueError(f"Cycle found in subdomain graph rooted at {self}. "
+                                     f"Propogated from subdomain {sd}: {e}"
+                                     )
+
+    def all_domains_in_tree(self) -> List["Domain"]:
+        domains = self._get_all_domains_from_parent()
+        domains.extend(self._get_all_domains_from_this_subtree())
+        return domains
+
+    def _get_all_domains_from_parent(self) -> List["Domain"]:
+        domains = []
+
+        parent = self.parent
+        if parent is not None:
+            parent_domains = parent._get_all_domains_from_this_subtree(excluded_subdomain=self)
+            domains.extend(parent_domains)
+            domains.extend(parent._get_all_domains_from_parent())
+
+        return domains
+
+    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) \
+            -> List["Domain"]:
+        domains = [self]
+        for sd in self._subdomains:
+            if sd != excluded_subdomain:
+                domains.extend(sd._get_all_domains_from_this_subtree())
+        return domains
+
+    def has_pool(self) -> bool:
+        """
+        :return:
+            whether a :any:`DomainPool` has been assigned to this :any:`Domain`
+        """
+        return self._pool is not None
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -1095,7 +1350,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """The :any:`Domain`'s on this :any:`Strand`, in order from 5' end to 3' end."""
 
     starred_domain_indices: FrozenSet[int]
-    """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains` 
+    """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains`
     on this :any:`Strand` that are starred."""
 
     group: StrandGroup
@@ -1110,15 +1365,15 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     Optional generic "label" object to associate to this :any:`Strand`.
 
     Useful for associating extra information with the :any:`Strand` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int) 
-    that is naturally JSON serializable. (Calling 
+    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
+    that is naturally JSON serializable. (Calling
     `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
     on the object should succeed without having to specify a custom encoder.)
     """
 
     pool: Optional[StrandPool] = None
     """
-    :any:`StrandPool` used to select DNA sequences for this :any:`Strand`. Note that this is incompatible 
+    :any:`StrandPool` used to select DNA sequences for this :any:`Strand`. Note that this is incompatible
     with using a :any:`DomainPool` for any :any:`Domain` on this :any:`Strand`.
     """
 
@@ -1187,6 +1442,12 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
                 domains.append(domain)
                 if is_starred:
                     starred_domain_indices.add(idx)
+
+        # Check that each base in the sequence is assigned by exactly one
+        # independent subdomain.
+        for d in cast(List[Domain], domains):
+            d._check_acyclic_subdomain_graph()  # noqa
+            d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
@@ -1314,7 +1575,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         seqs = []
         for idx, domain in enumerate(self.domains):
             starred = idx in self.starred_domain_indices
-            seqs.append(domain.get_sequence(starred))
+            seqs.append(domain.concrete_sequence(starred))
         delim = ' ' if spaces_between_domains else ''
         return delim.join(seqs)
 
@@ -1378,6 +1639,66 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     #              in the order they appear in this :any:`Strand`.
     #     """
 
+    def address_of_domain(self, domain_idx: int) -> 'StrandDomainAddress':
+        """Returns :any:`StrandDomainAddress` of the domain located at domain_idx
+
+        :rparam domain_idx: Index of domain
+        """
+        return StrandDomainAddress(self, domain_idx)
+
+    def address_of_nth_domain_occurence(self, domain_name: str, n: int,
+                                        forward=True) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
+
+        :param domain_name:
+            name of :any:`Domain` to find address of
+        :param n:
+            which occurrence (in order on the :any:`Strand`)
+            of :any:`Domain` with name `domain_name` to find address of.
+        :param forward:
+            if True, starts searching from 5' end, otherwise starts searching from 3' end.
+        :return:
+            :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
+        """
+        if n < 1:
+            raise ValueError(f'n needs to be at least 1')
+        domain_names = self.domain_names_tuple()
+        idx = -1
+        occurences = 0
+
+        itr = range(0, len(domain_names)) if forward else range(len(domain_names) - 1, -1, -1)
+
+        for i in itr:
+            if domain_names[i] == domain_name:
+                occurences += 1
+                if occurences == n:
+                    idx = i
+                    break
+        if idx == -1:
+            raise ValueError(f'{self} contained less than {n} occurrences of domain {domain_name}')
+
+        return StrandDomainAddress(self, idx)
+
+    def address_of_first_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the first occurence of domain named domain_name
+        starting from the 5' end.
+        """
+        return self.address_of_nth_domain_occurence(domain_name, 1)
+
+    def address_of_last_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
+        """
+        Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name
+        starting from the 3' end.
+        """
+        return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
+
+
+Complex = Tuple[Strand, ...]
+"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
+:any:`Domain`'s."""
+
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
@@ -1397,8 +1718,8 @@ class ConstraintReport:
 
     constraint: Optional['Constraint']
     """
-    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available 
-    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be 
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
+    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
     automatically inserted by the report generating code."""
 
     content: str
@@ -1408,13 +1729,13 @@ class ConstraintReport:
 
     num_violations: int
     """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
     violated the constraint.
     """
 
     num_checks: int
     """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that 
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
     were checked against the constraint.
     """
 
@@ -1450,6 +1771,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
+    complex_constraints: List['ComplexConstraint'] = field(default_factory=list)
+    """
+    Applied to tuple of :any:`Strand`'s in the :any:`Design`.
+    """
+
     domains_constraints: List['DomainsConstraint'] = field(default_factory=list)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
@@ -1482,14 +1808,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     domains: List[Domain[DomainLabel]] = field(init=False)
     """
     List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
-    
+
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
     strand_groups: Dict[StrandGroup, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
     Dict mapping each :any:`StrandGroup` to a list of the :any:`Strand`'s in this :any:`Design` in the group.
-    
+
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
@@ -1508,10 +1834,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
 
     def __post_init__(self) -> None:
+
+        # Get domains not explicitly listed on strands that are part of domain tree.
+        domains = []
+        for strand in self.strands:
+            for domain_in_strand in strand.domains:
+                domains.extend(domain_in_strand.all_domains_in_tree())
+
         # XXX: be careful; original version used set to remove duplications, but that has unspecified
         # insertion order, even though Python 3.7 dicts preserve insertion order:
         # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
-        self.domains = remove_duplicates(domain for strand in self.strands for domain in strand.domains)
+        self.domains = remove_duplicates(domains)
 
         self.strand_groups = defaultdict(list)
         for strand in self.strands:
@@ -1519,7 +1852,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domain_pools = defaultdict(list)
         for domain in self.domains:
-            if domain.pool_ is not None:
+            if domain._pool is not None:  # noqa
                 self.domain_pools[domain.pool].append(domain)
 
         self.domains_by_name = {}
@@ -1682,6 +2015,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         constraints.extend(self.strands_constraints)
         constraints.extend(self.domain_pairs_constraints)
         constraints.extend(self.strand_pairs_constraints)
+        constraints.extend(self.complex_constraints)
         constraints.extend(self.design_constraints)
         return constraints
 
@@ -1738,6 +2072,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = self.summary_of_strand_pairs_constraint(constraint, report_only_violations)
         elif isinstance(constraint, DesignConstraint):
             report = self.summary_of_design_constraint(constraint, report_only_violations)
+        elif isinstance(constraint, ComplexConstraint):
+            report = self.summary_of_complex_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
                       f'unrecognized type {type(constraint)}'
@@ -1836,11 +2172,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for fixed_domain in domains:
             num_checks += 1
-            summary = constraint.generate_summary(fixed_domain, False)
             passed = constraint(fixed_domain) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(fixed_domain, False)
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
@@ -1864,11 +2200,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand in strands:
             num_checks += 1
-            summary = constraint.generate_summary(strand, False)
             passed = constraint(strand) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(strand, False)
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
@@ -1893,11 +2229,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for domain1, domain2 in pairs_to_check:
             num_checks += 1
-            summary = constraint.generate_summary((domain1, domain2), False)
             passed = constraint((domain1, domain2)) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary((domain1, domain2), False)
                 line = (f'domains '
                         f'{domain1.name:{max_domain_name_length}}, '
                         f'{domain2.name:{max_domain_name_length}}: '
@@ -1925,11 +2261,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand1, strand2 in pairs_to_check:
             num_checks += 1
-            summary = constraint.generate_summary((strand1, strand2), False)
             passed = constraint((strand1, strand2)) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary((strand1, strand2), False)
                 line = (f'strands '
                         f'{strand1.name:{max_strand_name_length}}, '
                         f'{strand2.name:{max_strand_name_length}}: '
@@ -1980,6 +2316,35 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             else ConstraintReport(constraint=constraint,
                                   content='constraint.pairs is empty; nothing to report',
                                   num_violations=0, num_checks=0)
+        return report
+
+    @staticmethod
+    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+        lines: List[str] = []
+
+        for strand_complex in constraint.complexes:
+            num_checks += 1
+            passed = constraint(strand_complex) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(strand_complex, False)
+                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
+                line = (f'strand complex: '
+                        f'{strand_names}'
+                        f'{"" if passed else "  **violation**"}'
+                        f'\n{summary}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
         return report
 
     # remove quotes when Python 3.6 support dropped
@@ -2091,7 +2456,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         if sc_domain.name[-1] == '*':
                             domain_sequence = dv.wc(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
-                            dsd_domain.sequence_ = domain_sequence
+                            dsd_domain._sequence = domain_sequence
                             dsd_domain.fixed = fix_assigned_sequences
 
                 # set domain labels
@@ -2180,7 +2545,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if dsd_domain is None:
                 raise AssertionError(f'expected domain_name {domain_name} to be a key in domains_by_name '
                                      f'{list(self.domains_by_name.keys())}')
-            domain_sequence = dsd_domain.get_sequence(starred)
+            domain_sequence = dsd_domain.concrete_sequence(starred)
             sequence_list.append(domain_sequence)
         strand_sequence = ''.join(sequence_list)
         sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False,
@@ -2231,12 +2596,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 # if there are any '?' wildcards, then all of them should be wildcards
                 assert sc_domain_sequence == wildcard * len(sc_domain_sequence)
                 # if not assigned in sc_strand, we assign from dsd
-                domain_sequence = dsd_domain.get_sequence(starred)
+                domain_sequence = dsd_domain.concrete_sequence(starred)
             else:
                 # otherwise we stick with the sequence that was already assigned in sc_domain
                 domain_sequence = sc_domain_sequence
                 # but let's make sure dsd didn't actually change that sequence; it should have been fixed
-                dsd_domain_sequence = dsd_domain.get_sequence(starred)
+                dsd_domain_sequence = dsd_domain.concrete_sequence(starred)
                 if domain_sequence != dsd_domain_sequence:
                     raise AssertionError(f'\n    domain_sequence = {domain_sequence} is unequal to\n'
                                          f'dsd_domain_sequence = {dsd_domain_sequence}')
@@ -2254,7 +2619,7 @@ def add_header_to_content_of_summary(report: ConstraintReport) -> str:
 {delim}
 * {report.constraint.description}
 * checks:     {report.num_checks}
-* violations: {report.num_violations}  
+* violations: {report.num_violations}
 {indented_content}'''
     return summary
 
@@ -2266,10 +2631,12 @@ DesignPart = TypeVar('DesignPart',
                      Strand,
                      Tuple[Domain, Domain],  # noqa
                      Tuple[Strand, Strand],  # noqa
+                     Tuple[Strand, ...],  # noqa
                      Iterable[Domain],  # noqa
                      Iterable[Strand],  # noqa
                      Iterable[Tuple[Domain, Domain]],  # noqa
                      Iterable[Tuple[Strand, Strand]],  # noqa
+                     Iterable[Tuple[Strand, ...]],  # noqa
                      Design)
 
 
@@ -2285,20 +2652,20 @@ class Constraint(ABC, Generic[DesignPart]):
 
     weight: float = 1.0
     """
-    Weight of the problem; the higher the total weight of all the :any:`Constraint`'s a :any:`Domain` 
-    has caused, the greater likelihood its sequence is changed when stochastically searching for sequences 
+    Weight of the problem; the higher the total weight of all the :any:`Constraint`'s a :any:`Domain`
+    has caused, the greater likelihood its sequence is changed when stochastically searching for sequences
     to satisfy all constraints.
     """
 
     weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 3)
     """
-    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative 
-    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure 
+    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative
+    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
     energy exceeding a threshold, it will return the difference between the energy and the threshold.
     It is then passed through the weight_transfer_function.
     The default is the cubed ReLU function: f(x) = max(0, x^3).
-    This "punishes" more severe violations more, i.e., it would 
-    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its 
+    This "punishes" more severe violations more, i.e., it would
+    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
 
@@ -2442,6 +2809,17 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
+@dataclass(frozen=True, eq=False)
+class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
+    complexes: Tuple[Tuple[Strand, ...], ...] = None
+    """
+    List of complexes (tuples of :any:`Strand`'s) to check.
+    """
+
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
+        raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
+
+
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     """Constraint that applies to a pair of :any:`Domain`'s."""
@@ -2449,7 +2827,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     evaluate: Callable[[Domain, Domain],
                        float] = lambda _, __: 0.0
     """
-    Pairwise check to perform on :any:`Domain`'s. 
+    Pairwise check to perform on :any:`Domain`'s.
     Returns True if and only if the pair satisfies the constraint.
     """
 
@@ -2484,8 +2862,8 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     evaluate: Callable[[Strand, Strand],
                        float] = lambda _, __: 0.0
     """
-    Pairwise evaluation to perform on :any:`Strand`'s. 
-    Returns float indicating how much the constraint is violated,  
+    Pairwise evaluation to perform on :any:`Strand`'s.
+    Returns float indicating how much the constraint is violated,
     or 0.0 if the constraint is satisfied.
     """
 
@@ -2513,6 +2891,40 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
         return summary_callback(strand1, strand2)
 
 
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
+    """Constraint that applies to a complex (tuple of :any:`Strand`'s)."""
+
+    evaluate: Callable[[Tuple[Strand, ...]],
+                       float] = lambda _, __: 0.0
+    """
+    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
+    Returns float indicating how much the constraint is violated,
+    or 0.0 if the constraint is satisfied.
+    """
+
+    summary: Callable[[Tuple[Strand, ...]],
+                      str] = lambda _, __: _no_summary_string
+
+    threaded: bool = False
+
+    def __call__(self, strand_complex: Tuple[Strand, ...]) -> float:
+        evaluate_callback = cast(Callable[[Tuple[Strand, ...]], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(strand_complex)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
+
+    def generate_summary(self, strand_complex: Tuple[Strand, ...], report_only_violations: bool) -> str:
+        summary_callback = cast(Callable[[Tuple[Strand, ...]], str],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(strand_complex)
+
+
 def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
                                transfer_callback: Callable[[float], float]) \
         -> List[Tuple[OrderedSet[Domain], float]]:
@@ -2535,7 +2947,7 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     evaluate: Callable[[Iterable[Tuple[Domain, Domain]]],
                        List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
     """
-    Pairwise check to perform on :any:`Domain`'s. 
+    Pairwise check to perform on :any:`Domain`'s.
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
@@ -2569,7 +2981,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     evaluate: Callable[[Iterable[Tuple[Strand, Strand]]],
                        List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
     """
-    Pairwise check to perform on :any:`Strand`'s. 
+    Pairwise check to perform on :any:`Strand`'s.
     Returns True if and only if the all pairs in the input iterable satisfy the constraint.
     """
 
@@ -2592,6 +3004,40 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
         summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand_pairs, report_only_violations)
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Tuple[Strand, ...]]]):
+    """
+    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
+    """
+
+    evaluate: Callable[[Iterable[Tuple[Strand, ...]]],
+                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
+    """
+    Check to perform on an iterable of complexes (tuples of :any:`Strand`'s).
+    Returns True if and only if the all complexes in the input iterable satisfy the constraint.
+    """
+
+    summary: Callable[[Iterable[Tuple[Strand, ...]], bool],
+                      ConstraintReport] = lambda _: _no_summary_string
+
+    def __call__(self, complexes: Iterable[Tuple[Strand, ...]]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
+        evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, ...]]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(complexes)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
+
+    def generate_summary(self, complexes: Iterable[Tuple[Strand, ...]],
+                         report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Tuple[Strand, ...]], bool], ConstraintReport],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(complexes, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2754,8 +3200,8 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 raise ValueError(f'domain {domain2.name} is fixed in one but not the other:\n'
                                  f'design1 domain {domain1.name} fixed = {domain1.fixed},\n'
                                  f'design2 domain {domain2.name} fixed = {domain2.fixed}')
-            if (domain1.pool_ is not None
-                    and domain2.pool_ is not None
+            if (domain1.has_pool()
+                    and domain2.has_pool()
                     and domain1.pool.name != domain2.pool.name):
                 raise ValueError(f'domain {domain2.name} pool name does not match:'
                                  f'design1 domain {domain1.name} pool = {domain1.pool.name},\n'
@@ -2873,13 +3319,19 @@ def nupack_4_strand_secondary_structure_constraint(
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
 
-    :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+    :param threshold:
+        energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
         :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
         one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
-    :param temperature: temperature in Celsius
-    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
-    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
-    :param negate: whether to negate free energy (making it larger for more favorable structures).
+    :param temperature:
+        temperature in Celsius
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
+    :param negate:
+        whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
@@ -2890,7 +3342,8 @@ def nupack_4_strand_secondary_structure_constraint(
         Whether to use threadds to parallelize.
     :param strands:
         Strands to check; if not specified, all strands are checked.
-    :param description: detailed description of constraint suitable for putting in report; if not specified
+    :param description:
+        detailed description of constraint suitable for putting in report; if not specified
         a reasonable default is chosen
     :param short_description: short description of constraint suitable for logging to stdout
     :return: constraint
@@ -2898,7 +3351,8 @@ def nupack_4_strand_secondary_structure_constraint(
 
     def evaluate(strand: Strand) -> float:
         threshold_value = convert_threshold(threshold, strand.group)
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         logger.debug(
             f'strand ss threshold: {threshold_value:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
@@ -2908,7 +3362,8 @@ def nupack_4_strand_secondary_structure_constraint(
         return max(0.0, excess)
 
     def summary(strand: Strand) -> str:
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
@@ -2944,7 +3399,9 @@ def nupack_domain_pair_constraint(
         weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
-        negate: bool = False) -> DomainPairConstraint:
+        negate: bool = False,
+        version4: bool = True,
+) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
@@ -2975,6 +3432,8 @@ def nupack_domain_pair_constraint(
         Detailed description of constraint suitable for summary report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
+    :param version4:
+        Whether to use NUPACK version 4.
     :return:
         The :any:`DomainPairConstraint`.
     """
@@ -2995,8 +3454,12 @@ def nupack_domain_pair_constraint(
     num_threads = cpu_count()
     thread_pool = ThreadPool(processes=num_threads)
 
-    def binding_closure(seq_pair: Tuple[str, str]) -> float:
-        return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
+    if version4:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding4(seq_pair[0], seq_pair[1], temperature, negate)
+    else:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
 
     def evaluate(domain1: Domain, domain2: Domain) -> float:
         threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
@@ -3028,7 +3491,10 @@ def nupack_domain_pair_constraint(
         seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
         energies = []
         for seq1, seq2 in seq_pairs:
-            energy = dv.binding(seq1, seq2, temperature, negate)
+            if version4:
+                energy = dv.binding4(seq1, seq2, temperature, negate)
+            else:
+                energy = dv.binding(seq1, seq2, temperature, negate)
             energies.append(energy)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
         lines = [f'{name1:{max_name_length}}, '
@@ -3244,6 +3710,1925 @@ def nupack_strand_pair_constraint(
                                 summary=summary)
 
 
+class _AdjacentDuplexType(Enum):
+    # Refer to comments under BaseTypePair for notation reference
+    #
+    #
+    # Domain definitions:
+    #   All AdjacentDuplexType are with reference to domain c.
+    #   AdjacentDuplexType is agnostic to the ends of domain c.
+    #   Hence, c is written as #-----# in each of the AdjacentDuplexType
+    #   variants.
+    #
+    #   c* - complement of c   (must exist)
+    #   d* - 5' neighbor of c* (does not neccessarily exist)
+    #   d  - complement of d*  (does not neccessarily exist)
+    #   e  - 5' neighbor of d  (does not neccessarily exist)
+    #   e* - complement of e   (does not neccessarily exist)
+    #
+    #                          # #
+    #                          |-|
+    #                       e* |-| e (bound)
+    #                          |-|
+    #                          # #
+    #                       c  ? # d
+    #                    #-----# #-----#
+    #                     |||||   |||||
+    #                    #-----###-----#
+    #                       c*    d*
+    #
+    #   Note: if "?" was a "#" (meaning e* is adjacent to c), then then
+    #   it would be a three arm junction
+    #
+    ###########################################################################
+
+    # d* does not exist
+    #                       c
+    #                    #-----#
+    #                     |||||
+    #                    #-----]
+    #                       c*
+    BOTTOM_RIGHT_EMPTY = auto()
+
+    # d* exist, but d does not exist
+    #                       c
+    #                    #-----#
+    #                     |||||
+    #                    #-----##----#
+    #                       c*    d*
+    BOTTOM_RIGHT_DANGLE = auto()
+
+    # d* and d exist, but e does not exist
+    # d is is the 5' end of the strand
+    #                       c     d
+    #                    #-----#[----#
+    #                     |||||  ||||
+    #                    #-----##----#
+    #                       c*    d*
+    TOP_RIGHT_5P = auto()
+
+    # d* and d and e exist, but e* does not exist
+    #                           #
+    #                           |
+    #                           | e (unbound)
+    #                           |
+    #                           #
+    #                       c   | d
+    #                    #-----#+---#
+    #                     ||||| ||||
+    #                    #-----#----#
+    #                       c*    d*
+    TOP_RIGHT_OVERHANG = auto()
+
+    # d* and d and e and e* exist
+    #
+    # ? on 3p end of c domain because this case is agnostic to
+    # whether c and e* are connected
+    #
+    #                          # #
+    #                          |-|
+    #                       e* |-| e (bound)
+    #                          |-|
+    #                          # #
+    #                       c  ? # d
+    #                    #-----# #---#
+    #                     |||||  ||||
+    #                    #-----###---#
+    #                       c*    d*
+    TOP_RIGHT_BOUND_OVERHANG = auto()
+
+
+default_interior_to_strand_probability = 0.98
+"""Default probability threshold for :py:attr:`BasePairType.INTERIOR_TO_STRAND`"""
+default_adjacent_to_exterior_base_pair = 0.95
+"""Default probability threshold for :py:attr:`BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR`"""
+
+default_blunt_end_probability = 0.33
+"""Default probability threshold for :py:attr:`BasePairType.BLUNT_END`"""
+
+default_nick_3p_probability = 0.79
+"""Default probability threshold for :py:attr:`BasePairType.NICK_3P`"""
+
+default_nick_5p_probability = 0.73
+"""Default probability threshold for :py:attr:`BasePairType.NICK_5P`"""
+
+default_dangle_3p_probability = 0.51
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_3P`"""
+
+default_dangle_5p_probability = 0.57
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_5P`"""
+
+default_dangle_5p_3p_probability = 0.73
+"""Default probability threshold for :py:attr:`BasePairType.DANGLE_5P_3P`"""
+
+default_overhang_on_this_strand_3p_probability = 0.82
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_THIS_STRAND_3P`"""
+
+default_overhang_on_this_strand_5p_probability = 0.79
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_THIS_STRAND_5P`"""
+
+default_overhang_on_adjacent_strand_3p_probability = 0.55
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P`"""
+
+default_overhang_on_adjacent_strand_5p_probability = 0.49
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P`"""
+
+default_overhang_on_both_strand_3p_probability = 0.61
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_BOTH_STRANDS_3P`"""
+
+default_overhang_on_both_strand_5p_probability = 0.55
+"""Default probability threshold for :py:attr:`BasePairType.OVERHANG_ON_BOTH_STRANDS_5P`"""
+
+default_three_arm_junction_probability = 0.69
+"""Default probability threshold for :py:attr:`BasePairType.THREE_ARM_JUNCTION`"""
+
+default_four_arm_junction_probability = 0.84
+"""Default probability threshold for :py:attr:`BasePairType.FOUR_ARM_JUNCTION`"""
+
+default_five_arm_junction_probability = 0.77
+"""Default probability threshold for :py:attr:`BasePairType.FIVE_ARM_JUNCTION`"""
+
+default_mismatch_probability = 0.76
+"""Default probability threshold for :py:attr:`BasePairType.MISMATCH`"""
+
+default_bulge_loop_3p_probability = 0.69
+"""Default probability threshold for :py:attr:`BasePairType.BULGE_LOOP_3P`"""
+
+default_bulge_loop_5p_probability = 0.65
+"""Default probability threshold for :py:attr:`BasePairType.BULGE_LOOP_5P`"""
+
+default_unpaired_probability = 0.95
+"""Default probability threshold for :py:attr:`BasePairType.UNPAIRED`"""
+
+default_other_probability = 0.70
+"""Default probability threshold for :py:attr:`BasePairType.OTHER`"""
+
+
+class BasePairType(Enum):
+    """
+    Represents different configurations for a base pair and it's immediate
+    neighboring base pairs (or lack thereof).
+
+    **Notation**:
+
+    * "#" indicates denotes the ends of a domain.
+      They can either be the end of a strand or they could be connected to another domain.
+    * "]" and "[" indicates 5' ends of strand
+    * ">" and "<" indicates 3' ends of a strand
+    * "-" indicates a base (number of these are not important).
+    * "|" indicates a bases are bound (forming a base pair).
+      Any "-" not connected by "|" is unbound
+
+    **Domain Example**:
+
+    The following represents an unbound domain of length 5
+
+    .. code-block:: none
+
+        #-----#
+
+    The following represents bound domains of length 5
+
+    .. code-block:: none
+
+        #-----#
+         |||||
+        #-----#
+
+
+    Ocassionally, domains will be vertical in the case of overhangs.
+    In this case, "-" and "|" have opposite meanings
+
+    **Vertical Domain Example**:
+
+    .. code-block:: none
+
+        # #
+        |-|
+        |-|
+        |-|
+        |-|
+        |-|
+        # #
+
+    **Formatting**:
+
+    * Top strands have 5' end on left side and 3' end on right side
+    * Bottom strand have 3' end on left side and 5' end on right side
+
+    **Strand Example**:
+
+    .. code-block:: none
+
+      strand0: a-b-c-d
+      strand1: d*-b*-c*-a*
+
+                  a      b      c      d
+      strand0  [-----##-----##-----##----->
+                |||||  |||||  |||||  |||||
+      strand1  <-----##-----##-----##-----]
+                  a*     b*     c*     d*
+
+    **Consecutive "#"**:
+
+    In some cases, extra "#" are needed to to make space for ascii art.
+    We consider any consecutive "#"s to be equivalent "##".
+    The following is consider equivalent to the example above
+
+    .. code-block:: none
+
+                  a       b        c      d
+      strand0  [-----###-----####-----##----->
+                |||||   |||||    |||||  |||||
+      strand1  <-----###-----####-----##-----]
+                  a*      b*       c*     d*
+
+    Note that only consecutive "#"s is consider equivalent to "##".
+    The following example is not equivalent to the strands above because
+    the "#  #" between b and c are seperated by spaces, so they are
+    not equivalent to "##", meaning that b and c neednot be adjacent.
+    Note that while b and c need not be adjacent, b* and c* are still
+    adjacent because they are seperated by consecutive "#"s with no
+    spaces in between.
+
+    .. code-block:: none
+
+                  a       b        c      d
+      strand0  [-----###-----#  #-----##----->
+                |||||   |||||    |||||  |||||
+      strand1  <-----###-----####-----##-----]
+                  a*      b*       c*     d*
+    """
+
+    INTERIOR_TO_STRAND = auto()
+    """
+    Base pair is located inside of a strand but not next
+    to a base pair that resides on the end of a strand.
+
+    Similar base-pairing probability compared to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` but usually breathes less.
+
+    .. code-block:: none
+
+        #-----##-----#
+         |||||  |||||
+        #-----##-----#
+             ^
+             |
+         base pair
+
+    """
+
+    ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()
+    """
+    Base pair is located inside of a strand and next
+    to a base pair that resides on the end of a strand.
+
+    Similar base-pairing probability compared to :py:attr:`INTERIOR_TO_STRAND` but usually breathes more.
+
+    .. code-block:: none
+
+        #-----#
+         |||||
+        #-----]
+            ^
+            |
+        base pair
+
+    or
+
+    .. code-block:: none
+
+
+        #----->
+         |||||
+        #-----#
+            ^
+            |
+        base pair
+    """
+
+    BLUNT_END = auto()
+    """
+    Base pair is located at the end of both strands.
+
+    .. code-block:: none
+
+        #----->
+         |||||
+        #-----]
+             ^
+             |
+         base pair
+    """
+
+    NICK_3P = auto()
+    """
+    Base pair is located at a nick involving the 3' end of the strand.
+
+    .. code-block:: none
+
+        #----->[-----#
+         |||||  |||||
+        #-----##-----#
+             ^
+             |
+         base pair
+
+    """
+
+    NICK_5P = auto()
+    """
+    Base pair is located at a nick involving the 3' end of the strand.
+
+    .. code-block:: none
+
+        #-----##-----#
+         |||||  |||||
+        #-----]<-----#
+             ^
+             |
+         base pair
+    """
+
+    DANGLE_3P = auto()
+    """
+    Base pair is located at the end of a strand with a dangle on the
+    3' end.
+
+    .. code-block:: none
+
+        #-----##----#
+         |||||
+        #-----]
+             ^
+             |
+         base pair
+    """
+
+    DANGLE_5P = auto()
+    """
+    Base pair is located at the end of a strand with a dangle on the
+    5' end.
+
+    .. code-block:: none
+
+        #----->
+         |||||
+        #-----##----#
+             ^
+             |
+         base pair
+    """
+
+    DANGLE_5P_3P = auto()
+    """
+    Base pair is located with dangle at both the 3' and 5' end.
+
+    .. code-block:: none
+
+        #-----##----#
+         |||||
+        #-----##----#
+             ^
+             |
+         base pair
+    """
+
+    OVERHANG_ON_THIS_STRAND_3P = auto()
+    """
+    Base pair is next to a overhang on the 3' end.
+
+    .. code-block:: none
+
+              #
+              |
+              |
+              |
+              #
+        #-----# #-----#
+         |||||   |||||
+        #-----###-----#
+             ^
+             |
+         base pair
+    """
+
+    OVERHANG_ON_THIS_STRAND_5P = auto()
+    """
+    Base pair is next to a overhang on the 5' end.
+
+    .. code-block:: none
+
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+              #
+              |
+              |
+              |
+              #
+    """
+
+    OVERHANG_ON_ADJACENT_STRAND_3P = auto()
+    """
+    Base pair 3' end interfaces with an overhang.
+
+    The adjacent base pair type is :py:attr:`OVERHANG_ON_THIS_STRAND_5P`
+
+    .. code-block:: none
+
+                #
+                |
+                |
+                |
+                #
+        #-----# #---#
+         |||||   |||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
+    OVERHANG_ON_ADJACENT_STRAND_5P = auto()
+    """
+    Base pair 5' end interfaces with an overhang.
+
+    The adjacent base pair type is :py:attr:`OVERHANG_ON_THIS_STRAND_3P`
+
+    .. code-block:: none
+
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+                #
+                |
+                |
+                |
+                #
+    """
+
+    OVERHANG_ON_BOTH_STRANDS_3P = auto()
+    """
+    Base pair's 3' end is an overhang and adjacent strand also has an overhang.
+
+    .. code-block:: none
+
+              # #
+              | |
+              | |
+              | |
+              # #
+        #-----# #---#
+         |||||  ||||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
+    OVERHANG_ON_BOTH_STRANDS_5P = auto()
+    """
+    Base pair's 5' end is an overhang and adjacent strand also has an overhang.
+
+    .. code-block:: none
+
+         base pair
+             |
+             v
+        #-----###-----#
+         |||||   |||||
+        #-----# #-----#
+              # #
+              | |
+              | |
+              | |
+              # #
+    """
+
+    THREE_ARM_JUNCTION = auto()
+    """
+    Base pair is located next to a three-arm-junction.
+
+    .. code-block:: none
+
+
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+        #-----# #---#
+         |||||  ||||
+        #-----###---#
+             ^
+             |
+         base pair
+    """
+
+    FOUR_ARM_JUNCTION = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
+
+    Base pair is located next to a four-arm-junction (e.g. Holliday junction).
+
+    .. code-block:: none
+
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+        #-----# #-----#
+         |||||   |||||
+        #-----# #-----#
+              # #
+              |-|
+              |-|
+              |-|
+              # #
+    """
+
+    FIVE_ARM_JUNCTION = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
+
+    Base pair is located next to a five-arm-junction.
+    """
+
+    MISMATCH = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`DANGLE_5P_3P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----##-##-----#
+         |||||     |||||
+        #-----##-##-----#
+             ^
+             |
+         base pair
+    """
+
+    BULGE_LOOP_3P = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_3P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----##-##-----#
+         |||||     |||||
+        #-----#####-----#
+             ^
+             |
+         base pair
+    """
+
+    BULGE_LOOP_5P = auto()
+    """
+    TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_5P`).
+
+    Base pair is located next to a mismatch.
+
+    .. code-block:: none
+
+        #-----#####-----#
+         |||||     |||||
+        #-----##-##-----#
+             ^
+             |
+         base pair
+    """
+
+    UNPAIRED = auto()
+    """
+    Base is unpaired.
+
+    Probabilities specify how unlikely a base is to be paired with another base.
+    """
+
+    OTHER = auto()
+    """
+    Other base pair types.
+    """
+
+    def default_pair_probability(self) -> float:
+        if self is BasePairType.INTERIOR_TO_STRAND:
+            return default_interior_to_strand_probability
+        elif self is BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR:
+            return default_adjacent_to_exterior_base_pair
+        elif self is BasePairType.BLUNT_END:
+            return default_blunt_end_probability
+        elif self is BasePairType.NICK_3P:
+            return default_nick_3p_probability
+        elif self is BasePairType.NICK_5P:
+            return default_nick_5p_probability
+        elif self is BasePairType.DANGLE_3P:
+            return default_dangle_3p_probability
+        elif self is BasePairType.DANGLE_5P:
+            return default_dangle_5p_probability
+        elif self is BasePairType.DANGLE_5P_3P:
+            return default_dangle_5p_3p_probability
+        elif self is BasePairType.OVERHANG_ON_THIS_STRAND_3P:
+            return default_overhang_on_this_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_THIS_STRAND_5P:
+            return default_overhang_on_this_strand_5p_probability
+        elif self is BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P:
+            return default_overhang_on_adjacent_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P:
+            return default_overhang_on_adjacent_strand_5p_probability
+        elif self is BasePairType.OVERHANG_ON_BOTH_STRANDS_3P:
+            return default_overhang_on_both_strand_3p_probability
+        elif self is BasePairType.OVERHANG_ON_BOTH_STRANDS_5P:
+            return default_overhang_on_both_strand_5p_probability
+        elif self is BasePairType.THREE_ARM_JUNCTION:
+            return default_three_arm_junction_probability
+        elif self is BasePairType.FOUR_ARM_JUNCTION:
+            return default_four_arm_junction_probability
+        elif self is BasePairType.FIVE_ARM_JUNCTION:
+            return default_five_arm_junction_probability
+        elif self is BasePairType.OTHER:
+            return default_other_probability
+        elif self is BasePairType.UNPAIRED:
+            return default_unpaired_probability
+        elif self is BasePairType.BULGE_LOOP_3P:
+            return default_bulge_loop_3p_probability
+        elif self is BasePairType.BULGE_LOOP_5P:
+            return default_bulge_loop_5p_probability
+        elif self is BasePairType.MISMATCH:
+            return default_mismatch_probability
+        else:
+            assert False
+
+
+@dataclass
+class StrandDomainAddress:
+    """An addressing scheme for specifying a domain on a strand.
+    """
+
+    strand: Strand
+    """strand to index
+    """
+
+    domain_idx: int
+    """order in which domain appears in :py:data:`StrandDomainAddress.strand`
+    """
+
+    def neighbor_5p(self) -> Optional['StrandDomainAddress']:
+        """Returns 5' domain neighbor. If domain is 5' end of strand, returns None
+
+        :return: StrandDomainAddress of 5' neighbor or None if no 5' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
+        idx = self.domain_idx - 1
+        if idx >= 0:
+            return StrandDomainAddress(self.strand, idx)
+        else:
+            return None
+
+    def neighbor_3p(self) -> Optional['StrandDomainAddress']:
+        """Returns 3' domain neighbor. If domain is 3' end of strand, returns None
+
+        :return: StrandDomainAddress of 3' neighbor or None if no 3' neighbor
+        :rtype: Optional[StrandDomainAddress]
+        """
+        idx = self.domain_idx + 1
+        if idx < len(self.strand.domains):
+            return StrandDomainAddress(self.strand, idx)
+        else:
+            return None
+
+    def domain(self) -> Domain:
+        """Returns domain referenced by this address.
+
+        :return: domain
+        :rtype: Domain
+        """
+        return self.strand.domains[self.domain_idx]
+
+    def __hash__(self) -> int:
+        return hash((self.strand, self.domain_idx))
+
+    def __eq__(self, other):
+        if isinstance(other, StrandDomainAddress):
+            return self.strand == other.strand and self.domain_idx == other.domain_idx
+        return False
+
+    def __str__(self) -> str:
+        return f'{{strand: {self.strand}, domain_idx: {self.domain_idx}}}'
+
+    def __repr__(self) -> str:
+        return self.__str__() + f' hash: {self.__hash__()}'
+
+
+def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
+                                         all_bound_domain_addresses: Dict[
+                                             StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
+    """Returns the BasePairType that corresponds to the base pair that sits on the
+    3' end of provided domain.
+
+    :param domain_addr: The address of the domain that contains the interested
+    :type domain_addr: StrandDomainAddress
+    :param all_bound_domain_addresses: A mapping of all the domain pairs in complex
+    :type all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]
+    :return: BasePairType of base pair on 3' end of domain
+    :rtype: BasePairType
+    """
+    # Declare domain variables:
+    #                              # #
+    #                              |-|
+    #                            ? |-| adjacent_5n_addr
+    #                              |-|
+    #                              # #
+    #             domain_addr      ? #        adjacent_addr
+    #    #-------------------------# #-------------------------------------#
+    #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+    #    #-------------------------###-------------------------------------#
+    #         complementary_addr              complementary_5n_addr
+    assert domain_addr in all_bound_domain_addresses
+    complementary_addr = all_bound_domain_addresses[domain_addr]
+    complementary_5n_addr = complementary_addr.neighbor_5p()
+    adjacent_addr: Optional[StrandDomainAddress] = None
+    adjacent_5n_addr: Optional[StrandDomainAddress] = None
+
+    # First assume BOTTOM_RIGHT_EMPTY
+    #            domain_addr
+    #    #-------------------------#
+    #     |||||||||||||||||||||||||
+    #    #-------------------------] <- Note this 3' end here
+    #         complementary_addr
+    adjacent_strand_type: _AdjacentDuplexType = _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY
+
+    if complementary_5n_addr is not None:
+        #   Since complementary_5n_addr exists, assume BOTTOM_RIGHT_DANGLE
+        #
+        #            domain_addr
+        #    #-------------------------#
+        #     |||||||||||||||||||||||||
+        #    #-------------------------###-------------------------------------#
+        #     complementary_addr                complementary_5n_addr
+        adjacent_strand_type = _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE
+        if complementary_5n_addr in all_bound_domain_addresses:
+            # Since complementary_5n_addr is bound, meaning
+            # adjacent_addr exist, assume TOP_RIGHT_5p
+            #
+            #             domain_addr                adjacent_addr
+            #    #-------------------------# [-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #          complementary_addr          complementary_5n_addr
+            adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_5P
+            adjacent_addr = all_bound_domain_addresses[complementary_5n_addr]
+            adjacent_5n_addr = adjacent_addr.neighbor_5p()
+            if adjacent_5n_addr is not None:
+                # Since adjacent_5n_addr exists, assume TOP_RIGHT_OVERHANG
+                #
+                #                                #
+                #                                |
+                #                                | adjacent_5n_addr
+                #                                |
+                #                                #
+                #             domain_addr        #       adjacent_addr
+                #    #-------------------------# #-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #          complementary_addr          complementary_5n_addr
+                adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_OVERHANG
+                if adjacent_5n_addr in all_bound_domain_addresses:
+                    # Since adjacent_5n_addr is bound, two possible cases:
+
+                    if domain_addr == adjacent_5n_addr:
+                        # Since domain_addr and adjacent_5n_addr
+                        # are the same, then this must be an internal base pair
+                        #
+                        #   domain_addr == adjacent_5n_addr        adjacent_addr
+                        #    #-------------------------###-------------------------------------#
+                        #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                        #    #-------------------------###-------------------------------------#
+                        #        complementary_addr            complementary_5n_addr
+
+                        # Assuming non-competitive, then this must be internal base pair or
+                        # if the domain is length 2 and the 5' type is not interior, then
+                        # it is adjacent to exterior base pair type
+                        domain = domain_addr.strand.domains[domain_addr.domain_idx]
+                        domain_next_to_interior_base_pair = domain_addr.neighbor_5p() is not None and complementary_addr.neighbor_3p() is not None
+                        if domain.length == 2 and not domain_next_to_interior_base_pair:
+                            #   domain_addr == adjacent_5n_addr        adjacent_addr
+                            #     |                                       |
+                            #    [--###-------------------------------------#
+                            #     ||   |||||||||||||||||||||||||||||||||||||
+                            #    <--###-------------------------------------#
+                            #     |                              |
+                            # complementary_addr       complementary_5n_addr
+                            return BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
+                        else:
+                            return BasePairType.INTERIOR_TO_STRAND
+                    else:
+                        # Since adjacent_5n_addr does not equal domain_addr,
+                        # must be a bound overhang:
+                        #
+                        #                              # #
+                        #                              |-|
+                        #                            ? |-| adjacent_5n_addr
+                        #                              |-|
+                        #                              # #
+                        #             domain_addr      ? #        adjacent_addr
+                        #    #-------------------------# #-------------------------------------#
+                        #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                        #    #-------------------------###-------------------------------------#
+                        #         complementary_addr            complementary_5n_addr
+                        adjacent_strand_type = _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG
+
+    domain_3n_addr = domain_addr.neighbor_3p()
+    if domain_3n_addr is None:
+        # domain_addr is at 3' end of strand
+        #
+        #            domain_addr
+        #    #------------------------->
+        #     |||||||||||||||||||||||||
+        #    #-------------------------#
+        #         complementary_addr
+
+        if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+            #            domain_addr
+            #    #------------------------->
+            #     |||||||||||||||||||||||||
+            #    #-------------------------]
+            #         complementary_addr
+            return BasePairType.BLUNT_END
+        elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+            #          domain_addr
+            #    #------------------------->
+            #     |||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #       complementary_addr              complementary_5n_addr
+            return BasePairType.DANGLE_5P
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
+            #             domain_addr                adjacent_addr
+            #    #-------------------------> [-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_addr    complementary_5n_addr
+            return BasePairType.NICK_3P
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+            #                                #
+            #                                |
+            #                                | adjacent_5n_addr
+            #                                |
+            #                                #
+            #             domain_addr        #        adjacent_addr
+            #    #-------------------------> #-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_addr    complementary_5n_addr
+            return BasePairType.OVERHANG_ON_ADJACENT_STRAND_3P
+        elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+            #                              # #
+            #                              |-|
+            #                            ? |-| adjacent_5n_addr
+            #                              |-|
+            #                              # #
+            #             domain_addr        #        adjacent_addr
+            #    #-------------------------> #-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #     complementary_addr    complementary_5n_addr
+            # TODO: Possible case (nick n-arm junction)
+            return BasePairType.OTHER
+        else:
+            # Shouldn't reach here
+            assert False
+    else:
+        # domain_addr is not the 3' end of the strand
+        #
+        #            domain_addr              domain_3n_addr
+        #    #-------------------------##-------------------------#
+
+        if domain_3n_addr not in all_bound_domain_addresses:
+            # domain_addr's 3' neighbor is an unbound overhang
+            if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+                #            domain_addr             domain_3n_addr
+                #    #-------------------------##-------------------------#
+                #     |||||||||||||||||||||||||
+                #    #-------------------------]
+                #     complementary_addr
+                return BasePairType.DANGLE_3P
+            elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+                #            domain_addr                 domain_3n_addr
+                #    #-------------------------##-------------------------------------#
+                #     |||||||||||||||||||||||||
+                #    #-------------------------##-------------------------------------#
+                #          complementary_addr            complementary_5n_addr
+                return BasePairType.DANGLE_5P_3P
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
+                #                              #
+                #                              |
+                #               domain_3n_addr |
+                #                              |
+                #                              #
+                #             domain_addr      #         adjacent_addr
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_addr    complementary_5n_addr
+                return BasePairType.OVERHANG_ON_THIS_STRAND_3P
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+                #                              # #
+                #                              | |
+                #               domain_3n_addr | | adjacent_5n_addr
+                #                              | |
+                #                              # #
+                #             domain_addr      # #       adjacent_addr
+                #    #-------------------------# #-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_addr    complementary_5n_addr
+                return BasePairType.OVERHANG_ON_BOTH_STRANDS_3P
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+                # TODO: Possible case (nick n-arm junction)
+                #                              #                    # #
+                #                              |                    |-|
+                #               domain_3n_addr |                    |-| adjacent_5n_addr
+                #                              |                    |-|
+                #                              #                    # #
+                #             domain_addr      #                      #       adjacent_addr
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                return BasePairType.OTHER
+            else:
+                # Shouldn't reach here
+                assert False
+        else:
+            # domain_addr's 3' neighbor is a bound domain
+
+            # Techinically, could be an interior base, but we should have caught this earlier
+            # back when we were determining AdjacentDuplexType.
+            #
+            # Assertion checks that it is not an internal base
+            #
+            #             domain_addr            domain_3n_addr == adjacent_addr
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------###-------------------------------------#
+            #        complementary_addr              complementary_5n_addr
+            assert domain_3n_addr != adjacent_addr
+
+            # Declare new variables:
+            domain_3n_complementary_addr = all_bound_domain_addresses[domain_3n_addr]
+            domain_3n_complementary_3n_addr = domain_3n_complementary_addr.neighbor_3p()
+            #             domain_addr                 domain_3n_addr
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #        complementary_addr      # domain_3n_complementary_addr
+            #                                #
+            #                                |
+            #                                | domain_3n_complementary_3n_addr
+            #                                |
+            #                                #
+
+            # Three cases:
+            #
+            # domain_3n_complementary_addr is 3' end
+            #             domain_addr                 domain_3n_addr
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# <-------------------------------------#
+            #         complementary_addr         domain_3n_complementary_addr
+            #
+            # domain_3n_complementary_3n_addr is unbound overhang
+            #             domain_addr                 domain_3n_addr
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #           complementary_addr   # domain_3n_complementary_addr
+            #                                #
+            #                                |
+            #                                | domain_3n_complementary_3n_addr
+            #                                |
+            #                                #
+            #
+            # domain_3n_complementary_3n_addr is unbound overhang
+            #             domain_addr                 domain_3n_addr
+            #    #-------------------------###-------------------------------------#
+            #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+            #    #-------------------------# #-------------------------------------#
+            #         complementary_addr   ? #    domain_3n_complementary_addr
+            #                              # #
+            #                              |-|
+            #                              |-| domain_3n_complementary_3n_addr
+            #                              |-|
+            #                              #-#
+            #
+            # Variable is None, False, True respectively based on cases above
+            domain_3n_complementary_3n_addr_is_bound: Optional[bool] = None
+            if domain_3n_complementary_3n_addr is not None:
+                domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
+
+            # Not an internal base pair since domain_addr's 3' neighbor is
+            # bounded to a domain that is not complementary's 5' neighbor
+            if adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_EMPTY:
+                # NICK_5P
+                #
+                #             domain_addr                 domain_3n_addr
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] <-------------------------------------#
+                #        complementary_addr           domain_3n_complementary_addr
+                #
+                #                        OR
+                #
+                # OVERHANG_ON_ADJACENT_STRAND_5P
+                #
+                #             domain_addr                 domain_3n_addr
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] #-------------------------------------#
+                #          complementary_addr    #   domain_3n_complementary_addr
+                #                                #
+                #                                |
+                #                                | domain_3n_complementary_3n_addr
+                #                                |
+                #                                #
+                #
+                #                        OR
+                #
+                # OTHER
+                #
+                #             domain_addr                 domain_3n_addr
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------] #-------------------------------------#
+                #           complementary_addr   # domain_3n_complementary_addr
+                #                              # #
+                #                              |-|
+                #                              |-| domain_3n_complementary_3n_addr
+                #                              |-|
+                #                              # #
+                if domain_3n_complementary_3n_addr_is_bound is None:
+                    return BasePairType.NICK_5P
+                elif domain_3n_complementary_3n_addr_is_bound is False:
+                    return BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P
+                else:
+                    return BasePairType.OTHER
+            elif adjacent_strand_type is _AdjacentDuplexType.BOTTOM_RIGHT_DANGLE:
+                # OVERHANG_ON_THIS_STRAND_5P
+                #
+                #             domain_addr               domain_3n_addr
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------# #-------------------------------------#
+                #          complementary_addr  #   domain_3n_complementary_addr
+                #                              #
+                #                              |
+                #                              |
+                #                              |
+                #                              #
+                #
+                #                        OR
+                #
+                # OVERHANG_ON_BOTH_STRAND_5P
+                #
+                #             domain_addr               domain_3n_addr
+                #    #-------------------------###-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------# #-------------------------------------#
+                #           complementary_addr # # domain_3n_complementary_addr
+                #                              # #
+                #                              | |
+                #                              | | domain_3n_complementary_3n_addr
+                #                              | |
+                #                              # #
+                #
+                #                        OR
+                #
+                #
+                # OTHER
+                # TODO: Possible case (nick n-arm junction)
+                #
+                #             domain_addr                                   domain_3n_addr
+                #    #-------------------------########-------------------------------------#
+                #     |||||||||||||||||||||||||        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------#      #-------------------------------------#
+                #           complementary_addr #      # domain_3n_complementary_addr
+                #                              #    # #
+                #                              |    |-|
+                #                              |    |-| domain_3n_complementary_3n_addr
+                #                              |    |-|
+                #                              #    # #
+
+                if domain_3n_complementary_3n_addr_is_bound is None:
+                    return BasePairType.OVERHANG_ON_THIS_STRAND_5P
+                elif domain_3n_complementary_3n_addr_is_bound is False:
+                    return BasePairType.OVERHANG_ON_BOTH_STRANDS_5P
+                else:
+                    return BasePairType.OTHER
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_5P:
+                # TODO: Possible case (nick n-arm junction)
+                # TODO: Bound DANGLE_5P_3P? or OTHER?
+                #                              # #
+                #                              |-|
+                #               domain_3n_addr |-| domain_3n_complementary_addr
+                #                              |-|
+                #                              # v
+                #             domain_addr      #           adjacent_addr
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_addr                 complementary_5n_addr
+                #
+                #
+                #
+                #                              # #
+                #                              |-|
+                #               domain_3n_addr |-| domain_3n_complementary_addr
+                #                              |-|
+                #                              # ##---------#
+                #             domain_addr      #       adjacent_addr
+                #    #-------------------------# [-------------------------------------#
+                #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------###-------------------------------------#
+                #     complementary_addr                                  complementary_5n_addr
+                #
+                #
+                #
+                #
+                #                              # #
+                #                              |-|
+                #               domain_3n_addr |-| domain_3n_complementary_addr
+                #                              |-|
+                #                              # ##---------#
+                #             domain_addr      #   |||||||||                     adjacent_addr
+                #    #-------------------------#  #---------#         [-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                                     complementary_5n_addr
+                return BasePairType.OTHER
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_OVERHANG:
+                # TODO: Possible case (nick n-arm junction)
+                # Bound DANGLE_5P_3P?
+                #                              # #                    #
+                #                              |-|                    |
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
+                #                              |-|                    |
+                #                              # v                    #
+                #             domain_addr      #                      #       adjacent_addr
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                #
+                #
+                #
+                #                              # #                    #
+                #                              |-|                    |
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
+                #                              |-|                    |
+                #                              # ##---------#         #
+                #             domain_addr      #                      #       adjacent_addr
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                #
+                #                              # #                    #
+                #                              |-|                    |
+                #               domain_3n_addr |-|                    | adjacent_5n_addr
+                #                              |-|                    |
+                #                              # ##---------#         #
+                #             domain_addr      #   |||||||||          #       adjacent_addr
+                #    #-------------------------#  #---------#         #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                return BasePairType.OTHER
+            elif adjacent_strand_type is _AdjacentDuplexType.TOP_RIGHT_BOUND_OVERHANG:
+                #                              # #                  # #
+                #                              |-|                  |-|
+                #               domain_3n_addr |-|                  |-| adjacent_5n_addr
+                #                              |-|                  |-|
+                #                              # #                  # #
+                #             domain_addr      #                      #       adjacent_addr
+                #    #-------------------------#                      #-------------------------------------#
+                #     |||||||||||||||||||||||||                        |||||||||||||||||||||||||||||||||||||
+                #    #-------------------------########################-------------------------------------#
+                #     complementary_addr                         complementary_5n_addr
+                assert adjacent_5n_addr is not None
+                if domain_3n_addr == all_bound_domain_addresses[adjacent_5n_addr]:
+                    #                              # #
+                    #                              |-|
+                    #               domain_3n_addr |-| adjacent_5n_addr
+                    #                              |-|
+                    #                              # #
+                    #             domain_addr      # #       adjacent_addr
+                    #    #-------------------------# #-------------------------------------#
+                    #     |||||||||||||||||||||||||   |||||||||||||||||||||||||||||||||||||
+                    #    #-------------------------###-------------------------------------#
+                    #     complementary_addr    complementary_5n_addr
+                    return BasePairType.THREE_ARM_JUNCTION
+                else:
+                    # Could possibly be n-arm junction
+                    return BasePairType.OTHER
+            else:
+                # Should not make it here
+                assert False
+
+
+@dataclass(frozen=True)
+class _BasePairDomainEndpoint:
+    """A base pair endpoint in the context of the domain it resides on.
+
+    Numbering the bases in strand complex order, of the two bound domains,
+    domain1 is defined to be the domain that occurs earlier and domain2 is
+    defined to be the domain that occurs later.
+
+    ```(this line is to avoid Python syntax highlighting of ASCII art below)
+                 domain1_5p_index
+                 |
+    domain1   5' --------------------------------- 3'
+                 | | | | | | | | | | | | | | | | |
+    domain2   3' --------------------------------- 5'
+              ^  |                                 ^
+              |  domain2_3p_index                  |
+              |                                    |
+              |                                    |
+    domain1_5p_domain2_3p_exterior_base_pair_type  |
+                                                   |
+                            domain1_3p_domain2_5p_exterior_base_pair_type
+    ```
+    """
+    domain1_5p_index: int
+    domain2_3p_index: int
+    domain_base_length: int
+    domain1_5p_domain2_base_pair_type: BasePairType
+    domain1_3p_domain1_base_pair_type: BasePairType
+
+
+@dataclass(frozen=True)
+class _BasePair:
+    base_index1: int
+    base_index2: int
+    base_pairing_probability: float
+    base_pair_type: BasePairType
+
+
+BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
+"""Represents a reference to a base. Can be either specified as a NUPACK base
+index or an index of a dsd :py:class:`StrandDomainAddress`:
+"""
+BasePairAddress = Tuple[BaseAddress, BaseAddress]
+"""Represents a reference to a base pair
+"""
+BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
+"""Represents bound domains
+"""
+
+
+def _get_implicitly_bound_domain_addresses(strand_complex: Tuple[Strand, ...],
+                                           nonimplicit_base_pairs_domain_names: Set[str] = None) \
+        -> Dict[StrandDomainAddress, StrandDomainAddress]:
+    """Returns a map of all the implicitly bound domain addresses
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :param nonimplicit_base_pairs_domain_names: Set of all domain names to ignore in this search, defaults to None
+    :type nonimplicit_base_pairs_domain_names: Set[str], optional
+    :return: Map of all implicitly bound domain addresses
+    :rtype: Dict[StrandDomainAddress, StrandDomainAddress]
+    """
+    if nonimplicit_base_pairs_domain_names is None:
+        nonimplicit_base_pairs_domain_names = set()
+
+    implicitly_bound_domain_addresses = {}
+    implicit_seen_domains: Dict[str, StrandDomainAddress] = {}
+    for strand in strand_complex:
+        for domain_idx, domain in enumerate(strand.domains):
+            # Get domain_name
+            domain_name = domain.name
+            if domain_idx in strand.starred_domain_indices:
+                domain_name = domain.starred_name
+
+            # Move on to next domain if it was paired via nonimplicit_base_pairs
+            if domain_name in nonimplicit_base_pairs_domain_names:
+                continue
+
+            # populate implicit bounded_domains
+            strand_domain_address = StrandDomainAddress(strand, domain_idx)
+            # Assertions checks that domain_name was not previously seen.
+            # This is to check that the non-competition requirement on
+            # implicit domains was properly checked earlier in input validation.
+            assert domain_name not in implicit_seen_domains
+            implicit_seen_domains[domain_name] = strand_domain_address
+
+            complementary_domain_name = Domain.complementary_domain_name(domain_name)
+            if complementary_domain_name in implicit_seen_domains:
+                complementary_strand_domain_address = implicit_seen_domains[complementary_domain_name]
+                implicitly_bound_domain_addresses[strand_domain_address] = complementary_strand_domain_address
+                implicitly_bound_domain_addresses[complementary_strand_domain_address] = strand_domain_address
+
+    return implicitly_bound_domain_addresses
+
+
+def _get_addr_to_starting_base_pair_idx(strand_complex: Tuple[Strand, ...]) -> Dict[StrandDomainAddress, int]:
+    """Returns a mapping between StrandDomainAddress and the base index of the
+    5' end base of the domain
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :return: Map of StrandDomainAddress to starting base index
+    :rtype: Dict[StrandDomainAddress, int]
+    """
+    # Fill addr_to_starting_base_pair_idx and all_bound_domain_addresses
+    addr_to_starting_base_pair_idx = {}
+    domain_base_index = 0
+    for strand in strand_complex:
+        for domain_idx, domain in enumerate(strand.domains):
+            addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
+            domain_base_index += domain.length
+
+    return addr_to_starting_base_pair_idx
+
+
+def _leafify_domain(domain: Domain) -> List[Domain]:
+    """Returns the list of all leaf subdomains that make up domain
+
+    :param domain: Domain
+    :type domain: Domain
+    :return: List of leaf subdomains
+    :rtype: List[Domain]
+    """
+    if len(domain.subdomains) == 0:
+        return [domain]
+    else:
+        ret = []
+        for sd in domain.subdomains:
+            ret += _leafify_domain(sd)
+        return ret
+
+
+def _leafify_strand(
+        strand: Strand,
+        addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
+    """Create a new strand that is made of the leaf subdomains. Also updates an
+    addr_translation_table which maps StrandDomainAddress from old strand to new
+    strand. Since a domain may consist of multiple subdomains, a single StrandDomainAddress
+    may map to a list of StrandDomainAddresses, listed in 5' to 3' order.
+
+    :param strand: Strand
+    :type strand: Strand
+    :param addr_translation_table: Maps old StrandDomainAddress to new StrandDomainAddress
+    :type addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]
+    :return: Leafified strand
+    :rtype: Strand
+    """
+    leafify_domains: List[List[Domain]] = [_leafify_domain(d) for d in strand.domains]
+    new_domains: List[Domain] = []
+    new_starred_domain_indices: List[int] = []
+    new_starred_domain_idx = 0
+    addr_translation_table_without_strand: Dict[int, List[int]] = {}
+    for (idx, leaf_domain_list) in enumerate(leafify_domains):
+        new_domain_indices = []
+        for i in range(new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)):
+            new_domain_indices.append(i)
+
+        addr_translation_table_without_strand[idx] = new_domain_indices
+        if idx in strand.starred_domain_indices:
+            new_domains.extend(reversed(leaf_domain_list))
+            # Star every single subdomain that made up original starred domain
+            new_starred_domain_indices.extend(new_domain_indices)
+        else:
+            new_domains.extend(leaf_domain_list)
+
+        new_starred_domain_idx += len(leaf_domain_list)
+    new_strand: Strand = Strand(domains=new_domains, starred_domain_indices=new_starred_domain_indices,
+                                name=f"leafifed {strand.name}")
+    for idx, new_idxs in addr_translation_table_without_strand.items():
+        new_addrs = [StrandDomainAddress(new_strand, new_idx) for new_idx in new_idxs]
+        addr_translation_table[StrandDomainAddress(strand, idx)] = new_addrs
+
+    return new_strand
+
+
+def _get_base_pair_domain_endpoints_to_check(
+        strand_complex: Tuple[Strand, ...],
+        nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
+    """Returns the set of all the _BasePairDomainEndpoint to check
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
+    :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
+    :raises ValueError: If there are multiple instances of the same strand in a complex
+    :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
+    :raises ValueError: If address given in nonimplicit_base_pairs is not found
+    :return: Set of all the _BasePairDomainEndpoint to check
+    :rtype: Set[_BasePairDomainEndpoint]
+    """
+    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
+
+    # Need to convert strands into strands lowest level subdomains
+    leafify_strand_complex = tuple(
+        [_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
+
+    new_nonimplicit_base_pairs = []
+    if nonimplicit_base_pairs:
+        for bp in nonimplicit_base_pairs:
+            (addr1, addr2) = bp
+            new_addr1_list = addr_translation_table[addr1]
+            new_addr2_list = list(reversed(addr_translation_table[addr2]))
+
+            assert len(new_addr1_list) == len(new_addr2_list)
+            for idx in range(len(new_addr1_list)):
+                new_nonimplicit_base_pairs.append((new_addr1_list[idx], new_addr2_list[idx]))
+
+    return __get_base_pair_domain_endpoints_to_check(
+        leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs)
+
+
+def __get_base_pair_domain_endpoints_to_check(
+        strand_complex: Tuple[Strand, ...],
+        nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
+    """Returns the set of all the _BasePairDomainEndpoint to check
+
+    :param strand_complex: Tuple of strands representing strand complex
+    :type strand_complex: Tuple[Strand, ...]
+    :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
+    :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
+    :raises ValueError: If there are multiple instances of the same strand in a complex
+    :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
+    :raises ValueError: If address given in nonimplicit_base_pairs is not found
+    :return: Set of all the _BasePairDomainEndpoint to check
+    :rtype: Set[_BasePairDomainEndpoint]
+    """
+    # Maps domain pairs
+    all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress] = {}
+
+    # Keep track of all the domain names that are provided as
+    # part of a nonimplicit_base_pair so that input validation
+    # knows to ignore these domain names.
+    nonimplicit_base_pairs_domain_names: Set[str] = set()
+
+    if nonimplicit_base_pairs is not None:
+        for (addr1, addr2) in nonimplicit_base_pairs:
+            d1 = addr1.strand.domains[addr1.domain_idx]
+            d2 = addr2.strand.domains[addr2.domain_idx]
+            if d1 is not d2:
+                print('WARNING: a base pair is specified between two different domain objects')
+            nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
+            nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
+            nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
+            nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=True))
+
+            all_bound_domain_addresses[addr1] = addr2
+            all_bound_domain_addresses[addr2] = addr1
+
+    # Input validation checks:
+    #
+    # No repeated strand
+    #
+    # No competition:
+    #   check no "competition" between domain (at most one
+    #   starred domain for every domain, unless given as nonimplicit_base_pair)
+    #   Count number of occuruences of each domain
+    seen_strands: Set[Strand] = set()
+    domain_counts: Dict[str, int] = defaultdict(int)
+    for strand in strand_complex:
+        if strand in seen_strands:
+            raise ValueError(f"Multiple instances of a strand in a complex is not allowed."
+                             " Please make a separate Strand object with the same Domain objects in the same order"
+                             " but a different strand name")
+        seen_strands.add(strand)
+        for idx, domain in enumerate(strand.domains):
+            is_starred = idx in strand.starred_domain_indices
+            domain_name = domain.get_name(is_starred)
+            if domain_name not in nonimplicit_base_pairs_domain_names:
+                domain_counts[domain_name] += 1
+
+    # Check final counts of each domain for competition
+    for domain_name in domain_counts:
+        domain_name_complement = Domain.complementary_domain_name(domain_name)
+        if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+            assert domain_name not in nonimplicit_base_pairs_domain_names
+            raise ValueError(
+                f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
+                f"Violating domain: {domain_name_complement}")
+    # End Input Validation #
+
+    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
+                                         int] = _get_addr_to_starting_base_pair_idx(strand_complex)
+    all_bound_domain_addresses.update(_get_implicitly_bound_domain_addresses(
+        strand_complex, nonimplicit_base_pairs_domain_names))
+
+    # Set of all bound domain endpoints to check.
+    base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
+
+    for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
+        domain_base_length = domain_addr.domain().length
+        assert domain_base_length == comple_addr.domain().length
+
+        if domain_addr not in addr_to_starting_base_pair_idx:
+            if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:
+                raise ValueError(f'StrandDomainAddress {domain_addr} is not found in given complex')
+            else:
+                print(f'StrandDomainAddress {domain_addr} is not found in given complex')
+                assert False
+
+        if comple_addr not in addr_to_starting_base_pair_idx:
+            if comple_addr.domain().name in nonimplicit_base_pairs_domain_names:
+                raise ValueError(f'StrandDomainAddress {comple_addr} is not found in given complex')
+            else:
+                print(f'StrandDomainAddress {comple_addr} is not found in given complex')
+                assert False
+
+        domain_5p = addr_to_starting_base_pair_idx[domain_addr]
+        comple_5p = addr_to_starting_base_pair_idx[comple_addr]
+
+        # Define domain1 to be the "earlier" domain
+        if domain_5p < comple_5p:
+            domain1_addr = domain_addr
+            domain1_5p = domain_5p
+
+            domain2_addr = comple_addr
+            domain2_5p = comple_5p
+        else:
+            domain1_addr = comple_addr
+            domain1_5p = comple_5p
+
+            domain2_addr = domain_addr
+            domain2_5p = domain_5p
+
+        domain2_3p = domain2_5p + domain_base_length - 1
+
+        # domain1                     5' --------------------------------- 3'
+        #                                | | | | | | | | | | | | | | | | |
+        # domain2                     3' --------------------------------- 5'
+        #                             ^                                    ^
+        #                             |                                    |
+        #                   d1_5p_d2_3p_ext_bp_type                        |
+        #                                                                  |
+        #                                                       d1_3p_d2_5p_ext_bp_type
+        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr,
+                                                                       all_bound_domain_addresses)
+        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr,
+                                                                       all_bound_domain_addresses)
+
+        base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(
+            domain1_5p, domain2_3p, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
+
+    return base_pair_domain_endpoints_to_check
+
+
+def nupack_4_complex_secondary_structure_constraint(
+        strand_complexes: List[Tuple[Strand, ...]],
+        nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
+        all_base_pairs: Optional[Iterable[BoundDomains]] = None,
+        base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
+        base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
+        base_pair_prob: Dict[BasePairAddress, float] = None,
+        base_unpaired_prob: Dict[BaseAddress, float] = None,
+        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
+        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'complex_secondary_structure_nupack',
+        threaded: bool = False,
+) -> ComplexConstraint:
+    """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
+
+    :param strand_complexes:
+        Iterable of :any:`Strand` tuples
+    :type strand_complexes:
+        List[Tuple[Strand, ...]]
+    :param nonimplicit_base_pairs:
+        List of nonimplicit base pairs that cannot be inferred because multiple
+        instances of the same :py:class:`Domain` exist in complex.
+
+        The :py:attr:`StrandDomainAddress.strand` field of each address should
+        reference a strand in the first complex in ``strand_complexes``.
+
+        For example,
+        if one :py:class:`Strand` has one T :py:class:`Domain` and another
+        strand in the complex has two T* :py:class:`Domain` s, then the intended
+        binding graph cannot be inferred and must be stated explicitly in this
+        field.
+    :type nonimplicit_base_pairs:
+        Optional[Iterable[BoundDomains]]
+    :param all_base_pairs:
+        List of all base pairs in complex. If not provided, then base pairs are
+        infered based on the name of :py:class:`Domain` s in the complex as well
+        as base pairs specified in ``nonimplicit_base_pairs``.
+
+
+        **TODO**: This has not been implemented yet, and the behavior is as if this
+        parameter is always ``None`` (binding graph is always inferred).
+    :type all_base_pairs:
+        Optional[Iterable[BoundDomains]]
+    :param base_pair_prob_by_type:
+        Probability lower bounds for each :py:class:`BasePairType`.
+        All :py:class:`BasePairType` comes with a default
+        such as :py:data:`default_interior_to_strand_probability` which will be
+        used if a lower bound is not specified for a particular type.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
+    :type base_pair_prob_by_type:
+        Optional[Dict[BasePairType, float]]
+    :param base_pair_prob_by_type_upper_bound:
+        Probability upper bounds for each :py:class:`BasePairType`.
+        By default, no upper bound is set.
+
+        **Note**: Despite the name of this parameter, set thresholds for unpaired
+        bases by specifying a threshold for :py:attr:`BasePairType.UNPAIRED`.
+
+        **TODO**: This has not been implemented yet.
+    :type base_pair_prob_by_type_upper_bound:
+        Dict[BasePairType, float], optional
+    :param base_pair_prob:
+        Probability lower bounds for each :py:class:`BasePairAddress` which takes
+        precedence over probabilities specified by ``base_pair_prob_by_type``.
+
+        **TODO**: This has not been implemented yet.
+    :type base_pair_prob:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob:
+        Probability lower bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type[BasePairType.UNPAIRED]``.
+    :type base_unpaired_prob:
+        Optional[Dict[BaseAddress, float]]
+    :param base_pair_prob_upper_bound:
+        Probability upper bounds for each :py:class`BasePairAddress` which takes
+        precedence over probabilties specified by ``base_pair_prob_by_type_upper_bound``.
+    :type base_pair_prob_upper_bound:
+        Optional[Dict[BasePairAddress, float]]
+    :param base_unpaired_prob_upper_bound:
+        Probability upper bounds for each :py:class:`BaseAddress` representing
+        unpaired bases. These lower bounds take precedence over the probability
+        specified by ``base_pair_prob_by_type_upper_bound[BasePairType.UNPAIRED]``.
+    :type base_unpaired_prob_upper_bound:
+        Optional[Dict[BaseAddress, float]]
+    :param temperature:
+        Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
+    :type temperature: float, optional
+    :param weight:
+        See :py:data:`Constraint.weight`, defaults to 1.0
+    :type weight:
+        float, optional
+    :param weight_transfer_function:
+        Weight transfer function to use. By default, f(x) = x is used, where x
+        is the sum of the squared errors of each base pair that violates the
+        threshold.
+    :type weight_transfer_function: Callable[[float], float], optional
+    :param description:
+        See :py:data:`Constraint.description`, defaults to None
+    :type description:
+        Optional[str], optional
+    :param short_description:
+        See :py:data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
+    :type short_description:
+        str, optional
+    :param threaded:
+        **TODO**: Implement this
+    :type threaded:
+        bool, optional
+    :raises ImportError:
+        If NUPACK 4 is not installed.
+    :raises ValueError:
+        If ``strand_complexes`` is not valid. In order for ``strand_complexes`` to
+        be valid, ``strand_complexes`` must:
+
+        * Consist of complexes (tuples of :py:class:`Strand` objects)
+        * Each complex must be of the same motif
+
+            * Same number of :py:class:`Strand` s in each complex
+            * Same number of :py:class:`Domain` s in each :py:class:`Strand`
+            * Same number of bases in each :py:class:`Domain`
+    :return: ComplexConstraint
+    :rtype: ComplexConstraint
+    """
+    try:
+        from nupack import Complex as NupackComplex
+        from nupack import Model as NupackModel
+        from nupack import ComplexSet as NupackComplexSet
+        from nupack import Strand as NupackStrand
+        from nupack import SetSpec as NupackSetSpec
+        from nupack import complex_analysis as nupack_complex_analysis
+        from nupack import PairsMatrix as NupackPairsMatrix
+    except ModuleNotFoundError:
+        raise ImportError(
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    # Start Input Validation
+    if len(strand_complexes) == 0:
+        raise ValueError("strand_complexes list cannot be empty.")
+
+    strand_complex_template = strand_complexes[0]
+
+    if type(strand_complex_template) is not tuple:
+        raise ValueError(
+            f"First element in strand_complexes was not a tuple of Strands. Please provide a tuple of Strands.")
+
+    for strand in strand_complex_template:
+        if type(strand) is not Strand:
+            raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(strand)}")
+
+    for idx in range(1, len(strand_complexes)):
+        strand_complex = strand_complexes[idx]
+        if type(strand_complex) is not tuple:
+            raise ValueError(
+                f"Element at index {idx} was not a tuple of Strands. Please provide a tuple of Strands.")
+        if len(strand_complex) != len(strand_complex_template):
+            raise ValueError(
+                f"Inconsistent complex structures: Complex at index {idx} contained {len(strand_complex)} strands, "
+                f"but complex at index 0 contained {len(strand_complex_template)} strands.")
+        for s in range(len(strand_complex)):
+            other_strand: Strand = strand_complex[s]
+            template_strand: Strand = strand_complex_template[s]
+            if type(other_strand) is not Strand:
+                raise ValueError(
+                    f"Complex at index {idx} contained non-Strand object at index {s}: {type(other_strand)}")
+            if len(other_strand.domains) != len(template_strand.domains):
+                raise ValueError(
+                    f"Strand {other_strand} (index {s} of strand_complexes at index {idx}) does not match the provided template"
+                    f"({template_strand}). "
+                    f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
+                    f"{len(template_strand.domains)} domains.")
+            for d in range(1, len(other_strand.domains)):
+                domain_length: int = other_strand.domains[d].length
+                template_domain_length: int = template_strand.domains[d].length
+                if domain_length != template_domain_length:
+                    raise ValueError(
+                        f"Strand {other_strand} (the strand at index {s} of the complex located at index {idx} of strand_complexes) does not match the "
+                        f"provided template ({template_strand}): domain at index {d} is length "
+                        f"{domain_length}, but expected {template_domain_length}.")
+
+    base_pair_domain_endpoints_to_check = _get_base_pair_domain_endpoints_to_check(
+        strand_complex_template, nonimplicit_base_pairs=nonimplicit_base_pairs)
+
+    # Start populating base_pair_probs
+    base_type_probability_threshold: Dict[BasePairType, float] = (
+        {} if base_pair_prob_by_type is None else base_pair_prob_by_type.copy())
+    for base_type in BasePairType:
+        if base_type not in base_type_probability_threshold:
+            base_type_probability_threshold[base_type] = base_type.default_pair_probability()
+    # End populating base_pair_probs
+
+    nupack_model = NupackModel(material='dna', celsius=temperature)
+
+    if description is None:
+        description = ' '.join([str(s) for s in strand_complex_template])
+
+    def evaluate(strand_complex_: Tuple[Strand, ...]) -> float:
+        bps = _violation_base_pairs(strand_complex_)
+        err_sq = 0.0
+        for bp in bps:
+            e = base_type_probability_threshold[bp.base_pair_type] - bp.base_pairing_probability
+            assert e > 0
+            err_sq += e ** 2
+        return err_sq
+
+    # summary would print all the base pairs
+    # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
+    # * maybe consider puting second and after base pairs on new line with indent
+    def summary(strand_complex_: Tuple[Strand, ...]) -> str:
+        bps = _violation_base_pairs(strand_complex_)
+        if len(bps) == 0:
+            return "\tAll base pairs satisfy thresholds."
+        summary_list = []
+        for bp in bps:
+            i = bp.base_index1
+            j = bp.base_index2
+            p = bp.base_pairing_probability
+            t = bp.base_pair_type
+            summary_list.append(
+                f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+        return '\n'.join(summary_list)
+
+    def _violation_base_pairs(strand_complex_: Tuple[Strand, ...]) -> List[_BasePair]:
+        nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
+        nupack_complex: NupackComplex = NupackComplex(nupack_strands)
+
+        nupack_complex_set = NupackComplexSet(
+            nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
+        nupack_complex_analysis_result = nupack_complex_analysis(
+            nupack_complex_set, compute=['pairs'], model=nupack_model)
+        pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
+        nupack_complex_result: np.ndarray = pairs.to_array()
+
+        # DEBUG: Print out result matrix
+        # for r in nupack_complex_result:
+        #     for c in r:
+        #         print("{:.2f}".format(c), end=' ')
+        #     print()
+
+        # DEBUG: Print out complex strands and sequences
+        # for strand in strand_complex:
+        #     print(f'{strand.name}: {strand.sequence()}')
+
+        # Refactor all this into a function that returns all the base pairs that are below threshold
+        # eval would take the squared sum of prob differences
+
+        # Probability threshold
+        internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
+        unpaired_base_prob = base_type_probability_threshold[BasePairType.UNPAIRED]
+        border_internal_base_pair_prob = base_type_probability_threshold[
+            BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
+
+        # Tracks which bases are paired. Used to determine unpaired bases.
+        expected_paired_idxs: Set[int] = set()
+
+        # Collect violating base pairs
+        bps: List[_BasePair] = []
+        for e in base_pair_domain_endpoints_to_check:
+            domain1_5p = e.domain1_5p_index
+            domain2_3p = e.domain2_3p_index
+            domain_length_ = e.domain_base_length
+            d1_5p_d2_3p_ext_bp_type = e.domain1_5p_domain2_base_pair_type
+            d1_3p_d2_5p_ext_bp_type = e.domain1_3p_domain1_base_pair_type
+
+            # Checks if base pairs at ends of domain to be above 40% probability
+            domain1_3p = domain1_5p + (domain_length_ - 1)
+            domain2_5p = domain2_3p - (domain_length_ - 1)
+
+            d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
+            if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
+                bps.append(
+                    _BasePair(
+                        domain1_5p, domain2_3p, nupack_complex_result[domain1_5p][domain2_3p],
+                        d1_5p_d2_3p_ext_bp_type))
+            expected_paired_idxs.add(domain1_5p)
+            expected_paired_idxs.add(domain2_3p)
+
+            d1_3p_d2_5p_ext_bp_prob_thres = base_type_probability_threshold[d1_3p_d2_5p_ext_bp_type]
+            if nupack_complex_result[domain1_3p][domain2_5p] < d1_3p_d2_5p_ext_bp_prob_thres:
+                bps.append(
+                    _BasePair(
+                        domain1_3p, domain2_5p, nupack_complex_result[domain1_3p][domain2_5p],
+                        d1_3p_d2_5p_ext_bp_type))
+            expected_paired_idxs.add(domain1_3p)
+            expected_paired_idxs.add(domain2_5p)
+            # Check if base pairs interior to domain (note ascending base pair indices
+            # for domain1 and descending base pair indices for domain2)
+            #
+            # Ex:
+            #     0123
+            #    [AGCT>    domain1
+            #          \
+            #          |
+            #          /
+            #    <TCGA]    domain2
+            #     7654
+            #
+            # TODO: Rewrite this loop using numpy
+            # domain1_idxs = np.arange(domain1_5p + 1, domain1_5p + domain_length - 1)
+            # domain2_idxs = np.arange(domain2_3p - 1, ,-1)
+            for i in range(1, domain_length_ - 1):
+                row = domain1_5p + i
+                col = domain2_3p - i
+
+                # Determine if base pair is adjacent to exterior base pair
+                prob_thres = internal_base_pair_prob
+                bp_type = BasePairType.INTERIOR_TO_STRAND
+                if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND or i == domain_length_ - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
+                    prob_thres = border_internal_base_pair_prob
+                    bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
+
+                if nupack_complex_result[row][col] < prob_thres:
+                    bps.append(_BasePair(row, col, nupack_complex_result[row][col], bp_type))
+                expected_paired_idxs.add(row)
+                expected_paired_idxs.add(col)
+
+        # Check base pairs that should not be paired are high probability
+        for i in range(len(nupack_complex_result)):
+            if i not in expected_paired_idxs and nupack_complex_result[i][i] < unpaired_base_prob:
+                bps.append(_BasePair(i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED))
+
+        return bps
+
+    return ComplexConstraint(description=description,
+                             short_description=short_description,
+                             weight=weight,
+                             weight_transfer_function=weight_transfer_function,
+                             threaded=threaded,
+                             complexes=tuple(strand_complexes),
+                             evaluate=evaluate,
+                             summary=summary)
+
+
 def nupack_4_strand_pair_constraint(
         threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
         temperature: float = dv.default_temperature,
@@ -3269,6 +5654,10 @@ def nupack_4_strand_pair_constraint(
         the threshold used is ``threshold[(sg1, sg2)]``
     :param temperature:
         Temperature in Celsius
+    :param sodium:
+        concentration of Na+ in molar
+    :param magnesium:
+        concentration of Mg++ in molar
     :param negate:
         Whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
@@ -3383,10 +5772,10 @@ def cpu_count(logical: bool = False) -> int:
     except ModuleNotFoundError:
         logger.warning('''\
 psutil package not installed. Using os package to determine number of cores.
-WARNING: this will count the number of logical cores, but the number of 
-physical scores is a more effective number to use. It is recommended to 
+WARNING: this will count the number of logical cores, but the number of
+physical scores is a more effective number to use. It is recommended to
 install the package psutil to help determine the number of physical cores
-and make parallel processing more efficient: 
+and make parallel processing more efficient:
   https://pypi.org/project/psutil/''')
         import os
         count = os.cpu_count()
@@ -3728,8 +6117,8 @@ def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Dom
     domains: List[Tuple[Domain, Domain]] = []
     for d1, d2 in domain_pairs:
         for starred1, starred2 in itertools.product([False, True], repeat=2):
-            seq1 = d1.get_sequence(starred1)
-            seq2 = d2.get_sequence(starred2)
+            seq1 = d1.concrete_sequence(starred1)
+            seq2 = d2.concrete_sequence(starred2)
             name1 = d1.get_name(starred1)
             name2 = d2.get_name(starred2)
             sequence_pairs.append((seq1, seq2))

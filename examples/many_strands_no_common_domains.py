@@ -100,10 +100,13 @@ def main() -> None:
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
         threshold=-5.5, temperature=52, short_description='StrandPairNoCompl')
 
-    strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', threaded=threaded_vienna_pairs)
+    # strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
+    #     threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', threaded=threaded_vienna_pairs)
 
-    strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
+    # strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
+    #     threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded_strand_constraints)
+
+    strand_individual_ss_constraint = dc.nupack_4_strand_secondary_structure_constraint(
         threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded_strand_constraints)
 
     design = dc.Design(strands,
@@ -113,7 +116,7 @@ def main() -> None:
                        # domain_pair_constraints=[domain_pair_nupack_constraint],
                        # strand_pair_constraints=[strand_pair_nupack_constraint],
                        strand_constraints=[strand_individual_ss_constraint],
-                       strand_pairs_constraints=[strand_pairs_no_comp_constraint]
+                       # strand_pairs_constraints=[strand_pairs_no_comp_constraint]
                        )
 
     numpy_constraints: List[NumpyConstraint] = [
