@@ -1093,7 +1093,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             old_sequence = parent._sequence
             parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
             parent._set_parent_sequence(parent._sequence)
-            ## should lines 1093-1095 be indented
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """

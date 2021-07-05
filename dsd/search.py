@@ -1166,19 +1166,117 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 @dataclass
 class SearchParameters:
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
+    """
+    Function giving the probability of keeping a change in one
+    :any:`Domain`'s DNA sequence, if the new sequence affects the total weight of all violated
+    :any:`Constraint`'s by `weight_delta`, the input to `probability_of_keeping_change`.
+    See :py:meth:`default_probability_of_keeping_change_function` for a description of the default
+    behavior if this parameter is not specified.
+    """
+
     random_seed: Optional[int] = None
+    """
+    Integer given as a random seed to the numpy random number generator, used for
+    all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
+    """
+
     never_increase_weight: Optional[bool] = None
+    """
+    If specified and True, then it is assumed that the function
+    probability_of_keeping_change returns 0 for any negative value of `weight_delta` (i.e., the search
+    never goes "uphill"), and the search for violations is optimized to quit as soon as the total weight
+    of violations exceeds that of the current optimal solution. This vastly speeds up the search in later
+    stages, when the current optimal solution is low weight. If both `probability_of_keeping_change` and
+    `never_increase_weight` are left unspecified, then `probability_of_keeping_change` uses the default,
+    which never goes uphill, and `never_increase_weight` is set to True. If
+    `probability_of_keeping_change` is specified and `never_increase_weight` is not, then
+    `never_increase_weight` is set to False. If both are specified and `never_increase_weight` is set to
+    True, then take caution that `probability_of_keeping_change` really has the property that it never
+    goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
+    """
+
     out_directory: Optional[str] = None
+    """
+    Directory in which to write output files (report on constraint violations and DNA sequences)
+    whenever a new optimal sequence assignment is found.
+    """
+
     report_delay: float = 60.0
+    """
+    Every time the design improves, a report on the constraints is written, as long as it has been as
+    `report_delay` seconds since the last report was written. Since writing a report requires evaluating
+    all constraints, it requires more time than a single iteration, which requires evaluating only those
+    constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
+    Thus the default value of 60 seconds avoids spending too much time writing reports, since the
+    search finds many new improved designs frequently at the start of the search.
+    By setting this to 0, a new report will be written every time the design improves.
+    """
+
     on_improved_design: Callable[[int], None] = lambda _: None
+    """
+    Function to call whenever the design improves. Takes an integer as input indicating the number
+    of times the design has improved.
+    """
+
     restart: bool = False
+    """
+    If this function was previous called and placed files in `out_directory`, calling with this
+    parameter True will re-start the search at that point.
+    """
+
     force_overwrite: bool = False
+    """
+    If `restart` is False and there are files/subdirectories in `out_directory`,
+    then the user will be prompted to confirm that they want to delete these,
+    UNLESS force_overwrite is True.
+    """
+
     debug_log_file: bool = False
+    """
+    If True, a very detailed log of events is written to the file debug.log in the directory
+    `out_directory`. If run for several hours, this file can grow to hundreds of megabytes.
+    """
+
     info_log_file: bool = False
+    """
+    By default, the text written to the screen through logger.info (on the logger instance used in
+    dsd.constraints) is written to the file log_info.log in the directory `out_directory`.
+    """
+
     report_only_violations: bool = True
+    """
+    If True, does not give report on each constraint that was satisfied; only reports violations
+    and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
+    """
+
     max_iterations: Optional[int] = None
+    """
+    Maximum number of iterations of search to perform.
+    """
+
     max_domains_to_change: int = 1
+    """
+    Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
+    `max_domains_to_change` is selected uniformly at random, and then that many
+    :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
+    that they violated.
+    """
+    
     num_digits_update: Optional[int] = None
+    """
+    Number of digits to use when writing update number in filenames. By default,
+    they will be written using just enough digits for each integer,
+    (for example, for sequences)
+    sequences-0.txt, sequences-1.txt, ...,
+    sequences-9.txt, sequences-10.txt, ...
+    If -nd 3 is specified, for instance, they will be written
+    sequences-000.txt, sequences-001.txt, ...,
+    sequences-009.txt, sequences-010.txt, ...,
+    sequences-099.txt, sequences-100.txt, ...,
+    sequences-999.txt, sequences-1000.txt, ...,
+    i.e., using leading zeros to have exactly 3 digits,
+    until the integers are sufficiently large that more digits are required.
+    """
 
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
@@ -1233,79 +1331,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
     :param params:
-        A SearchParameters object with attributes that can be called within this function for flexibility.
+        A :any:`SearchParameters` object with attributes that can be called within this function for flexibility.
 
-    :param probability_of_keeping_change:
-        Function giving the probability of keeping a change in one
-        :any:`Domain`'s DNA sequence, if the new sequence affects the total weight of all violated
-        :any:`Constraint`'s by `weight_delta`, the input to `probability_of_keeping_change`.
-        See :py:meth:`default_probability_of_keeping_change_function` for a description of the default
-        behavior if this parameter is not specified.
-    :param never_increase_weight:
-        If specified and True, then it is assumed that the function
-        probability_of_keeping_change returns 0 for any negative value of `weight_delta` (i.e., the search
-        never goes "uphill"), and the search for violations is optimized to quit as soon as the total weight
-        of violations exceeds that of the current optimal solution. This vastly speeds up the search in later
-        stages, when the current optimal solution is low weight. If both `probability_of_keeping_change` and
-        `never_increase_weight` are left unspecified, then `probability_of_keeping_change` uses the default,
-        which never goes uphill, and `never_increase_weight` is set to True. If
-        `probability_of_keeping_change` is specified and `never_increase_weight` is not, then
-        `never_increase_weight` is set to False. If both are specified and `never_increase_weight` is set to
-        True, then take caution that `probability_of_keeping_change` really has the property that it never
-        goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
-    :param out_directory:
-        Directory in which to write output files (report on constraint violations and DNA sequences)
-        whenever a new optimal sequence assignment is found.
-    :param random_seed:
-        Integer given as a random seed to the numpy random number generator, used for
-        all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
-    :param report_delay:
-        Every time the design improves, a report on the constraints is written, as long as it has been as
-        `report_delay` seconds since the last report was written. Since writing a report requires evaluating
-        all constraints, it requires more time than a single iteration, which requires evaluating only those
-        constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
-        Thus the default value of 60 seconds avoids spending too much time writing reports, since the
-        search finds many new improved designs frequently at the start of the search.
-        By setting this to 0, a new report will be written every time the design improves.
-    :param on_improved_design:
-        Function to call whenever the design improves. Takes an integer as input indicating the number
-        of times the design has improved.
-    :param restart:
-        If this function was previous called and placed files in `out_directory`, calling with this
-        parameter True will re-start the search at that point.
-    :param force_overwrite:
-        If `restart` is False and there are files/subdirectories in `out_directory`,
-        then the user will be prompted to confirm that they want to delete these,
-        UNLESS force_overwrite is True.
-    :param debug_log_file:
-        If True, a very detailed log of events is written to the file debug.log in the directory
-        `out_directory`. If run for several hours, this file can grow to hundreds of megabytes.
-    :param info_log_file:
-        By default, the text written to the screen through logger.info (on the logger instance used in
-        dsd.constraints) is written to the file log_info.log in the directory `out_directory`.
-    :param report_only_violations:
-        If True, does not give report on each constraint that was satisfied; only reports violations
-        and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
-    :param max_iterations:
-        Maximum number of iterations of search to perform.
-    :param max_domains_to_change:
-        Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
-        `max_domains_to_change` is selected uniformly at random, and then that many
-        :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
-        that they violated.
-    :param num_digits_update:
-        Number of digits to use when writing update number in filenames. By default,
-        they will be written using just enough digits for each integer,
-        (for example, for sequences)
-        sequences-0.txt, sequences-1.txt, ...,
-        sequences-9.txt, sequences-10.txt, ...
-        If -nd 3 is specified, for instance, they will be written
-        sequences-000.txt, sequences-001.txt, ...,
-        sequences-009.txt, sequences-010.txt, ...,
-        sequences-099.txt, sequences-100.txt, ...,
-        sequences-999.txt, sequences-1000.txt, ...,
-        i.e., using leading zeros to have exactly 3 digits,
-        until the integers are sufficiently large that more digits are required.
     """
 
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
