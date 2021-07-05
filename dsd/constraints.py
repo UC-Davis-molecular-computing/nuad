@@ -2722,7 +2722,7 @@ class Constraint(ABC, Generic[DesignPart]):
     float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
     energy exceeding a threshold, it will return the difference between the energy and the threshold.
     It is then passed through the weight_transfer_function.
-    The default is the cubed ReLU function: f(x) = max(0, x^3).
+    The default is the squared ReLU function: f(x) = max(0, x^2).
     This "punishes" more severe violations more, i.e., it would
     bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
