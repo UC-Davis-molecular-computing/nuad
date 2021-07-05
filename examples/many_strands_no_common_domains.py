@@ -148,16 +148,15 @@ def main() -> None:
         for domain in strand.domains:
             domain.pool = domain_pool
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                out_directory=args.directory,
-                                restart=args.restart,
-                                force_overwrite=True,
-                                report_only_violations=False,
-                                random_seed=random_seed,
-                                max_iterations=None,
-                                )
+    params = ds.SearchParameters(out_directory=args.directory,
+                                 # weigh_violations_equally=True
+                                 restart=args.restart,
+                                 report_only_violations=False,
+                                 random_seed=random_seed,
+                                 max_iterations=None)
+    params.force_overwrite = True
+    params.report_delay = 0.0
+    ds.search_for_dna_sequences(design, params)
 
 
 if __name__ == '__main__':

@@ -1093,6 +1093,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             old_sequence = parent._sequence
             parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
             parent._set_parent_sequence(parent._sequence)
+            ## should lines 1093-1095 be indented
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -1661,14 +1662,14 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
     def address_of_first_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
         """
-        Returns :any:`StrandDomainAddress` of the first occurence of domain named domain_name
+        Returns :any:`StrandDomainAddress` of the first occurrence of domain named domain_name
         starting from the 5' end.
         """
         return self.address_of_nth_domain_occurence(domain_name, 1)
 
     def address_of_last_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
         """
-        Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name
+        Returns :any:`StrandDomainAddress` of the nth occurrence of domain named domain_name
         starting from the 3' end.
         """
         return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)

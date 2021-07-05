@@ -911,13 +911,12 @@ def main() -> None:
     design = dc.Design(strands=strands, complex_constraints=seesaw_circuit.constraints,
                        domain_pair_constraints=[base_difference_constraint(recognition_domains)],
                        strand_constraints=[strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)],)
+    params = ds.SearchParameters(out_directory='output/square_root_circuit',
+                                 # weigh_violations_equally=True,
+                                 # restart=True,
+                                 report_delay=0.0)
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                # restart=True,
-                                out_directory='output/square_root_circuit',
-                                )
+    ds.search_for_dna_sequences(design, params)
 
 
 if __name__ == '__main__':

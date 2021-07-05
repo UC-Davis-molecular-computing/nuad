@@ -1163,23 +1163,25 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 
     return domain_to_strand
 
+@dataclass
+class SearchParameters:
+    probability_of_keeping_change: Optional[Callable[[float], float]] = None
+    random_seed: Optional[int] = None
+    never_increase_weight: Optional[bool] = None
+    out_directory: Optional[str] = None
+    report_delay: float = 60.0
+    on_improved_design: Callable[[int], None] = lambda _: None
+    restart: bool = False
+    force_overwrite: bool = False
+    debug_log_file: bool = False
+    info_log_file: bool = False
+    report_only_violations: bool = True
+    max_iterations: Optional[int] = None
+    max_domains_to_change: int = 1
+    num_digits_update: Optional[int] = None
 
-def search_for_dna_sequences(*, design: dc.Design,
-                             probability_of_keeping_change: Optional[Callable[[float], float]] = None,
-                             random_seed: Optional[int] = None,
-                             never_increase_weight: Optional[bool] = None,
-                             out_directory: Optional[str] = None,
-                             report_delay: float = 60.0,
-                             on_improved_design: Callable[[int], None] = lambda _: None,
-                             restart: bool = False,
-                             force_overwrite: bool = False,
-                             debug_log_file: bool = False,
-                             info_log_file: bool = False,
-                             report_only_violations: bool = True,
-                             max_iterations: Optional[int] = None,
-                             max_domains_to_change: int = 1,
-                             num_digits_update: Optional[int] = None,
-                             ) -> None:
+
+def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
     :any:`Constraint`'s associated with `design`.
@@ -1219,7 +1221,7 @@ def search_for_dna_sequences(*, design: dc.Design,
     assigning DNA sequences to any :any:`Domain`.)
 
     The function has some side effects. It writes a report on the optimal sequence assignment found so far
-    every time a new improve assignment is found. This re-evaluates the entire design, so can be expensive,
+    every time a new improve assignment is found. This re-evaluates the entire design, so it can be expensive,
     but in practice the design is strictly improved many fewer times than total iterations.
 
     Whenever a new optimal sequence assignment is found, the following are written to files:
@@ -1230,6 +1232,9 @@ def search_for_dna_sequences(*, design: dc.Design,
     :param design:
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
+    :param params:
+        A SearchParameters object with attributes that can be called within this function for flexibility.
+
     :param probability_of_keeping_change:
         Function giving the probability of keeping a change in one
         :any:`Domain`'s DNA sequence, if the new sequence affects the total weight of all violated
@@ -1302,36 +1307,37 @@ def search_for_dna_sequences(*, design: dc.Design,
         i.e., using leading zeros to have exactly 3 digits,
         until the integers are sufficiently large that more digits are required.
     """
+
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
     domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
 
     directories = _setup_directories(
-        debug=debug_log_file, info=info_log_file, force_overwrite=force_overwrite,
-        restart=restart, out_directory=out_directory)
+        debug=params.debug_log_file, info=params.info_log_file, force_overwrite=params.force_overwrite,
+        restart=params.restart, out_directory=params.out_directory)
 
-    if random_seed is not None:
-        rng = np.random.default_rng(random_seed)
+    if params.random_seed is not None:
+        rng = np.random.default_rng(params.random_seed)
     else:
         rng = dn.default_rng
 
-    if probability_of_keeping_change is None:
-        probability_of_keeping_change = default_probability_of_keeping_change_function(design)
-        if never_increase_weight is None:
-            never_increase_weight = True
-    elif never_increase_weight is None:
-        never_increase_weight = False
+    if params.probability_of_keeping_change is None:
+        params.probability_of_keeping_change = default_probability_of_keeping_change_function(design)
+        if params.never_increase_weight is None:
+            params.never_increase_weight = True
+    elif params.never_increase_weight is None:
+        params.never_increase_weight = False
 
-    assert never_increase_weight is not None
+    assert params.never_increase_weight is not None
 
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
 
-    if random_seed is not None:
-        logger.info(f'using random seed of {random_seed}; use this same seed to reproduce this run')
+    if params.random_seed is not None:
+        logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
     try:
-        if not restart:
+        if not params.restart:
             assign_sequences_to_domains_randomly_from_pools(design=design, domain_to_strand=domain_to_strand,
                                                             rng=rng, overwrite_existing_sequences=False)
             num_new_optimal = 0
@@ -1340,12 +1346,12 @@ def search_for_dna_sequences(*, design: dc.Design,
                                                       directories.dsd_design_subdirectory)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
-            design=design, never_increase_weight=never_increase_weight, iteration=-1)
+            design=design, never_increase_weight=params.never_increase_weight, iteration=-1)
 
         # write initial sequences and report
         _write_intermediate_files(design=design, num_new_optimal=num_new_optimal, write_report=True,
-                                  directories=directories, report_only_violations=report_only_violations,
-                                  num_digits_update=num_digits_update)
+                                  directories=directories, report_only_violations=params.report_only_violations,
+                                  num_digits_update=params.num_digits_update)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
@@ -1354,22 +1360,22 @@ def search_for_dna_sequences(*, design: dc.Design,
         time_of_last_improvement: float = -1.0
 
         while len(violation_set_opt.all_violations) > 0 and \
-                (max_iterations is None or iteration < max_iterations):
+                (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
-                                                                    max_domains_to_change,
+                                                                    params.max_domains_to_change,
                                                                     domain_to_strand, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
                 design=design, domains_changed=domains_changed, violation_set_old=violation_set_opt,
-                never_increase_weight=never_increase_weight, iteration=iteration)
+                never_increase_weight=params.never_increase_weight, iteration=iteration)
 
             _debug = False
             # _debug = True
             if _debug:
-                _double_check_violations_from_scratch(design, iteration, never_increase_weight,
+                _double_check_violations_from_scratch(design, iteration, params.never_increase_weight,
                                                       violation_set_new, violation_set_opt)
 
             _log_constraint_summary(design=design,
@@ -1379,7 +1385,7 @@ def search_for_dna_sequences(*, design: dc.Design,
             # based on total weight of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
             weight_delta = violation_set_new.total_weight() - violation_set_opt.total_weight()
-            prob_keep_change = probability_of_keeping_change(weight_delta)
+            prob_keep_change = params.probability_of_keeping_change(weight_delta)
             keep_change = rng.random() < prob_keep_change
 
             if not keep_change:
@@ -1391,7 +1397,7 @@ def search_for_dna_sequences(*, design: dc.Design,
                 violation_set_opt = violation_set_new
                 if weight_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
-                    on_improved_design(num_new_optimal)
+                    params.on_improved_design(num_new_optimal)
 
                     current_time: float = time.time()
                     write_report = False
@@ -1401,14 +1407,14 @@ def search_for_dna_sequences(*, design: dc.Design,
                     #   it has been more than report_delay seconds since writing the last report
                     if (time_of_last_improvement < 0
                             or len(violation_set_opt.all_violations) == 0
-                            or current_time - time_of_last_improvement >= report_delay):
+                            or current_time - time_of_last_improvement >= params.report_delay):
                         time_of_last_improvement = current_time
                         write_report = True
 
                     _write_intermediate_files(design=design, num_new_optimal=num_new_optimal,
                                               write_report=write_report, directories=directories,
-                                              report_only_violations=report_only_violations,
-                                              num_digits_update=num_digits_update)
+                                              report_only_violations=params.report_only_violations,
+                                              num_digits_update=params.num_digits_update)
 
             iteration += 1
 
