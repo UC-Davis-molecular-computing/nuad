@@ -27,6 +27,7 @@ from numbers import Number
 from enum import Enum, auto
 
 import numpy as np  # noqa
+from numpy import isin
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -207,7 +208,7 @@ class RestrictBasesConstraint(NumpyConstraint):
     Note, however, that this is a constraint :any:`Domain`'s, not :any:`Strand`'s, so for a three-letter
     code to work, you must take care not to mixed :any:`Domain`'s on a :any:`Strand` that will use
     different alphabets.
-    """
+    """  # noqa
 
     bases: Collection[str]
     """Bases to use. Must be a strict subset of {'A', 'C', 'G', 'T'} with at least two bases."""
@@ -251,8 +252,8 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""
         wcenergies = dn.calculate_wc_energies(seqs.seqarr, self.temperature)
-        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)
-        seqarr_pass = seqs.seqarr[within_range]
+        within_range = (self.low_energy <= wcenergies) & (wcenergies <= self.high_energy)  # type: ignore
+        seqarr_pass = seqs.seqarr[within_range]  # type: ignore
         return dn.DNASeqList(seqarr=seqarr_pass)
 
 
@@ -867,7 +868,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     :py:data:`Domain.subdomains` of other domains in the same tree.
     """
 
-    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None, fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False, subdomains: Optional[List["Domain"]] = None) -> None:
+    def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
+                 fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False,
+                 subdomains: Optional[List["Domain"]] = None) -> None:
         if subdomains is None:
             subdomains = []
         self.name = name
@@ -1052,8 +1055,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             for sd in self._subdomains:
                 sd_total_length += sd.length
             if sd_total_length != self.length:
-                raise ValueError(f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
-                                 f'length of {sd_total_length}')
+                raise ValueError(
+                    f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
+                    f'length of {sd_total_length}')
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
@@ -1085,11 +1089,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
             # Add up lengths of subdomains, add new_sequence
             idx = 0
             assert self in parent._subdomains
+            sd: Optional[Domain] = None
             for sd in parent._subdomains:
                 if sd == self:
                     break
                 else:
                     idx += sd.length
+            assert sd is not None
             old_sequence = parent._sequence
             parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
             parent._set_parent_sequence(parent._sequence)
@@ -1256,12 +1262,20 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 
         return domains
 
-    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) -> List["Domain"]:
+    def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) \
+            -> List["Domain"]:
         domains = [self]
         for sd in self._subdomains:
             if sd != excluded_subdomain:
                 domains.extend(sd._get_all_domains_from_this_subtree())
         return domains
+
+    def has_pool(self) -> bool:
+        """
+        :return:
+            whether a :any:`DomainPool` has been assigned to this :any:`Domain`
+        """
+        return self._pool is not None
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -1433,8 +1447,8 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
         for d in cast(List[Domain], domains):
-            d._check_acyclic_subdomain_graph()
-            d._check_subdomain_graph_is_uniquely_assignable()
+            d._check_acyclic_subdomain_graph()  # noqa
+            d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
@@ -1633,12 +1647,20 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return StrandDomainAddress(self, domain_idx)
 
-    def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> 'StrandDomainAddress':
+    def address_of_nth_domain_occurence(self, domain_name: str, n: int,
+                                        forward=True) -> 'StrandDomainAddress':
         """
-        Returns :any:`StrandDomainAddress` of the nth occurence of domain named domain_name.
+        Returns :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
 
+        :param domain_name:
+            name of :any:`Domain` to find address of
+        :param n:
+            which occurrence (in order on the :any:`Strand`)
+            of :any:`Domain` with name `domain_name` to find address of.
         :param forward:
             if True, starts searching from 5' end, otherwise starts searching from 3' end.
+        :return:
+            :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
         """
         if n < 1:
             raise ValueError(f'n needs to be at least 1')
@@ -1674,11 +1696,24 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
 
 
+Complex = Tuple[Strand, ...]
+"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
+:any:`Domain`'s."""
+
+
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
-    :param lst: an Iterable
-    :return: a List consisting of elements of `lst` with duplicates removed, while preserving order
+    :param lst:
+        an Iterable of objects
+    :return:
+        a List consisting of elements of `lst` with duplicates removed,
+        while preserving iteration order of `lst`
+        (naive approach using Python set would not preserve order,
+        since iteration order of Python sets is not specified)
     """
+    # XXX: be careful; original version used set to remove duplicates, but that has unspecified
+    # insertion order, even though Python 3.7 dicts preserve insertion order:
+    # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
     seen: Set[T] = set()
     seen_add = seen.add
     return [x for x in lst if not (x in seen or seen_add(x))]
@@ -1717,60 +1752,64 @@ class ConstraintReport:
 @dataclass
 class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
-    Represents a complete design, i.e., a set of DNA strands with domains, and constraints on sequences
+    Represents a complete design, i.e., a set of DNA :any:`Strand`'s with domains,
+    and :any:`Constraint`'s on the sequences
     to assign to them via :py:meth:`search.search_for_dna_sequences`.
     """
 
     strands: List[Strand[StrandLabel, DomainLabel]]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
+    #################################################
+    # these fields are calculated from the single constructor parameter constraints
+
     # remove quotes when Python 3.6 support dropped
-    domain_constraints: List['DomainConstraint'] = field(default_factory=list)
+    domain_constraints: List['DomainConstraint'] = field(default_factory=list, init=False)
     """
     Applied to individual domain constraints across all :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_constraints: List['StrandConstraint'] = field(default_factory=list)
+    strand_constraints: List['StrandConstraint'] = field(default_factory=list, init=False)
     """
     Applied to individual strand constraints across all :any:`Strand`'s in the :any:`Design`.
     """
 
-    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list)
+    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list)
+    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
-    complex_constraints: List['ComplexConstraint'] = field(default_factory=list)
+    complex_constraints: List['ComplexConstraint'] = field(default_factory=list, init=False)
     """
     Applied to tuple of :any:`Strand`'s in the :any:`Design`.
     """
 
-    domains_constraints: List['DomainsConstraint'] = field(default_factory=list)
+    domains_constraints: List['DomainsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strands_constraints: List['StrandsConstraint'] = field(default_factory=list)
+    strands_constraints: List['StrandsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list)
+    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list)
+    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    design_constraints: List['DesignConstraint'] = field(default_factory=list)
+    design_constraints: List['DesignConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process whole design at once, for anything not expressible as one of the others
     (for example, in case it needs access to all the :any:`StrandGroup`'s and :any:`DomainPool`'s at once).
@@ -1807,17 +1846,63 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    def __post_init__(self) -> None:
+    def __init__(self, strands: Iterable[Strand],
+                 constraints: Optional[Iterable['Constraint']] = None) -> None:
+        """
+        :param strands:
+            the :any:`Strand`'s in this :any:`Design`
+        :param constraints:
+            the :any:`Constraint`'s to apply to this :any:`Design` when running
+            :py:meth:`search.search_for_dna_sequences`
+        """
+        if constraints is None: constraints = []
+        self.strands = strands if isinstance(strands, list) else list(strands)
+        self._partition_constraints(constraints)
+        self._compute_derived_fields()
 
+    # sort constraints from constructor constraints parameter into the various types
+    def _partition_constraints(self, constraints: Iterable['Constraint']) -> None:
+        self.domain_constraints = []
+        self.strand_constraints = []
+        self.domain_pair_constraints = []
+        self.strand_pair_constraints = []
+        self.complex_constraints = []
+        self.domains_constraints = []
+        self.strands_constraints = []
+        self.domain_pairs_constraints = []
+        self.strand_pairs_constraints = []
+        self.design_constraints = []
+        for constraint in constraints:
+            if isinstance(constraint, DomainConstraint):
+                self.domain_constraints.append(constraint)
+            elif isinstance(constraint, StrandConstraint):
+                self.strand_constraints.append(constraint)
+            elif isinstance(constraint, DomainPairConstraint):
+                self.domain_pair_constraints.append(constraint)
+            elif isinstance(constraint, StrandPairConstraint):
+                self.strand_pair_constraints.append(constraint)
+            elif isinstance(constraint, ComplexConstraint):
+                self.complex_constraints.append(constraint)
+            elif isinstance(constraint, DomainsConstraint):
+                self.domains_constraints.append(constraint)
+            elif isinstance(constraint, StrandsConstraint):
+                self.strands_constraints.append(constraint)
+            elif isinstance(constraint, DomainPairsConstraint):
+                self.domain_pairs_constraints.append(constraint)
+            elif isinstance(constraint, StrandPairsConstraint):
+                self.strand_pairs_constraints.append(constraint)
+            elif isinstance(constraint, DesignConstraint):
+                self.design_constraints.append(constraint)
+            else:
+                raise ValueError(f'{constraint} is not a valid type of Constraint')
+
+    def _compute_derived_fields(self):
         # Get domains not explicitly listed on strands that are part of domain tree.
         domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
                 domains.extend(domain_in_strand.all_domains_in_tree())
 
-        # XXX: be careful; original version used set to remove duplications, but that has unspecified
-        # insertion order, even though Python 3.7 dicts preserve insertion order:
-        # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
         self.domains = remove_duplicates(domains)
 
         self.strand_groups = defaultdict(list)
@@ -1826,7 +1911,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domain_pools = defaultdict(list)
         for domain in self.domains:
-            if domain._pool is not None:
+            if domain._pool is not None:  # noqa
                 self.domain_pools[domain.pool].append(domain)
 
         self.domains_by_name = {}
@@ -2050,7 +2135,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = self.summary_of_complex_constraint(constraint, report_only_violations)
         else:
             content = f'skipping summary of constraint {constraint.description}; ' \
-                f'unrecognized type {type(constraint)}'
+                      f'unrecognized type {type(constraint)}'
             report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
 
         report.constraint = constraint
@@ -2152,8 +2237,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(fixed_domain, False)
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
-                    f'{summary} ' \
-                    f'{"" if passed else " **violation**"}'
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -2180,8 +2265,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if not report_only_violations or (report_only_violations and not passed):
                 summary = constraint.generate_summary(strand, False)
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
-                    f'{summary} ' \
-                    f'{"" if passed else " **violation**"}'
+                       f'{summary} ' \
+                       f'{"" if passed else " **violation**"}'
                 lines.append(line)
         if not report_only_violations:
             lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
@@ -2292,7 +2377,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=0, num_checks=0)
         return report
 
-    def summary_of_complex_constraint(self, constraint: 'ComplexConstraint',
+    @staticmethod
+    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
                                       report_only_violations: bool) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
@@ -2630,13 +2716,13 @@ class Constraint(ABC, Generic[DesignPart]):
     to satisfy all constraints.
     """
 
-    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 3)
+    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 2)
     """
     Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative
     float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
     energy exceeding a threshold, it will return the difference between the energy and the threshold.
     It is then passed through the weight_transfer_function.
-    The default is the cubed ReLU function: f(x) = max(0, x^3).
+    The default is the squared ReLU function: f(x) = max(0, x^2).
     This "punishes" more severe violations more, i.e., it would
     bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
@@ -2672,8 +2758,8 @@ class Constraint(ABC, Generic[DesignPart]):
 
 
 _no_summary_string = f"No summary for this constraint. " \
-    f"To generate one, pass a function as the parameter named " \
-    f'"summary" when creating the Constraint.'
+                     f"To generate one, pass a function as the parameter named " \
+                     f'"summary" when creating the Constraint.'
 
 
 @dataclass(frozen=True, eq=False)
@@ -2784,7 +2870,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
-    complexes: Tuple[Tuple[Strand, ...], ...] = None
+    complexes: Tuple[Tuple[Strand, ...], ...] = ()
     """
     List of complexes (tuples of :any:`Strand`'s) to check.
     """
@@ -2866,7 +2952,11 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
-    """Constraint that applies to a complex (tuple of :any:`Strand`'s)."""
+    """Constraint that applies to a complex (tuple of :any:`Strand`'s).
+
+    Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
+    there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
+    :any:`Complex`'s must be specified manually in the constructor."""
 
     evaluate: Callable[[Tuple[Strand, ...]],
                        float] = lambda _, __: 0.0
@@ -3173,8 +3263,8 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 raise ValueError(f'domain {domain2.name} is fixed in one but not the other:\n'
                                  f'design1 domain {domain1.name} fixed = {domain1.fixed},\n'
                                  f'design2 domain {domain2.name} fixed = {domain2.fixed}')
-            if (domain1._pool is not None
-                    and domain2._pool is not None
+            if (domain1.has_pool()
+                    and domain2.has_pool()
                     and domain1.pool.name != domain2.pool.name):
                 raise ValueError(f'domain {domain2.name} pool name does not match:'
                                  f'design1 domain {domain1.name} pool = {domain1.pool.name},\n'
@@ -3257,7 +3347,7 @@ def nupack_strand_secondary_structure_constraint(
             strand_group_name_to_threshold = {strand_group.name: value
                                               for strand_group, value in threshold.items()}
             description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
-                f'as follows:\n{strand_group_name_to_threshold}'
+                          f'as follows:\n{strand_group_name_to_threshold}'
         else:
             raise AssertionError('threshold must be one of float or dict')
 
@@ -3292,13 +3382,19 @@ def nupack_4_strand_secondary_structure_constraint(
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
 
-    :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+    :param threshold:
+        energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
         :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
         one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
-    :param temperature: temperature in Celsius
-    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
-    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
-    :param negate: whether to negate free energy (making it larger for more favorable structures).
+    :param temperature:
+        temperature in Celsius
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
+    :param negate:
+        whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
         If False, then the constraint is violated if energy < `threshold`.
     :param weight:
@@ -3309,7 +3405,8 @@ def nupack_4_strand_secondary_structure_constraint(
         Whether to use threadds to parallelize.
     :param strands:
         Strands to check; if not specified, all strands are checked.
-    :param description: detailed description of constraint suitable for putting in report; if not specified
+    :param description:
+        detailed description of constraint suitable for putting in report; if not specified
         a reasonable default is chosen
     :param short_description: short description of constraint suitable for logging to stdout
     :return: constraint
@@ -3317,7 +3414,8 @@ def nupack_4_strand_secondary_structure_constraint(
 
     def evaluate(strand: Strand) -> float:
         threshold_value = convert_threshold(threshold, strand.group)
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         logger.debug(
             f'strand ss threshold: {threshold_value:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
@@ -3327,7 +3425,8 @@ def nupack_4_strand_secondary_structure_constraint(
         return max(0.0, excess)
 
     def summary(strand: Strand) -> str:
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
+                                                       negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
@@ -3363,7 +3462,9 @@ def nupack_domain_pair_constraint(
         weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
-        negate: bool = False) -> DomainPairConstraint:
+        negate: bool = False,
+        version4: bool = True,
+) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
@@ -3394,6 +3495,8 @@ def nupack_domain_pair_constraint(
         Detailed description of constraint suitable for summary report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
+    :param version4:
+        Whether to use NUPACK version 4.
     :return:
         The :any:`DomainPairConstraint`.
     """
@@ -3406,7 +3509,7 @@ def nupack_domain_pair_constraint(
                                                   for (domain_pool1, domain_pool2), value in
                                                   threshold.items()}
             description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
-                f'as follows:\n{domain_pool_name_pair_to_threshold}'
+                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -3414,8 +3517,12 @@ def nupack_domain_pair_constraint(
     num_threads = cpu_count()
     thread_pool = ThreadPool(processes=num_threads)
 
-    def binding_closure(seq_pair: Tuple[str, str]) -> float:
-        return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
+    if version4:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding4(seq_pair[0], seq_pair[1], temperature, negate)
+    else:
+        def binding_closure(seq_pair: Tuple[str, str]) -> float:
+            return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
 
     def evaluate(domain1: Domain, domain2: Domain) -> float:
         threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
@@ -3447,7 +3554,10 @@ def nupack_domain_pair_constraint(
         seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
         energies = []
         for seq1, seq2 in seq_pairs:
-            energy = dv.binding(seq1, seq2, temperature, negate)
+            if version4:
+                energy = dv.binding4(seq1, seq2, temperature, negate)
+            else:
+                energy = dv.binding(seq1, seq2, temperature, negate)
             energies.append(energy)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
         lines = [f'{name1:{max_name_length}}, '
@@ -3630,7 +3740,7 @@ def nupack_strand_pair_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -4385,7 +4495,8 @@ class StrandDomainAddress:
 
 
 def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
-                                         all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
+                                         all_bound_domain_addresses: Dict[
+                                             StrandDomainAddress, StrandDomainAddress]) -> BasePairType:
     """Returns the BasePairType that corresponds to the base pair that sits on the
     3' end of provided domain.
 
@@ -4731,7 +4842,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                 #                              # #
                 if domain_3n_complementary_3n_addr_is_bound is None:
                     return BasePairType.NICK_5P
-                elif domain_3n_complementary_3n_addr_is_bound == False:
+                elif domain_3n_complementary_3n_addr_is_bound is False:
                     return BasePairType.OVERHANG_ON_ADJACENT_STRAND_5P
                 else:
                     return BasePairType.OTHER
@@ -4783,7 +4894,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
 
                 if domain_3n_complementary_3n_addr_is_bound is None:
                     return BasePairType.OVERHANG_ON_THIS_STRAND_5P
-                elif domain_3n_complementary_3n_addr_is_bound == False:
+                elif domain_3n_complementary_3n_addr_is_bound is False:
                     return BasePairType.OVERHANG_ON_BOTH_STRANDS_5P
                 else:
                     return BasePairType.OTHER
@@ -4948,10 +5059,9 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(
-        strand_complex: Tuple[Strand, ...],
-        nonimplicit_base_pairs_domain_names: Set[str] = None) -> Dict[
-        StrandDomainAddress, StrandDomainAddress]:
+def _get_implicitly_bound_domain_addresses(strand_complex: Tuple[Strand, ...],
+                                           nonimplicit_base_pairs_domain_names: Set[str] = None) \
+        -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
     :param strand_complex: Tuple of strands representing strand complex
@@ -5032,7 +5142,8 @@ def _leafify_domain(domain: Domain) -> List[Domain]:
 
 
 def _leafify_strand(
-        strand: Strand, addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
+        strand: Strand,
+        addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]]) -> Strand:
     """Create a new strand that is made of the leaf subdomains. Also updates an
     addr_translation_table which maps StrandDomainAddress from old strand to new
     strand. Since a domain may consist of multiple subdomains, a single StrandDomainAddress
@@ -5091,7 +5202,8 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = tuple([_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
+    leafify_strand_complex = tuple(
+        [_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:
@@ -5175,7 +5287,7 @@ def __get_base_pair_domain_endpoints_to_check(
             raise ValueError(
                 f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
                 f"Violating domain: {domain_name_complement}")
-    ## End Input Validation ##
+    # End Input Validation #
 
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
                                          int] = _get_addr_to_starting_base_pair_idx(strand_complex)
@@ -5222,8 +5334,6 @@ def __get_base_pair_domain_endpoints_to_check(
 
         domain2_3p = domain2_5p + domain_base_length - 1
 
-        base_pair = (domain1_5p, domain2_3p)
-
         # domain1                     5' --------------------------------- 3'
         #                                | | | | | | | | | | | | | | | | |
         # domain2                     3' --------------------------------- 5'
@@ -5232,11 +5342,13 @@ def __get_base_pair_domain_endpoints_to_check(
         #                   d1_5p_d2_3p_ext_bp_type                        |
         #                                                                  |
         #                                                       d1_3p_d2_5p_ext_bp_type
-        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr, all_bound_domain_addresses)
-        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr, all_bound_domain_addresses)
+        d1_3p_d2_5p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain1_addr,
+                                                                       all_bound_domain_addresses)
+        d1_5p_d2_3p_ext_bp_type = _exterior_base_type_of_domain_3p_end(domain2_addr,
+                                                                       all_bound_domain_addresses)
 
         base_pair_domain_endpoints_to_check.add(_BasePairDomainEndpoint(
-            *base_pair, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
+            domain1_5p, domain2_3p, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type))
 
     return base_pair_domain_endpoints_to_check
 
@@ -5383,13 +5495,13 @@ def nupack_4_complex_secondary_structure_constraint(
         raise ImportError(
             'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
-    ## Start Input Validation ##
+    # Start Input Validation
     if len(strand_complexes) == 0:
         raise ValueError("strand_complexes list cannot be empty.")
 
     strand_complex_template = strand_complexes[0]
 
-    if (type(strand_complex_template) is not tuple):
+    if type(strand_complex_template) is not tuple:
         raise ValueError(
             f"First element in strand_complexes was not a tuple of Strands. Please provide a tuple of Strands.")
 
@@ -5397,23 +5509,24 @@ def nupack_4_complex_secondary_structure_constraint(
         if type(strand) is not Strand:
             raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(strand)}")
 
-    for i in range(1, len(strand_complexes)):
-        strand_complex = strand_complexes[i]
-        if (type(strand_complex) is not tuple):
-            raise ValueError(f"Element at index {i} was not a tuple of Strands. Please provide a tuple of Strands.")
+    for idx in range(1, len(strand_complexes)):
+        strand_complex = strand_complexes[idx]
+        if type(strand_complex) is not tuple:
+            raise ValueError(
+                f"Element at index {idx} was not a tuple of Strands. Please provide a tuple of Strands.")
         if len(strand_complex) != len(strand_complex_template):
             raise ValueError(
-                f"Inconsistent complex structures: Complex at index {i} contained {len(strand_complex)} strands, "
+                f"Inconsistent complex structures: Complex at index {idx} contained {len(strand_complex)} strands, "
                 f"but complex at index 0 contained {len(strand_complex_template)} strands.")
         for s in range(len(strand_complex)):
             other_strand: Strand = strand_complex[s]
             template_strand: Strand = strand_complex_template[s]
-            if (type(other_strand) is not Strand):
+            if type(other_strand) is not Strand:
                 raise ValueError(
-                    f"Complex at index {i} contained non-Strand object at index {s}: {type(other_strand)}")
+                    f"Complex at index {idx} contained non-Strand object at index {s}: {type(other_strand)}")
             if len(other_strand.domains) != len(template_strand.domains):
                 raise ValueError(
-                    f"Strand {other_strand} (index {s} of strand_complexes at index {i}) does not match the provided template"
+                    f"Strand {other_strand} (index {s} of strand_complexes at index {idx}) does not match the provided template"
                     f"({template_strand}). "
                     f"Strand {other_strand} contains {len(other_strand.domains)} domains but template strand {template_strand} contains "
                     f"{len(template_strand.domains)} domains.")
@@ -5422,28 +5535,28 @@ def nupack_4_complex_secondary_structure_constraint(
                 template_domain_length: int = template_strand.domains[d].length
                 if domain_length != template_domain_length:
                     raise ValueError(
-                        f"Strand {other_strand} (the strand at index {s} of the complex located at index {i} of strand_complexes) does not match the "
+                        f"Strand {other_strand} (the strand at index {s} of the complex located at index {idx} of strand_complexes) does not match the "
                         f"provided template ({template_strand}): domain at index {d} is length "
                         f"{domain_length}, but expected {template_domain_length}.")
 
     base_pair_domain_endpoints_to_check = _get_base_pair_domain_endpoints_to_check(
         strand_complex_template, nonimplicit_base_pairs=nonimplicit_base_pairs)
 
-    ## Start populating base_pair_probs ##
+    # Start populating base_pair_probs
     base_type_probability_threshold: Dict[BasePairType, float] = (
         {} if base_pair_prob_by_type is None else base_pair_prob_by_type.copy())
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
-    ## End populating base_pair_probs ##
+    # End populating base_pair_probs
 
     nupack_model = NupackModel(material='dna', celsius=temperature)
 
     if description is None:
         description = ' '.join([str(s) for s in strand_complex_template])
 
-    def evaluate(strand_complex: Tuple[Strand, ...]) -> float:
-        bps = _violation_base_pairs(strand_complex)
+    def evaluate(strand_complex_: Tuple[Strand, ...]) -> float:
+        bps = _violation_base_pairs(strand_complex_)
         err_sq = 0.0
         for bp in bps:
             e = base_type_probability_threshold[bp.base_pair_type] - bp.base_pairing_probability
@@ -5454,8 +5567,8 @@ def nupack_4_complex_secondary_structure_constraint(
     # summary would print all the base pairs
     # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
     # * maybe consider puting second and after base pairs on new line with indent
-    def summary(strand_complex: Tuple[Strand, ...]) -> str:
-        bps = _violation_base_pairs(strand_complex)
+    def summary(strand_complex_: Tuple[Strand, ...]) -> str:
+        bps = _violation_base_pairs(strand_complex_)
         if len(bps) == 0:
             return "\tAll base pairs satisfy thresholds."
         summary_list = []
@@ -5468,8 +5581,8 @@ def nupack_4_complex_secondary_structure_constraint(
                 f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
 
-    def _violation_base_pairs(strand_complex: Tuple[Strand, ...]) -> List[_BasePair]:
-        nupack_strands = [NupackStrand(strand.sequence(), name=strand.name) for strand in strand_complex]
+    def _violation_base_pairs(strand_complex_: Tuple[Strand, ...]) -> List[_BasePair]:
+        nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
         nupack_complex_set = NupackComplexSet(
@@ -5495,7 +5608,8 @@ def nupack_4_complex_secondary_structure_constraint(
         # Probability threshold
         internal_base_pair_prob = base_type_probability_threshold[BasePairType.INTERIOR_TO_STRAND]
         unpaired_base_prob = base_type_probability_threshold[BasePairType.UNPAIRED]
-        border_internal_base_pair_prob = base_type_probability_threshold[BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
+        border_internal_base_pair_prob = base_type_probability_threshold[
+            BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR]
 
         # Tracks which bases are paired. Used to determine unpaired bases.
         expected_paired_idxs: Set[int] = set()
@@ -5505,13 +5619,13 @@ def nupack_4_complex_secondary_structure_constraint(
         for e in base_pair_domain_endpoints_to_check:
             domain1_5p = e.domain1_5p_index
             domain2_3p = e.domain2_3p_index
-            domain_length = e.domain_base_length
+            domain_length_ = e.domain_base_length
             d1_5p_d2_3p_ext_bp_type = e.domain1_5p_domain2_base_pair_type
             d1_3p_d2_5p_ext_bp_type = e.domain1_3p_domain1_base_pair_type
 
             # Checks if base pairs at ends of domain to be above 40% probability
-            domain1_3p = domain1_5p + (domain_length - 1)
-            domain2_5p = domain2_3p - (domain_length - 1)
+            domain1_3p = domain1_5p + (domain_length_ - 1)
+            domain2_5p = domain2_3p - (domain_length_ - 1)
 
             d1_5p_d2_3p_ext_bp_prob_thres = base_type_probability_threshold[d1_5p_d2_3p_ext_bp_type]
             if nupack_complex_result[domain1_5p][domain2_3p] < d1_5p_d2_3p_ext_bp_prob_thres:
@@ -5545,14 +5659,14 @@ def nupack_4_complex_secondary_structure_constraint(
             # TODO: Rewrite this loop using numpy
             # domain1_idxs = np.arange(domain1_5p + 1, domain1_5p + domain_length - 1)
             # domain2_idxs = np.arange(domain2_3p - 1, ,-1)
-            for i in range(1, domain_length - 1):
+            for i in range(1, domain_length_ - 1):
                 row = domain1_5p + i
                 col = domain2_3p - i
 
                 # Determine if base pair is adjacent to exterior base pair
                 prob_thres = internal_base_pair_prob
                 bp_type = BasePairType.INTERIOR_TO_STRAND
-                if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND or i == domain_length - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
+                if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND or i == domain_length_ - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
                     prob_thres = border_internal_base_pair_prob
                     bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
 
@@ -5603,6 +5717,10 @@ def nupack_4_strand_pair_constraint(
         the threshold used is ``threshold[(sg1, sg2)]``
     :param temperature:
         Temperature in Celsius
+    :param sodium:
+        concentration of Na+ in molar
+    :param magnesium:
+        concentration of Mg++ in molar
     :param negate:
         Whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
@@ -5783,7 +5901,7 @@ def rna_duplex_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
@@ -5955,7 +6073,7 @@ def rna_cofold_strand_pairs_constraint(
             strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
                                               for (strand_group1, strand_group2), value in threshold.items()}
             description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
-                f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
