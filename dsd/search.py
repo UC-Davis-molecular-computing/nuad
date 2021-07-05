@@ -242,8 +242,8 @@ def _violations_of_constraints(design: Design,
                 return violation_set
 
     # individual strand constraints within each StrandGroup
-    for strand_pool, strands in design.strand_groups.items():
-        for strand_constraint_pool in strand_pool.strand_constraints:
+    for strand_group, strands in design.strand_groups.items():
+        for strand_constraint_pool in strand_group.strand_constraints:
             current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
                 if never_increase_weight and violation_set_old is not None else None
             strands = _strands_containing_domains(domains_changed, strands)
