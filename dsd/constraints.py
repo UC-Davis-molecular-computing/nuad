@@ -2716,7 +2716,7 @@ class Constraint(ABC, Generic[DesignPart]):
     to satisfy all constraints.
     """
 
-    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 3)
+    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 2)
     """
     Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative
     float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
