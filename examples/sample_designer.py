@@ -92,13 +92,11 @@ def main() -> None:
         threshold=-0.0, temperature=52, short_description='StrandSS')
 
     initial_design = dc.Design(strands,
-                               # domain_pair_constraints=[
-                               #     dc.domains_not_substrings_of_each_other_domain_pair_constraint()],
-                               # strand_constraints=[strand_individual_ss_constraint],
-                               strand_pairs_constraints=[strand_pairs_no_comp_constraint]
-                               # strand_pairs_constraints=[strand_pairs_no_comp_constraint,
-                               #                           strand_pairs_comp_constraint]
-                               )
+                               constraints=[strand_pairs_no_comp_constraint,
+                                            # strand_pairs_comp_constraint,
+                                            # strand_individual_ss_constraint,
+                                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
+                                            ])
 
     if args.initial_design_filename is not None:
         with open(args.initial_design_filename, 'r') as file:
