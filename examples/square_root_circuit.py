@@ -912,17 +912,18 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
+    
     constraints: List[dc.Constraint] = [base_difference_constraint(recognition_domains),
                                         strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)]
     constraints.extend(seesaw_circuit.constraints) # make mypy happy about the generics with List
     design = dc.Design(strands=strands, constraints=constraints)
+    params = ds.SearchParameters(out_directory='output/square_root_circuit',
+                                 # weigh_violations_equally=True,
+                                 # restart=True,
+                                 report_delay=0.0)
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                # restart=True,
-                                out_directory='output/square_root_circuit',
-                                )
+
+    ds.search_for_dna_sequences(design, params)
 
 
 if __name__ == '__main__':
