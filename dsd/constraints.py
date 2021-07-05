@@ -27,6 +27,7 @@ from numbers import Number
 from enum import Enum, auto
 
 import numpy as np  # noqa
+from numpy import isin
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -1702,9 +1703,17 @@ Complex = Tuple[Strand, ...]
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
-    :param lst: an Iterable
-    :return: a List consisting of elements of `lst` with duplicates removed, while preserving order
+    :param lst:
+        an Iterable of objects
+    :return:
+        a List consisting of elements of `lst` with duplicates removed,
+        while preserving iteration order of `lst`
+        (naive approach using Python set would not preserve order,
+        since iteration order of Python sets is not specified)
     """
+    # XXX: be careful; original version used set to remove duplicates, but that has unspecified
+    # insertion order, even though Python 3.7 dicts preserve insertion order:
+    # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
     seen: Set[T] = set()
     seen_add = seen.add
     return [x for x in lst if not (x in seen or seen_add(x))]
@@ -1743,60 +1752,64 @@ class ConstraintReport:
 @dataclass
 class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
-    Represents a complete design, i.e., a set of DNA strands with domains, and constraints on sequences
+    Represents a complete design, i.e., a set of DNA :any:`Strand`'s with domains,
+    and :any:`Constraint`'s on the sequences
     to assign to them via :py:meth:`search.search_for_dna_sequences`.
     """
 
     strands: List[Strand[StrandLabel, DomainLabel]]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
+    #################################################
+    # these fields are calculated from the single constructor parameter constraints
+
     # remove quotes when Python 3.6 support dropped
-    domain_constraints: List['DomainConstraint'] = field(default_factory=list)
+    domain_constraints: List['DomainConstraint'] = field(default_factory=list, init=False)
     """
     Applied to individual domain constraints across all :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_constraints: List['StrandConstraint'] = field(default_factory=list)
+    strand_constraints: List['StrandConstraint'] = field(default_factory=list, init=False)
     """
     Applied to individual strand constraints across all :any:`Strand`'s in the :any:`Design`.
     """
 
-    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list)
+    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list)
+    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
-    complex_constraints: List['ComplexConstraint'] = field(default_factory=list)
+    complex_constraints: List['ComplexConstraint'] = field(default_factory=list, init=False)
     """
     Applied to tuple of :any:`Strand`'s in the :any:`Design`.
     """
 
-    domains_constraints: List['DomainsConstraint'] = field(default_factory=list)
+    domains_constraints: List['DomainsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strands_constraints: List['StrandsConstraint'] = field(default_factory=list)
+    strands_constraints: List['StrandsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list)
+    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list)
+    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    design_constraints: List['DesignConstraint'] = field(default_factory=list)
+    design_constraints: List['DesignConstraint'] = field(default_factory=list, init=False)
     """
     Constraints that process whole design at once, for anything not expressible as one of the others
     (for example, in case it needs access to all the :any:`StrandGroup`'s and :any:`DomainPool`'s at once).
@@ -1833,17 +1846,63 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    def __post_init__(self) -> None:
+    def __init__(self, strands: Iterable[Strand],
+                 constraints: Optional[Iterable['Constraint']] = None) -> None:
+        """
+        :param strands:
+            the :any:`Strand`'s in this :any:`Design`
+        :param constraints:
+            the :any:`Constraint`'s to apply to this :any:`Design` when running
+            :py:meth:`search.search_for_dna_sequences`
+        """
+        if constraints is None: constraints = []
+        self.strands = strands if isinstance(strands, list) else list(strands)
+        self._partition_constraints(constraints)
+        self._compute_derived_fields()
 
+    # sort constraints from constructor constraints parameter into the various types
+    def _partition_constraints(self, constraints: Iterable['Constraint']) -> None:
+        self.domain_constraints = []
+        self.strand_constraints = []
+        self.domain_pair_constraints = []
+        self.strand_pair_constraints = []
+        self.complex_constraints = []
+        self.domains_constraints = []
+        self.strands_constraints = []
+        self.domain_pairs_constraints = []
+        self.strand_pairs_constraints = []
+        self.design_constraints = []
+        for constraint in constraints:
+            if isinstance(constraint, DomainConstraint):
+                self.domain_constraints.append(constraint)
+            elif isinstance(constraint, StrandConstraint):
+                self.strand_constraints.append(constraint)
+            elif isinstance(constraint, DomainPairConstraint):
+                self.domain_pair_constraints.append(constraint)
+            elif isinstance(constraint, StrandPairConstraint):
+                self.strand_pair_constraints.append(constraint)
+            elif isinstance(constraint, ComplexConstraint):
+                self.complex_constraints.append(constraint)
+            elif isinstance(constraint, DomainsConstraint):
+                self.domains_constraints.append(constraint)
+            elif isinstance(constraint, StrandsConstraint):
+                self.strands_constraints.append(constraint)
+            elif isinstance(constraint, DomainPairsConstraint):
+                self.domain_pairs_constraints.append(constraint)
+            elif isinstance(constraint, StrandPairsConstraint):
+                self.strand_pairs_constraints.append(constraint)
+            elif isinstance(constraint, DesignConstraint):
+                self.design_constraints.append(constraint)
+            else:
+                raise ValueError(f'{constraint} is not a valid type of Constraint')
+
+    def _compute_derived_fields(self):
         # Get domains not explicitly listed on strands that are part of domain tree.
         domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
                 domains.extend(domain_in_strand.all_domains_in_tree())
 
-        # XXX: be careful; original version used set to remove duplications, but that has unspecified
-        # insertion order, even though Python 3.7 dicts preserve insertion order:
-        # https://softwaremaniacs.org/blog/2020/02/05/dicts-ordered/
         self.domains = remove_duplicates(domains)
 
         self.strand_groups = defaultdict(list)
