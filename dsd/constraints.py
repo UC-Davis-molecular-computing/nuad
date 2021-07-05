@@ -2870,7 +2870,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
-    complexes: Tuple[Tuple[Strand, ...], ...] = None
+    complexes: Tuple[Tuple[Strand, ...], ...] = ()
     """
     List of complexes (tuples of :any:`Strand`'s) to check.
     """
@@ -2952,7 +2952,11 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
-    """Constraint that applies to a complex (tuple of :any:`Strand`'s)."""
+    """Constraint that applies to a complex (tuple of :any:`Strand`'s).
+
+    Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
+    there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
+    :any:`Complex`'s must be specified manually in the constructor."""
 
     evaluate: Callable[[Tuple[Strand, ...]],
                        float] = lambda _, __: 0.0
