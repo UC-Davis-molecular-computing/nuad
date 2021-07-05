@@ -1,7 +1,7 @@
 # Contributing to the dsd Python package 
 First off, thanks for taking the time to contribute!
 
-The following is a set of guidelines for contributing to scadnano.
+The following is a set of guidelines for contributing to dsd.
 Feel free to propose changes to this document in a pull request, 
 or post questions as issues on the [issues page](https://github.com/UC-Davis-molecular-computing/dsd/issues).
 
@@ -27,8 +27,6 @@ The dsd Python package requires at least Python 3.6.
 ### What to install
 
 Follow the [installation instructions](README.md#installation) to install the correct version of Python if you don't have it already.
-
-It is actually unnecessary for you to install scadnano via pip, so you can skip that step. In developing, you will have a local version of the package that you run and modify.
 
 I suggest using a powerful IDE such as [PyCharm](https://www.jetbrains.com/pycharm/download/download-thanks.html). [Visual Studio Code](https://code.visualstudio.com/) is also good with the right plugins. The dsd Python package uses type hints, and these tools are very helpful in giving static analysis warnings about the code that may represent errors that will manifest at run time.
 
@@ -59,7 +57,7 @@ The first step is cloning the repository so you have it available locally.
 git clone https://github.com/UC-Davis-molecular-computing/dsd.git
 ```
 
-Changes to the scadnano package should be pushed to the
+Changes to the dsd package should be pushed to the
 [`dev`](https://github.com/UC-Davis-molecular-computing/dsd/tree/dev) branch. So switch to the `dev` branch:
 
 ```
@@ -129,8 +127,6 @@ One simple way to do this is to copy/paste the title of the issue into the commi
 Users can read the description by clicking on the link to the commit or the pull request, but anything is put there, then the commit message should say something like "click on commit/PR for more details".
 
 Breaking changes should be announced explicitly, perhaps in the commit message, but ideally also manually added at the top of the release notes, indicating what users need to do to deal with the change.
-
-See here for an example: https://github.com/UC-Davis-molecular-computing/scadnano-python-package/releases/tag/v0.10.0
 
 So the steps for committing to the main branch are:
 
