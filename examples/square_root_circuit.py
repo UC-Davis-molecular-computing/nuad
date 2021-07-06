@@ -20,19 +20,20 @@ EXTENDED_TOEHOLD_LENGTH = 2
 TOEHOLD_LENGTH = 5
 
 # Constants -- Illegal DNA Base sequences
-ILLEGAL_SUBSTRINGS_FOUR = ['G'*4, 'C'*4]
-ILLEGAL_SUBSTRINGS_FIVE = ['A'*5, 'T'*5]
+ILLEGAL_SUBSTRINGS_FOUR = ['G' * 4, 'C' * 4]
+ILLEGAL_SUBSTRINGS_FIVE = ['A' * 5, 'T' * 5]
 ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 
 # NumpyConstraints
 three_letter_code_constraint = dc.RestrictBasesConstraint(('A', 'C', 'T'))
 no_gggg_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
 no_aaaaa_constraint = dc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
-c_content_constraint = dc.BaseCountConstraint('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH), ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
-
+c_content_constraint = dc.BaseCountConstraint('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH),
+                                              ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
 
 # Domain pools
-SUBDOMAIN_SS_POOL: dc.DomainPool = dc.DomainPool(f'SUBDOMAIN_SS_POOL', SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
+SUBDOMAIN_SS_POOL: dc.DomainPool = dc.DomainPool(f'SUBDOMAIN_SS_POOL',
+                                                 SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
 SUBDOMAIN_S_POOL: dc.DomainPool = dc.DomainPool(f'SUBDOMAIN_S_POOL', EXTENDED_TOEHOLD_LENGTH)
 TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, [three_letter_code_constraint])
@@ -40,7 +41,6 @@ TOEHOLD_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
 SIGNAL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     'SIGNAL_DOMAIN_POOL', SIGNAL_DOMAIN_LENGTH,
     [three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint, no_gggg_constraint])
-
 
 # Alias
 dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
@@ -232,7 +232,8 @@ def reporter_top_strand(gate: int) -> dc.Strand:
     :return: Waste strand
     :rtype: dc.Strand
     """
-    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], starred_domain_indices=[], name=f'reporter_top_{gate}')
+    s: dc.Strand = dc.Strand(domains=[get_signal_domain(gate)], starred_domain_indices=[],
+                             name=f'reporter_top_{gate}')
     return s
 
 
@@ -257,7 +258,8 @@ def reporter_bottom_strand(gate) -> dc.Strand:
     return s
 
 
-def input_gate_complex_constraint(input_gate_complexes: List[Tuple[dc.Strand, dc.Strand]]) -> dc.ComplexConstraint:
+def input_gate_complex_constraint(
+        input_gate_complexes: List[Tuple[dc.Strand, dc.Strand]]) -> dc.ComplexConstraint:
     """Returns a input:gate complex constraint
 
     .. code-block:: none
@@ -360,6 +362,7 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
     :return: DomainPairConstraint
     :rtype: dc.DomainPairConstraint
     """
+
     def evaluate(domain1: dc.Domain, domain2: dc.Domain) -> float:
         num_of_matches = 0
         run_of_matches = 0
@@ -408,6 +411,7 @@ def strand_substring_constraint(
     :return: [description]
     :rtype: dc.StrandConstraint
     """
+
     def violated(strand: dc.Strand):
         for substring in substrings:
             if substring in strand.sequence():
@@ -908,16 +912,18 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    design = dc.Design(strands=strands, complex_constraints=seesaw_circuit.constraints,
-                       domain_pair_constraints=[base_difference_constraint(recognition_domains)],
-                       strand_constraints=[strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)],)
+    
+    constraints: List[dc.Constraint] = [base_difference_constraint(recognition_domains),
+                                        strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)]
+    constraints.extend(seesaw_circuit.constraints) # make mypy happy about the generics with List
+    design = dc.Design(strands=strands, constraints=constraints)
+    params = ds.SearchParameters(out_directory='output/square_root_circuit',
+                                 # weigh_violations_equally=True,
+                                 # restart=True,
+                                 report_delay=0.0)
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                # restart=True,
-                                out_directory='output/square_root_circuit',
-                                )
+
+    ds.search_for_dna_sequences(design, params)
 
 
 if __name__ == '__main__':
