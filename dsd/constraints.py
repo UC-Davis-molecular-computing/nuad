@@ -12,6 +12,7 @@ legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyCo
 and  :any:`SequenceConstraint`, an alias for a function taking a string as input and returning a bool.
 """
 
+import os
 import math
 import json
 from typing import List, Set, Optional, Dict, Callable, Iterable, Tuple, Union, Collection, TypeVar, Any, \
@@ -27,7 +28,6 @@ from numbers import Number
 from enum import Enum, auto
 
 import numpy as np  # noqa
-from numpy import isin
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -1855,7 +1855,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             the :any:`Constraint`'s to apply to this :any:`Design` when running
             :py:meth:`search.search_for_dna_sequences`
         """
-        if constraints is None: constraints = []
+        if constraints is None:
+            constraints = []
         self.strands = strands if isinstance(strands, list) else list(strands)
         self._partition_constraints(constraints)
         self._compute_derived_fields()
@@ -2690,12 +2691,12 @@ DesignPart = TypeVar('DesignPart',
                      Strand,
                      Tuple[Domain, Domain],  # noqa
                      Tuple[Strand, Strand],  # noqa
-                     Tuple[Strand, ...],  # noqa
+                     Complex,  # noqa
                      Iterable[Domain],  # noqa
                      Iterable[Strand],  # noqa
                      Iterable[Tuple[Domain, Domain]],  # noqa
                      Iterable[Tuple[Strand, Strand]],  # noqa
-                     Iterable[Tuple[Strand, ...]],  # noqa
+                     Iterable[Complex],  # noqa
                      Design)
 
 
@@ -2775,7 +2776,7 @@ class ConstraintWithDomains(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
-    strands: Optional[Tuple[Strand, ...]] = None
+    strands: Optional[Complex] = None
     """
     List of :any:`Strand`'s to check; if not specified, all :any:`Strand`'s in :any:`Design` are checked.
     """
@@ -2870,7 +2871,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
-    complexes: Tuple[Tuple[Strand, ...], ...] = ()
+    complexes: Tuple[Complex, ...] = ()
     """
     List of complexes (tuples of :any:`Strand`'s) to check.
     """
@@ -2951,14 +2952,14 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
+class ComplexConstraint(ConstraintWithComplexes[Complex]):
     """Constraint that applies to a complex (tuple of :any:`Strand`'s).
 
     Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
     there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
     :any:`Complex`'s must be specified manually in the constructor."""
 
-    evaluate: Callable[[Tuple[Strand, ...]],
+    evaluate: Callable[[Complex],
                        float] = lambda _, __: 0.0
     """
     Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
@@ -2966,13 +2967,13 @@ class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
     or 0.0 if the constraint is satisfied.
     """
 
-    summary: Callable[[Tuple[Strand, ...]],
+    summary: Callable[[Complex],
                       str] = lambda _, __: _no_summary_string
 
     threaded: bool = False
 
-    def __call__(self, strand_complex: Tuple[Strand, ...]) -> float:
-        evaluate_callback = cast(Callable[[Tuple[Strand, ...]], float],  # noqa
+    def __call__(self, strand_complex: Complex) -> float:
+        evaluate_callback = cast(Callable[[Complex], float],  # noqa
                                  self.evaluate)  # type: ignore
         transfer_callback = cast(Callable[[float], float],  # noqa
                                  self.weight_transfer_function)  # type: ignore
@@ -2982,8 +2983,8 @@ class ComplexConstraint(ConstraintWithComplexes[Tuple[Strand, ...]]):
         weight = transfer_callback(excess)
         return weight
 
-    def generate_summary(self, strand_complex: Tuple[Strand, ...], report_only_violations: bool) -> str:
-        summary_callback = cast(Callable[[Tuple[Strand, ...]], str],  # noqa
+    def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
+        summary_callback = cast(Callable[[Complex], str],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand_complex)
 
@@ -3070,24 +3071,24 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexesConstraint(ConstraintWithComplexes[Iterable[Tuple[Strand, ...]]]):
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
     """
     Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
     """
 
-    evaluate: Callable[[Iterable[Tuple[Strand, ...]]],
+    evaluate: Callable[[Iterable[Complex]],
                        List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
     """
     Check to perform on an iterable of complexes (tuples of :any:`Strand`'s).
     Returns True if and only if the all complexes in the input iterable satisfy the constraint.
     """
 
-    summary: Callable[[Iterable[Tuple[Strand, ...]], bool],
+    summary: Callable[[Iterable[Complex], bool],
                       ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, complexes: Iterable[Tuple[Strand, ...]]) \
+    def __call__(self, complexes: Iterable[Complex]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, ...]]],  # noqa
+        evaluate_callback = cast(Callable[[Iterable[Complex]],  # noqa
                                           List[Tuple[OrderedSet[Domain], float]]],  # noqa
                                  self.evaluate)  # type: ignore
         transfer_callback = cast(Callable[[float], float],  # noqa
@@ -3096,9 +3097,9 @@ class ComplexesConstraint(ConstraintWithComplexes[Iterable[Tuple[Strand, ...]]])
         sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
         return sets_weights
 
-    def generate_summary(self, complexes: Iterable[Tuple[Strand, ...]],
+    def generate_summary(self, complexes: Iterable[Complex],
                          report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Tuple[Strand, ...]], bool], ConstraintReport],  # noqa
+        summary_callback = cast(Callable[[Iterable[Complex], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(complexes, report_only_violations)
 
@@ -3293,7 +3294,7 @@ def nupack_strand_secondary_structure_constraint(
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
-        threaded: bool = False,
+        threaded: bool = True,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
         strands: Optional[Iterable[Strand]] = None,
@@ -3371,7 +3372,7 @@ def nupack_4_strand_secondary_structure_constraint(
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
-        threaded: bool = False,
+        threaded: bool = True,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
         strands: Optional[Iterable[Strand]] = None,
@@ -5059,13 +5060,13 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(strand_complex: Tuple[Strand, ...],
+def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
                                            nonimplicit_base_pairs_domain_names: Set[str] = None) \
         -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
     :param strand_complex: Tuple of strands representing strand complex
-    :type strand_complex: Tuple[Strand, ...]
+    :type strand_complex: Complex
     :param nonimplicit_base_pairs_domain_names: Set of all domain names to ignore in this search, defaults to None
     :type nonimplicit_base_pairs_domain_names: Set[str], optional
     :return: Map of all implicitly bound domain addresses
@@ -5104,12 +5105,12 @@ def _get_implicitly_bound_domain_addresses(strand_complex: Tuple[Strand, ...],
     return implicitly_bound_domain_addresses
 
 
-def _get_addr_to_starting_base_pair_idx(strand_complex: Tuple[Strand, ...]) -> Dict[StrandDomainAddress, int]:
+def _get_addr_to_starting_base_pair_idx(strand_complex: Complex) -> Dict[StrandDomainAddress, int]:
     """Returns a mapping between StrandDomainAddress and the base index of the
     5' end base of the domain
 
     :param strand_complex: Tuple of strands representing strand complex
-    :type strand_complex: Tuple[Strand, ...]
+    :type strand_complex: Complex
     :return: Map of StrandDomainAddress to starting base index
     :rtype: Dict[StrandDomainAddress, int]
     """
@@ -5185,12 +5186,12 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-        strand_complex: Tuple[Strand, ...],
+        strand_complex: Complex,
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
     :param strand_complex: Tuple of strands representing strand complex
-    :type strand_complex: Tuple[Strand, ...]
+    :type strand_complex: Complex
     :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
@@ -5221,12 +5222,12 @@ def _get_base_pair_domain_endpoints_to_check(
 
 
 def __get_base_pair_domain_endpoints_to_check(
-        strand_complex: Tuple[Strand, ...],
+        strand_complex: Complex,
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
     :param strand_complex: Tuple of strands representing strand complex
-    :type strand_complex: Tuple[Strand, ...]
+    :type strand_complex: Complex
     :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
@@ -5354,7 +5355,7 @@ def __get_base_pair_domain_endpoints_to_check(
 
 
 def nupack_4_complex_secondary_structure_constraint(
-        strand_complexes: List[Tuple[Strand, ...]],
+        strand_complexes: List[Complex],
         nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
         all_base_pairs: Optional[Iterable[BoundDomains]] = None,
         base_pair_prob_by_type: Optional[Dict[BasePairType, float]] = None,
@@ -5369,13 +5370,14 @@ def nupack_4_complex_secondary_structure_constraint(
         description: Optional[str] = None,
         short_description: str = 'complex_secondary_structure_nupack',
         threaded: bool = False,
+        # threaded: bool = True,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
     :param strand_complexes:
         Iterable of :any:`Strand` tuples
     :type strand_complexes:
-        List[Tuple[Strand, ...]]
+        List[Complex]
     :param nonimplicit_base_pairs:
         List of nonimplicit base pairs that cannot be inferred because multiple
         instances of the same :py:class:`Domain` exist in complex.
@@ -5507,7 +5509,7 @@ def nupack_4_complex_secondary_structure_constraint(
 
     for strand in strand_complex_template:
         if type(strand) is not Strand:
-            raise ValueError(f"Complex at index 0 contanied non-Strand object: {type(strand)}")
+            raise ValueError(f"Complex at index 0 contained non-Strand object: {type(strand)}")
 
     for idx in range(1, len(strand_complexes)):
         strand_complex = strand_complexes[idx]
@@ -5555,7 +5557,7 @@ def nupack_4_complex_secondary_structure_constraint(
     if description is None:
         description = ' '.join([str(s) for s in strand_complex_template])
 
-    def evaluate(strand_complex_: Tuple[Strand, ...]) -> float:
+    def evaluate(strand_complex_: Complex) -> float:
         bps = _violation_base_pairs(strand_complex_)
         err_sq = 0.0
         for bp in bps:
@@ -5567,7 +5569,7 @@ def nupack_4_complex_secondary_structure_constraint(
     # summary would print all the base pairs
     # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
     # * maybe consider puting second and after base pairs on new line with indent
-    def summary(strand_complex_: Tuple[Strand, ...]) -> str:
+    def summary(strand_complex_: Complex) -> str:
         bps = _violation_base_pairs(strand_complex_)
         if len(bps) == 0:
             return "\tAll base pairs satisfy thresholds."
@@ -5581,7 +5583,7 @@ def nupack_4_complex_secondary_structure_constraint(
                 f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
         return '\n'.join(summary_list)
 
-    def _violation_base_pairs(strand_complex_: Tuple[Strand, ...]) -> List[_BasePair]:
+    def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
         nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
         nupack_complex: NupackComplex = NupackComplex(nupack_strands)
 
@@ -5836,11 +5838,10 @@ def cpu_count(logical: bool = False) -> int:
         logger.warning('''\
 psutil package not installed. Using os package to determine number of cores.
 WARNING: this will count the number of logical cores, but the number of
-physical scores is a more effective number to use. It is recommended to
+physical cores is a more effective number to use. It is recommended to
 install the package psutil to help determine the number of physical cores
 and make parallel processing more efficient:
   https://pypi.org/project/psutil/''')
-        import os
         count = os.cpu_count()
     if count is None:
         logger.warning('could not determine number of physical CPU cores; defaulting to 1')
