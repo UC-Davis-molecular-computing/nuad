@@ -80,6 +80,7 @@ import dsd.np as dn
 # tested it.
 # from multiprocessing.pool import Pool
 from multiprocessing.pool import ThreadPool
+import pathos
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
@@ -89,7 +90,13 @@ import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
 
-_thread_pool = ThreadPool(processes=dc.cpu_count())
+
+def new_process_pool(cpu_count: int):
+    return pathos.multiprocessing.Pool(processes=cpu_count)
+    # return ThreadPool(processes=cpu_count)
+
+
+_process_pool = new_process_pool(dc.cpu_count())
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
@@ -676,7 +683,7 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             else:
                 return None
 
-        violating_domains_weights = _thread_pool.map(domain_if_violates, unfixed_domains)
+        violating_domains_weights = _process_pool.map(domain_if_violates, unfixed_domains)
 
     for violating_domain_weight in violating_domains_weights:
         if violating_domain_weight is not None:
@@ -744,12 +751,12 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                 return _empty_ordered_set, 0.0
 
         if current_weight_gap is None:
-            sets_of_violating_domains_weights = _thread_pool.map(strand_to_unfixed_domains_set,
-                                                                 unfixed_strands)
+            sets_of_violating_domains_weights = _process_pool.map(strand_to_unfixed_domains_set,
+                                                                  unfixed_strands)
         else:
             for strand_chunk in dc.chunker(unfixed_strands, chunk_size):
-                sets_of_violating_domains_excesses_chunk = _thread_pool.map(strand_to_unfixed_domains_set,
-                                                                            strand_chunk)
+                sets_of_violating_domains_excesses_chunk = _process_pool.map(strand_to_unfixed_domains_set,
+                                                                             strand_chunk)
                 sets_of_violating_domains_weights.extend(sets_of_violating_domains_excesses_chunk)
 
                 # quit early if possible; check weights of violations we just added
@@ -835,12 +842,12 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
 
         if current_weight_gap is None:
             violating_domain_pairs_weights = list(
-                _thread_pool.map(domain_pair_if_violates, domain_pairs_to_check))
+                _process_pool.map(domain_pair_if_violates, domain_pairs_to_check))
         else:
             chunks = dc.chunker(domain_pairs_to_check, chunk_size)
             for domain_chunk in chunks:
                 violating_domain_pairs_chunk_with_none = \
-                    _thread_pool.map(domain_pair_if_violates, domain_chunk)
+                    _process_pool.map(domain_pair_if_violates, domain_chunk)
                 violating_domain_pairs_weights_chunk = \
                     remove_none_from_list(violating_domain_pairs_chunk_with_none)
                 violating_domain_pairs_weights.extend(violating_domain_pairs_weights_chunk)
@@ -923,12 +930,12 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 
         if current_weight_gap is None:
             violating_strand_pairs_weights = list(
-                _thread_pool.map(strand_pair_weight_if_violates, strand_pairs_to_check))
+                _process_pool.map(strand_pair_weight_if_violates, strand_pairs_to_check))
         else:
             chunks = dc.chunker(strand_pairs_to_check, chunk_size)
             for strand_chunk in chunks:
                 violating_strand_pairs_chunk_with_none: List[Optional[Tuple[Strand, Strand, float]]] = \
-                    _thread_pool.map(strand_pair_weight_if_violates, strand_chunk)
+                    _process_pool.map(strand_pair_weight_if_violates, strand_chunk)
                 violating_strand_pairs_chunk: List[Tuple[Strand, Strand, float]] = \
                     remove_none_from_list(violating_strand_pairs_chunk_with_none)
                 violating_strand_pairs_weights.extend(violating_strand_pairs_chunk)
@@ -972,7 +979,7 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
     weight_discovered_here: float = 0.0
     quit_early = False
 
-    cpu_count = dc.cpu_count() if constraint.threaded else 1
+    cpu_count = dc.cpu_count()
 
     chunk_size = cpu_count
     if (not constraint.threaded
@@ -1005,12 +1012,12 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
 
         if current_weight_gap is None:
             violating_complexes_weights = list(
-                _thread_pool.map(complex_weight_if_violates, complexes_to_check))
+                _process_pool.map(complex_weight_if_violates, complexes_to_check))
         else:
             chunks = dc.chunker(complexes_to_check, chunk_size)
             for complex_chunk in chunks:
                 violating_complexes_chunk_with_none: List[Optional[Tuple[Complex, float]]] = \
-                    _thread_pool.map(complex_weight_if_violates, complex_chunk)
+                    _process_pool.map(complex_weight_if_violates, complex_chunk)
                 violating_complexes_chunk: List[Tuple[Complex, float]] = \
                     remove_none_from_list(violating_complexes_chunk_with_none)
                 violating_complexes_weights.extend(violating_complexes_chunk)
@@ -1206,6 +1213,7 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 
     return domain_to_strand
 
+
 @dataclass
 class SearchParameters:
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
@@ -1304,7 +1312,7 @@ class SearchParameters:
     :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
     that they violated.
     """
-    
+
     num_digits_update: Optional[int] = None
     """
     Number of digits to use when writing update number in filenames. By default,
@@ -1374,7 +1382,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
     :param params:
-        A :any:`SearchParameters` object with attributes that can be called within this function for flexibility.
+        A :any:`SearchParameters` object with attributes that can be called within this function
+        for flexibility.
 
     """
 
@@ -1407,6 +1416,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     if params.random_seed is not None:
         logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
+    # need to assign to local function variable so it doesn't look like a method call
+    on_improved_design: Callable[[int], None] = params.on_improved_design
+
     try:
         if not params.restart:
             assign_sequences_to_domains_randomly_from_pools(design=design,
@@ -1421,7 +1433,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         # write initial sequences and report
         _write_intermediate_files(design=design, num_new_optimal=num_new_optimal, write_report=True,
-                                  directories=directories, report_only_violations=params.report_only_violations,
+                                  directories=directories,
+                                  report_only_violations=params.report_only_violations,
                                   num_digits_update=params.num_digits_update)
 
         # this helps with logging if we execute no iterations
@@ -1468,7 +1481,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                 violation_set_opt = violation_set_new
                 if weight_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
-                    params.on_improved_design(num_new_optimal)
+                    on_improved_design(num_new_optimal)  # type: ignore
 
                     current_time: float = time.time()
                     write_report = False
@@ -1496,8 +1509,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     finally:
         # if sys.platform != 'win32':
         #     _pfunc_killall()
-        _thread_pool.close()  # noqa
-        _thread_pool.terminate()
+        _process_pool.close()  # noqa
+        _process_pool.terminate()
 
     if directories.debug_file_handler is not None:
         dc.logger.removeHandler(directories.debug_file_handler)  # noqa
@@ -1513,10 +1526,10 @@ def _check_cpu_count(cpu_count: int) -> None:
         logger.info(f'number of processes in system changed from {cpu_count} to {dc.cpu_count()}'
                     f'\nallocating new ThreadPool')
         cpu_count = dc.cpu_count()
-        global _thread_pool
-        _thread_pool.close()
-        _thread_pool.terminate()
-        _thread_pool = ThreadPool(processes=cpu_count)
+        global _process_pool
+        _process_pool.close()
+        _process_pool.terminate()
+        _process_pool = new_process_pool(cpu_count)
 
 
 def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
