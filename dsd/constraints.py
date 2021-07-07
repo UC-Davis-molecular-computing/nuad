@@ -1696,11 +1696,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
 
 
-Complex = Tuple[Strand, ...]
-"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
-:any:`Domain`'s."""
-
-
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
     :param lst:
@@ -2767,7 +2762,7 @@ _no_summary_string = f"No summary for this constraint. " \
 class ConstraintWithDomains(Constraint[DesignPart], Generic[DesignPart]):
     domains: Optional[Tuple[Domain, ...]] = None
     """
-    List of :any:`Domain`'s to check; if not specified, all :any:`Domain`'s in :any:`Design` are checked.
+    Tuple of :any:`Domain`'s to check; if not specified, all :any:`Domain`'s in :any:`Design` are checked.
     """
 
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
@@ -2776,9 +2771,9 @@ class ConstraintWithDomains(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
-    strands: Optional[Complex] = None
+    strands: Optional[Tuple[Strand, ...]] = None
     """
-    List of :any:`Strand`'s to check; if not specified, all :any:`Strand`'s in :any:`Design` are checked.
+    Tuple of :any:`Strand`'s to check; if not specified, all :any:`Strand`'s in :any:`Design` are checked.
     """
 
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
@@ -2869,17 +2864,6 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
         raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
 
 
-@dataclass(frozen=True, eq=False)
-class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
-    complexes: Tuple[Complex, ...] = ()
-    """
-    List of complexes (tuples of :any:`Strand`'s) to check.
-    """
-
-    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
-        raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
-
-
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     """Constraint that applies to a pair of :any:`Domain`'s."""
@@ -2952,57 +2936,6 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexConstraint(ConstraintWithComplexes[Complex]):
-    """Constraint that applies to a complex (tuple of :any:`Strand`'s).
-
-    Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
-    there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
-    :any:`Complex`'s must be specified manually in the constructor."""
-
-    evaluate: Callable[[Complex],
-                       float] = lambda _, __: 0.0
-    """
-    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
-    Returns float indicating how much the constraint is violated,
-    or 0.0 if the constraint is satisfied.
-    """
-
-    summary: Callable[[Complex],
-                      str] = lambda _, __: _no_summary_string
-
-    threaded: bool = False
-
-    def __call__(self, strand_complex: Complex) -> float:
-        evaluate_callback = cast(Callable[[Complex], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(strand_complex)
-        if excess < 0:
-            return 0.0
-        weight = transfer_callback(excess)
-        return weight
-
-    def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
-        summary_callback = cast(Callable[[Complex], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strand_complex)
-
-
-def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
-                               transfer_callback: Callable[[float], float]) \
-        -> List[Tuple[OrderedSet[Domain], float]]:
-    sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
-    for set_, excess in sets_excesses:
-        if excess < 0:
-            weight = 0.0
-        else:
-            weight = transfer_callback(excess)
-        sets_weights.append((set_, weight))
-    return sets_weights
-
-
-@dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Domain]]]):
     """
     Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
@@ -3068,40 +3001,6 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
         summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport],  # noqa
                                 self.summary)  # type: ignore
         return summary_callback(strand_pairs, report_only_violations)
-
-
-@dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
-    """
-    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
-    """
-
-    evaluate: Callable[[Iterable[Complex]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
-    """
-    Check to perform on an iterable of complexes (tuples of :any:`Strand`'s).
-    Returns True if and only if the all complexes in the input iterable satisfy the constraint.
-    """
-
-    summary: Callable[[Iterable[Complex], bool],
-                      ConstraintReport] = lambda _: _no_summary_string
-
-    def __call__(self, complexes: Iterable[Complex]) \
-            -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Complex]],  # noqa
-                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(complexes)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
-        return sets_weights
-
-    def generate_summary(self, complexes: Iterable[Complex],
-                         report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Complex], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(complexes, report_only_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3772,6 +3671,700 @@ def nupack_strand_pair_constraint(
                                 pairs=pairs,
                                 evaluate=evaluate,
                                 summary=summary)
+
+
+def nupack_4_strand_pair_constraint(
+        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'strand_pair_nupack',
+        threaded: bool = False,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        negate: bool = False) -> StrandPairConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    NUPACK's pfunc executable.
+
+    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float;
+        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
+        the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature:
+        Temperature in Celsius
+    :param sodium:
+        concentration of Na+ in molar
+    :param magnesium:
+        concentration of Mg++ in molar
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param threaded:
+        Whether to use threading to parallelize evaluating this constraint.
+    :param description:
+        Detailed description of constraint suitable for report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+    :return:
+        The :any:`StrandPairConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+                                              for (strand_group1, strand_group2), value in threshold.items()}
+            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    def evaluate(strand1: Strand, strand2: Strand) -> float:
+        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        logger.debug(
+            f'strand pair threshold: {threshold_value:6.2f} '
+            f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+        excess = threshold_value - energy
+        if negate:
+            excess = -excess
+        return max(0.0, excess)
+
+    def summary(strand1: Strand, strand2: Strand) -> str:
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        return f'{energy:6.2f} kcal/mol'
+
+    if pairs is not None:
+        pairs = tuple(pairs)
+
+    return StrandPairConstraint(description=description,
+                                short_description=short_description,
+                                weight=weight,
+                                weight_transfer_function=weight_transfer_function,
+                                threaded=threaded,
+                                pairs=pairs,
+                                evaluate=evaluate,
+                                summary=summary)
+
+
+def chunker(sequence: Sequence[T], chunk_length: Optional[int] = None, num_chunks: Optional[int] = None) -> \
+        List[List[T]]:
+    """
+    Collect data into fixed-length chunks or blocks, e.g., chunker('ABCDEFG', 3) --> ABC DEF G
+
+    :param sequence:
+        Sequence (list or tuple) of items.
+    :param chunk_length:
+        Length of each chunk. Mutually exclusive with `num_chunks`.
+    :param num_chunks:
+        Number of chunks. Mutually exclusive with `chunk_length`.
+    :return:
+        List of `num_chunks` lists, each list of length `chunk_length` (one of `num_chunks` or
+        `chunk_length` will be calculated from the other).
+    """
+    if chunk_length is None and num_chunks is None or chunk_length is not None and num_chunks is not None:
+        raise ValueError('exactly one of chunk_length or num_chunks must be None')
+
+    if chunk_length is None:
+        if num_chunks is None:
+            raise ValueError('exactly one of chunk_length or num_chunks must be None')
+        if num_chunks < 1:
+            raise ValueError('num_chunks must be positive')
+        num_items = len(sequence)
+        chunk_length, remainder = divmod(num_items, num_chunks)
+        if remainder > 0:
+            chunk_length += 1
+
+    args = [iter(sequence)] * chunk_length
+    chunks = list(itertools.zip_longest(*args, fillvalue=None))
+    for i, chunk in enumerate(chunks):
+        chunks[i] = [item for item in chunks[i] if item is not None]
+    return chunks
+
+
+def cpu_count(logical: bool = False) -> int:
+    """
+    Counts the number of physical CPUs (cores). For greatest accuracy, requires the 3rd party
+    `psutil <https://pypi.org/project/psutil/>`_
+    package to be installed.
+
+    :param logical:
+        Whether to count number of logical processors or physical CPU cores.
+    :return:
+        Number of physical CPU cores if logical is False and package psutils is installed;
+        otherwise, the number of logical processors.
+    """
+    count: Optional[int]
+    try:
+        import psutil  # type: ignore
+        count = psutil.cpu_count(logical=logical)
+    except ModuleNotFoundError:
+        logger.warning('''\
+psutil package not installed. Using os package to determine number of cores.
+WARNING: this will count the number of logical cores, but the number of
+physical cores is a more effective number to use. It is recommended to
+install the package psutil to help determine the number of physical cores
+and make parallel processing more efficient:
+  https://pypi.org/project/psutil/''')
+        count = os.cpu_count()
+    if count is None:
+        logger.warning('could not determine number of physical CPU cores; defaulting to 1')
+        count = 1
+    return count
+
+
+def rna_duplex_strand_pairs_constraint(
+        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        temperature: float = dv.default_temperature,
+        negate: bool = False,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'rna_dup_strand_pairs',
+        threaded: bool = False,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> StrandPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    Vienna RNA's RNAduplex executable.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float;
+        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
+        the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature:
+        Temperature in Celsius.
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        Long description of constraint suitable for putting into constraint report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param threaded:
+        Whether to test the each pair of :any:`Strand`'s in parallel.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+    :param parameters_filename:
+        Name of parameters file for ViennaRNA;
+        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :return:
+        The :any:`StrandPairsConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+                                              for (strand_group1, strand_group2), value in threshold.items()}
+            description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    from dsd.stopwatch import Stopwatch
+
+    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
+    thread_pool = ThreadPool(processes=num_threads)
+
+    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+        return dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
+
+    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+        if threaded and len(sequence_pairs) > 1:
+            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
+            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
+            energies = _flatten(lists_of_energies)
+        else:
+            energies = calculate_energies_unthreaded(sequence_pairs)
+        return energies
+
+    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
+        stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
+        # stopwatch = None  # uncomment to not log time
+
+        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
+        energies = calculate_energies(sequence_pairs)
+
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+        for (strand1, strand2), energy in zip(strand_pairs, energies):
+            excess = energy_excess(energy, threshold, negate, strand1, strand2)
+            # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')
+            if excess > 0.0:
+                domain_set_weights = (
+                    OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
+                domain_sets_weights.append(domain_set_weights)
+
+        if stopwatch is not None:
+            stopwatch.stop()
+            logger.debug(f'*** rna_duplex_strand_pairs_constraint ***')
+            logger.debug(f'*   description: {description}')
+            logger.debug(f'*   evaluated {len(sequence_pairs)} pairs of strands')
+            logger.debug(f'*   total time to evaluate: {stopwatch}')
+            logger.debug(f'*   energies: {sorted(energies)}')
+
+        return domain_sets_weights
+
+    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
+                report_only_violations: bool) -> ConstraintReport:
+        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
+        energies = calculate_energies(sequence_pairs)
+        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
+
+        strand_pairs_energies = zip(strand_pairs, energies)
+
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (strand1, strand2), energy in strand_pairs_energies:
+            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'strands '
+                        f'{strand1.name:{max_name_length}}, '
+                        f'{strand2.name:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=None, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
+                                 evaluate=evaluate,
+                                 summary=summary,
+                                 pairs=pairs_tuple)
+
+
+def energy_excess(energy: float, threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+                  negate: bool, strand1: Strand, strand2: Strand) -> float:
+    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
+    if isinstance(threshold, Number):
+        threshold_value = threshold
+    elif isinstance(threshold, dict):
+        threshold_value = threshold[(strand1.group, strand2.group)]
+    excess = threshold_value - energy
+    if negate:
+        excess = -excess
+    return excess
+
+
+def energy_excess_domains(energy: float,
+                          threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
+                          negate: bool, domain1: Domain, domain2: Domain) -> float:
+    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
+    if isinstance(threshold, Number):
+        threshold_value = threshold
+    elif isinstance(threshold, dict):
+        threshold_value = threshold[(domain1.pool, domain2.pool)]
+    excess = threshold_value - energy
+    if negate:
+        excess = -excess
+    return excess
+
+
+def rna_cofold_strand_pairs_constraint(
+        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        temperature: float = dv.default_temperature,
+        negate: bool = False,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
+        short_description: str = 'rna_dup_strand_pairs',
+        threaded: bool = False,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> StrandPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    Vienna RNA's RNAduplex executable.
+
+    :param threshold:
+        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
+        :any:`StrandGroup`'s to a float;
+        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
+        the threshold used is ``threshold[(sg1, sg2)]``
+    :param temperature:
+        Temperature in Celsius.
+    :param negate:
+        Whether to negate free energy (making it larger for more favorable structures).
+        If True, then the constraint is violated if energy > `threshold`.
+        If False, then the constraint is violated if energy < `threshold`.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        Long description of constraint suitable for putting into constraint report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param threaded:
+        Whether to test the each pair of :any:`Strand`'s in parallel.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+    :param parameters_filename:
+        Name of parameters file for ViennaRNA;
+        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :return:
+        The :any:`StrandPairsConstraint`.
+    """
+
+    if description is None:
+        if isinstance(threshold, Number):
+            description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
+        elif isinstance(threshold, dict):
+            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
+                                              for (strand_group1, strand_group2), value in threshold.items()}
+            description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
+                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
+        else:
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
+                             f'but it is {type(threshold)}')
+
+    from dsd.stopwatch import Stopwatch
+
+    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
+    thread_pool = ThreadPool(processes=num_threads)
+
+    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+        return dv.rna_cofold_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
+
+    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+        if threaded and len(sequence_pairs) > 1:
+            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
+            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
+            energies = _flatten(lists_of_energies)
+        else:
+            energies = calculate_energies_unthreaded(sequence_pairs)
+        return energies
+
+    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
+        stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
+        # stopwatch = None  # uncomment to not log time
+
+        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+        # domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+
+        energies = calculate_energies(sequence_pairs)
+
+        for (strand1, strand2), energy in zip(strand_pairs, energies):
+            excess = energy_excess(energy, threshold, negate, strand1, strand2)
+            if excess > 0.0:
+                domain_set_weights = (OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()),
+                                      excess)
+                domain_sets_weights.append(domain_set_weights)
+
+        if stopwatch is not None:
+            stopwatch.stop()
+            logger.debug(f'*** rna_cofold_strand_pairs_constraint ***')
+            logger.debug(f'*   description: {description}')
+            logger.debug(f'*   evaluated {len(sequence_pairs)} pairs of strands')
+            logger.debug(f'*   total time to evaluate: {stopwatch}')
+            logger.debug(f'*   energies: {sorted(energies)}')
+
+        return domain_sets_weights
+
+    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
+                report_only_violations: bool) -> ConstraintReport:
+        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
+        energies = calculate_energies(sequence_pairs)
+        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
+        strand_pairs_energies = zip(strand_pairs, energies)
+
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (strand1, strand2), energy in strand_pairs_energies:
+            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'strands '
+                        f'{strand1.name:{max_name_length}}, '
+                        f'{strand2.name:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        return ConstraintReport(constraint=None, content='\n'.join(lines),
+                                num_violations=num_violations, num_checks=num_checks)
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
+                                 evaluate=evaluate,
+                                 summary=summary,
+                                 pairs=pairs_tuple)
+
+
+def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
+        -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
+    """
+    :param domain_pairs:
+        Domain pairs.
+    :return:
+        pair consisting of two lists, each of length 4 times as long as `domain_pairs`.
+        Each pair in `domain_pairs` is associated to the 4 combinations of WC complementing (or not)
+        the sequences of each Domain.
+        - sequence_pairs: the sequences (appropriated complemented or not)
+        - names: the names (appropriately *'d or not)
+    """
+    sequence_pairs: List[Tuple[str, str]] = []
+    names: List[Tuple[str, str]] = []
+    domains: List[Tuple[Domain, Domain]] = []
+    for d1, d2 in domain_pairs:
+        for starred1, starred2 in itertools.product([False, True], repeat=2):
+            seq1 = d1.concrete_sequence(starred1)
+            seq2 = d2.concrete_sequence(starred2)
+            name1 = d1.get_name(starred1)
+            name2 = d2.get_name(starred2)
+            sequence_pairs.append((seq1, seq2))
+            names.append((name1, name2))
+            domains.append((d1, d2))
+    return sequence_pairs, names, domains
+
+
+def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
+    #  Flatten one level of nesting
+    return list(itertools.chain.from_iterable(list_of_lists))
+
+
+def rna_duplex_domain_pairs_constraint(
+        threshold: float,
+        temperature: float = dv.default_temperature,
+        negate: bool = False,
+        weight: float = 1.0,
+        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        short_description: str = 'rna_dup_dom_pairs',
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> DomainPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
+    Vienna RNA's RNAduplex executable.
+
+    :param threshold: energy threshold
+    :param temperature: temperature in Celsius
+    :param negate: whether to negate free energy (making it larger for more favorable structures).
+                   If True, then the constraint is violated if energy > `threshold`.
+                   If False, then the constraint is violated if energy < `threshold`.
+    :param weight: how much to weigh this :any:`Constraint`
+    :param weight_transfer_function:
+        See :py:data:`Constraint.weight_transfer_function`.
+    :param short_description: short description of constraint suitable for logging to stdout
+    :param pairs: pairs of :any:`Domain`'s to compare; if not specified, checks all pairs
+    :param parameters_filename: name of parameters file for ViennaRNA; default is
+                                same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :return: constraint
+    """
+
+    def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[OrderedSet[Domain], float]]:
+        if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
+            raise ValueError('cannot evaluate domains unless they have sequences assigned')
+        sequence_pairs, _, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
+        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+        energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
+        for (domain1, domain2), energy in zip(domain_pairs, energies):
+            excess = threshold - energy
+            if negate:
+                excess = -excess
+            if excess > 0.0:
+                domain_set_weights = (OrderedSet([domain1, domain2]), excess)
+                domain_sets_weights.append(domain_set_weights)
+        return domain_sets_weights
+
+    def summary(domain_pairs: Iterable[Tuple[Domain, Domain]],
+                report_only_violations: bool) -> ConstraintReport:
+        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_and_complements(domain_pairs)
+        energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
+        max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
+
+        num_checks = len(energies)
+        num_violations = 0
+        lines: List[str] = []
+        for (domain1, domain2), (name1, name2), energy in zip(domains, domain_name_pairs, energies):
+            passed = energy_excess_domains(energy, threshold, negate, domain1, domain2) <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                line = (f'domains '
+                        f'{name1:{max_name_length}}, '
+                        f'{name2:{max_name_length}}: '
+                        f'{energy:6.2f} kcal/mol'
+                        f'{"" if passed else "  **violation**"}')
+                lines.append(line)
+
+        if not report_only_violations:
+            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=None, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return DomainPairsConstraint(description='RNAduplex some domain pairs',
+                                 short_description=short_description,
+                                 weight=weight,
+                                 weight_transfer_function=weight_transfer_function,
+                                 evaluate=evaluate,
+                                 summary=summary,
+                                 pairs=pairs_tuple)
+
+
+#########################################################################################
+# ComplexConstraints defined below here
+#########################################################################################
+
+
+Complex = Tuple[Strand, ...]
+"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
+:any:`Domain`'s."""
+
+
+@dataclass(frozen=True, eq=False)
+class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
+    complexes: Tuple[Complex, ...] = ()
+    """
+    List of complexes (tuples of :any:`Strand`'s) to check.
+    """
+
+    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
+        raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexConstraint(ConstraintWithComplexes[Complex]):
+    """Constraint that applies to a complex (tuple of :any:`Strand`'s).
+
+    Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
+    there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
+    :any:`Complex`'s must be specified manually in the constructor."""
+
+    evaluate: Callable[[Complex],
+                       float] = lambda _, __: 0.0
+    """
+    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
+    Returns float indicating how much the constraint is violated,
+    or 0.0 if the constraint is satisfied.
+    """
+
+    summary: Callable[[Complex],
+                      str] = lambda _, __: _no_summary_string
+
+    threaded: bool = False
+
+    def __call__(self, strand_complex: Complex) -> float:
+        evaluate_callback = cast(Callable[[Complex], float],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        excess = evaluate_callback(strand_complex)
+        if excess < 0:
+            return 0.0
+        weight = transfer_callback(excess)
+        return weight
+
+    def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
+        summary_callback = cast(Callable[[Complex], str],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(strand_complex)
+
+
+def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
+                               transfer_callback: Callable[[float], float]) \
+        -> List[Tuple[OrderedSet[Domain], float]]:
+    sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
+    for set_, excess in sets_excesses:
+        if excess < 0:
+            weight = 0.0
+        else:
+            weight = transfer_callback(excess)
+        sets_weights.append((set_, weight))
+    return sets_weights
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
+    """
+    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
+    """
+
+    evaluate: Callable[[Iterable[Complex]],
+                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
+    """
+    Check to perform on an iterable of complexes (tuples of :any:`Strand`'s).
+    Returns True if and only if the all complexes in the input iterable satisfy the constraint.
+    """
+
+    summary: Callable[[Iterable[Complex], bool],
+                      ConstraintReport] = lambda _: _no_summary_string
+
+    def __call__(self, complexes: Iterable[Complex]) \
+            -> List[Tuple[OrderedSet[Domain], float]]:
+        evaluate_callback = cast(Callable[[Iterable[Complex]],  # noqa
+                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
+                                 self.evaluate)  # type: ignore
+        transfer_callback = cast(Callable[[float], float],  # noqa
+                                 self.weight_transfer_function)  # type: ignore
+        sets_excesses = evaluate_callback(complexes)
+        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        return sets_weights
+
+    def generate_summary(self, complexes: Iterable[Complex],
+                         report_only_violations: bool) -> ConstraintReport:
+        summary_callback = cast(Callable[[Iterable[Complex], bool], ConstraintReport],  # noqa
+                                self.summary)  # type: ignore
+        return summary_callback(complexes, report_only_violations)
 
 
 class _AdjacentDuplexType(Enum):
@@ -5692,591 +6285,3 @@ def nupack_4_complex_secondary_structure_constraint(
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
-
-
-def nupack_4_strand_pair_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
-        temperature: float = dv.default_temperature,
-        sodium: float = dv.default_sodium,
-        magnesium: float = dv.default_magnesium,
-        weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
-        short_description: str = 'strand_pair_nupack',
-        threaded: bool = False,
-        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        negate: bool = False) -> StrandPairConstraint:
-    """
-    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    NUPACK's pfunc executable.
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-
-    :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
-    :param temperature:
-        Temperature in Celsius
-    :param sodium:
-        concentration of Na+ in molar
-    :param magnesium:
-        concentration of Mg++ in molar
-    :param negate:
-        Whether to negate free energy (making it larger for more favorable structures).
-        If True, then the constraint is violated if energy > `threshold`.
-        If False, then the constraint is violated if energy < `threshold`.
-    :param weight:
-        How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param threaded:
-        Whether to use threading to parallelize evaluating this constraint.
-    :param description:
-        Detailed description of constraint suitable for report.
-    :param short_description:
-        Short description of constraint suitable for logging to stdout.
-    :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
-    :return:
-        The :any:`StrandPairConstraint`.
-    """
-
-    if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
-
-    def evaluate(strand1: Strand, strand2: Strand) -> float:
-        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
-        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
-        logger.debug(
-            f'strand pair threshold: {threshold_value:6.2f} '
-            f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
-        excess = threshold_value - energy
-        if negate:
-            excess = -excess
-        return max(0.0, excess)
-
-    def summary(strand1: Strand, strand2: Strand) -> str:
-        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
-        return f'{energy:6.2f} kcal/mol'
-
-    if pairs is not None:
-        pairs = tuple(pairs)
-
-    return StrandPairConstraint(description=description,
-                                short_description=short_description,
-                                weight=weight,
-                                weight_transfer_function=weight_transfer_function,
-                                threaded=threaded,
-                                pairs=pairs,
-                                evaluate=evaluate,
-                                summary=summary)
-
-
-def chunker(sequence: Sequence[T], chunk_length: Optional[int] = None, num_chunks: Optional[int] = None) -> \
-        List[List[T]]:
-    """
-    Collect data into fixed-length chunks or blocks, e.g., chunker('ABCDEFG', 3) --> ABC DEF G
-
-    :param sequence:
-        Sequence (list or tuple) of items.
-    :param chunk_length:
-        Length of each chunk. Mutually exclusive with `num_chunks`.
-    :param num_chunks:
-        Number of chunks. Mutually exclusive with `chunk_length`.
-    :return:
-        List of `num_chunks` lists, each list of length `chunk_length` (one of `num_chunks` or
-        `chunk_length` will be calculated from the other).
-    """
-    if chunk_length is None and num_chunks is None or chunk_length is not None and num_chunks is not None:
-        raise ValueError('exactly one of chunk_length or num_chunks must be None')
-
-    if chunk_length is None:
-        if num_chunks is None:
-            raise ValueError('exactly one of chunk_length or num_chunks must be None')
-        if num_chunks < 1:
-            raise ValueError('num_chunks must be positive')
-        num_items = len(sequence)
-        chunk_length, remainder = divmod(num_items, num_chunks)
-        if remainder > 0:
-            chunk_length += 1
-
-    args = [iter(sequence)] * chunk_length
-    chunks = list(itertools.zip_longest(*args, fillvalue=None))
-    for i, chunk in enumerate(chunks):
-        chunks[i] = [item for item in chunks[i] if item is not None]
-    return chunks
-
-
-def cpu_count(logical: bool = False) -> int:
-    """
-    Counts the number of physical CPUs (cores). For greatest accuracy, requires the 3rd party
-    `psutil <https://pypi.org/project/psutil/>`_
-    package to be installed.
-
-    :param logical:
-        Whether to count number of logical processors or physical CPU cores.
-    :return:
-        Number of physical CPU cores if logical is False and package psutils is installed;
-        otherwise, the number of logical processors.
-    """
-    count: Optional[int]
-    try:
-        import psutil  # type: ignore
-        count = psutil.cpu_count(logical=logical)
-    except ModuleNotFoundError:
-        logger.warning('''\
-psutil package not installed. Using os package to determine number of cores.
-WARNING: this will count the number of logical cores, but the number of
-physical cores is a more effective number to use. It is recommended to
-install the package psutil to help determine the number of physical cores
-and make parallel processing more efficient:
-  https://pypi.org/project/psutil/''')
-        count = os.cpu_count()
-    if count is None:
-        logger.warning('could not determine number of physical CPU cores; defaulting to 1')
-        count = 1
-    return count
-
-
-def rna_duplex_strand_pairs_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
-        temperature: float = dv.default_temperature,
-        negate: bool = False,
-        weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
-        short_description: str = 'rna_dup_strand_pairs',
-        threaded: bool = False,
-        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
-        -> StrandPairsConstraint:
-    """
-    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
-
-    :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
-    :param temperature:
-        Temperature in Celsius.
-    :param negate:
-        Whether to negate free energy (making it larger for more favorable structures).
-        If True, then the constraint is violated if energy > `threshold`.
-        If False, then the constraint is violated if energy < `threshold`.
-    :param weight:
-        How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param description:
-        Long description of constraint suitable for putting into constraint report.
-    :param short_description:
-        Short description of constraint suitable for logging to stdout.
-    :param threaded:
-        Whether to test the each pair of :any:`Strand`'s in parallel.
-    :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
-    :param parameters_filename:
-        Name of parameters file for ViennaRNA;
-        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
-    :return:
-        The :any:`StrandPairsConstraint`.
-    """
-
-    if description is None:
-        if isinstance(threshold, Number):
-            description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
-
-    from dsd.stopwatch import Stopwatch
-
-    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
-    thread_pool = ThreadPool(processes=num_threads)
-
-    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        return dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if threaded and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
-        else:
-            energies = calculate_energies_unthreaded(sequence_pairs)
-        return energies
-
-    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
-        stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
-        # stopwatch = None  # uncomment to not log time
-
-        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        energies = calculate_energies(sequence_pairs)
-
-        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
-        for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, negate, strand1, strand2)
-            # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')
-            if excess > 0.0:
-                domain_set_weights = (
-                    OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
-                domain_sets_weights.append(domain_set_weights)
-
-        if stopwatch is not None:
-            stopwatch.stop()
-            logger.debug(f'*** rna_duplex_strand_pairs_constraint ***')
-            logger.debug(f'*   description: {description}')
-            logger.debug(f'*   evaluated {len(sequence_pairs)} pairs of strands')
-            logger.debug(f'*   total time to evaluate: {stopwatch}')
-            logger.debug(f'*   energies: {sorted(energies)}')
-
-        return domain_sets_weights
-
-    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
-                report_only_violations: bool) -> ConstraintReport:
-        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        energies = calculate_energies(sequence_pairs)
-        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
-
-        strand_pairs_energies = zip(strand_pairs, energies)
-
-        num_checks = len(energies)
-        num_violations = 0
-        lines: List[str] = []
-        for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
-            if not passed:
-                num_violations += 1
-            if not report_only_violations or (report_only_violations and not passed):
-                line = (f'strands '
-                        f'{strand1.name:{max_name_length}}, '
-                        f'{strand2.name:{max_name_length}}: '
-                        f'{energy:6.2f} kcal/mol'
-                        f'{"" if passed else "  **violation**"}')
-                lines.append(line)
-
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
-
-        content = '\n'.join(lines)
-        report = ConstraintReport(constraint=None, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
-        return report
-
-    pairs_tuple = None
-    if pairs is not None:
-        pairs_tuple = tuple(pairs)
-
-    return StrandPairsConstraint(description=description,
-                                 short_description=short_description,
-                                 weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
-                                 evaluate=evaluate,
-                                 summary=summary,
-                                 pairs=pairs_tuple)
-
-
-def energy_excess(energy: float, threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
-                  negate: bool, strand1: Strand, strand2: Strand) -> float:
-    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
-    if isinstance(threshold, Number):
-        threshold_value = threshold
-    elif isinstance(threshold, dict):
-        threshold_value = threshold[(strand1.group, strand2.group)]
-    excess = threshold_value - energy
-    if negate:
-        excess = -excess
-    return excess
-
-
-def energy_excess_domains(energy: float,
-                          threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
-                          negate: bool, domain1: Domain, domain2: Domain) -> float:
-    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
-    if isinstance(threshold, Number):
-        threshold_value = threshold
-    elif isinstance(threshold, dict):
-        threshold_value = threshold[(domain1.pool, domain2.pool)]
-    excess = threshold_value - energy
-    if negate:
-        excess = -excess
-    return excess
-
-
-def rna_cofold_strand_pairs_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
-        temperature: float = dv.default_temperature,
-        negate: bool = False,
-        weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
-        short_description: str = 'rna_dup_strand_pairs',
-        threaded: bool = False,
-        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
-        -> StrandPairsConstraint:
-    """
-    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
-
-    :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
-    :param temperature:
-        Temperature in Celsius.
-    :param negate:
-        Whether to negate free energy (making it larger for more favorable structures).
-        If True, then the constraint is violated if energy > `threshold`.
-        If False, then the constraint is violated if energy < `threshold`.
-    :param weight:
-        How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param description:
-        Long description of constraint suitable for putting into constraint report.
-    :param short_description:
-        Short description of constraint suitable for logging to stdout.
-    :param threaded:
-        Whether to test the each pair of :any:`Strand`'s in parallel.
-    :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
-    :param parameters_filename:
-        Name of parameters file for ViennaRNA;
-        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
-    :return:
-        The :any:`StrandPairsConstraint`.
-    """
-
-    if description is None:
-        if isinstance(threshold, Number):
-            description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
-
-    from dsd.stopwatch import Stopwatch
-
-    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
-    thread_pool = ThreadPool(processes=num_threads)
-
-    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        return dv.rna_cofold_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if threaded and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
-        else:
-            energies = calculate_energies_unthreaded(sequence_pairs)
-        return energies
-
-    def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
-        stopwatch: Optional[Stopwatch] = Stopwatch()  # noqa
-        # stopwatch = None  # uncomment to not log time
-
-        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
-        # domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
-
-        energies = calculate_energies(sequence_pairs)
-
-        for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, negate, strand1, strand2)
-            if excess > 0.0:
-                domain_set_weights = (OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()),
-                                      excess)
-                domain_sets_weights.append(domain_set_weights)
-
-        if stopwatch is not None:
-            stopwatch.stop()
-            logger.debug(f'*** rna_cofold_strand_pairs_constraint ***')
-            logger.debug(f'*   description: {description}')
-            logger.debug(f'*   evaluated {len(sequence_pairs)} pairs of strands')
-            logger.debug(f'*   total time to evaluate: {stopwatch}')
-            logger.debug(f'*   energies: {sorted(energies)}')
-
-        return domain_sets_weights
-
-    def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
-                report_only_violations: bool) -> ConstraintReport:
-        sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
-        energies = calculate_energies(sequence_pairs)
-        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
-        strand_pairs_energies = zip(strand_pairs, energies)
-
-        num_checks = len(energies)
-        num_violations = 0
-        lines: List[str] = []
-        for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, negate, strand1, strand2) <= 0.0
-            if not passed:
-                num_violations += 1
-            if not report_only_violations or (report_only_violations and not passed):
-                line = (f'strands '
-                        f'{strand1.name:{max_name_length}}, '
-                        f'{strand2.name:{max_name_length}}: '
-                        f'{energy:6.2f} kcal/mol'
-                        f'{"" if passed else "  **violation**"}')
-                lines.append(line)
-
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
-
-        return ConstraintReport(constraint=None, content='\n'.join(lines),
-                                num_violations=num_violations, num_checks=num_checks)
-
-    pairs_tuple = None
-    if pairs is not None:
-        pairs_tuple = tuple(pairs)
-
-    return StrandPairsConstraint(description=description,
-                                 short_description=short_description,
-                                 weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
-                                 evaluate=evaluate,
-                                 summary=summary,
-                                 pairs=pairs_tuple)
-
-
-def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
-        -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
-    """
-    :param domain_pairs:
-        Domain pairs.
-    :return:
-        pair consisting of two lists, each of length 4 times as long as `domain_pairs`.
-        Each pair in `domain_pairs` is associated to the 4 combinations of WC complementing (or not)
-        the sequences of each Domain.
-        - sequence_pairs: the sequences (appropriated complemented or not)
-        - names: the names (appropriately *'d or not)
-    """
-    sequence_pairs: List[Tuple[str, str]] = []
-    names: List[Tuple[str, str]] = []
-    domains: List[Tuple[Domain, Domain]] = []
-    for d1, d2 in domain_pairs:
-        for starred1, starred2 in itertools.product([False, True], repeat=2):
-            seq1 = d1.concrete_sequence(starred1)
-            seq2 = d2.concrete_sequence(starred2)
-            name1 = d1.get_name(starred1)
-            name2 = d2.get_name(starred2)
-            sequence_pairs.append((seq1, seq2))
-            names.append((name1, name2))
-            domains.append((d1, d2))
-    return sequence_pairs, names, domains
-
-
-def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
-    #  Flatten one level of nesting
-    return list(itertools.chain.from_iterable(list_of_lists))
-
-
-def rna_duplex_domain_pairs_constraint(
-        threshold: float,
-        temperature: float = dv.default_temperature,
-        negate: bool = False,
-        weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
-        short_description: str = 'rna_dup_dom_pairs',
-        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
-        -> DomainPairsConstraint:
-    """
-    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
-
-    :param threshold: energy threshold
-    :param temperature: temperature in Celsius
-    :param negate: whether to negate free energy (making it larger for more favorable structures).
-                   If True, then the constraint is violated if energy > `threshold`.
-                   If False, then the constraint is violated if energy < `threshold`.
-    :param weight: how much to weigh this :any:`Constraint`
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param short_description: short description of constraint suitable for logging to stdout
-    :param pairs: pairs of :any:`Domain`'s to compare; if not specified, checks all pairs
-    :param parameters_filename: name of parameters file for ViennaRNA; default is
-                                same as :py:meth:`vienna_nupack.rna_duplex_multiple`
-    :return: constraint
-    """
-
-    def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[OrderedSet[Domain], float]]:
-        if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
-            raise ValueError('cannot evaluate domains unless they have sequences assigned')
-        sequence_pairs, _, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
-        domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
-        energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
-        for (domain1, domain2), energy in zip(domain_pairs, energies):
-            excess = threshold - energy
-            if negate:
-                excess = -excess
-            if excess > 0.0:
-                domain_set_weights = (OrderedSet([domain1, domain2]), excess)
-                domain_sets_weights.append(domain_set_weights)
-        return domain_sets_weights
-
-    def summary(domain_pairs: Iterable[Tuple[Domain, Domain]],
-                report_only_violations: bool) -> ConstraintReport:
-        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_and_complements(domain_pairs)
-        energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
-        max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
-
-        num_checks = len(energies)
-        num_violations = 0
-        lines: List[str] = []
-        for (domain1, domain2), (name1, name2), energy in zip(domains, domain_name_pairs, energies):
-            passed = energy_excess_domains(energy, threshold, negate, domain1, domain2) <= 0.0
-            if not passed:
-                num_violations += 1
-            if not report_only_violations or (report_only_violations and not passed):
-                line = (f'domains '
-                        f'{name1:{max_name_length}}, '
-                        f'{name2:{max_name_length}}: '
-                        f'{energy:6.2f} kcal/mol'
-                        f'{"" if passed else "  **violation**"}')
-                lines.append(line)
-
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
-
-        content = '\n'.join(lines)
-        report = ConstraintReport(constraint=None, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
-        return report
-
-    pairs_tuple = None
-    if pairs is not None:
-        pairs_tuple = tuple(pairs)
-
-    return DomainPairsConstraint(description='RNAduplex some domain pairs',
-                                 short_description=short_description,
-                                 weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
-                                 evaluate=evaluate,
-                                 summary=summary,
-                                 pairs=pairs_tuple)
