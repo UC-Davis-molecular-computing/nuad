@@ -64,7 +64,7 @@ all_dna_bases: Set[str] = {'A', 'C', 'G', 'T'}
 Set of all DNA bases.
 """
 
-generation_upper_limit = 4 ** 13
+generation_upper_limit = 4 ** 11
 num_random_sequences_to_generate_at_once = 10 ** 5 # constant
 updated_num_gen_sequences = 10 ** 5
 # will be increased if no sequences satisfying constraints are found after generating 100,000
