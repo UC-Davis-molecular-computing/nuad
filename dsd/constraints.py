@@ -626,16 +626,11 @@ class DomainPool(JSONSerializable):
     def graph_hamming_distance(self, steps, previous_sequence):
         """
         Makes an adjacency list for the previous sequence to allow a sequence a certain Hamming distance
-        away to replace the previous sequence. Creates a single new key:value pair each time.
+        away to replace the previous sequence. Creates a single new key:value pair each time. The previous
+        sequence is stored as a key with neighbors as its values, so neighbors of future sequences to be
+        replaced can be checked against the list of keys to make sure old sequences are not reused.
         """
-        # The commented code below takes too long to finish (it computes neighbors for all sequences)
-        # for sequence in self._sequences:
-        #     adjacency_list[sequence] = []
-        #     for seq_to_compare in self._sequences:
-        #         differences = sum(1 for base1, base2 in zip(sequence, seq_to_compare) if base1 != base2)
-        #         if differences == steps:
-        #             adjacency_list[sequence].append(seq_to_compare)
-        self.adjacency_list[previous_sequence] = [] # is it safe to assume sequence has not been used before?
+        self.adjacency_list[previous_sequence] = []
         for sequence in self._sequences:
             # counts number of differences between sequences
             differences = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
@@ -681,21 +676,21 @@ class DomainPool(JSONSerializable):
                 hamming_distances.append(key)
                 hamming_probabilities.append(val)
             # chooses random number of bases to be changed (steps)
-            steps = np.random.choice(hamming_distances, p=hamming_probabilities) # weight limit? seed?
-            # print(f'Looking for sequence {steps} steps away')
+            steps = np.random.choice(hamming_distances, p=hamming_probabilities) # seed?
             adjacency_list = self.graph_hamming_distance(steps, previous_sequence)
             while not adjacency_list[previous_sequence]:
                 # changes value of steps until such a neighbor of previous_sequence exists
                 # print(f'No neighbors found {steps} away, choosing different step')
                 steps = np.random.choice(hamming_distances, p=hamming_probabilities)
-                # print(steps)
                 adjacency_list = self.graph_hamming_distance(steps, previous_sequence)
             sequence = np.random.choice(adjacency_list[previous_sequence])
-            for seq in adjacency_list:
-                try:
-                    adjacency_list[seq].remove(previous_sequence)
-                except ValueError: # prevents removing nonexistent item from list from disrupting code
-                    pass
+            # Code below can be used to remove the replaced sequence from all previous lists,
+            # but is currently redundant because no previous list will be used anyways.
+            # for seq in adjacency_list:
+            #     try:
+            #         adjacency_list[seq].remove(previous_sequence)
+            #     except ValueError: # prevents removing nonexistent item from list from disrupting code
+            #         pass
         return sequence
 
     def _get_next_sequence_satisfying_numpy_constraints(self, rng: np.random.Generator) -> str:
