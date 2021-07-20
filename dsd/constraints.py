@@ -602,7 +602,7 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def generate_sequence(self, rng: np.random.Generator) -> str:
+    def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
         Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
         :py:data:`DomainPool.sequence_constraints`
@@ -616,6 +616,9 @@ class DomainPool(JSONSerializable):
 
         :param rng:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
+        :param previous_sequence:
+            previously generated sequence to be replaced by a new sequence; optional if no previous
+            sequence exists.
         :return:
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
