@@ -576,6 +576,27 @@ class DomainPool(JSONSerializable):
 
     _idx: int = field(compare=False, hash=False, default=0, repr=False)
 
+    find_neighbor_sequences: bool = False
+
+    hamming_probability: Optional[Dict[int, float]] = field(default_factory=dict)
+    """
+    Dictionary that specifies probability of taking a new sequence from the pool that is some integer 
+    number of bases different. 
+    """
+
+    adjacency_list: Dict[str, List[str]] = field(default_factory=dict)
+    """
+    Dictionary storing used sequences and their neighbor sequences a certain Hamming distance away.
+    """
+
+    def __post_init__(self):
+        if not self.hamming_probability: # sets default probability distribution if the user does not
+            self.hamming_probability = {}
+            for i in range(self.length):
+                # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
+                self.hamming_probability[i+1] = 1 / 2**(i+1)
+            self.hamming_probability[self.length] *= 2
+
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         dct = {
             name_key: self.name,
@@ -602,6 +623,26 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
+    def graph_hamming_distance(self, steps, previous_sequence):
+        """
+        Makes an adjacency list for the previous sequence to allow a sequence a certain Hamming distance
+        away to replace the previous sequence. Creates a single new key:value pair each time.
+        """
+        # The commented code below takes too long to finish (it computes neighbors for all sequences)
+        # for sequence in self._sequences:
+        #     adjacency_list[sequence] = []
+        #     for seq_to_compare in self._sequences:
+        #         differences = sum(1 for base1, base2 in zip(sequence, seq_to_compare) if base1 != base2)
+        #         if differences == steps:
+        #             adjacency_list[sequence].append(seq_to_compare)
+        self.adjacency_list[previous_sequence] = [] # is it safe to assume sequence has not been used before?
+        for sequence in self._sequences:
+            # counts number of differences between sequences
+            differences = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
+            if differences == steps and sequence not in self.adjacency_list.keys():
+                self.adjacency_list[previous_sequence].append(sequence)
+        return self.adjacency_list
+
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
         Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
@@ -624,12 +665,37 @@ class DomainPool(JSONSerializable):
             :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
-        sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
-        while not self.satisfies_sequence_constraints(sequence):
-            logger.debug(f'rejecting domain sequence {sequence}; failed some sequence constraint')
+        if not self.find_neighbor_sequences or not previous_sequence:
+            # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
-        if log_debug_sequence_constraints_accepted:
-            logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
+            while not self.satisfies_sequence_constraints(sequence):
+                logger.debug(f'rejecting domain sequence {sequence}; failed some sequence constraint')
+                sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
+            if log_debug_sequence_constraints_accepted:
+                logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
+        else:
+            # takes neighbor to previous sequence; difference in bases randomly chosen
+            hamming_distances = []
+            hamming_probabilities = []
+            for key, val in self.hamming_probability.items(): # make lists for np.random.choice
+                hamming_distances.append(key)
+                hamming_probabilities.append(val)
+            # chooses random number of bases to be changed (steps)
+            steps = np.random.choice(hamming_distances, p=hamming_probabilities) # weight limit? seed?
+            # print(f'Looking for sequence {steps} steps away')
+            adjacency_list = self.graph_hamming_distance(steps, previous_sequence)
+            while not adjacency_list[previous_sequence]:
+                # changes value of steps until such a neighbor of previous_sequence exists
+                # print(f'No neighbors found {steps} away, choosing different step')
+                steps = np.random.choice(hamming_distances, p=hamming_probabilities)
+                # print(steps)
+                adjacency_list = self.graph_hamming_distance(steps, previous_sequence)
+            sequence = np.random.choice(adjacency_list[previous_sequence])
+            for seq in adjacency_list:
+                try:
+                    adjacency_list[seq].remove(previous_sequence)
+                except ValueError: # prevents removing nonexistent item from list from disrupting code
+                    pass
         return sequence
 
     def _get_next_sequence_satisfying_numpy_constraints(self, rng: np.random.Generator) -> str:
