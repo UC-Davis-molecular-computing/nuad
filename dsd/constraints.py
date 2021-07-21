@@ -680,7 +680,7 @@ class DomainPool(JSONSerializable):
                 steps = np.random.choice(hamming_distances, p=hamming_probabilities)
                 adjacency_list = self.find_sequence_neighbors(steps, previous_sequence)
             sequence = np.random.choice(adjacency_list)
-            swap_idx = self._sequences.index(previous_sequence)
+            swap_idx = self._sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
             self._sequences[self._idx], self._sequences[swap_idx] = self._sequences[swap_idx], \
