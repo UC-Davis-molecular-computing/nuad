@@ -576,7 +576,7 @@ class DomainPool(JSONSerializable):
 
     _idx: int = field(compare=False, hash=False, default=0, repr=False)
 
-    find_neighbor_sequences: bool = False
+    find_neighbors_bool: bool = False
 
     hamming_probability: Dict[int, float] = field(default_factory=dict)
     """
@@ -617,18 +617,18 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def find_sequence_neighbors(self, steps: int, previous_sequence: str) -> List[str]:
+    def find_steps_distance_sequences(self, steps: int, previous_sequence: str) -> List[str]:
         """
-        Makes an adjacency list of sequences some Hamming distance away from the previous sequence.
+        Makes a list of sequences some Hamming distance away from the previous sequence.
         The sequence that replaces the previous sequence will be randomly chosen from this list.
         """
-        adjacency_list= []
+        neighbors_list= []
         for sequence in self._sequences[self._idx:]:
             # counts number of differences between previous sequence and remaining unused sequences
             differences = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
             if differences == steps:
-                adjacency_list.append(sequence)
-        return adjacency_list
+                neighbors_list.append(sequence)
+        return neighbors_list
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -646,7 +646,7 @@ class DomainPool(JSONSerializable):
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         :param previous_sequence:
             previously generated sequence to be replaced by a new sequence; None if no previous
-            sequence exists. Used in :py:meth:`DomainPool.find_sequence_neighbors`
+            sequence exists. Used in :py:meth:`DomainPool.find_steps_distance_sequences`
             to choose a new sequence "close" to itself in Hamming distance. The number of
             differences between previous_sequence and its neighbors is determined by randomly
             picking a Hamming distance from :py:data:`DomainPool.hamming_probability` with
@@ -656,7 +656,7 @@ class DomainPool(JSONSerializable):
             :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
-        if not self.find_neighbor_sequences or not previous_sequence:
+        if not self.find_neighbors_bool or not previous_sequence:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
             while not self.satisfies_sequence_constraints(sequence):
@@ -673,13 +673,13 @@ class DomainPool(JSONSerializable):
                 hamming_probabilities.append(val)
             # chooses random number of bases to be changed (steps)
             steps = np.random.choice(hamming_distances, p=hamming_probabilities) # seed?
-            adjacency_list = self.find_sequence_neighbors(steps, previous_sequence)
-            while len(adjacency_list) == 0:
+            neighbors_list = self.find_steps_distance_sequences(steps, previous_sequence)
+            while len(neighbors_list) == 0:
                 # changes value of steps until a neighbor of the previous_sequence is found
                 # print(f'No neighbors found {steps} away, choosing different step')
                 steps = np.random.choice(hamming_distances, p=hamming_probabilities)
-                adjacency_list = self.find_sequence_neighbors(steps, previous_sequence)
-            sequence = np.random.choice(adjacency_list)
+                neighbors_list = self.find_steps_distance_sequences(steps, previous_sequence)
+            sequence = np.random.choice(neighbors_list)
             swap_idx = self._sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
