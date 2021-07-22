@@ -666,11 +666,8 @@ class DomainPool(JSONSerializable):
                 logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
         else:
             # takes neighbor to previous sequence; difference in bases randomly chosen
-            hamming_distances = []
-            hamming_probabilities = []
-            for key, val in self.hamming_probability.items(): # make lists for np.random.choice
-                hamming_distances.append(key)
-                hamming_probabilities.append(val)
+            hamming_distances = list(self.hamming_probability.keys())
+            hamming_probabilities = list(self.hamming_probability.values())
             # chooses random number of bases to be changed (steps)
             steps = np.random.choice(hamming_distances, p=hamming_probabilities) # seed?
             neighbors = self.find_steps_distance_sequences(steps, previous_sequence)
