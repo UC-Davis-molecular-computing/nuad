@@ -1263,7 +1263,7 @@ class SearchParameters:
 
     restart: bool = False
     """
-    If this function was previous called and placed files in `out_directory`, calling with this
+    If this function was previously called and placed files in `out_directory`, calling with this
     parameter True will re-start the search at that point.
     """
 
@@ -1553,7 +1553,7 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
         original_sequences[domain] = domain.sequence
-        domain.sequence = domain.pool.generate_sequence(rng)
+        domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
 
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
     for domain in dependent_domains:
@@ -1853,6 +1853,7 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
     for domain in independent_domains:
         skip_fixed_msg = skip_nonfixed_msg = None
         if domain.has_sequence():
+            # TODO check var names (appear swapped)
             skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
                              f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
                              f'which the search will attempt to replace.'
@@ -1860,7 +1861,7 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
                                 f'That domain has a FIXED sequence {domain.sequence}.'
         if overwrite_existing_sequences:
             if not domain.fixed:
-                domain.sequence = domain.pool.generate_sequence(rng)
+                domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
                 assert len(domain.sequence) == domain.pool.length
             else:
                 logger.info(skip_fixed_msg)
