@@ -617,17 +617,20 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def find_steps_distance_sequences(self, steps: int, previous_sequence: str) -> List[str]:
+    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, List[str]]:
         """
-        Makes a list of sequences some Hamming distance away from the previous sequence.
-        The sequence that replaces the previous sequence will be randomly chosen from this list.
+        Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
+        in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
+        different the sequence is to the previous sequence.
+
+        :param previous_sequence: DNA sequence to be replaced
+        :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
         """
-        neighbors = []
+        neighbors = defaultdict(list)
         for sequence in self._sequences[self._idx:]:
             # counts number of differences between previous sequence and remaining unused sequences
-            differences = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
-            if differences == steps:
-                neighbors.append(sequence)
+            distance = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
+            neighbors[distance].append(sequence)
         return neighbors
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
@@ -666,17 +669,18 @@ class DomainPool(JSONSerializable):
                 logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
         else:
             # takes neighbor to previous sequence; difference in bases randomly chosen
-            hamming_distances = list(self.hamming_probability.keys())
-            hamming_probabilities = list(self.hamming_probability.values())
-            # chooses random number of bases to be changed (steps)
-            steps = np.random.choice(hamming_distances, p=hamming_probabilities) # seed?
-            neighbors = self.find_steps_distance_sequences(steps, previous_sequence)
-            while len(neighbors) == 0:
-                # changes value of steps until a neighbor of the previous_sequence is found
-                # print(f'No neighbors found {steps} away, choosing different step')
-                steps = np.random.choice(hamming_distances, p=hamming_probabilities)
-                neighbors = self.find_steps_distance_sequences(steps, previous_sequence)
-            sequence = np.random.choice(neighbors)
+            hamming_probabilities = np.array(list(self.hamming_probability.values()))
+            neighbors = self.find_neighbor_sequences(previous_sequence) # dictionary mapping distance:sequences
+            # Some distances may not exist, so scale the probabilities of the remaining so that
+            # they sum to one
+            distances = np.array(list(neighbors.keys()))
+            existing_hamming_probabilities = hamming_probabilities[distances - 1]
+            prob_sum = existing_hamming_probabilities.sum()
+            existing_hamming_probabilities /= prob_sum
+            # randomly chooses a Hamming distance to change previous_sequence by
+            hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
+            assert len(neighbors[hamming_dist]) > 0
+            sequence = rng.choice(neighbors[hamming_dist])
             swap_idx = self._sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
