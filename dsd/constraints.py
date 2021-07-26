@@ -64,10 +64,14 @@ all_dna_bases: Set[str] = {'A', 'C', 'G', 'T'}
 Set of all DNA bases.
 """
 
-num_random_sequences_to_generate_at_once = 10 ** 5
+generation_upper_limit = 4 ** 11
+num_random_sequences_to_generate_at_once = 10 ** 5 # constant
+updated_num_gen_sequences = 10 ** 5
+# will be increased if no sequences satisfying constraints are found after generating 100,000
+
 # For lengths at most this value, we generate all DNA sequences in advance.
 # Above this value, a random subset of DNA sequences will be generated.
-_length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_at_once, 4))
+_length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_at_once, 4)) # 6.64 -> 6
 
 # _length_threshold_numpy = 10
 
@@ -153,7 +157,7 @@ class NumpyConstraint(ABC):
     as numpy operations on 2D arrays of bytes representing DNA sequences, through the class
     :any:`np.DNASeqList` (which uses such a 2D array as the field :py:data:`np.DNASeqList.seqarr`).
 
-    Subclasses should set the value self.name, inhereted from this class.
+    Subclasses should set the value self.name, inherited from this class.
 
     Pre-made subclasses of :any:`NumpyConstraint` provided in this library,
     such as :any:`RestrictBasesConstraint` or :any:`NearestNeighborEnergyConstraint`,
@@ -572,6 +576,21 @@ class DomainPool(JSONSerializable):
 
     _idx: int = field(compare=False, hash=False, default=0, repr=False)
 
+    replace_with_close_sequences: bool = False
+
+    hamming_probability: Dict[int, float] = field(default_factory=dict)
+    """
+    Dictionary that specifies probability of taking a new sequence from the pool that is some integer 
+    number of bases different from the previous sequence (Hamming distance). 
+    """
+
+    def __post_init__(self) -> None:
+        if len(self.hamming_probability) == 0: # sets default probability distribution if the user does not
+            for i in range(self.length):
+                # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
+                self.hamming_probability[i+1] = 1 / 2**(i+1)
+            self.hamming_probability[self.length] *= 2
+
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         dct = {
             name_key: self.name,
@@ -598,7 +617,23 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def generate_sequence(self, rng: np.random.Generator) -> str:
+    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, List[str]]:
+        """
+        Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
+        in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
+        different the sequence is to the previous sequence.
+
+        :param previous_sequence: DNA sequence to be replaced
+        :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
+        """
+        neighbors = defaultdict(list)
+        for sequence in self._sequences[self._idx:]:
+            # counts number of differences between previous sequence and remaining unused sequences
+            distance = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
+            neighbors[distance].append(sequence)
+        return neighbors
+
+    def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
         Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
         :py:data:`DomainPool.sequence_constraints`
@@ -612,17 +647,46 @@ class DomainPool(JSONSerializable):
 
         :param rng:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
+        :param previous_sequence:
+            previously generated sequence to be replaced by a new sequence; None if no previous
+            sequence exists. Used in :py:meth:`DomainPool.find_steps_distance_sequences`
+            to choose a new sequence "close" to itself in Hamming distance. The number of
+            differences between previous_sequence and its neighbors is determined by randomly
+            picking a Hamming distance from :py:data:`DomainPool.hamming_probability` with
+            weighted probabilities of choosing each distance.
         :return:
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
-        sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
-        while not self.satisfies_sequence_constraints(sequence):
-            logger.debug(f'rejecting domain sequence {sequence}; failed some sequence constraint')
+        if not self.replace_with_close_sequences or not previous_sequence:
+            # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
-        if log_debug_sequence_constraints_accepted:
-            logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
+            while not self.satisfies_sequence_constraints(sequence):
+                logger.debug(f'rejecting domain sequence {sequence}; failed some sequence constraint')
+                sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
+            if log_debug_sequence_constraints_accepted:
+                logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
+        else:
+            # takes neighbor to previous sequence; difference in bases randomly chosen
+            hamming_probabilities = np.array(list(self.hamming_probability.values()))
+            neighbors = self.find_neighbor_sequences(previous_sequence) # dictionary mapping distance:sequences
+            # Some distances may not exist, so scale the probabilities of the remaining so that
+            # they sum to one
+            distances = np.array(list(neighbors.keys()))
+            existing_hamming_probabilities = hamming_probabilities[distances - 1]
+            prob_sum = existing_hamming_probabilities.sum()
+            existing_hamming_probabilities /= prob_sum
+            # randomly chooses a Hamming distance to change previous_sequence by
+            hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
+            assert len(neighbors[hamming_dist]) > 0
+            sequence = rng.choice(neighbors[hamming_dist])
+            swap_idx = self._sequences.index(sequence)
+            # swaps positions of sequence used and the current indexed position so that all
+            # sequences after self._idx are unused
+            self._sequences[self._idx], self._sequences[swap_idx] = self._sequences[swap_idx], \
+                                                                    self._sequences[self._idx]
+            self._idx += 1
         return sequence
 
     def _get_next_sequence_satisfying_numpy_constraints(self, rng: np.random.Generator) -> str:
@@ -636,6 +700,7 @@ class DomainPool(JSONSerializable):
         return sequence
 
     def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
+        global updated_num_gen_sequences # 10 ** 5 initial value
         bases = self._bases_to_use()
         length = self.length
         use_random_subset = length > _length_threshold_numpy
@@ -643,15 +708,24 @@ class DomainPool(JSONSerializable):
             seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True, rng=rng)
             num_starting_seqs = seqs.numseqs
         else:
-            num_starting_seqs = num_random_sequences_to_generate_at_once
+            num_starting_seqs = updated_num_gen_sequences
             seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                                  num_random_seqs=num_starting_seqs, rng=rng)
-
         seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
-
-        if seqs_satisfying_numpy_constraints.numseqs == 0:
-            raise ValueError('no sequences passed the numpy constraints')
-
+        while seqs_satisfying_numpy_constraints.numseqs == 0 and \
+                updated_num_gen_sequences < generation_upper_limit:
+            # 4 ** 13 sequences or more takes over a minute to generate and an excessive amount of memory
+            print(f'No valid sequences found in {updated_num_gen_sequences} sequences examined. '
+                  f'Increasing number of sequences generated by a factor of 10.')
+            updated_num_gen_sequences *= 10
+            num_starting_seqs = updated_num_gen_sequences
+            seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
+                                 num_random_seqs=num_starting_seqs, rng=rng)
+            seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
+        else:
+            if updated_num_gen_sequences >= generation_upper_limit:
+                raise ValueError("Too many sequences need to be generated to find a satisfactory sequence. "
+                                 "Please adjust constraints. ")
         num_decimals = len(str(num_random_sequences_to_generate_at_once))
         logger.info(f'generated {num_starting_seqs:{num_decimals}} sequences '
                     f'of length {length:2}, '
