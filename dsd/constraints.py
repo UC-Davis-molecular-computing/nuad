@@ -659,7 +659,7 @@ class DomainPool(JSONSerializable):
             :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
-        if not self.replace_with_close_sequences or not previous_sequence:
+        if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
             while not self.satisfies_sequence_constraints(sequence):
