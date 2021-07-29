@@ -673,6 +673,9 @@ class DomainPool(JSONSerializable):
             if log_debug_sequence_constraints_accepted:
                 logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
         else:
+            if self._idx >= len(self._sequences):
+                logger.debug('All pool sequences have been used. Regenerating new sequences.')
+                self._reset_precomputed_sequences(rng)
             # takes neighbor to previous sequence; difference in bases randomly chosen
             hamming_probabilities = np.array(list(self.hamming_probability.values()))
             neighbors = self.find_neighbor_sequences(
