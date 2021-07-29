@@ -59,19 +59,23 @@ length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
 
+Complex = Tuple['Strand', ...]
+"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
+:any:`Domain`'s."""
+
 all_dna_bases: Set[str] = {'A', 'C', 'G', 'T'}
 """
 Set of all DNA bases.
 """
 
 generation_upper_limit = 4 ** 11
-num_random_sequences_to_generate_at_once = 10 ** 5 # constant
+num_random_sequences_to_generate_at_once = 10 ** 5  # constant
 updated_num_gen_sequences = 10 ** 5
 # will be increased if no sequences satisfying constraints are found after generating 100,000
 
 # For lengths at most this value, we generate all DNA sequences in advance.
 # Above this value, a random subset of DNA sequences will be generated.
-_length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_at_once, 4)) # 6.64 -> 6
+_length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_at_once, 4))  # 6.64 -> 6
 
 # _length_threshold_numpy = 10
 
@@ -127,7 +131,8 @@ def all_pairs_iterator(values: Iterable[T],
         Unlike :py:meth:`all_pairs`, which returns a list,
         the iterator returned may be iterated over only ONCE.
     """
-    it = cast(Iterator[Tuple[T, T]], filter(where, itertools.combinations(values, 2)))  # noqa
+    it = cast(Iterator[Tuple[T, T]],
+              filter(where, itertools.combinations_with_replacement(values, 2)))  # noqa
     return it
 
 
@@ -585,10 +590,10 @@ class DomainPool(JSONSerializable):
     """
 
     def __post_init__(self) -> None:
-        if len(self.hamming_probability) == 0: # sets default probability distribution if the user does not
+        if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
             for i in range(self.length):
                 # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
-                self.hamming_probability[i+1] = 1 / 2**(i+1)
+                self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
             self.hamming_probability[self.length] *= 2
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
@@ -659,7 +664,7 @@ class DomainPool(JSONSerializable):
             :py:data:`DomainPool.sequence_constraints`
         """
         log_debug_sequence_constraints_accepted = False
-        if not self.replace_with_close_sequences or not previous_sequence:
+        if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
             while not self.satisfies_sequence_constraints(sequence):
@@ -670,7 +675,8 @@ class DomainPool(JSONSerializable):
         else:
             # takes neighbor to previous sequence; difference in bases randomly chosen
             hamming_probabilities = np.array(list(self.hamming_probability.values()))
-            neighbors = self.find_neighbor_sequences(previous_sequence) # dictionary mapping distance:sequences
+            neighbors = self.find_neighbor_sequences(
+                previous_sequence)  # dictionary mapping distance:sequences
             # Some distances may not exist, so scale the probabilities of the remaining so that
             # they sum to one
             distances = np.array(list(neighbors.keys()))
@@ -684,8 +690,8 @@ class DomainPool(JSONSerializable):
             swap_idx = self._sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
-            self._sequences[self._idx], self._sequences[swap_idx] = self._sequences[swap_idx], \
-                                                                    self._sequences[self._idx]
+            self._sequences[self._idx], self._sequences[swap_idx] = \
+                self._sequences[swap_idx], self._sequences[self._idx]
             self._idx += 1
         return sequence
 
@@ -700,7 +706,7 @@ class DomainPool(JSONSerializable):
         return sequence
 
     def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
-        global updated_num_gen_sequences # 10 ** 5 initial value
+        global updated_num_gen_sequences  # 10 ** 5 initial value
         bases = self._bases_to_use()
         length = self.length
         use_random_subset = length > _length_threshold_numpy
@@ -1942,6 +1948,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self.domain_pairs_constraints = []
         self.strand_pairs_constraints = []
         self.design_constraints = []
+
         for constraint in constraints:
             if isinstance(constraint, DomainConstraint):
                 self.domain_constraints.append(constraint)
@@ -2329,7 +2336,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand in strands:
             num_checks += 1
-            passed = constraint(strand) <= 0.0
+            passed = constraint(strand.sequence(), strand) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2390,7 +2397,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for strand1, strand2 in pairs_to_check:
             num_checks += 1
-            passed = constraint((strand1, strand2)) <= 0.0
+            passed = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2889,7 +2896,7 @@ class DomainConstraint(ConstraintWithDomains[Domain]):
 class StrandConstraint(ConstraintWithStrands[Strand]):
     """Constraint that applies to a single :any:`Strand`."""
 
-    evaluate: Callable[[Strand],
+    evaluate: Callable[[str, Optional[Strand]],
                        float] = lambda _: 0.0
 
     summary: Callable[[Strand],
@@ -2897,14 +2904,20 @@ class StrandConstraint(ConstraintWithStrands[Strand]):
 
     threaded: bool = False
 
-    def __call__(self, strand: Strand) -> float:
+    sequence_only: bool = True
+
+    def __call__(self, sequence: str, strand: Optional[Strand]) -> float:
+        if not self.sequence_only and strand is None:
+            raise ValueError('if StrandConstraint.sequence_only is False, '
+                             'then strand cannot be None, but '
+                             f'strand = {strand}')
         # The strand line breaks are because PyCharm finds a static analysis warning on the first line
         # and mypy finds it on the second line; this lets us ignore both of them.
-        evaluate_callback = cast(Callable[[Strand], float],  # noqa
+        evaluate_callback = cast(Callable[[str, Optional[Strand]], float],  # noqa
                                  self.evaluate)  # type: ignore
         transfer_callback = cast(Callable[[float], float],  # noqa
                                  self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(strand)
+        excess = evaluate_callback(sequence, strand)
         if excess < 0:
             return 0.0
         weight = transfer_callback(excess)
@@ -2977,7 +2990,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
 class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     """Constraint that applies to a pair of :any:`Strand`'s."""
 
-    evaluate: Callable[[Strand, Strand],
+    evaluate: Callable[[str, str, Optional[Strand], Optional[Strand]],
                        float] = lambda _, __: 0.0
     """
     Pairwise evaluation to perform on :any:`Strand`'s.
@@ -2990,13 +3003,27 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
 
     threaded: bool = False
 
-    def __call__(self, strand_pair: Tuple[Strand, Strand]) -> float:
-        strand1, strand2 = strand_pair
-        evaluate_callback = cast(Callable[[Strand, Strand], float],  # noqa
+    sequence_only: bool = True
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.threaded and not self.sequence_only:
+            raise ValueError('cannot have both threaded=True and sequence_only=False;\n'
+                             'if you want to use threading, the constraint must be sequence_only '
+                             'for efficiency, since the pathos library is used for parallel processing, '
+                             'and it is too inefficient to serialize anything more than the DNA sequence')
+
+    def __call__(self, sequence1: str, sequence2: str,
+                 strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
+        if not self.sequence_only and (strand1 is None or strand2 is None):
+            raise ValueError('if StrandPairConstraint.sequence_only is False, '
+                             'then strand1 and strand2 cannot be None, but '
+                             f'strand1 = {strand1} and strand2 = {strand2}')
+        evaluate_callback = cast(Callable[[str, str, Optional[Strand], Optional[Strand]], float],  # noqa
                                  self.evaluate)  # type: ignore
         transfer_callback = cast(Callable[[float], float],  # noqa
                                  self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(strand1, strand2)
+        excess = evaluate_callback(sequence1, sequence2, strand1, strand2)
         if excess < 0:
             return 0.0
         weight = transfer_callback(excess)
@@ -3262,8 +3289,14 @@ def convert_threshold(threshold: Union[float, Dict[T, float]], key: T) -> float:
     return threshold_value
 
 
+# old doc for threshold when dict was allowed
+# ; can either be a single float, or a dict mapping pairs of
+#         :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
+#         one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
+#
+
 def nupack_strand_secondary_structure_constraint(
-        threshold: Union[float, Dict[StrandGroup, float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -3278,9 +3311,7 @@ def nupack_strand_secondary_structure_constraint(
 
     NUPACK version 2 or 3 must be installed and on the PATH.
 
-    :param threshold: energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
-        one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
+    :param threshold: energy threshold in kcal/mol
     :param temperature: temperature in Celsius
     :param negate: whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
@@ -3299,13 +3330,12 @@ def nupack_strand_secondary_structure_constraint(
     :return: constraint
     """
 
-    def evaluate(strand: Strand) -> float:
-        threshold_value = convert_threshold(threshold, strand.group)
-        energy = dv.secondary_structure_single_strand(strand.sequence(), temperature, negate)
+    def evaluate(sequence: str, strand: Optional[Strand]) -> float:
+        energy = dv.secondary_structure_single_strand(sequence, temperature, negate)
         logger.debug(
-            f'strand ss threshold: {threshold_value:6.2f} '
+            f'strand ss threshold: {threshold:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
-        excess = threshold_value - energy
+        excess = threshold - energy
         if negate:
             excess = -excess
         return max(0.0, excess)
@@ -3315,15 +3345,7 @@ def nupack_strand_secondary_structure_constraint(
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {strand_group.name: value
-                                              for strand_group, value in threshold.items()}
-            description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
-                          f'as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise AssertionError('threshold must be one of float or dict')
+        description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
 
     if strands is not None:
         strands = tuple(strands)
@@ -3339,7 +3361,7 @@ def nupack_strand_secondary_structure_constraint(
 
 
 def nupack_4_strand_secondary_structure_constraint(
-        threshold: Union[float, Dict[StrandGroup, float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         sodium: float = dv.default_sodium,
         magnesium: float = dv.default_magnesium,
@@ -3357,9 +3379,7 @@ def nupack_4_strand_secondary_structure_constraint(
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
 
     :param threshold:
-        energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float; when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to
-        one in ``sg2``, the threshold used is ``threshold[(sg1, sg2)]``
+        energy threshold in kcal/mol
     :param temperature:
         temperature in Celsius
     :param sodium:
@@ -3386,33 +3406,24 @@ def nupack_4_strand_secondary_structure_constraint(
     :return: constraint
     """
 
-    def evaluate(strand: Strand) -> float:
-        threshold_value = convert_threshold(threshold, strand.group)
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
-                                                       negate)
-        logger.debug(
-            f'strand ss threshold: {threshold_value:6.2f} '
-            f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
-        excess = threshold_value - energy
+    def evaluate(sequence: str, strand: Optional[Strand]) -> float:
+        energy = dv.secondary_structure_single_strand4(sequence, temperature, sodium, magnesium, negate)
+        if strand is not None:
+            logger.debug(
+                f'strand ss threshold: {threshold:6.2f} '
+                f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
+        excess = threshold - energy
         if negate:
             excess = -excess
         return max(0.0, excess)
 
     def summary(strand: Strand) -> str:
-        energy = dv.secondary_structure_single_strand4(strand.sequence(), temperature, sodium, magnesium,
-                                                       negate)
+        sequence = strand.sequence()
+        energy = dv.secondary_structure_single_strand4(sequence, temperature, sodium, magnesium, negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {strand_group.name: value
-                                              for strand_group, value in threshold.items()}
-            description = f'NUPACK secondary structure of strand exceeds threshold defined by its StrandGroup ' \
-                          f'as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise AssertionError('threshold must be one of float or dict')
+        description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
 
     if strands is not None:
         strands = tuple(strands)
@@ -3708,24 +3719,15 @@ def nupack_strand_pair_constraint(
     """
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
+        description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
 
-    def evaluate(strand1: Strand, strand2: Strand) -> float:
-        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
-        energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
+    def evaluate(sequence1: str, sequence2: str,
+                 strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
+        energy = dv.binding(sequence1, sequence2, temperature, negate)
         logger.debug(
-            f'strand pair threshold: {threshold_value:6.2f} '
+            f'strand pair threshold: {threshold:6.2f} '
             f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
-        excess = threshold_value - energy
+        excess = threshold - energy
         if negate:
             excess = -excess
         return max(0.0, excess)
@@ -3748,7 +3750,7 @@ def nupack_strand_pair_constraint(
 
 
 def nupack_4_strand_pair_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         sodium: float = dv.default_sodium,
         magnesium: float = dv.default_magnesium,
@@ -3766,10 +3768,7 @@ def nupack_4_strand_pair_constraint(
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
 
     :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
+        Energy threshold in kcal/mol
     :param temperature:
         Temperature in Celsius
     :param sodium:
@@ -3797,24 +3796,16 @@ def nupack_4_strand_pair_constraint(
     """
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'NUPACK binding energy of strand pair exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
+        description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
 
-    def evaluate(strand1: Strand, strand2: Strand) -> float:
-        threshold_value: float = convert_threshold(threshold, (strand1.group, strand2.group))
-        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
-        logger.debug(
-            f'strand pair threshold: {threshold_value:6.2f} '
-            f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
-        excess = threshold_value - energy
+    def evaluate(sequence1: str, sequence2: str,
+                 strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
+        energy = dv.binding4(sequence1, sequence2, temperature, sodium, magnesium, negate)
+        if strand1 is not None and strand2 is not None:
+            logger.debug(
+                f'strand pair threshold: {threshold:6.2f} '
+                f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+        excess = threshold - energy
         if negate:
             excess = -excess
         return max(0.0, excess)
@@ -4338,11 +4329,6 @@ def rna_duplex_domain_pairs_constraint(
 #########################################################################################
 # ComplexConstraints defined below here
 #########################################################################################
-
-
-Complex = Tuple[Strand, ...]
-"""A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
-:any:`Domain`'s."""
 
 
 @dataclass(frozen=True, eq=False)

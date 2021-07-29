@@ -17,19 +17,22 @@ import sys
 from collections import defaultdict
 from functools import lru_cache
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional
+from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast
 
 os_is_windows = sys.platform == 'win32'
 
 global_thread_pool = ThreadPool()
 
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
+
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
+
 default_temperature = 37.0
 """Default temperature used to specify a `NUPACK 4 model`_.
 
 .. _NUPACK 4 model: https://piercelab-caltech.github.io/nupack-docs/model/
 """
+
 default_magnesium = 0.0125
 default_sodium = 0.05
 
@@ -101,7 +104,9 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
 
     return -dg if negate else dg
 
+
 _cached_pfunc4_models = {}
+
 
 @lru_cache(maxsize=10_000)
 def pfunc4(seqs: Union[str, Tuple[str, ...]],
@@ -131,8 +136,8 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
         seqs = (seqs,)
 
     try:
-        from nupack import pfunc as nupack_pfunc
-        from nupack import Model
+        from nupack import pfunc as nupack_pfunc  # type: ignore
+        from nupack import Model  # type: ignore
     except ModuleNotFoundError:
         raise ImportError(
             'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
@@ -233,13 +238,13 @@ def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float, 
     global _hits
     global _misses
     key = (seq_pair, temperature, negate, parameters_filename)
-    result = _rna_duplex_cache.get(key, _sentinel)
+    result: Union[object, float] = _rna_duplex_cache.get(key, _sentinel)
     if result is _sentinel:
         _misses += 1
         return None
     else:
         _hits += 1
-        return result
+        return cast(float, result)
 
 
 def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
