@@ -15,6 +15,7 @@ and  :any:`SequenceConstraint`, an alias for a function taking a string as input
 import os
 import math
 import json
+import time
 from typing import List, Set, Optional, Dict, Callable, Iterable, Tuple, Union, Collection, TypeVar, Any, \
     cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
 from dataclasses import dataclass, field
@@ -103,27 +104,35 @@ T = TypeVar('T')
 
 
 def all_pairs(values: Iterable[T],
+              with_replacement: bool = True,
               where: Callable[[Tuple[T, T]], bool] = lambda _: True) -> List[Tuple[T, T]]:
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
 
     :param values:
         Iterable of values.
+    :param with_replacement:
+        Whether to include self pairs, i.e., pairs (a,a)
     :param where:
         Predicate indicating whether to include a specific pair.
     :return:
         List of all pairs of values from `iterable`.
     """
-    return list(all_pairs_iterator(values, where=where))
+    return list(all_pairs_iterator(values, with_replacement=with_replacement, where=where))
 
 
 def all_pairs_iterator(values: Iterable[T],
+                       with_replacement: bool = True,
                        where: Callable[[Tuple[T, T]], bool] = lambda _: True) -> Iterator[Tuple[T, T]]:
     """
     Strongly typed function to get iterator of all pairs from `iterable`. (for using with mypy)
 
+    This is WITH replacement; to specify without replacement, set `with_replacement` = False
+
     :param values:
         Iterable of values.
+    :param with_replacement:
+        Whether to include self pairs, i.e., pairs (a,a)
     :param where:
         Predicate indicating whether to include a specific pair.
     :return:
@@ -131,8 +140,9 @@ def all_pairs_iterator(values: Iterable[T],
         Unlike :py:meth:`all_pairs`, which returns a list,
         the iterator returned may be iterated over only ONCE.
     """
+    comb_iterator = itertools.combinations_with_replacement if with_replacement else itertools.combinations
     it = cast(Iterator[Tuple[T, T]],
-              filter(where, itertools.combinations_with_replacement(values, 2)))  # noqa
+              filter(where, comb_iterator(values, 2)))  # noqa
     return it
 
 
@@ -554,24 +564,6 @@ class DomainPool(JSONSerializable):
     Optional; default is empty.
     """
 
-    # remove quotes when Python 3.6 support dropped
-    domain_constraints: List['DomainConstraint'] = field(
-        compare=False, hash=False, default_factory=list, repr=False)
-    """
-    :any:`DomainConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
-
-    Unlike a :any:`SequenceConstraint`, which sees only the DNA sequence,
-    a :any:`DomainConstraint` is given the full :any:`Domain`. Generally a :any:`SequenceConstraint`
-    is applied before assigning a DNA sequence to a :any:`Domain`,
-    to see if the sequence is even "legal" on its own.
-    A :any:`DomainConstraint` is generally one that requires more information about the :any:`Domain`
-    (such as its :any:`DomainPool`), but unlike other types of constraints, can still be applied
-    without referencing information outside of the :any:`Domain`
-    (e.g., the :any:`Strand` the :any:`Domain` is in).
-
-    Optional; default is empty.
-    """
-
     _sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
     # list of available sequences; we iterate through this and then generate new ones when they run out
     # They are randomly permuted, so if this is all sequences of a given length satisfying the numpy
@@ -604,7 +596,9 @@ class DomainPool(JSONSerializable):
         return dct
 
     def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
+        # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
         self._sequences = self._generate_sequences_satisfying_numpy_constraints(rng)
+        self._sequences = [seq for seq in self._sequences if self.satisfies_sequence_constraints(seq)]
         self._idx = 0
 
     def __hash__(self) -> int:
@@ -666,10 +660,7 @@ class DomainPool(JSONSerializable):
         log_debug_sequence_constraints_accepted = False
         if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
-            sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
-            while not self.satisfies_sequence_constraints(sequence):
-                logger.debug(f'rejecting domain sequence {sequence}; failed some sequence constraint')
-                sequence = self._get_next_sequence_satisfying_numpy_constraints(rng)
+            sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
             if log_debug_sequence_constraints_accepted:
                 logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
         else:
@@ -678,8 +669,13 @@ class DomainPool(JSONSerializable):
                 self._reset_precomputed_sequences(rng)
             # takes neighbor to previous sequence; difference in bases randomly chosen
             hamming_probabilities = np.array(list(self.hamming_probability.values()))
-            neighbors = self.find_neighbor_sequences(
-                previous_sequence)  # dictionary mapping distance:sequences
+
+            # before = time.perf_counter_ns()
+            neighbors = self.find_neighbor_sequences(previous_sequence)  # dict mapping distance:sequences
+            # after = time.perf_counter_ns()
+            # time_ms = (after - before) / 1e6
+            # print(f'time spent finding neighbors: {time_ms:.1f} ms')
+
             # Some distances may not exist, so scale the probabilities of the remaining so that
             # they sum to one
             distances = np.array(list(neighbors.keys()))
@@ -698,10 +694,7 @@ class DomainPool(JSONSerializable):
             self._idx += 1
         return sequence
 
-    def _get_next_sequence_satisfying_numpy_constraints(self, rng: np.random.Generator) -> str:
-        # Gets next sequence from precomputed self._sequences, regenerating them if necessary.
-        # This will always return a new sequence.
-        # The sequence may not satisfy the sequence constraints; those are checked by generate_sequence.
+    def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         if self._idx >= len(self._sequences):
             self._reset_precomputed_sequences(rng)
         sequence = self._sequences[self._idx]
@@ -820,10 +813,6 @@ class StrandGroup:
 
     name: str
     """Name of this :any:`StrandGroup`. Must be unique."""
-
-    # remove quotes when Python 3.6 support dropped
-    strand_constraints: List['StrandConstraint'] = field(compare=False, hash=False, default_factory=list)
-    """:any:`StrandConstraint`'s shared by all :any:`Strand`'s in this :any:`StrandGroup`."""
 
     def __hash__(self) -> int:
         return hash(self.name)
@@ -1379,11 +1368,14 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
              (in particular, if they are equal length, then they are not the same domain)
     """
 
-    def domains_not_substrings_of_each_other(domain1: Domain, domain2: Domain) -> float:
-        s1 = domain1.sequence
-        s2 = domain2.sequence
+    def domains_not_substrings_of_each_other(s1: str, s2: str,
+                                             domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
         if len(s1) > len(s2):
             s1, s2 = s2, s1
+        if domain1 is not None:
+            assert s1 == domain1.sequence
+        if domain2 is not None:
+            assert s2 == domain2.sequence
         if check_complements:
             c1 = dv.wc(s1)
             # by symmetry, only need to check c1 versus s2 for WC complement, since
@@ -2118,33 +2110,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return domains_in_pool
 
     # remove quotes when Python 3.6 support dropped
-    def strand_group_constraints(self) -> List['StrandConstraint']:
-        constraints = []
-        for strand_group in self.strand_groups:
-            constraints.extend(strand_group.strand_constraints)
-        return constraints
-
-    # remove quotes when Python 3.6 support dropped
-    def domain_pool_constraints(self) -> List['DomainConstraint']:
-        constraints = []
-        for domain_pool in self.domain_pools:
-            constraints.extend(domain_pool.domain_constraints)
-        return constraints
-
-    # remove quotes when Python 3.6 support dropped
     def all_constraints(self) -> List['Constraint']:
         # Since list types are covariant, we cannot use + to concatenate them without upsetting mypy:
         # https://stackoverflow.com/questions/56738485/why-do-i-get-a-warning-when-concatenating-lists-of-mixed-types-in-pycharm
         # https://github.com/python/mypy/issues/4244
         # https://mypy.readthedocs.io/en/latest/common_issues.html#invariance-vs-covariance
-        constraints: List[Constraint] = []
-        constraints.extend(self.domain_pool_constraints())
-        constraints.extend(self.strand_group_constraints())
-        constraints.extend(self.all_constraints_outside_domain_pools_and_strand_groups())
-        return constraints
-
-    # remove quotes when Python 3.6 support dropped
-    def all_constraints_outside_domain_pools_and_strand_groups(self) -> List['Constraint']:
         constraints: List[Constraint] = []
         constraints.extend(self.domain_constraints)
         constraints.extend(self.strand_constraints)
@@ -2160,26 +2130,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def summary_of_constraints(self, report_only_violations: bool) -> str:
         summaries: List[str] = []
-        # domain pool constraints
-        for domain_pool, domains_in_pool in self.domain_pools.items():
-            for domain_constraint in domain_pool.domain_constraints:
-                report = self.summary_of_domain_constraint(domain_constraint, report_only_violations,
-                                                           domains_in_pool)
-                report.constraint = domain_constraint
-                summary = add_header_to_content_of_summary(report)
-                summaries.append(summary)
-
-        # strand group constraints
-        for strand_group, strands_in_group in self.strand_groups.items():
-            for strand_constraint in strand_group.strand_constraints:
-                report = self.summary_of_strand_constraint(strand_constraint, report_only_violations,
-                                                           strands_in_group)
-                report.constraint = strand_constraint
-                summary = add_header_to_content_of_summary(report)
-                summaries.append(summary)
 
         # other constraints
-        for constraint in self.all_constraints_outside_domain_pools_and_strand_groups():
+        for constraint in self.all_constraints():
             summary = self.summary_of_constraint(constraint, report_only_violations)
             summaries.append(summary)
 
@@ -2311,7 +2264,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for fixed_domain in domains:
             num_checks += 1
-            passed = constraint(fixed_domain) <= 0.0
+            seq = fixed_domain.sequence
+            passed = constraint(seq, fixed_domain) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2368,7 +2322,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines: List[str] = []
         for domain1, domain2 in pairs_to_check:
             num_checks += 1
-            passed = constraint((domain1, domain2)) <= 0.0
+            seq1, seq2 = domain1.sequence, domain2.sequence
+            passed = constraint(seq1, seq2, domain1, domain2) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2808,12 +2763,33 @@ class Constraint(ABC, Generic[DesignPart]):
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
 
+    threaded: bool = False
+    """
+    Whether or not to use parallelization across multiple processes to take advantage of multiple
+    processors/cores. (Not applicable to some types of constraints. 
+    """
+
+    sequence_only: bool = True
+    """
+    If :py:data:`Constraint.threaded` is True, then this should be set to True so that only the 
+    sequence is serialized when passing data to other processes for parallel computation.
+    Otherwise, significant time is spent serializing objects such as :any:`Strand` or :any:`Domain`,
+    which is slower than not using parallelization in the first place.
+    """
+
     def __post_init__(self) -> None:
         if len(self.short_description) == 0:
             # self.short_description = self.description
             object.__setattr__(self, 'short_description', self.description)
+
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
+
+        if self.threaded and not self.sequence_only:
+            raise ValueError('cannot have both threaded=True and sequence_only=False;\n'
+                             'if you want to use threading, the constraint must be sequence_only '
+                             'for efficiency, since the pathos library is used for parallel processing, '
+                             'and it is too inefficient to serialize anything more than the DNA sequence')
 
     @abstractmethod
     def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> ConstraintReport:
@@ -2834,7 +2810,12 @@ class Constraint(ABC, Generic[DesignPart]):
             A :any:`StrandPairsConstraint` checking all pairs of :any:`Strand`'s may return a longer
             string reporting on every pair.
         """
-        pass
+        raise NotImplementedError('subclasses of Constraint must implement generate_summary')
+
+    def _check_sequence_only(self, part: Any):
+        if not self.sequence_only and part is None:
+            raise AssertionError('if sequence_only is False, '
+                                 'then the design part cannot be None, but it is')
 
 
 _no_summary_string = f"No summary for this constraint. " \
@@ -2868,31 +2849,22 @@ class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
 class DomainConstraint(ConstraintWithDomains[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
 
-    evaluate: Callable[[Domain],
+    evaluate: Callable[[str, Optional[Domain]],
                        float] = lambda _: 0.0
 
     summary: Callable[[Domain],
                       str] = lambda _: _no_summary_string
 
-    threaded: bool = False
-
-    def __call__(self, domain: Domain) -> float:
-        # The strand line breaks are because PyCharm finds a static analysis warning on the first line
-        # and mypy finds it on the second line; this lets us ignore both of them.
-        evaluate_callback = cast(Callable[[Domain], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(domain)
+    def __call__(self, sequence: str, domain: Optional[Domain]) -> float:
+        self._check_sequence_only(domain)
+        excess = (self.evaluate)(sequence, domain)  # noqa
         if excess < 0:
             return 0.0
-        weight = transfer_callback(excess)
+        weight = (self.weight_transfer_function)(excess)  # noqa
         return weight
 
     def generate_summary(self, domain: Domain, report_only_violations: bool) -> str:
-        summary_callback = cast(Callable[[Domain], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(domain)
+        return (self.summary)(domain)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2905,31 +2877,16 @@ class StrandConstraint(ConstraintWithStrands[Strand]):
     summary: Callable[[Strand],
                       str] = lambda _: _no_summary_string
 
-    threaded: bool = False
-
-    sequence_only: bool = True
-
     def __call__(self, sequence: str, strand: Optional[Strand]) -> float:
-        if not self.sequence_only and strand is None:
-            raise ValueError('if StrandConstraint.sequence_only is False, '
-                             'then strand cannot be None, but '
-                             f'strand = {strand}')
-        # The strand line breaks are because PyCharm finds a static analysis warning on the first line
-        # and mypy finds it on the second line; this lets us ignore both of them.
-        evaluate_callback = cast(Callable[[str, Optional[Strand]], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(sequence, strand)
+        self._check_sequence_only(strand)
+        excess = (self.evaluate)(sequence, strand)  # noqa
         if excess < 0:
             return 0.0
-        weight = transfer_callback(excess)
+        weight = (self.weight_transfer_function)(excess)  # noqa
         return weight
 
     def generate_summary(self, strand: Strand, report_only_violations: bool) -> str:
-        summary_callback = cast(Callable[[Strand], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strand)
+        return self.summary(strand)  # noqa
 
 
 @dataclass(frozen=True, eq=False)
@@ -2958,7 +2915,7 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     """Constraint that applies to a pair of :any:`Domain`'s."""
 
-    evaluate: Callable[[Domain, Domain],
+    evaluate: Callable[[str, str, Optional[Domain], Optional[Domain]],
                        float] = lambda _, __: 0.0
     """
     Pairwise check to perform on :any:`Domain`'s.
@@ -2968,25 +2925,17 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
     summary: Callable[[Domain, Domain],
                       str] = lambda _, __: _no_summary_string
 
-    threaded: bool = False
-
-    def __call__(self, domain_pair: Tuple[Domain, Domain]) -> float:
-        domain1, domain2 = domain_pair
-        evaluate_callback = cast(Callable[[Domain, Domain], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(domain1, domain2)
+    def __call__(self, sequence1: str, sequence2: str,
+                 domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
+        excess = (self.evaluate)(sequence1, sequence2, domain1, domain2)  # noqa
         if excess < 0:
             return 0.0
-        weight = transfer_callback(excess)
+        weight = (self.weight_transfer_function)(excess)  # noqa
         return weight
 
     def generate_summary(self, domain_pair: Tuple[Domain, Domain], report_only_violations: bool) -> str:
         domain1, domain2 = domain_pair
-        summary_callback = cast(Callable[[Domain, Domain], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(domain1, domain2)
+        return (self.summary)(domain1, domain2)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -2996,7 +2945,7 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     evaluate: Callable[[str, str, Optional[Strand], Optional[Strand]],
                        float] = lambda _, __: 0.0
     """
-    Pairwise evaluation to perform on :any:`Strand`'s.
+    Pairwise check to perform on :any:`Strand`'s.
     Returns float indicating how much the constraint is violated,
     or 0.0 if the constraint is satisfied.
     """
@@ -3004,39 +2953,19 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
     summary: Callable[[Strand, Strand],
                       str] = lambda _, __: _no_summary_string
 
-    threaded: bool = False
-
-    sequence_only: bool = True
-
-    def __post_init__(self):
-        super().__post_init__()
-        if self.threaded and not self.sequence_only:
-            raise ValueError('cannot have both threaded=True and sequence_only=False;\n'
-                             'if you want to use threading, the constraint must be sequence_only '
-                             'for efficiency, since the pathos library is used for parallel processing, '
-                             'and it is too inefficient to serialize anything more than the DNA sequence')
-
     def __call__(self, sequence1: str, sequence2: str,
                  strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-        if not self.sequence_only and (strand1 is None or strand2 is None):
-            raise ValueError('if StrandPairConstraint.sequence_only is False, '
-                             'then strand1 and strand2 cannot be None, but '
-                             f'strand1 = {strand1} and strand2 = {strand2}')
-        evaluate_callback = cast(Callable[[str, str, Optional[Strand], Optional[Strand]], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(sequence1, sequence2, strand1, strand2)
+        self._check_sequence_only(strand1)
+        self._check_sequence_only(strand2)
+        excess = (self.evaluate)(sequence1, sequence2, strand1, strand2)  # noqa
         if excess < 0:
             return 0.0
-        weight = transfer_callback(excess)
+        weight = (self.weight_transfer_function)(excess)  # noqa
         return weight
 
     def generate_summary(self, strand_pair: Tuple[Strand, Strand], report_only_violations: bool) -> str:
         strand1, strand2 = strand_pair
-        summary_callback = cast(Callable[[Strand, Strand], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strand1, strand2)
+        return (self.summary)(strand1, strand2)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3057,20 +2986,13 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
 
     def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]]],  # noqa
-                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(domain_pairs)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        sets_excesses = (self.evaluate)(domain_pairs)  # noqa
+        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
         return sets_weights
 
     def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]],
                          report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Tuple[Domain, Domain]], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(domain_pairs, report_only_violations)
+        return (self.summary)(domain_pairs, report_only_violations)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3091,20 +3013,13 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
 
     def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]]],  # noqa
-                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(strand_pairs)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        sets_excesses = (self.evaluate)(strand_pairs)  # noqa
+        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
         return sets_weights
 
     def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]],
                          report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Tuple[Strand, Strand]], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strand_pairs, report_only_violations)
+        return (self.summary)(strand_pairs, report_only_violations)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3133,18 +3048,12 @@ class DomainsConstraint(ConstraintWithDomains[Iterable[Domain]]):
                       ConstraintReport] = lambda _: _no_summary_string
 
     def __call__(self, domains: Iterable[Domain]) -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Domain]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(domains)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        sets_excesses = (self.evaluate)(domains)  # noqa
+        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
         return sets_weights
 
     def generate_summary(self, domains: Iterable[Domain], report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Domain], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(domains, report_only_violations)
+        return (self.summary)(domains, report_only_violations)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3173,18 +3082,12 @@ class StrandsConstraint(ConstraintWithStrands[Iterable[Strand]]):
                       ConstraintReport] = lambda _: _no_summary_string
 
     def __call__(self, strands: Iterable[Strand]) -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Strand]], List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(strands)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        sets_excesses = (self.evaluate)(strands)  # noqa
+        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
         return sets_weights
 
     def generate_summary(self, strands: Iterable[Strand], report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Strand], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strands, report_only_violations)
+        return (self.summary)(strands, report_only_violations)  # noqa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3214,19 +3117,12 @@ class DesignConstraint(Constraint[Design]):
 
     def __call__(self, design: Design, domains_changed: Optional[Iterable[Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Design, Optional[Iterable[Domain]]],  # noqa
-                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(design, domains_changed)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
+        sets_excesses = (self.evaluate)(design, domains_changed)  # noqa
+        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
         return sets_weights
 
     def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Design, bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(design, report_only_violations)
+        return (self.summary)(design, report_only_violations)  # noqa
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:
@@ -3405,8 +3301,10 @@ def nupack_4_strand_secondary_structure_constraint(
     :param description:
         detailed description of constraint suitable for putting in report; if not specified
         a reasonable default is chosen
-    :param short_description: short description of constraint suitable for logging to stdout
-    :return: constraint
+    :param short_description:
+        short description of constraint suitable for logging to stdout
+    :return:
+        the constraint
     """
 
     def evaluate(sequence: str, strand: Optional[Strand]) -> float:
@@ -3442,7 +3340,7 @@ def nupack_4_strand_secondary_structure_constraint(
 
 
 def nupack_domain_pair_constraint(
-        threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         threaded: bool = False,
         threaded4: bool = False,
@@ -3461,16 +3359,12 @@ def nupack_domain_pair_constraint(
     NUPACK version 2 or 3 must be installed and on the PATH.
 
     :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`DomainPool`'s to a float; when a :any:`Domain` in :any:`DomainPool` ``dp1`` is compared to
-        one in ``dp2``, the threshold used is ``threshold[(dp1, dp2)]``
+        Energy threshold in kcal/mol.
     :param temperature:
         Temperature in Celsius
     :param threaded:
         Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
-        :py:data:`DomainPairConstraint.threaded`)
-    :param threaded4:
-        Whether to test the four pairs in different threads, allowing the calls to NUPACK to be parallelized.
+        :py:data:`Constraint.threaded`)
     :param negate:
         Whether to negate free energy (making it larger for more favorable structures).
         If True, then the constraint is violated if energy > `threshold`.
@@ -3503,22 +3397,32 @@ def nupack_domain_pair_constraint(
                              f'but it is {type(threshold)}')
 
     num_threads = cpu_count()
-    thread_pool = ThreadPool(processes=num_threads)
+    # thread_pool = ThreadPool(processes=num_threads)
 
     if version4:
         def binding_closure(seq_pair: Tuple[str, str]) -> float:
-            return dv.binding4(seq_pair[0], seq_pair[1], temperature, negate)
+            return dv.binding4(seq_pair[0], seq_pair[1], temperature=temperature, negate=negate)
     else:
         def binding_closure(seq_pair: Tuple[str, str]) -> float:
             return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
 
-    def evaluate(domain1: Domain, domain2: Domain) -> float:
-        threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
-        seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+    def evaluate(seq1: str, seq2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
+        name_pairs = [(None, None)] * 4
+        if domain1 is not None and domain2 is not None:
+            seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
+                [(domain1, domain2)])
+        else:
+            seq_pairs = [
+                (seq1, seq2),
+                (seq1, dv.wc(seq2)),
+                (dv.wc(seq1), seq2),
+                (dv.wc(seq1), dv.wc(seq2)),
+            ]
 
         energies: List[float]
         if threaded4:
-            energies = thread_pool.map(binding_closure, seq_pairs)
+            # energies = thread_pool.map(binding_closure, seq_pairs)
+            raise NotImplementedError()
         else:
             energies = []
             for seq1, seq2 in seq_pairs:
@@ -3527,10 +3431,11 @@ def nupack_domain_pair_constraint(
 
         excesses: List[float] = []
         for energy, (name1, name2) in zip(energies, name_pairs):
-            logger.debug(
-                f'domain pair threshold: {threshold_value:6.2f} '
-                f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
-            excess = threshold_value - energy
+            if name1 is not None and name2 is not None:
+                logger.debug(
+                    f'domain pair threshold: {threshold:6.2f} '
+                    f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+            excess = threshold - energy
             if negate:
                 excess = -excess
             excesses.append(excess)
@@ -3539,128 +3444,14 @@ def nupack_domain_pair_constraint(
         return max(0.0, max_excess)
 
     def summary(domain1: Domain, domain2: Domain) -> str:
-        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
+        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
+            [(domain1, domain2)])
         energies = []
         for seq1, seq2 in seq_pairs:
             if version4:
-                energy = dv.binding4(seq1, seq2, temperature, negate)
+                energy = dv.binding4(seq1, seq2, temperature=temperature, negate=negate)
             else:
                 energy = dv.binding(seq1, seq2, temperature, negate)
-            energies.append(energy)
-        max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
-        lines = [f'{name1:{max_name_length}}, '
-                 f'{name2:{max_name_length}}: '
-                 f' {energy:6.2f} kcal/mol'
-                 for (name1, name2), energy in zip(domain_name_pairs, energies)]
-        return '\n  ' + '\n  '.join(lines)
-
-    return DomainPairConstraint(description=description,
-                                short_description=short_description,
-                                weight=weight,
-                                weight_transfer_function=weight_transfer_function,
-                                evaluate=evaluate,
-                                summary=summary,
-                                threaded=threaded)
-
-
-def nupack_4_domain_pair_constraint(
-        threshold: Union[float, Dict[Tuple[DomainPool, DomainPool], float]],
-        temperature: float = dv.default_temperature,
-        sodium: float = dv.default_sodium,
-        magnesium: float = dv.default_magnesium,
-        threaded: bool = False,
-        threaded4: bool = False,
-        weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
-        short_description: str = 'dom_pair_nupack',
-        negate: bool = False) -> DomainPairConstraint:
-    """
-    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
-    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
-    are compared.
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-
-    :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`DomainPool`'s to a float; when a :any:`Domain` in :any:`DomainPool` ``dp1`` is compared to
-        one in ``dp2``, the threshold used is ``threshold[(dp1, dp2)]``
-    :param temperature:
-        Temperature in Celsius
-    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
-    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
-    :param threaded:
-        Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
-        :py:data:`DomainPairConstraint.threaded`)
-    :param threaded4:
-        Whether to test the four pairs in different threads, allowing the calls to NUPACK to be parallelized.
-    :param negate:
-        Whether to negate free energy (making it larger for more favorable structures).
-        If True, then the constraint is violated if energy > `threshold`.
-        If False, then the constraint is violated if energy < `threshold`.
-    :param weight:
-        How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
-    :param description:
-        Detailed description of constraint suitable for summary report.
-    :param short_description:
-        Short description of constraint suitable for logging to stdout.
-    :return:
-        The :any:`DomainPairConstraint`.
-    """
-
-    if description is None:
-        if isinstance(threshold, Number):
-            description = f'NUPACK energy of domain pair exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            domain_pool_name_pair_to_threshold = {(domain_pool1.name, domain_pool2.name): value
-                                                  for (domain_pool1, domain_pool2), value in
-                                                  threshold.items()}
-            description = f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools ' \
-                          f'as follows:\n{domain_pool_name_pair_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
-
-    num_threads = cpu_count()
-    thread_pool = ThreadPool(processes=num_threads)
-
-    def binding_closure(seq_pair: Tuple[str, str]) -> float:
-        return dv.binding4(seq_pair[0], seq_pair[1], temperature, sodium, magnesium, negate)
-
-    def evaluate(domain1: Domain, domain2: Domain) -> float:
-        threshold_value = convert_threshold(threshold, (domain1.pool, domain2.pool))
-        seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
-
-        energies: List[float]
-        if threaded4:
-            energies = thread_pool.map(binding_closure, seq_pairs)
-        else:
-            energies = []
-            for seq1, seq2 in seq_pairs:
-                energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
-                energies.append(energy)
-
-        excesses: List[float] = []
-        for energy, (name1, name2) in zip(energies, name_pairs):
-            logger.debug(
-                f'domain pair threshold: {threshold_value:6.2f} '
-                f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
-            excess = threshold_value - energy
-            if negate:
-                excess = -excess
-            excesses.append(excess)
-
-        max_excess = max(excesses)
-        return max(0.0, max_excess)
-
-    def summary(domain1: Domain, domain2: Domain) -> str:
-        seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_and_complements([(domain1, domain2)])
-        energies = []
-        for seq1, seq2 in seq_pairs:
-            energy = dv.binding4(seq1, seq2, temperature, sodium, magnesium, negate)
             energies.append(energy)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
         lines = [f'{name1:{max_name_length}}, '
@@ -3803,7 +3594,8 @@ def nupack_4_strand_pair_constraint(
 
     def evaluate(sequence1: str, sequence2: str,
                  strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-        energy = dv.binding4(sequence1, sequence2, temperature, sodium, magnesium, negate)
+        energy = dv.binding4(sequence1, sequence2, temperature=temperature, negate=negate,
+                             sodium=sodium, magnesium=magnesium)
         if strand1 is not None and strand2 is not None:
             logger.debug(
                 f'strand pair threshold: {threshold:6.2f} '
@@ -3814,7 +3606,8 @@ def nupack_4_strand_pair_constraint(
         return max(0.0, excess)
 
     def summary(strand1: Strand, strand2: Strand) -> str:
-        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature, sodium, magnesium, negate)
+        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature=temperature, negate=negate,
+                             sodium=sodium, magnesium=magnesium)
         return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:
@@ -4211,7 +4004,7 @@ def rna_cofold_strand_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def _all_pairs_domain_sequences_and_complements(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
+def _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
         -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
     """
     :param domain_pairs:
@@ -4275,7 +4068,7 @@ def rna_duplex_domain_pairs_constraint(
     def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[OrderedSet[Domain], float]]:
         if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
             raise ValueError('cannot evaluate domains unless they have sequences assigned')
-        sequence_pairs, _, _ = _all_pairs_domain_sequences_and_complements(domain_pairs)
+        sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
         domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
         for (domain1, domain2), energy in zip(domain_pairs, energies):
@@ -4289,7 +4082,8 @@ def rna_duplex_domain_pairs_constraint(
 
     def summary(domain_pairs: Iterable[Tuple[Domain, Domain]],
                 report_only_violations: bool) -> ConstraintReport:
-        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_and_complements(domain_pairs)
+        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_complements_names_from_domains(
+            domain_pairs)
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, negate, parameters_filename)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
 
@@ -4356,7 +4150,7 @@ class ComplexConstraint(ConstraintWithComplexes[Complex]):
     evaluate: Callable[[Complex],
                        float] = lambda _, __: 0.0
     """
-    Pairwise evaluation to perform on complex (tuple of :any:`Strand`'s).
+    Evaluation to perform on complex (tuple of :any:`Strand`'s).
     Returns float indicating how much the constraint is violated,
     or 0.0 if the constraint is satisfied.
     """
@@ -4364,23 +4158,15 @@ class ComplexConstraint(ConstraintWithComplexes[Complex]):
     summary: Callable[[Complex],
                       str] = lambda _, __: _no_summary_string
 
-    threaded: bool = False
-
     def __call__(self, strand_complex: Complex) -> float:
-        evaluate_callback = cast(Callable[[Complex], float],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        excess = evaluate_callback(strand_complex)
+        excess = (self.evaluate)(strand_complex)  # noqa
         if excess < 0:
             return 0.0
-        weight = transfer_callback(excess)
+        weight = (self.weight_transfer_function)(excess)  # noqa
         return weight
 
     def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
-        summary_callback = cast(Callable[[Complex], str],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(strand_complex)
+        return (self.summary)(strand_complex)  # noqa
 
 
 def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],

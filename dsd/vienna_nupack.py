@@ -500,8 +500,8 @@ def binding(seq1: str, seq2: str, temperature: float = default_temperature, nega
             pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
 
 
-def binding4(seq1: str, seq2: str, temperature: float = default_temperature, sodium: float = default_sodium,
-             magnesium: float = default_magnesium, negate: bool = False) -> float:
+def binding4(seq1: str, seq2: str, *, temperature: float = default_temperature, negate: bool = False,
+             sodium: float = default_sodium, magnesium: float = default_magnesium) -> float:
     """Computes the (partition function) free energy of association between two strands.
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -643,19 +643,21 @@ def domain_orthogonal4(seq: str, seqs: Sequence[str], temperature: float, sodium
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
+    def binding_callback(s1: str, s2: str, temperature: float, sodium: float, magnesium: float) -> float:
+        return binding4(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
     if threaded:
         results = [
-            global_thread_pool.apply_async(binding4, args=(s, s, temperature, sodium, magnesium))
+            global_thread_pool.apply_async(binding_callback, args=(s, s, temperature, sodium, magnesium))
             for s in (seq, wc(seq))]
         energies = [result.get() for result in results]
         if max(energies) > orthogonality:
             return False
     else:
-        ss = binding4(seq, seq, temperature, sodium, magnesium)
+        ss = binding4(seq, seq, temperature=temperature, sodium=sodium, magnesium=magnesium)
         log_energy(ss)
         if ss > orthogonality:
             return False
-        wsws = binding4(wc(seq), wc(seq), temperature, sodium, magnesium)
+        wsws = binding4(wc(seq), wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
         log_energy(wsws)
         if wsws > orthogonality:
             return False
@@ -663,26 +665,27 @@ def domain_orthogonal4(seq: str, seqs: Sequence[str], temperature: float, sodium
     for altseq in seqs:
         if threaded:
             results = [
-                global_thread_pool.apply_async(binding4, args=(seq1, seq2, temperature, sodium, magnesium))
+                global_thread_pool.apply_async(binding_callback,
+                                               args=(seq1, seq2, temperature, sodium, magnesium))
                 for seq1, seq2 in itertools.product((seq, wc(seq)), (altseq, wc(altseq)))]
             energies = [result.get() for result in results]
             if max(energies) > orthogonality:
                 return False
             energy_sum += sum(energies)
         else:
-            sa = binding4(seq, altseq, temperature, sodium, magnesium)
+            sa = binding4(seq, altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(sa)
             if sa > orthogonality:
                 return False
-            sw = binding4(seq, wc(altseq), temperature, sodium, magnesium)
+            sw = binding4(seq, wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(sw)
             if sw > orthogonality:
                 return False
-            wa = binding4(wc(seq), altseq, temperature, sodium, magnesium)
+            wa = binding4(wc(seq), altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(wa)
             if wa > orthogonality:
                 return False
-            ww = binding4(wc(seq), wc(altseq), temperature, sodium, magnesium)
+            ww = binding4(wc(seq), wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(ww)
             if ww > orthogonality:
                 return False
