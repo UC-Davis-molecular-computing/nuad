@@ -14,7 +14,7 @@ dsd requires Python version 3.6 or higher. Currently, it cannot be installed usi
 dsd uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download). While it is technically possible to use dsd without them, most of the pre-packaged constraints require them. ViennaRNA is fairly straightforward to install on any system.
 
 You can download either NUPACK 3 or NUPACK 4. Installing NUPACK 3 requires compiling C code from source, and it is not straightforward to install on Windows (for example, using Cygwin or MinGW). To use NUPACK on Windows, you should use [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system.
-Installing NUPACK 4 allows access to functions such as `pfunc4` and related functions
+Installing NUPACK 4 allows access to functions such as `pfunc` and related functions
 and can be done by following the installation instructions
 in the online [user guide](https://piercelab-caltech.github.io/nupack-docs/start/).
 
@@ -63,9 +63,9 @@ To install dsd:
 
     ```python
     >>> import dsd.vienna_nupack as dv
-    >>> dv.pfunc('GCGCGCGCGC') # test NUPACK 3
+    >>> dv.pfunc3('GCGCGCGCGC') # test NUPACK 3
     -2.06056146
-    >>> dv.pfunc4('GCGCGCGCGC') # test NUPACK 4
+    >>> dv.pfunc('GCGCGCGCGC')  # test NUPACK 4
     -1.9079766874655928
     >>> dv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
     [-15.7]

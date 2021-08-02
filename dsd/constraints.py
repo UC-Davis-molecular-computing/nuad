@@ -3230,7 +3230,7 @@ def nupack_strand_secondary_structure_constraint(
     """
 
     def evaluate(sequence: str, strand: Optional[Strand]) -> float:
-        energy = dv.secondary_structure_single_strand(sequence, temperature, negate)
+        energy = dv.secondary_structure_single_strand_3(sequence, temperature, negate)
         logger.debug(
             f'strand ss threshold: {threshold:6.2f} '
             f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
@@ -3240,7 +3240,7 @@ def nupack_strand_secondary_structure_constraint(
         return max(0.0, excess)
 
     def summary(strand: Strand) -> str:
-        energy = dv.secondary_structure_single_strand(strand.sequence(), temperature, negate)
+        energy = dv.secondary_structure_single_strand_3(strand.sequence(), temperature, negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
@@ -3308,7 +3308,7 @@ def nupack_4_strand_secondary_structure_constraint(
     """
 
     def evaluate(sequence: str, strand: Optional[Strand]) -> float:
-        energy = dv.secondary_structure_single_strand4(sequence, temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand(sequence, temperature, sodium, magnesium, negate)
         if strand is not None:
             logger.debug(
                 f'strand ss threshold: {threshold:6.2f} '
@@ -3320,7 +3320,7 @@ def nupack_4_strand_secondary_structure_constraint(
 
     def summary(strand: Strand) -> str:
         sequence = strand.sequence()
-        energy = dv.secondary_structure_single_strand4(sequence, temperature, sodium, magnesium, negate)
+        energy = dv.secondary_structure_single_strand(sequence, temperature, sodium, magnesium, negate)
         return f'{energy:6.2f} kcal/mol'
 
     if description is None:
@@ -3401,10 +3401,10 @@ def nupack_domain_pair_constraint(
 
     if version4:
         def binding_closure(seq_pair: Tuple[str, str]) -> float:
-            return dv.binding4(seq_pair[0], seq_pair[1], temperature=temperature, negate=negate)
+            return dv.binding(seq_pair[0], seq_pair[1], temperature=temperature, negate=negate)
     else:
         def binding_closure(seq_pair: Tuple[str, str]) -> float:
-            return dv.binding(seq_pair[0], seq_pair[1], temperature, negate)
+            return dv.binding_3(seq_pair[0], seq_pair[1], temperature, negate)
 
     def evaluate(seq1: str, seq2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
         name_pairs = [(None, None)] * 4
@@ -3426,7 +3426,7 @@ def nupack_domain_pair_constraint(
         else:
             energies = []
             for seq1, seq2 in seq_pairs:
-                energy = dv.binding(seq1, seq2, temperature, negate)
+                energy = dv.binding_3(seq1, seq2, temperature, negate)
                 energies.append(energy)
 
         excesses: List[float] = []
@@ -3449,9 +3449,9 @@ def nupack_domain_pair_constraint(
         energies = []
         for seq1, seq2 in seq_pairs:
             if version4:
-                energy = dv.binding4(seq1, seq2, temperature=temperature, negate=negate)
+                energy = dv.binding(seq1, seq2, temperature=temperature, negate=negate)
             else:
-                energy = dv.binding(seq1, seq2, temperature, negate)
+                energy = dv.binding_3(seq1, seq2, temperature, negate)
             energies.append(energy)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
         lines = [f'{name1:{max_name_length}}, '
@@ -3517,7 +3517,7 @@ def nupack_strand_pair_constraint(
 
     def evaluate(sequence1: str, sequence2: str,
                  strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-        energy = dv.binding(sequence1, sequence2, temperature, negate)
+        energy = dv.binding_3(sequence1, sequence2, temperature, negate)
         logger.debug(
             f'strand pair threshold: {threshold:6.2f} '
             f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
@@ -3527,7 +3527,7 @@ def nupack_strand_pair_constraint(
         return max(0.0, excess)
 
     def summary(strand1: Strand, strand2: Strand) -> str:
-        energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature, negate)
+        energy = dv.binding_3(strand1.sequence(), strand2.sequence(), temperature, negate)
         return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:
@@ -3594,8 +3594,8 @@ def nupack_4_strand_pair_constraint(
 
     def evaluate(sequence1: str, sequence2: str,
                  strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-        energy = dv.binding4(sequence1, sequence2, temperature=temperature, negate=negate,
-                             sodium=sodium, magnesium=magnesium)
+        energy = dv.binding(sequence1, sequence2, temperature=temperature, negate=negate,
+                            sodium=sodium, magnesium=magnesium)
         if strand1 is not None and strand2 is not None:
             logger.debug(
                 f'strand pair threshold: {threshold:6.2f} '
@@ -3606,8 +3606,8 @@ def nupack_4_strand_pair_constraint(
         return max(0.0, excess)
 
     def summary(strand1: Strand, strand2: Strand) -> str:
-        energy = dv.binding4(strand1.sequence(), strand2.sequence(), temperature=temperature, negate=negate,
-                             sodium=sodium, magnesium=magnesium)
+        energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature=temperature, negate=negate,
+                            sodium=sodium, magnesium=magnesium)
         return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:

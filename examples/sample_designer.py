@@ -113,7 +113,7 @@ def main() -> None:
     ]
 
     def nupack_binding_energy_in_bounds(seq: str) -> bool:
-        energy = dv.binding_complement(seq, 52)
+        energy = dv.binding_complement_3(seq, 52)
         dc.logger.debug(f'nupack complement binding energy = {energy}')
         return -12 < energy < -8
 
