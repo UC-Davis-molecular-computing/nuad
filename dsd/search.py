@@ -909,7 +909,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                     if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                         quit_early = True
                         break
-    else:
+    else: 
         logger.debug(f'using threading for strand pair constraint {constraint.description}')
 
         assert constraint.sequence_only  # should have been checked in StrandPairConstraint post_init
