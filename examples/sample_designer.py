@@ -93,8 +93,8 @@ def main() -> None:
 
     initial_design = dc.Design(strands,
                                constraints=[strand_pairs_no_comp_constraint,
-                                            # strand_pairs_comp_constraint,
-                                            # strand_individual_ss_constraint,
+                                            strand_pairs_comp_constraint,
+                                            strand_individual_ss_constraint,
                                             # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                                             ])
 
@@ -140,15 +140,16 @@ def main() -> None:
     strand3.domains[0].pool = domain_pools[lengths[1]]
     strand3.domains[1].pool = domain_pools[lengths[2]]
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                out_directory=args.directory,
-                                restart=args.restart,
-                                # force_overwrite=True,
-                                report_only_violations=False,
-                                random_seed=1,
-                                )
+    params = ds.SearchParameters(
+        # weigh_violations_equally=True,
+        report_delay=0.0,
+        out_directory=args.directory,
+        restart=args.restart,
+        # force_overwrite=True,
+        report_only_violations=False,
+        random_seed=1, )
+
+    ds.search_for_dna_sequences(design=design, params=params)
 
     # for strand in design.strands:
     #     print(f'strand seq = {strand.sequence(spaces_between_domains=True)}')

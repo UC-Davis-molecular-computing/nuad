@@ -79,7 +79,8 @@ import dsd.np as dn
 # There may also be a performance overhead for doing this pickling, but I don't know because I haven't
 # tested it.
 # from multiprocessing.pool import Pool
-from multiprocessing.pool import ThreadPool
+# from multiprocessing.pool import ThreadPool
+import pathos
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
@@ -89,7 +90,13 @@ import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
 
-_thread_pool = ThreadPool(processes=dc.cpu_count())
+
+def new_process_pool(cpu_count: int):
+    return pathos.multiprocessing.Pool(processes=cpu_count)
+    # return ThreadPool(processes=cpu_count)
+
+
+_process_pool = new_process_pool(dc.cpu_count())
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
@@ -268,44 +275,20 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
-    # individual domain constraints within each DomainPool
-    pools_domains = design.domain_pools.items() if domains_changed is None \
-        else [(domain_changed.pool, [domain_changed]) for domain_changed in domains_changed]
-    for domain_pool, domains_in_pool in pools_domains:
-        for domain_constraint_pool in domain_pool.domain_constraints:
-            domains = domains_in_pool if domains_changed is None else domains_changed
-            domain_violations_pool = _violations_of_domain_constraint(
-                domains=domains, constraint=domain_constraint_pool)
-            violation_set.update(domain_violations_pool)
-
-            if _quit_early(never_increase_weight, violation_set, violation_set_old):
-                return violation_set
-
-    # individual strand constraints within each StrandGroup
-    for strand_group, strands in design.strand_groups.items():
-        for strand_constraint_pool in strand_group.strand_constraints:
-            current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-                if never_increase_weight and violation_set_old is not None else None
-            strands = _strands_containing_domains(domains_changed, strands)
-            strand_violations_pool, quit_early_in_func = _violations_of_strand_constraint(
-                strands=strands, constraint=strand_constraint_pool, current_weight_gap=current_weight_gap)
-            violation_set.update(strand_violations_pool)
-
-            quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
-            if quit_early != quit_early_in_func:
-                print('fail')
-            assert quit_early == quit_early_in_func
-            if quit_early:
-                return violation_set
-
     # individual domain constraints across all domains in Design
     # most of the time we only check one of these, so we don't bother passing in the current weight gap
     for domain_constraint in design.domain_constraints:
         domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domain_constraint)
-        domain_violations = _violations_of_domain_constraint(
-            domains=domains_to_check, constraint=domain_constraint)
+
+        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
+            if never_increase_weight and violation_set_old is not None else None
+
+        domain_violations, quit_early_in_func = _violations_of_domain_constraint(
+            domains=domains_to_check, constraint=domain_constraint, current_weight_gap=current_weight_gap)
         violation_set.update(domain_violations)
 
+        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        assert quit_early == quit_early_in_func
         if _quit_early(never_increase_weight, violation_set, violation_set_old):
             return violation_set
 
@@ -325,7 +308,7 @@ def _violations_of_constraints(design: Design,
         if quit_early:
             return violation_set
 
-    # all pairs of domains in Design
+    # pairs of domains
     for domain_pair_constraint in design.domain_pair_constraints:
         current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
             if never_increase_weight and violation_set_old is not None else None
@@ -339,7 +322,7 @@ def _violations_of_constraints(design: Design,
         if quit_early:
             return violation_set
 
-    # all pairs of strands in Design
+    # pairs of strands
     for strand_pair_constraint in design.strand_pair_constraints:
         current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
             if never_increase_weight and violation_set_old is not None else None
@@ -493,8 +476,9 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     it is all pairs where one of the two is `domain_changed`.
     """
     # either all pairs, or just constraint.pairs if specified
+    # Note with_replacement is False, i.e., we don't check a domain against itself.
     domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-        else all_pairs_iterator(all_domains, where=_at_least_one_domain_unfixed)
+        else all_pairs_iterator(all_domains, with_replacement=False, where=_at_least_one_domain_unfixed)
 
     # filter out those not containing domain_change if specified
     domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
@@ -638,7 +622,6 @@ def _convert_sets_of_violating_domains_to_violations(
 
 
 _empty_frozen_set: FrozenSet = frozenset()
-_empty_ordered_set: OrderedSet = OrderedSet()
 
 
 # XXX: Although this is written very generally for multiple domains; for most iterationg only one domain
@@ -646,12 +629,16 @@ _empty_ordered_set: OrderedSet = OrderedSet()
 # quitting early since we are usually only checking a single constraint.
 def _violations_of_domain_constraint(domains: Iterable[Domain],
                                      constraint: DomainConstraint,
-                                     ) -> Dict[Domain, OrderedSet[_Violation]]:
+                                     current_weight_gap: Optional[float],
+                                     ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     unfixed_domains = [domain for domain in domains if not domain.fixed]
     violating_domains_weights: List[Optional[Tuple[Domain, float]]] = []
 
-    num_threads = dc.cpu_count() if constraint.threaded else 1
+    weight_discovered_here: float = 0.0
+    quit_early = False
+    num_threads = dc.cpu_count()
+    chunk_size = num_threads
 
     if log_names_of_domains_and_strands_checked:
         logger.debug(f'$ for domain constraint {constraint.description}, checking these domains:')
@@ -662,21 +649,37 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             or len(unfixed_domains) == 1):
         logger.debug(f'NOT using threading for domain constraint {constraint.description}')
         for domain in unfixed_domains:
-            weight: float = constraint(domain)
+            weight: float = constraint(domain.sequence, domain)
             if weight > 0.0:
                 violating_domains_weights.append((domain, weight))
     else:
         logger.debug(f'using threading for domain constraint {constraint.description}')
 
-        def domain_if_violates(domain: Domain) -> Optional[Tuple[Domain, float]]:
-            # return domain if it violates the constraint, else None
-            weight_: float = constraint(domain)
-            if weight_ > 0.0:
-                return domain, weight_
-            else:
-                return None
+        domains_to_check = unfixed_domains
 
-        violating_domains_weights = _thread_pool.map(domain_if_violates, unfixed_domains)
+        def sequence_to_weight(sequence: str) -> float:
+            return constraint(sequence, None)
+
+        if current_weight_gap is None:
+            sequences_to_check = (domain.sequence for domain in domains_to_check)
+            weights = list(_process_pool.map(sequence_to_weight, sequences_to_check))
+            violating_domains_weights = [(domain, weight) for domain, weight in zip(domains_to_check, weights)
+                                         if weight > 0]
+        else:
+            chunks = dc.chunker(domains_to_check, chunk_size)
+            for domain_chunk in chunks:
+                sequence_chunk = [domain.sequence for domain in domain_chunk]
+                weights = list(_process_pool.map(sequence_to_weight, sequence_chunk))
+                violating_domains_chunk = [(strand, weight) for strand, weight in zip(domain_chunk, weights)
+                                           if weight > 0]
+                violating_domains_weights.extend(violating_domains_chunk)
+
+                # quit early if possible
+                total_weight_chunk = sum(weight for _, weight in violating_domains_chunk)
+                weight_discovered_here += constraint.weight * total_weight_chunk
+                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                    quit_early = True
+                    break
 
     for violating_domain_weight in violating_domains_weights:
         if violating_domain_weight is not None:
@@ -684,7 +687,7 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             violation = _Violation(constraint, [violating_domain], weight)
             violations[violating_domain].add(violation)
 
-    return violations
+    return violations, quit_early
 
 
 def _violations_of_strand_constraint(strands: Iterable[Strand],
@@ -703,30 +706,28 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
         1. dict mapping each domain to the set of violations that blame it
         2. bool indicating whether we quit early
     """
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    unfixed_strands = [strand for strand in strands if not strand.fixed]
-    sets_of_violating_domains_weights: List[Tuple[OrderedSet[Domain], float]] = []
+    strands_to_check = [strand for strand in strands if not strand.fixed]
+
+    violating_strands_weights: List[Tuple[Strand, float]] = []
 
     weight_discovered_here: float = 0.0
     quit_early = False
-
-    num_threads = dc.cpu_count() if constraint.threaded else 1
+    num_threads = dc.cpu_count()
     chunk_size = num_threads
 
     if log_names_of_domains_and_strands_checked:
         logger.debug(f'$ for strand constraint {constraint.description}, checking these strands:')
-        logger.debug(f'$ {pprint.pformat(unfixed_strands, indent=pprint_indent)}')
+        logger.debug(f'$ {pprint.pformat(strands_to_check, indent=pprint_indent)}')
 
     if (not constraint.threaded
             or num_threads == 1
-            or len(unfixed_strands) == 1
+            or len(strands_to_check) == 1
             or (current_weight_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand constraint {constraint.description}')
-        for strand in unfixed_strands:
-            weight: float = constraint(strand)
+        for strand in strands_to_check:
+            weight: float = constraint(strand.sequence(), strand)
             if weight > 0.0:
-                set_of_violating_domains = OrderedSet(strand.unfixed_domains())
-                sets_of_violating_domains_weights.append((set_of_violating_domains, weight))
+                violating_strands_weights.append((strand, weight))
                 if current_weight_gap is not None:
                     weight_discovered_here += constraint.weight * weight
                     if _is_significantly_greater(weight_discovered_here, current_weight_gap):
@@ -734,38 +735,39 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                         break
     else:
         logger.debug(f'using threading for strand constraint {constraint.description}')
+        assert constraint.sequence_only  # should have been checked in constraint post_init
 
-        def strand_to_unfixed_domains_set(strand: Strand) -> Tuple[OrderedSet[Domain], float]:
-            # return unfixed domains on strand if strand violates the constraint, else empty set
-            weight_: float = constraint(strand)
-            if weight_ > 0.0:
-                return OrderedSet(strand.unfixed_domains()), weight_
-            else:
-                return _empty_ordered_set, 0.0
+        def sequence_to_weight(sequence: str) -> float:
+            return constraint(sequence, None)
 
         if current_weight_gap is None:
-            sets_of_violating_domains_weights = _thread_pool.map(strand_to_unfixed_domains_set,
-                                                                 unfixed_strands)
+            sequences_to_check = (strand.sequence() for strand in strands_to_check)
+            weights = list(_process_pool.map(sequence_to_weight, sequences_to_check))
+            violating_strands_weights = [(strand, weight) for strand, weight in zip(strands_to_check, weights)
+                                         if weight > 0]
         else:
-            for strand_chunk in dc.chunker(unfixed_strands, chunk_size):
-                sets_of_violating_domains_excesses_chunk = _thread_pool.map(strand_to_unfixed_domains_set,
-                                                                            strand_chunk)
-                sets_of_violating_domains_weights.extend(sets_of_violating_domains_excesses_chunk)
+            chunks = dc.chunker(strands_to_check, chunk_size)
+            for strand_chunk in chunks:
+                sequence_chunk = [strand.sequence() for strand in strand_chunk]
+                weights = list(_process_pool.map(sequence_to_weight, sequence_chunk))
+                violating_strands_chunk = [(strand, weight) for strand, weight in zip(strand_chunk, weights)
+                                           if weight > 0]
+                violating_strands_weights.extend(violating_strands_chunk)
 
-                # quit early if possible; check weights of violations we just added
-                total_weight_chunk = sum(weight_chunk
-                                         for _, weight_chunk in sets_of_violating_domains_excesses_chunk)
+                # quit early if possible
+                total_weight_chunk = sum(weight for _, weight in violating_strands_chunk)
                 weight_discovered_here += constraint.weight * total_weight_chunk
                 if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
                     break
 
-    # print(f'{[domains for domains,_ in sets_of_violating_domains_weights]}')
-    for set_of_violating_domains, weight in sets_of_violating_domains_weights:
-        if len(set_of_violating_domains) > 0:
-            violation = _Violation(constraint, set_of_violating_domains, weight)
-            for domain in set_of_violating_domains:
-                violations[domain].add(violation)
+    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violating_strand_pair_weight: Optional[Tuple[Strand, Strand, float]]
+    for strand, weight in violating_strands_weights:
+        unfixed_domains_set = OrderedSet(strand.unfixed_domains())
+        violation = _Violation(constraint, unfixed_domains_set, weight)
+        for domain in unfixed_domains_set:
+            violations[domain].add(violation)
 
     return violations, quit_early
 
@@ -800,7 +802,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
     weight_discovered_here: float = 0.0
     quit_early = False
 
-    cpu_count = dc.cpu_count() if constraint.threaded else 1
+    cpu_count = dc.cpu_count()
 
     # since each domain pair check is already parallelized for the four domain pairs
     # (d1,d2), (d1,w2), (w1,d2), (w1,w2), we take smaller chunks
@@ -813,7 +815,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
         for domain1, domain2 in domain_pairs_to_check:
             assert not domain1.fixed or not domain2.fixed
             assert domain1.name != domain2.name
-            weight: float = constraint((domain1, domain2))
+            weight: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
             if weight > 0.0:
                 violating_domain_pairs_weights.append((domain1, domain2, weight))
                 if current_weight_gap is not None:
@@ -824,32 +826,29 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
     else:
         logger.debug(f'using threading for domain pair constraint {constraint.description}')
 
-        def domain_pair_if_violates(domain_pair: Tuple[Domain, Domain]) \
-                -> Optional[Tuple[Domain, Domain, float]]:
-            # return domain pair if it violates the constraint, else None
-            weight_: float = constraint(domain_pair)
-            if weight_ > 0.0:
-                return domain_pair[0], domain_pair[1], weight_
-            else:
-                return None
+        def sequence_pair_to_weight(seq_pair: Tuple[str, str]) -> float:
+            seq1, seq2 = seq_pair
+            return constraint(seq1, seq2, None, None)
 
         if current_weight_gap is None:
-            violating_domain_pairs_weights = list(
-                _thread_pool.map(domain_pair_if_violates, domain_pairs_to_check))
+            sequence_pairs_to_check = [(domain1.sequence, domain2.sequence)
+                                       for domain1, domain2 in domain_pairs_to_check]
+            weights = list(_process_pool.map(sequence_pair_to_weight, sequence_pairs_to_check))
+            violating_domain_pairs_weights = [(domain1, domain2, weight) for (domain1, domain2), weight in
+                                              zip(domain_pairs_to_check, weights) if weight > 0]
+
         else:
             chunks = dc.chunker(domain_pairs_to_check, chunk_size)
-            for domain_chunk in chunks:
-                violating_domain_pairs_chunk_with_none = \
-                    _thread_pool.map(domain_pair_if_violates, domain_chunk)
-                violating_domain_pairs_weights_chunk = \
-                    remove_none_from_list(violating_domain_pairs_chunk_with_none)
-                violating_domain_pairs_weights.extend(violating_domain_pairs_weights_chunk)
+            for domain_pair_chunk in chunks:
+                sequence_chunk = [(domain1.sequence, domain2.sequence)
+                                  for domain1, domain2 in domain_pair_chunk]
+                weights = list(_process_pool.map(sequence_pair_to_weight, sequence_chunk))
+                violating_domain_pairs_chunk = [(domain1, domain2, weight) for (domain1, domain2), weight in
+                                                zip(domain_pair_chunk, weights) if weight > 0]
+                violating_domain_pairs_weights.extend(violating_domain_pairs_chunk)
 
                 # quit early if possible
-                total_weight_chunk: float = sum(
-                    domain_pair_weight[2]
-                    for domain_pair_weight in violating_domain_pairs_weights_chunk
-                    if domain_pair_weight is not None)
+                total_weight_chunk = sum(weight for _, _, weight in violating_domain_pairs_chunk)
                 weight_discovered_here += constraint.weight * total_weight_chunk
                 if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
@@ -886,13 +885,11 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         logger.debug(f'$ for strand pair constraint {constraint.description}, checking these strand pairs:')
         logger.debug(f'$ {pprint.pformat(strand_pairs_to_check, indent=pprint_indent)}')
 
-    violating_strand_pairs_weights: List[Optional[Tuple[Strand, Strand, float]]] = []
+    violating_strand_pairs_weights: List[Tuple[Strand, Strand, float]] = []
 
     weight_discovered_here: float = 0.0
     quit_early = False
-
-    cpu_count = dc.cpu_count() if constraint.threaded else 1
-
+    cpu_count = dc.cpu_count()
     chunk_size = cpu_count
 
     if (not constraint.threaded
@@ -901,7 +898,10 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
         for strand1, strand2 in strand_pairs_to_check:
             assert not strand1.fixed or not strand2.fixed
-            weight = constraint((strand1, strand2))
+            if constraint.sequence_only:
+                weight = constraint(strand1.sequence(), strand2.sequence(), None, None)
+            else:
+                weight = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
             if weight > 0.0:
                 violating_strand_pairs_weights.append((strand1, strand2, weight))
                 if current_weight_gap is not None:
@@ -910,34 +910,33 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                         quit_early = True
                         break
     else:
-        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
+        logger.debug(f'using threading for strand pair constraint {constraint.description}')
 
-        def strand_pair_weight_if_violates(strand_pair: Tuple[Strand, Strand]) \
-                -> Optional[Tuple[Strand, Strand, float]]:
-            # return strand pair if it violates the constraint, else None
-            weight_ = constraint(strand_pair)
-            if weight_ > 0.0:
-                return strand_pair[0], strand_pair[1], weight_
-            else:
-                return None
+        assert constraint.sequence_only  # should have been checked in StrandPairConstraint post_init
+
+        def sequence_pair_to_weight(seq_pair: Tuple[str, str]) -> float:
+            seq1, seq2 = seq_pair
+            return constraint(seq1, seq2, None, None)
 
         if current_weight_gap is None:
-            violating_strand_pairs_weights = list(
-                _thread_pool.map(strand_pair_weight_if_violates, strand_pairs_to_check))
+            sequence_pairs_to_check = [(strand1.sequence(), strand2.sequence())
+                                       for strand1, strand2 in strand_pairs_to_check]
+            weights = list(_process_pool.map(sequence_pair_to_weight, sequence_pairs_to_check))
+            violating_strand_pairs_weights = [(strand1, strand2, weight) for (strand1, strand2), weight in
+                                              zip(strand_pairs_to_check, weights) if weight > 0]
+
         else:
             chunks = dc.chunker(strand_pairs_to_check, chunk_size)
-            for strand_chunk in chunks:
-                violating_strand_pairs_chunk_with_none: List[Optional[Tuple[Strand, Strand, float]]] = \
-                    _thread_pool.map(strand_pair_weight_if_violates, strand_chunk)
-                violating_strand_pairs_chunk: List[Tuple[Strand, Strand, float]] = \
-                    remove_none_from_list(violating_strand_pairs_chunk_with_none)
+            for strand_pair_chunk in chunks:
+                sequence_chunk = [(strand1.sequence(), strand2.sequence())
+                                  for strand1, strand2 in strand_pair_chunk]
+                weights = list(_process_pool.map(sequence_pair_to_weight, sequence_chunk))
+                violating_strand_pairs_chunk = [(strand1, strand2, weight) for (strand1, strand2), weight in
+                                                zip(strand_pair_chunk, weights) if weight > 0]
                 violating_strand_pairs_weights.extend(violating_strand_pairs_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(
-                    domain_pair_weight[2]
-                    for domain_pair_weight in violating_strand_pairs_chunk
-                    if domain_pair_weight is not None)
+                total_weight_chunk = sum(weight for _, _, weight in violating_strand_pairs_chunk)
                 weight_discovered_here += constraint.weight * total_weight_chunk
                 if _is_significantly_greater(weight_discovered_here, current_weight_gap):
                     quit_early = True
@@ -945,13 +944,11 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     violating_strand_pair_weight: Optional[Tuple[Strand, Strand, float]]
-    for violating_strand_pair_weight in violating_strand_pairs_weights:
-        if violating_strand_pair_weight is not None:
-            strand1, strand2, weight = violating_strand_pair_weight
-            unfixed_domains_set = frozenset(strand1.unfixed_domains() + strand2.unfixed_domains())
-            violation = _Violation(constraint, unfixed_domains_set, weight)
-            for domain in unfixed_domains_set:
-                violations[domain].add(violation)
+    for strand1, strand2, weight in violating_strand_pairs_weights:
+        unfixed_domains_set = OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains())
+        violation = _Violation(constraint, unfixed_domains_set, weight)
+        for domain in unfixed_domains_set:
+            violations[domain].add(violation)
 
     return violations, quit_early
 
@@ -971,10 +968,9 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
 
     weight_discovered_here: float = 0.0
     quit_early = False
-
-    cpu_count = dc.cpu_count() if constraint.threaded else 1
-
+    cpu_count = dc.cpu_count()
     chunk_size = cpu_count
+
     if (not constraint.threaded
             or cpu_count == 1
             or (current_weight_gap is not None and chunk_size == 1)):
@@ -1005,12 +1001,12 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
 
         if current_weight_gap is None:
             violating_complexes_weights = list(
-                _thread_pool.map(complex_weight_if_violates, complexes_to_check))
+                _process_pool.map(complex_weight_if_violates, complexes_to_check))
         else:
             chunks = dc.chunker(complexes_to_check, chunk_size)
             for complex_chunk in chunks:
                 violating_complexes_chunk_with_none: List[Optional[Tuple[Complex, float]]] = \
-                    _thread_pool.map(complex_weight_if_violates, complex_chunk)
+                    _process_pool.map(complex_weight_if_violates, complex_chunk)
                 violating_complexes_chunk: List[Tuple[Complex, float]] = \
                     remove_none_from_list(violating_complexes_chunk_with_none)
                 violating_complexes_weights.extend(violating_complexes_chunk)
@@ -1206,6 +1202,7 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 
     return domain_to_strand
 
+
 @dataclass
 class SearchParameters:
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
@@ -1304,7 +1301,7 @@ class SearchParameters:
     :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
     that they violated.
     """
-    
+
     num_digits_update: Optional[int] = None
     """
     Number of digits to use when writing update number in filenames. By default,
@@ -1374,7 +1371,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
     :param params:
-        A :any:`SearchParameters` object with attributes that can be called within this function for flexibility.
+        A :any:`SearchParameters` object with attributes that can be called within this function
+        for flexibility.
 
     """
 
@@ -1407,6 +1405,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     if params.random_seed is not None:
         logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
+    # need to assign to local function variable so it doesn't look like a method call
+    on_improved_design: Callable[[int], None] = params.on_improved_design
+
     try:
         if not params.restart:
             assign_sequences_to_domains_randomly_from_pools(design=design,
@@ -1421,7 +1422,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         # write initial sequences and report
         _write_intermediate_files(design=design, num_new_optimal=num_new_optimal, write_report=True,
-                                  directories=directories, report_only_violations=params.report_only_violations,
+                                  directories=directories,
+                                  report_only_violations=params.report_only_violations,
                                   num_digits_update=params.num_digits_update)
 
         # this helps with logging if we execute no iterations
@@ -1468,7 +1470,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                 violation_set_opt = violation_set_new
                 if weight_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
-                    params.on_improved_design(num_new_optimal)
+                    on_improved_design(num_new_optimal)  # type: ignore
 
                     current_time: float = time.time()
                     write_report = False
@@ -1496,8 +1498,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     finally:
         # if sys.platform != 'win32':
         #     _pfunc_killall()
-        _thread_pool.close()  # noqa
-        _thread_pool.terminate()
+        _process_pool.close()  # noqa
+        _process_pool.terminate()
 
     if directories.debug_file_handler is not None:
         dc.logger.removeHandler(directories.debug_file_handler)  # noqa
@@ -1513,10 +1515,10 @@ def _check_cpu_count(cpu_count: int) -> None:
         logger.info(f'number of processes in system changed from {cpu_count} to {dc.cpu_count()}'
                     f'\nallocating new ThreadPool')
         cpu_count = dc.cpu_count()
-        global _thread_pool
-        _thread_pool.close()
-        _thread_pool.terminate()
-        _thread_pool = ThreadPool(processes=cpu_count)
+        global _process_pool
+        _process_pool.close()
+        _process_pool.terminate()
+        _process_pool = new_process_pool(cpu_count)
 
 
 def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
