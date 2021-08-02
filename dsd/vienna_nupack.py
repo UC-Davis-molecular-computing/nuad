@@ -114,23 +114,31 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
            sodium: float = default_sodium,
            magnesium: float = default_magnesium,
            adjust: bool = False,
-           negate: bool = False) -> float:
-    """Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
+           ) -> float:
+    """
+    Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
 
-    :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
-                 For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
-                 in such cases.
-    :param temperature: temperature in Celsius
-    :param sodium: molarity of sodium in moles per liter (Default: 0.05)
-    :param magnesium: molarity of magnesium in moles per liter (Default: 0.0125)
-    :param adjust: whether to adjust from NUPACK mole fraction units to molar units
-    :param negate: whether to negate the standard free energy (typically free energies are negative;
-                   if `negate` is ``True`` then the return value will be positive)
-    :return: complex free energy ("delta G") of ordered complex
-             with strands in given cyclic permutation
+    :param seqs:
+        DNA sequences (tuple, or a single DNA sequence),
+        whose order indicates a cyclic permutation of the complex.
+        For one or two sequences, there is only one cyclic permutation,
+        so the order doesn't matter in such cases.
+    :param temperature:
+        temperature in Celsius
+    :param sodium:
+        molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium:
+        molarity of magnesium in moles per liter (Default: 0.0125)
+    :param adjust:
+        whether to adjust from NUPACK mole fraction units to molar units
+        (was necessary in NUPACK 3, but might not be necessary in NUPACK 4; leaving as an option
+        until we know for sure)
+    :return:
+        complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
     if isinstance(seqs, str):
         seqs = (seqs,)
@@ -140,7 +148,8 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
         from nupack import Model  # type: ignore
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at '
+            'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     param = (temperature, sodium, magnesium)
     if param not in _cached_pfunc4_models:
@@ -153,7 +162,7 @@ def pfunc4(seqs: Union[str, Tuple[str, ...]],
     if adjust:
         dg += _dg_adjust(temperature, len(seqs))
 
-    return -dg if negate else dg
+    return dg
 
 
 def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]:
@@ -176,14 +185,14 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     # Passing either of the keyword arguments universal_newlines=True or encoding='utf8'
     # solves the problem for python3.6. For python3.7 (but not 3.6) one can use text=True
     # XXX: Then why are none of those keyword arguments being used here??
-    p: Optional[sub.Popen] = None
+    process: Optional[sub.Popen] = None
     command_strs = (['wsl.exe', '-e'] if os_is_windows else []) + command_strs
     try:
-        with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as p:
-            output, stderr = p.communicate(user_input.encode())
+        with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as process:
+            output, stderr = process.communicate(user_input.encode())
     except BaseException as error:
-        if p is not None:
-            p.kill()
+        if process is not None:
+            process.kill()
         raise error
     output_decoded = output.decode()
     stderr_decoded = stderr.decode()
@@ -500,7 +509,7 @@ def binding(seq1: str, seq2: str, temperature: float = default_temperature, nega
             pfunc(seq1, temperature, negate) + pfunc(seq2, temperature, negate))
 
 
-def binding4(seq1: str, seq2: str, *, temperature: float = default_temperature, negate: bool = False,
+def binding4(seq1: str, seq2: str, *, temperature: float = default_temperature,
              sodium: float = default_sodium, magnesium: float = default_magnesium) -> float:
     """Computes the (partition function) free energy of association between two strands.
 
@@ -511,9 +520,8 @@ def binding4(seq1: str, seq2: str, *, temperature: float = default_temperature, 
     #   but pfunc is a symmetric function so it's safe to swap the order
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
-    return pfunc4((seq1, seq2), temperature, sodium, magnesium, negate) - (
-            pfunc4(seq1, temperature, sodium, magnesium, negate) + pfunc4(seq2, temperature, sodium,
-                                                                          magnesium, negate))
+    return pfunc4((seq1, seq2), temperature, sodium, magnesium) - (
+            pfunc4(seq1, temperature, sodium, magnesium) + pfunc4(seq2, temperature, sodium, magnesium))
 
 
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
@@ -536,7 +544,7 @@ def domain_equal_strength4(seq: str, temperature: float, sodium: float,
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    dg = binding4(seq, wc(seq), temperature, sodium, magnesium)
+    dg = binding4(seq, wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
     return low <= dg <= high
 
 
@@ -641,13 +649,16 @@ def domain_orthogonal4(seq: str, seqs: Sequence[str], temperature: float, sodium
                        orthogonality_ave: float = -1, threaded: bool = True) -> bool:
     """test orthogonality of domain with all others and their wc complements
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    def binding_callback(s1: str, s2: str, temperature: float, sodium: float, magnesium: float) -> float:
+
+    def binding_callback(s1: str, s2: str) -> float:
         return binding4(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
+
     if threaded:
         results = [
-            global_thread_pool.apply_async(binding_callback, args=(s, s, temperature, sodium, magnesium))
+            global_thread_pool.apply_async(binding_callback, args=(s, s))
             for s in (seq, wc(seq))]
         energies = [result.get() for result in results]
         if max(energies) > orthogonality:
