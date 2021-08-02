@@ -88,13 +88,13 @@ def main() -> None:
         threshold=-7.0, temperature=52, short_description='StrandPairCompl',
         pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
     )
-    strand_individual_ss_constraint = dc.nupack_3_strand_secondary_structure_constraint(
+    strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
         threshold=-0.0, temperature=52, short_description='StrandSS')
 
     initial_design = dc.Design(strands,
                                constraints=[strand_pairs_no_comp_constraint,
-                                            # strand_pairs_comp_constraint,
-                                            # strand_individual_ss_constraint,
+                                            strand_pairs_comp_constraint,
+                                            strand_individual_ss_constraint,
                                             # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                                             ])
 
@@ -113,7 +113,7 @@ def main() -> None:
     ]
 
     def nupack_binding_energy_in_bounds(seq: str) -> bool:
-        energy = dv.binding_complement_3(seq, 52)
+        energy = dv.binding_complement(seq, 52)
         dc.logger.debug(f'nupack complement binding energy = {energy}')
         return -12 < energy < -8
 
@@ -140,15 +140,16 @@ def main() -> None:
     strand3.domains[0].pool = domain_pools[lengths[1]]
     strand3.domains[1].pool = domain_pools[lengths[2]]
 
-    ds.search_for_dna_sequences(design=design,
-                                # weigh_violations_equally=True,
-                                report_delay=0.0,
-                                out_directory=args.directory,
-                                restart=args.restart,
-                                # force_overwrite=True,
-                                report_only_violations=False,
-                                random_seed=1,
-                                )
+    params = ds.SearchParameters(
+        # weigh_violations_equally=True,
+        report_delay=0.0,
+        out_directory=args.directory,
+        restart=args.restart,
+        # force_overwrite=True,
+        report_only_violations=False,
+        random_seed=1, )
+
+    ds.search_for_dna_sequences(design=design, params=params)
 
     # for strand in design.strands:
     #     print(f'strand seq = {strand.sequence(spaces_between_domains=True)}')
