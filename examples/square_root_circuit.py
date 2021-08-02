@@ -112,8 +112,6 @@ def signal_strand(
     :param gate5p: Gate to be identified by the recognition domain on the 5'
                    end
     :type gate5p: Union[int, str]
-    :param name: Name of the strand, defaults to 'signal {gate3p} {gate5p}'
-    :type name: str, optional
     :return: Strand
     :rtype: dc.Strand
     """
@@ -167,7 +165,7 @@ def gate_base_strand(gate: int) -> dc.Strand:
     return s
 
 
-def threshold_bottom_strand(input: int, gate: int) -> dc.Strand:
+def threshold_bottom_strand(input_: int, gate: int) -> dc.Strand:
     """Returns a threshold bottom strand for seesaw gate labeled `gate` that
     thresholds `input`
 
@@ -177,21 +175,21 @@ def threshold_bottom_strand(input: int, gate: int) -> dc.Strand:
          |     |          |        |
         [==--=====--=============--==>
 
-    :param input: Name of input that is being thresholded
-    :type input: int
+    :param input_: Name of input that is being thresholded
+    :type input_: int
     :param gate: Name of gate
     :type gate: int
     :return: Threshold bottom strand
     :rtype: dc.Strand
     """
     # Note, this assumes that this input signal domain has already been built
-    d_input_sub = recognition_domains_and_subdomains[f's{input}']
+    d_input_sub = recognition_domains_and_subdomains[f's{input_}']
     d_gate = get_signal_domain(gate)
 
     s: dc.Strand = dc.Strand(
         domains=[d_input_sub, TOEHOLD_DOMAIN, d_gate],
         starred_domain_indices=[0, 1, 2],
-        name=f'threshold_bottom_{input}_{gate}')
+        name=f'threshold_bottom_{input_}_{gate}')
     return s
 
 
@@ -294,13 +292,13 @@ def input_gate_complex_constraint(
     assert len(template_complex) == 2
     template_top_strand = template_complex[0]
     template_bot_strand = template_complex[1]
-    addr_T = template_top_strand.address_of_first_domain_occurence('T')
-    addr_T_star = template_bot_strand.address_of_first_domain_occurence('T*')
+    addr_t = template_top_strand.address_of_first_domain_occurence('T')
+    addr_t_star = template_bot_strand.address_of_first_domain_occurence('T*')
     return dc_complex_constraint(
         strand_complexes=cast(
             List[Tuple[dc.Strand, ...]],
             input_gate_complexes),
-        nonimplicit_base_pairs=[(addr_T, addr_T_star)],
+        nonimplicit_base_pairs=[(addr_t, addr_t_star)],
         description="input:gate Complex",
         short_description="input:gate")
 
@@ -333,8 +331,12 @@ def gate_output_complex_constraint(
                                53
            T*         S5*      s5*   T*
 
-    :param output_gate_complexes: List of gate:output complexes
-    :type output_gate_complexes: List[Tuple[dc.Strand, ...]]
+    :param gate_output_complexes: List of gate:output complexes
+    :type gate_output_complexes: List[Tuple[dc.Strand, ...]]
+    :param base_pair_prob_by_type: probabilities to assign to each type of base pair
+    :type base_pair_prob_by_type: Optional[Dict[dc.BasePairType, float]]
+    :param description: description of complex
+    :type description: str
     :return: A complex constraint on the base-pairing probabilities
     :rtype: dc.ComplexConstraint
     """
@@ -343,11 +345,11 @@ def gate_output_complex_constraint(
     assert len(template_complex) == 2
     template_top_strand = template_complex[0]
     template_bot_strand = template_complex[1]
-    addr_T = template_top_strand.address_of_first_domain_occurence('T')
-    addr_T_star = template_bot_strand.address_of_last_domain_occurence('T*')
+    addr_t = template_top_strand.address_of_first_domain_occurence('T')
+    addr_t_star = template_bot_strand.address_of_last_domain_occurence('T*')
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
-        nonimplicit_base_pairs=[(addr_T, addr_T_star)],
+        nonimplicit_base_pairs=[(addr_t, addr_t_star)],
         base_pair_prob_by_type=base_pair_prob_by_type, description=f"{description} Complex",
         short_description=f"{description}"
     )
@@ -363,15 +365,15 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
     :rtype: dc.DomainPairConstraint
     """
 
-    def evaluate(domain1: dc.Domain, domain2: dc.Domain) -> float:
+    def evaluate(seq1: str, seq2: str, domain1: Optional[dc.Domain], domain2: Optional[dc.Domain]) -> float:
         num_of_matches = 0
         run_of_matches = 0
-        assert len(domain1.sequence) == len(domain2.sequence)
-        length = len(domain1.sequence)
+        assert len(seq1) == len(seq2)
+        length = len(seq1)
         run_of_matches_limit = 0.35 * length
         num_of_matches_limit = 0.7 * length
         for i in range(length):
-            if domain1.sequence[i] == domain2.sequence[i]:
+            if seq1[i] == seq2[i]:
                 num_of_matches += 1
                 run_of_matches += 1
             else:
@@ -381,7 +383,7 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
         return 0
 
     def summary(domain1: dc.Domain, domain2: dc.Domain) -> str:
-        if evaluate(domain1, domain2) > 0:
+        if evaluate(domain1.sequence, domain2.sequence, domain1, domain2) > 0:
             return (f'Too many matches between {domain1} and {domain2}\n'
                     f'\t{domain1}: {domain1.sequence}\n'
                     f'\t{domain2}: {domain2.sequence}\n')
@@ -412,21 +414,21 @@ def strand_substring_constraint(
     :rtype: dc.StrandConstraint
     """
 
-    def violated(strand: dc.Strand):
+    def violated(seq: str):
         for substring in substrings:
-            if substring in strand.sequence():
+            if substring in seq:
                 return True
         return False
 
-    def evaluate(strand: dc.Strand):
-        if violated(strand):
+    def evaluate(seq: str, strand: Optional[dc.Strand]):
+        if violated(seq):
             return 100
         else:
             return 0
 
     def summary(strand: dc.Strand):
         violation_str: str
-        if violated(strand):
+        if violated(strand.sequence()):
             violation_str = ''
         else:
             violation_str = "** violation**"
@@ -493,12 +495,12 @@ class SeesawCircuit:
             if gate_name in input_gate_pairs:
                 raise ValueError(f'Invalid seesaw circuit: '
                                  'Multiple gates labeled {gate_name} found')
-            for input in seesaw_gate.inputs:
-                assert (input, gate_name) not in input_gate_pairs
-                input_gate_pairs.add((input, gate_name))
+            for input_ in seesaw_gate.inputs:
+                assert (input_, gate_name) not in input_gate_pairs
+                input_gate_pairs.add((input_, gate_name))
 
-        self.signal_strands = {(input, gate): signal_strand(input, gate)
-                               for input, gate in input_gate_pairs}
+        self.signal_strands = {(input_, gate): signal_strand(input_, gate)
+                               for input_, gate in input_gate_pairs}
 
     def _set_fuel_strands(self) -> None:
         """Sets self.fuel_strands
@@ -533,12 +535,12 @@ class SeesawCircuit:
                     raise ValueError(
                         f'Invalid seesaw circuit: '
                         'Multiple gates labeled {gate_name} found')
-                for input in seesaw_gate.inputs:
-                    assert (input, gate_name) not in input_gate_pairs_with_threshold
-                    input_gate_pairs_with_threshold.add((input, gate_name))
+                for input_ in seesaw_gate.inputs:
+                    assert (input_, gate_name) not in input_gate_pairs_with_threshold
+                    input_gate_pairs_with_threshold.add((input_, gate_name))
 
-        self.threshold_bottom_strands = {(input, gate): threshold_bottom_strand(
-            input, gate) for input, gate in input_gate_pairs_with_threshold}
+        self.threshold_bottom_strands = {(input_, gate): threshold_bottom_strand(
+            input_, gate) for input_, gate in input_gate_pairs_with_threshold}
 
     def _set_threshold_top_strands(self) -> None:
         """Sets self.threshold_top_strands
@@ -598,8 +600,8 @@ class SeesawCircuit:
                 assert len(inputs) == 1
                 reporter_gates.add((inputs[0], gate_name))
 
-        self.reporter_bottom_strands = {(input, gate): reporter_bottom_strand(gate)
-                                        for input, gate in reporter_gates}
+        self.reporter_bottom_strands = {(input_, gate): reporter_bottom_strand(gate)
+                                        for input_, gate in reporter_gates}
 
     def _set_strands(self) -> None:
         """Sets self.strands
@@ -623,7 +625,7 @@ class SeesawCircuit:
         """Adds input:gate complexes to self.constraint
         """
         input_gate_complexes = []
-        for (input, gate), s in self.signal_strands.items():
+        for (input_, gate), s in self.signal_strands.items():
             if gate in self.gate_base_strands:
                 g = self.gate_base_strands[gate]
                 input_gate_complexes.append((s, g))
@@ -686,9 +688,9 @@ class SeesawCircuit:
              s2*   T*        S5*       s5*
         """
         threshold_complexes: List[Tuple[dc.Strand, ...]] = []
-        for (_, gate), threshold_bottom_strand in self.threshold_bottom_strands.items():
+        for (_, gate), thres_bottom_strand in self.threshold_bottom_strands.items():
             waste_strand = self.threshold_top_strands[gate]
-            threshold_complexes.append((waste_strand, threshold_bottom_strand))
+            threshold_complexes.append((waste_strand, thres_bottom_strand))
 
         self.constraints.append(
             dc_complex_constraint(
@@ -715,10 +717,10 @@ class SeesawCircuit:
                            s2*   T*        S5*       s5*
         """
         threshold_waste_complexes: List[Tuple[dc.Strand, ...]] = []
-        for (input, gate), threshold_bottom_strand in self.threshold_bottom_strands.items():
-            signal_strand = self.signal_strands[(input, gate)]
+        for (input_, gate), thres_bottom_strand in self.threshold_bottom_strands.items():
+            sig_strand = self.signal_strands[(input_, gate)]
             threshold_waste_complexes.append(
-                (signal_strand, threshold_bottom_strand))
+                (sig_strand, thres_bottom_strand))
 
         self.constraints.append(
             dc_complex_constraint(
@@ -743,9 +745,9 @@ class SeesawCircuit:
                T*        S6*       s6*
         """
         reporter_complexes: List[Tuple[dc.Strand, ...]] = []
-        for (_, gate), reporter_bottom_strand in self.reporter_bottom_strands.items():
+        for (_, gate), reporter_bottom_strand_ in self.reporter_bottom_strands.items():
             waste_strand = self.reporter_top_strands[gate]
-            reporter_complexes.append((waste_strand, reporter_bottom_strand))
+            reporter_complexes.append((waste_strand, reporter_bottom_strand_))
 
         self.constraints.append(
             dc_complex_constraint(
@@ -771,10 +773,10 @@ class SeesawCircuit:
                                   T*        S6*       s6*
         """
         reporter_waste_complexes: List[Tuple[dc.Strand, ...]] = []
-        for (input, gate), reporter_bottom_strand in self.reporter_bottom_strands.items():
-            signal_strand = self.signal_strands[(input, gate)]
+        for (input_, gate), reporter_bottom_strand_ in self.reporter_bottom_strands.items():
+            signal_strand_ = self.signal_strands[(input_, gate)]
             reporter_waste_complexes.append(
-                (signal_strand, reporter_bottom_strand))
+                (signal_strand_, reporter_bottom_strand_))
 
         self.constraints.append(
             dc_complex_constraint(
@@ -828,36 +830,36 @@ def and_or_gate(integrating_gate_name: int, amplifying_gate_name: int,
     amplifying_gate = SeesawGate(
         gate_name=amplifying_gate_name, inputs=[integrating_gate_name],
         has_threshold=True, has_fuel=True)
-    return (integrating_gate, amplifying_gate)
+    return integrating_gate, amplifying_gate
 
 
-def reporter_gate(gate_name: int, input: int) -> SeesawGate:
+def reporter_gate(gate_name: int, input_: int) -> SeesawGate:
     """Returns a SeesawGate for a reporter
 
     :param gate_name: Name of the reporter
     :type gate_name: int
-    :param input: Input
-    :type input: int
+    :param input_: Input
+    :type input_: int
     :return: SeesawGate for a reporter
     :rtype: SeesawGate
     """
     return SeesawGate(
-        gate_name=gate_name, inputs=[input],
+        gate_name=gate_name, inputs=[input_],
         has_threshold=True, has_fuel=False, is_reporter=True)
 
 
-def input_gate(gate_name: int, input: int) -> SeesawGate:
+def input_gate(gate_name: int, input_: int) -> SeesawGate:
     """Returns a SeesawGate for an input
 
     :param gate_name: Name of the gate
     :type gate_name: int
-    :param input: Input
-    :type input: int
+    :param input_: Input
+    :type input_: int
     :return: SeesawGate
     :rtype: SeesawGate
     """
     return SeesawGate(
-        gate_name=gate_name, inputs=[input],
+        gate_name=gate_name, inputs=[input_],
         has_threshold=True, has_fuel=True)
 
 
@@ -867,7 +869,7 @@ def main() -> None:
                      amplifying_gate_name=1, inputs=[21, 27]),
         *and_or_gate(integrating_gate_name=53,
                      amplifying_gate_name=5, inputs=[18, 22]),
-        reporter_gate(gate_name=6, input=5),
+        reporter_gate(gate_name=6, input_=5),
         *and_or_gate(integrating_gate_name=20,
                      amplifying_gate_name=8, inputs=[35, 38]),
         *and_or_gate(integrating_gate_name=26,
@@ -876,9 +878,9 @@ def main() -> None:
                      amplifying_gate_name=18, inputs=[28, 33, 37]),
         *and_or_gate(integrating_gate_name=36,
                      amplifying_gate_name=21, inputs=[29, 35, 38]),
-        reporter_gate(gate_name=23, input=1),
-        reporter_gate(gate_name=24, input=13),
-        reporter_gate(gate_name=25, input=8),
+        reporter_gate(gate_name=23, input_=1),
+        reporter_gate(gate_name=24, input_=13),
+        reporter_gate(gate_name=25, input_=8),
         *and_or_gate(integrating_gate_name=39,
                      amplifying_gate_name=22, inputs=[29, 31]),
         *and_or_gate(integrating_gate_name=40,
@@ -891,10 +893,10 @@ def main() -> None:
                      amplifying_gate_name=30, inputs=[33, 38]),
         *and_or_gate(integrating_gate_name=44,
                      amplifying_gate_name=31, inputs=[35, 37]),
-        input_gate(gate_name=33, input=49),
-        input_gate(gate_name=35, input=50),
-        input_gate(gate_name=37, input=51),
-        input_gate(gate_name=38, input=52),
+        input_gate(gate_name=33, input_=49),
+        input_gate(gate_name=35, input_=50),
+        input_gate(gate_name=37, input_=51),
+        input_gate(gate_name=38, input_=52),
     ]
 
     seesaw_circuit = SeesawCircuit(seesaw_gates=seesaw_gates)
@@ -912,16 +914,14 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    
     constraints: List[dc.Constraint] = [base_difference_constraint(recognition_domains),
                                         strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)]
-    constraints.extend(seesaw_circuit.constraints) # make mypy happy about the generics with List
+    constraints.extend(seesaw_circuit.constraints)  # make mypy happy about the generics with List
     design = dc.Design(strands=strands, constraints=constraints)
     params = ds.SearchParameters(out_directory='output/square_root_circuit',
                                  # weigh_violations_equally=True,
                                  # restart=True,
                                  report_delay=0.0)
-
 
     ds.search_for_dna_sequences(design, params)
 
