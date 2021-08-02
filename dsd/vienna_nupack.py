@@ -56,56 +56,6 @@ def _dg_adjust(temperature: float, num_seqs: int) -> float:
     return adjust * (num_seqs - 1)
 
 
-@lru_cache(maxsize=10_000)
-def pfunc3(seqs: Union[str, Tuple[str, ...]],
-           temperature: float = default_temperature,
-           adjust: bool = True,
-           ) -> float:
-    """Calls NUPACK's pfunc (http://www.nupack.org/) on a complex consisting of the unique strands in
-    seqs, returns energy ("delta G"), i.e., generally a negative number.
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-
-    :param seqs:
-        DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
-        For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
-        in such cases.
-    :param temperature:
-        temperature in Celsius
-    :param adjust:
-        whether to adjust from NUPACK mole fraction units to molar units
-    :return:
-        complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
-    """
-    if isinstance(seqs, str):
-        seqs = (seqs,)
-    seqs_on_separate_lines = '\n'.join(seqs)
-    permutation = ' '.join(map(str, range(1, len(seqs) + 1)))
-    user_input = f'''\
-{len(seqs)}
-{seqs_on_separate_lines}
-{permutation}'''
-
-    command_strs = ['pfunc', '-T', str(temperature), '-multi', '-material', 'dna']
-
-    output, _ = call_subprocess(command_strs, user_input)
-
-    lines = output.split('\n')
-    if lines[-4] != "% Free energy (kcal/mol) and partition function:":
-        raise NameError('NUPACK output parsing problem')
-    dg_str = lines[-3].strip()
-    if dg_str.lower() == 'inf':
-        # this can occur when two strands have MFE completely unpaired; should be 0 energy
-        dg = 0.0
-    else:
-        dg = float(dg_str)
-
-    if adjust:
-        dg += _dg_adjust(temperature, len(seqs))
-
-    return dg
-
-
 _cached_pfunc4_models = {}
 
 
@@ -200,21 +150,6 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     return output_decoded, stderr_decoded
 
 
-# def rna_duplex_python(seq_pairs: Sequence[Tuple[str, str]],
-#                       temperature: float = default_temperature,
-#                       negate: bool = False, ) -> List[float]:
-#     import RNA
-#     (ss, mfe) = RNA.fold('ACGTAGCTGATCGTAGCTAGCTAGCTAGCTAGCTAGCT')
-#     print(f'ss = {ss}')
-#     print(f'mfe = {mfe}')
-
-# def nupack_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
-#                            temperature: float = default_temperature,
-#                            negate: bool = False) -> List[float]:
-#     seqs_list, seq_orders = unique_seqs_in_pairs(seq_pairs)
-#     with open('')
-
-
 def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str], Dict[str, int]]:
     """
     :param seq_pairs: iterable of pairs of strings
@@ -238,16 +173,16 @@ _sentinel = object()
 _max_size = 1_000_000
 _hits = 0
 _misses = 0
-_rna_duplex_cache: Dict[Tuple[Tuple[str, str], float, bool, str], float] = {}
+_rna_duplex_cache: Dict[Tuple[Tuple[str, str], float, str], float] = {}
 
 
-def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float, negate: bool,
+def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float,
                                  parameters_filename: str) -> Optional[float]:
     # return None if arguments are not in _rna_duplex_cache,
     # otherwise return cached energy in _rna_duplex_cache
     global _hits
     global _misses
-    key = (seq_pair, temperature, negate, parameters_filename)
+    key = (seq_pair, temperature, parameters_filename)
     result: Union[object, float] = _rna_duplex_cache.get(key, _sentinel)
     if result is _sentinel:
         _misses += 1
@@ -260,7 +195,6 @@ def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float, 
 def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
-                        negate: bool = False,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
                         # cache: bool = True,
                         cache: bool = False,  # off until I implement LRU queue to bound cache size
@@ -272,12 +206,14 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
     Returns a list (in the same order as seqpairs) of free energies.
 
-    :param seq_pairs: sequence (list or tuple) of pairs of DNA sequences
-    :param logger: logger to use for printing error messages
-    :param temperature: temperature in Celsius
-    :param negate: whether to negate the standard free energy (typically free energies are negative;
-                   if `negate` is ``True`` then the return value will be positive)
+    :param seq_pairs:
+        sequence (list or tuple) of pairs of DNA sequences
+    :param logger:
+        logger to use for printing error messages
+    :param temperature:
+        temperature in Celsius
     :param parameters_filename:
+        name of parameters file for NUPACK
     :param cache:
         Whether to cache results to save on number of sequences to give to RNAduplex.
     :return:
@@ -296,7 +232,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
 
     # fill in cached energies and determine which indices still need to have their energies calculated
     if cache:
-        energies = [_rna_duplex_single_cacheable(seq_pair, temperature, negate, parameters_filename)
+        energies = [_rna_duplex_single_cacheable(seq_pair, temperature, parameters_filename)
                     for seq_pair in seq_pairs]
     else:
         energies = [None] * len(seq_pairs)
@@ -334,16 +270,13 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
 
     assert len(energies_to_calculate) == len(seq_pairs_to_calculate)
 
-    if negate:
-        energies_to_calculate = [-dg for dg in energies_to_calculate]
-
     # put calculated energies into list to return alongside cached energies
     assert len(idxs_to_calculate) == len(energies_to_calculate)
     for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
         energies[i] = energy
         if cache:
             if _misses < _max_size:
-                key = (seq_pair, temperature, negate, parameters_filename)
+                key = (seq_pair, temperature, parameters_filename)
                 _rna_duplex_cache[key] = energy
             else:
                 logger.warning(f'WARNING: cache size {_max_size} exceeded; '
@@ -366,7 +299,6 @@ def _fix_filename_windows(parameters_filename: str) -> str:
 def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
-                        negate: bool = False,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
                         ) -> List[float]:
     """
@@ -376,13 +308,16 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
     where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
     Returns a list (in the same order as seqpairs) of free energies.
 
-    :param seq_pairs: sequence (list or tuple) of pairs of DNA sequences
-    :param logger: logger to use for printing error messages
-    :param temperature: temperature in Celsius
+    :param seq_pairs:
+        sequence (list or tuple) of pairs of DNA sequences
+    :param logger:
+        logger to use for printing error messages
+    :param temperature:
+        temperature in Celsius
     :param parameters_filename:
-    :param negate: whether to negate the standard free energy (typically free energies are negative;
-                   if `negate` is ``True`` then the return value will be positive)
-    :return: list of free energies, in the same order as `seq_pairs`
+        name of NUPACK parameters file
+    :return:
+        list of free energies, in the same order as `seq_pairs`
     """
 
     # NB: the string NA_parameter_set needs to be exactly the intended filename;
@@ -421,9 +356,6 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
         raise AssertionError(
             'lengths do not match: #lines:{} #seqpairs:{}'.format(len(lines) - 1, len(seq_pairs)))
 
-    if negate:
-        dg_list = [-dg for dg in dg_list]
-
     return dg_list
 
 
@@ -435,29 +367,8 @@ def wc(seq: str) -> str:
     return seq.translate(_wctable)[::-1]
 
 
-def binding_complement_3(seq: str, temperature: float = default_temperature, subtract_indv: bool = True,
-                         negate: bool = False) -> float:
-    """Computes the (partition function) free energy of a strand with its perfect WC complement.
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    seq1 = seq
-    seq2 = wc(seq)
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
-    #   considered different tuples hence are cached differently by lrucache;
-    #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
-    if seq1 > seq2:
-        seq1, seq2 = seq2, seq1
-    association_energy = pfunc3((seq1, seq2), temperature, negate)
-    if subtract_indv:
-        # ddG_reaction == dG(products) - dG(reactants)
-        association_energy -= (pfunc3(seq1, temperature, negate) + pfunc3(seq2, temperature, negate))
-    return association_energy
-
-
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
-                       magnesium: float = default_magnesium, subtract_indv: bool = True,
-                       negate: bool = False) -> float:
+                       magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
     """Computes the (partition function) free energy of a strand with its perfect WC complement.
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -469,45 +380,22 @@ def binding_complement(seq: str, temperature: float = default_temperature, sodiu
     #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
-    association_energy = pfunc((seq1, seq2), temperature, sodium, magnesium, negate)
+    association_energy = pfunc((seq1, seq2), temperature, sodium, magnesium)
     if subtract_indv:
         # ddG_reaction == dG(products) - dG(reactants)
-        association_energy -= (pfunc(seq1, temperature, sodium, magnesium, negate) +
-                               pfunc(seq2, temperature, sodium, magnesium, negate))
+        association_energy -= (pfunc(seq1, temperature, sodium, magnesium) +
+                               pfunc(seq2, temperature, sodium, magnesium))
     return association_energy
-
-
-def secondary_structure_single_strand_3(seq: str, temperature: float = default_temperature,
-                                        negate: bool = False) -> float:
-    """Computes the (partition function) free energy of single-strand secondary structure.
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    return pfunc3((seq,), temperature, negate)
 
 
 def secondary_structure_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
-        magnesium: float = default_magnesium, negate: bool = False) -> float:
+        magnesium: float = default_magnesium) -> float:
     """Computes the (partition function) free energy of single-strand secondary structure.
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    return pfunc((seq,), temperature, sodium, magnesium, negate)
-
-
-def binding_3(seq1: str, seq2: str, temperature: float = default_temperature, negate: bool = False) -> float:
-    """Computes the (partition function) free energy of association between two strands.
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
-    #   considered different tuples hence are cached differently by lrucache;
-    #   but pfunc is a symmetric function so it's safe to swap the order
-    if seq1 > seq2:
-        seq1, seq2 = seq2, seq1
-    return pfunc3((seq1, seq2), temperature, negate) - (
-            pfunc3(seq1, temperature, negate) + pfunc3(seq2, temperature, negate))
+    return pfunc((seq,), temperature, sodium, magnesium)
 
 
 def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
@@ -530,15 +418,6 @@ def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
     return ''.join(random.choices(population=bases, k=length))
 
 
-def domain_equal_strength_3(seq: str, temperature: float, low: float, high: float) -> bool:
-    """test roughly equal strength of domains (according to partition function)
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    dg = binding_3(seq, wc(seq), temperature)
-    return low <= dg <= high
-
-
 def domain_equal_strength(seq: str, temperature: float, sodium: float,
                           magnesium: float, low: float, high: float) -> bool:
     """test roughly equal strength of domains (according to partition function)
@@ -547,22 +426,6 @@ def domain_equal_strength(seq: str, temperature: float, sodium: float,
     """
     dg = binding(seq, wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
     return low <= dg <= high
-
-
-def domain_no_sec_struct_3(seq: str, temperature: float, individual: float, threaded: bool) -> float:
-    """test lack of secondary structure in domains
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    if threaded:
-        results = [global_thread_pool.apply_async(secondary_structure_single_strand_3, args=(s, temperature))
-                   for s in (seq, wc(seq))]
-        e_seq, e_wcseq = [result.get() for result in results]
-        return e_seq <= individual and e_wcseq <= individual
-    else:
-        seq_sec_struc = secondary_structure_single_strand_3(seq, temperature)
-        seq_wc_sec_struc = secondary_structure_single_strand_3(wc(seq), temperature)
-        return seq_sec_struc <= individual and seq_wc_sec_struc <= individual
 
 
 def domain_no_sec_struct(seq: str, temperature: float, sodium: float,
@@ -589,61 +452,6 @@ LOG_ENERGY = False
 def log_energy(energy: float) -> None:
     if LOG_ENERGY:
         print(f'{energy:.1f}')
-
-
-def domain_orthogonal_3(seq: str, seqs: Sequence[str], temperature: float, orthogonality: float,
-                        orthogonality_ave: float = -1, threaded: bool = True) -> bool:
-    """test orthogonality of domain with all others and their wc complements
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    if threaded:
-        results = [global_thread_pool.apply_async(binding_3, args=(s, s, temperature)) for s in
-                   (seq, wc(seq))]
-        energies = [result.get() for result in results]
-        if max(energies) > orthogonality:
-            return False
-    else:
-        ss = binding_3(seq, seq, temperature)
-        log_energy(ss)
-        if ss > orthogonality:
-            return False
-        wsws = binding_3(wc(seq), wc(seq), temperature)
-        log_energy(wsws)
-        if wsws > orthogonality:
-            return False
-    energy_sum = 0.0
-    for altseq in seqs:
-        if threaded:
-            results = [global_thread_pool.apply_async(binding_3, args=(seq1, seq2, temperature))
-                       for seq1, seq2 in itertools.product((seq, wc(seq)), (altseq, wc(altseq)))]
-            energies = [result.get() for result in results]
-            if max(energies) > orthogonality:
-                return False
-            energy_sum += sum(energies)
-        else:
-            sa = binding_3(seq, altseq, temperature)
-            log_energy(sa)
-            if sa > orthogonality:
-                return False
-            sw = binding_3(seq, wc(altseq), temperature)
-            log_energy(sw)
-            if sw > orthogonality:
-                return False
-            wa = binding_3(wc(seq), altseq, temperature)
-            log_energy(wa)
-            if wa > orthogonality:
-                return False
-            ww = binding_3(wc(seq), wc(altseq), temperature)
-            log_energy(ww)
-            if ww > orthogonality:
-                return False
-            energy_sum += sa + sw + wa + ww
-    if orthogonality_ave > 0:
-        energy_ave = energy_sum / (4 * len(seqs)) if len(seqs) > 0 else 0.0
-        return energy_ave <= orthogonality_ave
-    else:
-        return True
 
 
 def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium: float,
@@ -706,71 +514,6 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
     if orthogonality_ave > 0:
         energy_ave = energy_sum / (4 * len(seqs)) if len(seqs) > 0 else 0.0
         return energy_ave <= orthogonality_ave
-    else:
-        return True
-
-
-def domain_pairwise_concatenated_no_sec_struct_3(seq: str, seqs: Sequence[str], temperature: float,
-                                                 concat: float, concat_ave: float = -1,
-                                                 threaded: bool = True) -> bool:
-    """test lack of secondary structure in concatenated domains
-
-    NUPACK version 2 or 3 must be installed and on the PATH.
-    """
-    #     if hairpin(seq+seq,temperature) > concat: return False
-    #     if hairpin(wc(seq)+wc(seq),temperature) > concat: return False
-    energy_sum = 0.0
-    for altseq in seqs:
-        wc_seq = wc(seq)
-        wc_altseq = wc(altseq)
-        if threaded:
-            results = [global_thread_pool.apply_async(secondary_structure_single_strand_3,
-                                                      args=(seq1 + seq2, temperature)) for
-                       (seq1, seq2) in
-                       [(seq, altseq),
-                        (seq, wc_altseq),
-                        (wc_seq, altseq),
-                        (wc_seq, wc_altseq),
-                        (altseq, seq),
-                        (wc_altseq, seq),
-                        (altseq, wc_seq),
-                        (wc_altseq, wc_seq)]]
-            energies = [result.get() for result in results]
-            #             print len(results)
-            #             print 'pair: %s' % [round(e,1) for e in energies]
-            if max(energies) > concat:
-                return False
-            energy_sum += sum(energies)
-        else:
-            seq_alt = secondary_structure_single_strand_3(seq + altseq, temperature)
-            if seq_alt > concat:
-                return False
-            seq_wcalt = secondary_structure_single_strand_3(seq + wc_altseq, temperature)
-            if seq_wcalt > concat:
-                return False
-            wcseq_alt = secondary_structure_single_strand_3(wc_seq + altseq, temperature)
-            if wcseq_alt > concat:
-                return False
-            wcseq_wcalt = secondary_structure_single_strand_3(wc_seq + wc_altseq, temperature)
-            if wcseq_wcalt > concat:
-                return False
-            alt_seq = secondary_structure_single_strand_3(altseq + seq, temperature)
-            if alt_seq > concat:
-                return False
-            alt_wcseq = secondary_structure_single_strand_3(altseq + wc_seq, temperature)
-            if alt_wcseq > concat:
-                return False
-            wcalt_seq = secondary_structure_single_strand_3(wc_altseq + seq, temperature)
-            if wcalt_seq > concat:
-                return False
-            wcalt_wcseq = secondary_structure_single_strand_3(wc_altseq + wc_seq, temperature)
-            if wcalt_wcseq > concat:
-                return False
-            energy_sum += (seq_alt + seq_wcalt + wcseq_alt + wcseq_wcalt +
-                           alt_seq + alt_wcseq + wcalt_seq + wcalt_wcseq)
-    if concat_ave > 0:
-        energy_ave = energy_sum / (8 * len(seqs)) if len(seqs) > 0 else 0.0
-        return energy_ave <= concat_ave
     else:
         return True
 

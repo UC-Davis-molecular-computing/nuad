@@ -43,7 +43,7 @@ SIGNAL_DOMAIN_POOL: dc.DomainPool = dc.DomainPool(
     [three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint, no_gggg_constraint])
 
 # Alias
-dc_complex_constraint = dc.nupack_4_complex_secondary_structure_constraint
+dc_complex_constraint = dc.nupack_complex_secondary_structure_constraint
 
 # Stores all domains used in design
 TOEHOLD_DOMAIN: dc.Domain = dc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
