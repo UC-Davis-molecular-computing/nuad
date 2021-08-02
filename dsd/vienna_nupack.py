@@ -60,21 +60,22 @@ def _dg_adjust(temperature: float, num_seqs: int) -> float:
 def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           adjust: bool = True,
-          negate: bool = False) -> float:
+          ) -> float:
     """Calls NUPACK's pfunc (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
     NUPACK version 2 or 3 must be installed and on the PATH.
 
-    :param seqs: DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
-                 For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
-                 in such cases.
-    :param temperature: temperature in Celsius
-    :param adjust: whether to adjust from NUPACK mole fraction units to molar units
-    :param negate: whether to negate the standard free energy (typically free energies are negative;
-                   if `negate` is ``True`` then the return value will be positive)
-    :return: complex free energy ("delta G") of ordered complex
-             with strands in given cyclic permutation
+    :param seqs:
+        DNA sequences (list or tuple), whose order indicates a cyclic permutation of the complex
+        For one or two sequences, there is only one cyclic permutation, so the order doesn't matter
+        in such cases.
+    :param temperature:
+        temperature in Celsius
+    :param adjust:
+        whether to adjust from NUPACK mole fraction units to molar units
+    :return:
+        complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
     if isinstance(seqs, str):
         seqs = (seqs,)
@@ -102,7 +103,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     if adjust:
         dg += _dg_adjust(temperature, len(seqs))
 
-    return -dg if negate else dg
+    return dg
 
 
 _cached_pfunc4_models = {}
