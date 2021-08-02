@@ -9,11 +9,11 @@ The API documentation is on readthedocs: https://dnadsd.readthedocs.io/
 
 
 ## Installation
-dsd requires Python version 3.6 or higher. Currently, it cannot be installed using pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/dsd/issues/12)). 
+dsd requires Python version 3.7 or higher. Currently, it cannot be installed using pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/dsd/issues/12)). 
 
 dsd uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download). While it is technically possible to use dsd without them, most of the pre-packaged constraints require them. ViennaRNA is fairly straightforward to install on any system.
 
-You can download either NUPACK 3 or NUPACK 4. Installing NUPACK 3 requires compiling C code from source, and it is not straightforward to install on Windows (for example, using Cygwin or MinGW). To use NUPACK on Windows, you should use [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system.
+To use NUPACK on Windows, you should use [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system.
 Installing NUPACK 4 allows access to functions such as `pfunc` and related functions
 and can be done by following the installation instructions
 in the online [user guide](https://piercelab-caltech.github.io/nupack-docs/start/).
@@ -40,9 +40,8 @@ To install dsd:
 
 3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/dsd/blob/main/requirements.txt) by typing `pip install numpy ordered_set psutil pathos scadnano` at the command line.
 
-4. Install NUPACK (version 3 and/or 4) and ViennaRNA following their installation instructions ([NUPACK](https://piercelab-caltech.github.io/nupack-docs/start/#installation-requirements) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html)). (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK 3 and/or ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so there is is no executable directory you need to add to `path`.
+4. Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK](https://piercelab-caltech.github.io/nupack-docs/start/#installation-requirements) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html)). (If you do not install one of them, you can still install dsd, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (wsl)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within wsl. After installing each of NUPACK 3 and/or ViennaRNA, add their executable directories to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so there is is no executable directory you need to add to `path`.
 
-    To test that NUPACK 3 is installed correctly, type `pfunc` at the command line (the wsl command line if using Windows); the pfunc NUPACK 3 executable should be called.
     To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
     To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
 
@@ -59,12 +58,10 @@ To install dsd:
     >>>
     ```
 
-    To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install both versions of NUPACK, and ViennaRNA, then only a subset of the following will succeed):
+    To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
 
     ```python
     >>> import dsd.vienna_nupack as dv
-    >>> dv.pfunc3('GCGCGCGCGC') # test NUPACK 3
-    -2.06056146
     >>> dv.pfunc('GCGCGCGCGC')  # test NUPACK 4
     -1.9079766874655928
     >>> dv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
@@ -102,13 +99,20 @@ In more detail, there are five main types of objects you create to describe your
 
         - `StrandPairConstraint`: This evaluates a pair of `Strand`'s.
 
-        - TODO: `ComplexConstraint` with a tuple of `Strand`'s?
+        - `ComplexConstraint`: This evaluates a tuple of `Strand`'s of arbitrary size.
 
         - `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`: These are similar to their singular counterparts listed above. The difference is that some checks may be faster to do in batch or parallel than one at a time. For instance, RNAduplex, an executable included with ViennaRNA, can examine many pairs of sequences, and it is much faster to give it all pairs at once, than to repeatedly call RNAduplex, once for each pair. 
 
         - `DesignConstraint`: This is rarely used in practice, but it can be used to express any constraint not captured by one of the constraints already listed. It takes the entire design as input.
 
-    The "singular" constraints `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint` each are given a function `evaluate`, which takes as input the relevant part of the design (e.g., a `StrandPairConstraint` takes as input two `Strand`'s) and returns a floating-point value. The interpretation of the returned value is as follows: if the constraint is satisfied, it should return 0.0. If the constraint is violated, it returns a positive number indicating "how much" the constraint is violated. The pre-packaged constraints are all of the form "*compare some energy value returned by NUPACK or ViennaRNA to a fixed threshold, and return the difference*". For example, with a threshold of -1.6 kcal/mol, if a `Strand` has partition function energy of -2.9 kcal/mol according to NUPACK's pfunc, then the constraint will return the value 1.3 = -1.6 - (-2.9), i.e., the actual energy is 1.3 beyond the threshold. If the actual energy is -1.2 instead, then it will return 0.0, since it is on the "good" side of the threshold. (The dsd sequence design algorithm actually converts all negative values to 0.0, so one could slightly simplify and simply return the value `threshold - energy`.)
+    The "singular" constraints `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint` each are given a function `evaluate`, which takes as input the relevant part of the design (e.g., a `StrandPairConstraint` takes as input two `Strand`'s) and returns a floating-point value. Technically it's a bit different; see [Constraints processing DNA sequences only](#constraints-processing-dna-sequences-only) below for details.
+    
+    The interpretation of the returned value is as follows: if the constraint is satisfied, it should return 0.0. If the constraint is violated, it returns a positive number indicating "how much" the constraint is violated. The pre-packaged constraints are all of the form "*compare some energy value returned by NUPACK or ViennaRNA to a fixed threshold, and return the difference*". For example, with a threshold of -1.6 kcal/mol, if a `Strand` has partition function energy of -2.9 kcal/mol according to NUPACK's pfunc, then the constraint will return the value 1.3 = -1.6 - (-2.9), i.e., the actual energy is 1.3 beyond the threshold. If the actual energy is -1.2 instead, then it will return 0.0, since it is on the "good" side of the threshold. (The dsd sequence design algorithm actually converts all negative values to 0.0, so one could slightly simplify and simply return the value `threshold - energy`.)
 
     The "plural" constraints take as input a list of "`Design` parts" (e.g., a list of pairs of `Strand`'s for a `StrandPairsConstraint`). However, rather than returning a list of floats, the return value is slightly more general. Each of these constraints "blames" individual `Domain`'s each each violation. They TODO finish this.
 
+
+## Constraints processing DNA sequences only
+Each constraint is specified primarily by a function called `evaluate` that takes two major types of arguments: DNA sequence(s) of the related design part(s), and optional arguments containing the part(s) themselves. For example, a `StrandPairConstraint`'s `evaluate` function takes as input two DNA sequences corresponding to the two `Strand` objects, as well as the two `Strand`'s themselves.
+    
+The type of the `Strand` parameters is actually `Optional[Strand]`, so could have the value `None`, for the following reason. If you use dsd's automatic parallelization feature (by setting a Constraint's `threaded` field to True), then when constraints such as this are called, the `Strand`'s will not be given to the `evaluate` function, only the DNA sequences. This is because the [pathos](https://pypi.org/project/pathos/) library is used for parallelization, which uses the [dill](https://pypi.org/project/dill/) library to serialize objects for parallel processing. In practice it takes much longer to serialize the entire `Strand` object than only its DNA sequence. The upshot is that if you don't use parallelization, then you can write constraints that reference not only the DNA sequence of a Strand or other part of the design, but the object representing the part itself. However, to use parallelization, only the DNA sequence of the part will be available to evaluate the constraint.
