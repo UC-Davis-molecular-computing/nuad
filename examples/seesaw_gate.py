@@ -409,7 +409,7 @@ complex_constraints = [
     f_waste_6_complex_constraint,
 ]
 
-seesaw_design = dc.Design(strands=strands, constraints=[complex_constraints, four_g_constraint])
+seesaw_design = dc.Design(strands=strands, constraints=complex_constraints + [four_g_constraint])
 
 params = ds.SearchParameters(  # weigh_violations_equally=True,
     report_delay=0.0,
