@@ -5,7 +5,7 @@ from typing import List, Iterable, Dict, Tuple
 from itertools import chain, combinations
 from functools import reduce
 from collections import defaultdict
-from dsd.vienna_nupack import pfunc4, binding4
+from dsd.vienna_nupack import pfunc, binding
 from nupack import Model, Complex, ComplexSet, SetSpec, complex_analysis
 from nupack import Strand as NupackStrand
 
@@ -146,7 +146,7 @@ def calculate_and_print_binding(strand1: Strand, strand2: Strand, is_expected_to
     is_expected_to_bind_str = ''
     if is_expected_to_bind:
         is_expected_to_bind_str = '(expected to bind)'
-    binding_val = binding4(strand1.sequence, strand2.sequence)
+    binding_val = binding(strand1.sequence, strand2.sequence)
     print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val: {binding_width}.{binding_percision}} {is_expected_to_bind_str}')
 
 
@@ -212,7 +212,7 @@ def main():
     pfunc4_width = 5
     pfunc4_percision = 5
     for strand in strands():
-        pfunc4_val = pfunc4(strand.sequence)
+        pfunc4_val = pfunc(strand.sequence)
         print(f'{format_strand_name(strand.name)} | pfunc: {pfunc4_val: {pfunc4_width}.{pfunc4_percision}}')
 
     print('\nCalculating binding between pairs of signal strands (including fuel)...')
