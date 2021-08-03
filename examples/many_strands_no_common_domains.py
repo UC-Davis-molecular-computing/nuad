@@ -53,13 +53,14 @@ def main() -> None:
     # dc.logger.setLevel(logging.DEBUG)
     dc.logger.setLevel(logging.INFO)
 
-    random_seed = 0
+    random_seed = 2
 
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    # num_strands = 2
-    num_strands = 10
+    num_strands = 2
+    # num_strands = 5
+    # num_strands = 10
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
@@ -68,14 +69,14 @@ def main() -> None:
     # strand i is    [----------|----------|----------|---------->
     strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
 
-    # threaded = False
-    threaded = True
+    threaded = False
+    # threaded = True
 
     domain_pairs_rna_duplex_constraint = dc.rna_duplex_domain_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='DomainPairNoCompl')
+        threshold=-2.0, temperature=52, short_description='DomainPairNoCompl')
 
     domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
-        threshold=-4.5, temperature=52, short_description='DomainPairNoCompl',
+        threshold=-5.5, temperature=52, short_description='DomainPairNoCompl',
         threaded=threaded)
 
     # strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
@@ -94,7 +95,7 @@ def main() -> None:
                        constraints=[
                            strand_individual_ss_constraint,
                            strand_pair_nupack_constraint,
-                           domain_pair_nupack_constraint,
+                           # domain_pair_nupack_constraint,
                            domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                            # strand_pairs_no_comp_constraint,
@@ -125,8 +126,9 @@ def main() -> None:
 
     length = 10
     domain_pool = dc.DomainPool(f'length-{length} domains', length,
-                                numpy_constraints=numpy_constraints,
+                                # numpy_constraints=numpy_constraints,
                                 replace_with_close_sequences=True,
+                                # replace_with_close_sequences=False,
                                 )  # ,
     # sequence_constraints=sequence_constraints)
 
@@ -136,7 +138,7 @@ def main() -> None:
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,
-                                 report_only_violations=False,
+                                 report_only_violations=True,
                                  random_seed=random_seed,
                                  max_iterations=None,
                                  )

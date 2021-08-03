@@ -68,9 +68,10 @@ all_dna_bases: Set[str] = {'A', 'C', 'G', 'T'}
 Set of all DNA bases.
 """
 
-generation_upper_limit = 4 ** 11
+generation_upper_limit = 4 ** 12
 num_random_sequences_to_generate_at_once = 10 ** 5  # constant
-updated_num_gen_sequences = 10 ** 5
+# num_random_sequences_to_generate_at_once = 2 * 10 ** 6
+updated_num_gen_sequences = num_random_sequences_to_generate_at_once
 # will be increased if no sequences satisfying constraints are found after generating 100,000
 
 # For lengths at most this value, we generate all DNA sequences in advance.
@@ -563,12 +564,15 @@ class DomainPool(JSONSerializable):
     Optional; default is empty.
     """
 
-    _sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
+    # _sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
     # list of available sequences; we iterate through this and then generate new ones when they run out
     # They are randomly permuted, so if this is all sequences of a given length satisfying the numpy
     # sequence constraints, then we will go through them in a different order next time the second time.
     # If a subset of random sequences were generated, then some new sequences could be considered
     # the second time.
+
+    _sequences: dn.DNASeqList = field(compare=False, hash=False,
+                                      default_factory=lambda: dn.DNASeqList(length=0), repr=False)
 
     _idx: int = field(compare=False, hash=False, default=0, repr=False)
 
@@ -597,8 +601,18 @@ class DomainPool(JSONSerializable):
     def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
         # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
         self._sequences = self._generate_sequences_satisfying_numpy_constraints(rng)
-        self._sequences = [seq for seq in self._sequences if self.satisfies_sequence_constraints(seq)]
+        self._filter_sequence_constraints()
         self._idx = 0
+
+    def _filter_sequence_constraints(self) -> None:
+        if len(self.sequence_constraints) == 0:
+            return
+        idxs_to_keep = []
+        for idx in range(self._sequences.numseqs):
+            seq = self._sequences.get_seq_str(idx)
+            if self.satisfies_sequence_constraints(seq):
+                idxs_to_keep.append(idx)
+        self._sequences.keep_seqs_at_indices(idxs_to_keep)
 
     def __hash__(self) -> int:
         return hash((self.name, self.length))
@@ -615,7 +629,7 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, List[str]]:
+    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
         """
         Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
         in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
@@ -624,12 +638,15 @@ class DomainPool(JSONSerializable):
         :param previous_sequence: DNA sequence to be replaced
         :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
         """
-        neighbors = defaultdict(list)
-        for sequence in self._sequences[self._idx:]:
-            # counts number of differences between previous sequence and remaining unused sequences
-            distance = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
-            neighbors[distance].append(sequence)
-        return neighbors
+        # neighbors = defaultdict(list)
+        # for sequence in self._sequences[self._idx:]:
+        #     # counts number of differences between previous sequence and remaining unused sequences
+        #     distance = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
+        #     neighbors[distance].append(sequence)
+        # return neighbors
+        remaining_sequences = self._sequences.sublist(self._idx)
+        return remaining_sequences.hamming_map(previous_sequence)
+
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -660,20 +677,19 @@ class DomainPool(JSONSerializable):
         if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
-            if log_debug_sequence_constraints_accepted:
-                logger.debug(f'accepting domain sequence {sequence}; passed all sequence constraints')
         else:
             if self._idx >= len(self._sequences):
                 logger.debug('All pool sequences have been used. Regenerating new sequences.')
                 self._reset_precomputed_sequences(rng)
+
             # takes neighbor to previous sequence; difference in bases randomly chosen
             hamming_probabilities = np.array(list(self.hamming_probability.values()))
 
+            # import time
             # before = time.perf_counter_ns()
             neighbors = self.find_neighbor_sequences(previous_sequence)  # dict mapping distance:sequences
             # after = time.perf_counter_ns()
-            # time_ms = (after - before) / 1e6
-            # print(f'time spent finding neighbors: {time_ms:.1f} ms')
+            # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
 
             # Some distances may not exist, so scale the probabilities of the remaining so that
             # they sum to one
@@ -700,7 +716,8 @@ class DomainPool(JSONSerializable):
         self._idx += 1
         return sequence
 
-    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
+    # def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
+    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> dn.DNASeqList:
         global updated_num_gen_sequences  # 10 ** 5 initial value
         bases = self._bases_to_use()
         length = self.length
@@ -733,7 +750,7 @@ class DomainPool(JSONSerializable):
                     f'of which {len(seqs_satisfying_numpy_constraints):{num_decimals}} '
                     f'passed the numpy sequence constraints'
                     f'{" (generated at random)" if use_random_subset else ""}')
-        return seqs_satisfying_numpy_constraints.to_list()
+        return seqs_satisfying_numpy_constraints
 
     def _bases_to_use(self) -> Collection[str]:
         # checks explicitly for NumpyRestrictBasesConstraint
@@ -3506,7 +3523,7 @@ and make parallel processing more efficient:
 
 
 def rna_duplex_strand_pairs_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -3521,10 +3538,7 @@ def rna_duplex_strand_pairs_constraint(
     Vienna RNA's RNAduplex executable.
 
     :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
+        Energy threshold in kcal/mol
     :param temperature:
         Temperature in Celsius.
     :param weight:
@@ -3547,16 +3561,7 @@ def rna_duplex_strand_pairs_constraint(
     """
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'RNAduplex energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
+        description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
 
     from dsd.stopwatch import Stopwatch
 
@@ -3585,7 +3590,6 @@ def rna_duplex_strand_pairs_constraint(
         domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         for (strand1, strand2), energy in zip(strand_pairs, energies):
             excess = energy_excess(energy, threshold, strand1, strand2)
-            # print(f'excess = {excess:6.2f};  excess > 0.0? {excess > 0.0}')
             if excess > 0.0:
                 domain_set_weights = (
                     OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
@@ -3645,14 +3649,8 @@ def rna_duplex_strand_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def energy_excess(energy: float, threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
-                  strand1: Strand, strand2: Strand) -> float:
-    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
-    if isinstance(threshold, Number):
-        threshold_value = threshold
-    elif isinstance(threshold, dict):
-        threshold_value = threshold[(strand1.group, strand2.group)]
-    excess = threshold_value - energy
+def energy_excess(energy: float, threshold: float, strand1: Strand, strand2: Strand) -> float:
+    excess = threshold - energy
     return excess
 
 
@@ -3669,7 +3667,7 @@ def energy_excess_domains(energy: float,
 
 
 def rna_cofold_strand_pairs_constraint(
-        threshold: Union[float, Dict[Tuple[StrandGroup, StrandGroup], float]],
+        threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
@@ -3684,10 +3682,7 @@ def rna_cofold_strand_pairs_constraint(
     Vienna RNA's RNAduplex executable.
 
     :param threshold:
-        Energy threshold in kcal/mol; can either be a single float, or a dict mapping pairs of
-        :any:`StrandGroup`'s to a float;
-        when a :any:`Strand` in :any:`StrandGroup` ``sg1`` is compared to one in ``sg2``,
-        the threshold used is ``threshold[(sg1, sg2)]``
+        Energy threshold in kcal/mol
     :param temperature:
         Temperature in Celsius.
     :param weight:
@@ -3710,16 +3705,7 @@ def rna_cofold_strand_pairs_constraint(
     """
 
     if description is None:
-        if isinstance(threshold, Number):
-            description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
-        elif isinstance(threshold, dict):
-            strand_group_name_to_threshold = {(strand_group1.name, strand_group2.name): value
-                                              for (strand_group1, strand_group2), value in threshold.items()}
-            description = f'RNAcofold energy for some strand pairs exceeds threshold defined by their ' \
-                          f'StrandGroups as follows:\n{strand_group_name_to_threshold}'
-        else:
-            raise ValueError(f'threshold = {threshold} must be one of float or dict, '
-                             f'but it is {type(threshold)}')
+        description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
 
     from dsd.stopwatch import Stopwatch
 
@@ -3843,6 +3829,7 @@ def rna_duplex_domain_pairs_constraint(
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
+        description: Optional[str] = None,
         short_description: str = 'rna_dup_dom_pairs',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
         parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
@@ -3869,6 +3856,9 @@ def rna_duplex_domain_pairs_constraint(
     :return:
         constraint
     """
+
+    if description is None:
+        description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
 
     def evaluate(domain_pairs: Iterable[Tuple[Domain, Domain]]) -> List[Tuple[OrderedSet[Domain], float]]:
         if any(d1.sequence is None or d2.sequence is None for d1, d2 in domain_pairs):
@@ -3917,7 +3907,7 @@ def rna_duplex_domain_pairs_constraint(
     if pairs is not None:
         pairs_tuple = tuple(pairs)
 
-    return DomainPairsConstraint(description='RNAduplex some domain pairs',
+    return DomainPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
                                  weight_transfer_function=weight_transfer_function,
