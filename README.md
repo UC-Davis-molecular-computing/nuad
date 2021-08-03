@@ -18,7 +18,7 @@ Installing NUPACK 4 allows access to functions such as `pfunc` and related funct
 and can be done by following the installation instructions
 in the online [user guide](https://piercelab-caltech.github.io/nupack-docs/start/).
 
-If you are using Windows, you can then run python code calling the dsd library from either WSL (which will appear to the Python virtual machine as though it is running on Linux), or from the Windows command prompt/PowerShell directly. If you do the latter, then the dsd library, when making a call to NUPACK or ViennaRNA, will assume they have been installed under WSL and call them via the Windows command line, e.g., `wsl.exe -e RNAduplex ...`. This is what will happen, for instance, if you use an IDE such as [PyCharm](https://www.jetbrains.com/pycharm/) to run your Python program in Windows.
+If you are using Windows, you can then run python code calling the dsd library from WSL (which will appear to the Python virtual machine as though it is running on Linux). This is necessary to use any of the constraints that use NUPACK 4, which is not available in under standard Windows Python installations, only under WSL.
 
 To install dsd:
 
