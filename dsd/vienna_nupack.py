@@ -8,7 +8,6 @@ Generally this module processes Python 'ACTG' strings
 """  # noqa
 import collections
 import itertools
-import math
 import os
 import logging
 import random
