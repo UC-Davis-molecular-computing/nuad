@@ -418,34 +418,6 @@ def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
     return ''.join(random.choices(population=bases, k=length))
 
 
-def domain_equal_strength(seq: str, temperature: float, sodium: float,
-                          magnesium: float, low: float, high: float) -> bool:
-    """test roughly equal strength of domains (according to partition function)
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-    """
-    dg = binding(seq, wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
-    return low <= dg <= high
-
-
-def domain_no_sec_struct(seq: str, temperature: float, sodium: float,
-                         magnesium: float, individual: float, threaded: bool) -> float:
-    """test lack of secondary structure in domains
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-    """
-    if threaded:
-        results = [global_thread_pool.apply_async(
-            secondary_structure_single_strand, args=(s, temperature, sodium, magnesium))
-            for s in (seq, wc(seq))]
-        e_seq, e_wcseq = [result.get() for result in results]
-        return e_seq <= individual and e_wcseq <= individual
-    else:
-        seq_sec_struc = secondary_structure_single_strand(seq, temperature, sodium, magnesium)
-        seq_wc_sec_struc = secondary_structure_single_strand(wc(seq), temperature, sodium, magnesium)
-        return seq_sec_struc <= individual and seq_wc_sec_struc <= individual
-
-
 LOG_ENERGY = False
 
 

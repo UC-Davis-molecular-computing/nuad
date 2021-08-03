@@ -3211,7 +3211,7 @@ def nupack_strand_secondary_structure_constraint(
         strands: Optional[Iterable[Strand]] = None) -> StrandConstraint:
     """
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
-    NUPACK's pfunc executable.
+    NUPACK's pfunc.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
