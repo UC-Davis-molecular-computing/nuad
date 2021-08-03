@@ -12,7 +12,7 @@ Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
 
 # from __future__ import annotations
 
-from typing import Tuple, List, Collection, Optional, Union, Sequence, Dict
+from typing import Tuple, List, Collection, Optional, Union, Sequence, Dict, Iterable
 from dataclasses import dataclass
 import math
 import itertools as it
@@ -449,7 +449,7 @@ class DNASeqList:
         self.rng = rng
         if seqarr is not None:
             self.seqarr = seqarr
-            self.numseqs, self.seqlen = seqarr.shape
+            self._update_size()
         elif seqs is not None:
             if len(seqs) == 0:
                 raise ValueError('seqs must have positive length')
@@ -468,7 +468,7 @@ class DNASeqList:
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs(
                     self.seqlen, num_random_seqs, self.rng, alphabet)
-            self.numseqs = len(self.seqarr)
+            self.numseqs = len(self.seqarr) if length > 0 else 0
         else:
             raise ValueError('at least one of length, seqs, seqarr, or filename must be specified')
 
@@ -476,6 +476,10 @@ class DNASeqList:
 
         if shuffle:
             self.shuffle()
+
+    def _update_size(self) -> None:
+        # updates numseqs and seqlen based on shape of seqarr
+        self.numseqs, self.seqlen = self.seqarr.shape
 
     def __len__(self) -> int:
         return self.numseqs
@@ -552,13 +556,24 @@ class DNASeqList:
             ret.append(''.join(bases_ch))
         return ret
 
+    def keep_seqs_at_indices(self, indices: Iterable[int]) -> None:
+        """Keeps only sequences at the given indices."""
+        if not isinstance(indices, list):
+            indices = list(indices)
+        self.seqarr = self.seqarr[indices]
+        self._update_size()
+
     def __getitem__(self, slice_: Union[int, slice]) -> Union[str, List[str]]:
         if isinstance(slice_, int):
             return self.get_seq_str(slice_)
         elif isinstance(slice_, slice):
             return self.get_seqs_str_list(slice_)
         else:
-            raise ValueError('idx must be int or slice')
+            raise ValueError('slice_ must be int or slice')
+
+    def __setitem__(self, idx: int, seq: str) -> None:
+        # cannot set on slice
+        self.seqarr[idx] = seq2arr(seq)
 
     def pop(self) -> str:
         """Remove and return last seq, as a string."""
@@ -597,6 +612,28 @@ class DNASeqList:
         self.seqarr = arr_keep
         self.numseqs = self.seqarr.shape[0]
 
+    def hamming_map(self, sequence: str) -> Dict[int, 'DNASeqList']:
+        """Return dict mapping each length `d` to a :any:`DNASeqList` of sequences that are
+        Hamming distance `d` from `seq`."""
+        sequence_1d_array = seq2arr(sequence)
+        distances = np.sum(np.bitwise_xor(self.seqarr, sequence_1d_array) != 0, axis=1)
+        distance_map = {}
+        for length in range(self.seqlen + 1):
+            indices = distances == length
+            arr = self.seqarr[indices]
+            if arr.shape[0] > 9:  # don't bother putting empty array into map
+                distance_map[length] = DNASeqList(seqarr=arr)
+        return distance_map
+
+    def sublist(self, start: int, end: Optional[int] = None) -> 'DNASeqList':
+        """Return sublist of DNASeqList from `start`, inclusive, to `end`, exclusive.
+
+        If `end` is not specified, goes until the end of the list."""
+        if end is None:
+            end = self.numseqs
+        arr = self.seqarr[start:end]
+        return DNASeqList(seqarr=arr)
+
     def hamming_min(self, arr: np.ndarray) -> int:
         """Returns minimum Hamming distance between arr and any sequence in
         this DNASeqList."""
@@ -615,23 +652,6 @@ class DNASeqList:
     def energies(self, temperature: float) -> np.ndarray:
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
         return wcenergies
-
-    # def filter_PF(self, low, high, temperature):
-    #     '''Return new DNASeqList with seqs whose wc complement energy is within
-    #     the given range, according to NUPACK.'''
-    #     raise NotImplementedError('this was assuming energies get stored, which no longer is the case')
-    #     pfenergies = np.zeros(self.wcenergies.shape)
-    #     i = 0
-    #     print('searching through %d sequences for PF energies' % self.numseqs)
-    #     for seq in self.toList():
-    #         energy = sst_dsd.duplex(seq, temperature)
-    #         pfenergies[i] = energy
-    #         i += 1
-    #         if i % 100 == 0:
-    #             print('searched %d so far' % i)
-    #     within_range = (low <= pfenergies) & (pfenergies <= high)
-    #     new_seqarr = self.seqarr[within_range]
-    #     return DNASeqList(seqarr=new_seqarr)
 
     # remove quotes when Py3.6 support dropped
     def filter_end_gc(self) -> 'DNASeqList':
@@ -729,6 +749,18 @@ class DNASeqList:
     def filter_seqs_by_g_quad_c_quad(self) -> 'DNASeqList':
         """Removes any sticky ends with 4 G's or C's in a row (a quadruplex)."""
         return self.filter_substring(['GGGG', 'CCCC'])
+
+    def index(self, sequence: Union[str, np.ndarray]) -> int:
+        # finds index of sequence in (rows of) self.seqarr
+        # raises IndexError if not present
+        # taken from https://stackoverflow.com/questions/40382384/finding-a-matching-row-in-a-numpy-matrix
+        if isinstance(sequence, str):
+            sequence = seq2arr(sequence)
+        matching_condition = (self.seqarr == sequence).all(axis=1)
+        all_indices_tuple = np.where(matching_condition)
+        all_indices = all_indices_tuple[0]
+        first_index = all_indices[0]
+        return int(first_index)
 
 
 def create_toeplitz(seqlen: int, sublen: int) -> np.ndarray:
