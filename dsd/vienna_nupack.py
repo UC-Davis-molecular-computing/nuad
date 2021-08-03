@@ -6,7 +6,7 @@ Shipped with DNA single-stranded tile (SST) sequence designer used in the follow
 Generally this module processes Python 'ACTG' strings
 (as opposed to numpy arrays which are processed by dsd.np).
 """  # noqa
-
+import collections
 import itertools
 import math
 import os
@@ -17,7 +17,7 @@ import sys
 from collections import defaultdict
 from functools import lru_cache
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast
+from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast, Deque
 
 os_is_windows = sys.platform == 'win32'
 
@@ -171,33 +171,29 @@ def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str
 # https://github.com/python/cpython/blob/42336def77f53861284336b3335098a1b9b8cab2/Lib/functools.py#L485
 _sentinel = object()
 _max_size = 1_000_000
-_hits = 0
-_misses = 0
 _rna_duplex_cache: Dict[Tuple[Tuple[str, str], float, str], float] = {}
+_rna_duplex_queue: Deque[Tuple[Tuple[str, str], float, str]] = collections.deque(maxlen=_max_size)
 
 
 def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float,
                                  parameters_filename: str) -> Optional[float]:
     # return None if arguments are not in _rna_duplex_cache,
     # otherwise return cached energy in _rna_duplex_cache
-    global _hits
-    global _misses
     key = (seq_pair, temperature, parameters_filename)
     result: Union[object, float] = _rna_duplex_cache.get(key, _sentinel)
     if result is _sentinel:
-        _misses += 1
         return None
     else:
-        _hits += 1
-        return cast(float, result)
+        result_float: float = cast(float, result)
+        return result_float
 
 
 def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
-                        # cache: bool = True,
-                        cache: bool = False,  # off until I implement LRU queue to bound cache size
+                        cache: bool = True,
+                        # cache: bool = False,  # off until I implement LRU queue to bound cache size
                         ) -> List[float]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
@@ -231,6 +227,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
 
     # fill in cached energies and determine which indices still need to have their energies calculated
+    print(f'size of queue: {len(_rna_duplex_queue)}')
     if cache:
         energies = [_rna_duplex_single_cacheable(seq_pair, temperature, parameters_filename)
                     for seq_pair in seq_pairs]
@@ -275,12 +272,15 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
         energies[i] = energy
         if cache:
-            if _misses < _max_size:
-                key = (seq_pair, temperature, parameters_filename)
-                _rna_duplex_cache[key] = energy
-            else:
-                logger.warning(f'WARNING: cache size {_max_size} exceeded; '
-                               f'not storing RNAduplex energies in cache anymore.')
+            key = (seq_pair, temperature, parameters_filename)
+            _rna_duplex_cache[key] = energy
+
+            # clear out oldest cache key if _rna_duplex_queue is full
+            if len(_rna_duplex_queue) == _rna_duplex_queue.maxlen:
+                lru_item = _rna_duplex_queue[0]
+                del _rna_duplex_cache[lru_item]
+
+            _rna_duplex_queue.append(key)
 
     return energies
 
@@ -416,34 +416,6 @@ def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
     """Chooses a random DNA sequence."""
     return ''.join(random.choices(population=bases, k=length))
-
-
-def domain_equal_strength(seq: str, temperature: float, sodium: float,
-                          magnesium: float, low: float, high: float) -> bool:
-    """test roughly equal strength of domains (according to partition function)
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-    """
-    dg = binding(seq, wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
-    return low <= dg <= high
-
-
-def domain_no_sec_struct(seq: str, temperature: float, sodium: float,
-                         magnesium: float, individual: float, threaded: bool) -> float:
-    """test lack of secondary structure in domains
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-    """
-    if threaded:
-        results = [global_thread_pool.apply_async(
-            secondary_structure_single_strand, args=(s, temperature, sodium, magnesium))
-            for s in (seq, wc(seq))]
-        e_seq, e_wcseq = [result.get() for result in results]
-        return e_seq <= individual and e_wcseq <= individual
-    else:
-        seq_sec_struc = secondary_structure_single_strand(seq, temperature, sodium, magnesium)
-        seq_wc_sec_struc = secondary_structure_single_strand(wc(seq), temperature, sodium, magnesium)
-        return seq_sec_struc <= individual and seq_wc_sec_struc <= individual
 
 
 LOG_ENERGY = False
