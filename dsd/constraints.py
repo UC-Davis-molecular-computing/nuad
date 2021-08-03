@@ -1143,6 +1143,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         self._sequence = new_sequence
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
+        self._starred_sequence = dv.wc(self.sequence)
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -1206,9 +1207,10 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: Watson-Crick complement of DNA sequence assigned to this :any:`Domain`.
         """
-        if self.sequence is None:
+        if self._sequence is None:
             raise ValueError('no DNA sequence has been assigned to this Domain')
-        return dv.wc(self.sequence)
+        # return dv.wc(self.sequence)
+        return self._starred_sequence
 
     def get_name(self, starred: bool) -> str:
         """
@@ -1225,7 +1227,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        return dv.wc(self.sequence) if starred else self.sequence
+        return self.starred_sequence if starred else self.sequence
 
     def has_sequence(self) -> bool:
         """
