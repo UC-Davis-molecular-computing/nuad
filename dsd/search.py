@@ -438,8 +438,6 @@ def _violations_of_constraints(design: Design,
         if quit_early:
             return violation_set
 
-    # print('violation_set.domain_to_violations:')
-    # pprint(violation_set.domain_to_violations)
     return violation_set
 
 
@@ -1437,8 +1435,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
             _check_cpu_count(cpu_count)
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
-                                                                    params.max_domains_to_change,
-                                                                    rng)
+                                                                    params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
@@ -1554,8 +1551,9 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
     for domain in independent_domains:
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
-        original_sequences[domain] = domain.sequence
-        domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
+        previous_sequence = domain.sequence
+        original_sequences[domain] = previous_sequence
+        domain.sequence = domain.pool.generate_sequence(rng, previous_sequence)
 
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
     for domain in dependent_domains:
