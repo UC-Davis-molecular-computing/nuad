@@ -429,7 +429,7 @@ def domain_equal_strength(seq: str, temperature: float, sodium: float,
 
 
 def domain_no_sec_struct(seq: str, temperature: float, sodium: float,
-                         magnesium: float, individual: float, threaded: bool) -> float:
+                         magnesium: float, individual: float, threaded: bool) -> bool:
     """test lack of secondary structure in domains
 
     NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
