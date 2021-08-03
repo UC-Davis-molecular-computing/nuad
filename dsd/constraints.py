@@ -564,15 +564,15 @@ class DomainPool(JSONSerializable):
     Optional; default is empty.
     """
 
-    # _sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
+    _sequences: dn.DNASeqList = field(compare=False, hash=False,
+                                      default_factory=lambda: dn.DNASeqList(length=0), repr=False)
     # list of available sequences; we iterate through this and then generate new ones when they run out
     # They are randomly permuted, so if this is all sequences of a given length satisfying the numpy
     # sequence constraints, then we will go through them in a different order next time the second time.
     # If a subset of random sequences were generated, then some new sequences could be considered
     # the second time.
-
-    _sequences: dn.DNASeqList = field(compare=False, hash=False,
-                                      default_factory=lambda: dn.DNASeqList(length=0), repr=False)
+    # This is represented as a DNASeqList for efficiency when calculating Hamming distances
+    # when the option replace_with_close_sequences is True
 
     _idx: int = field(compare=False, hash=False, default=0, repr=False)
 
@@ -638,12 +638,6 @@ class DomainPool(JSONSerializable):
         :param previous_sequence: DNA sequence to be replaced
         :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
         """
-        # neighbors = defaultdict(list)
-        # for sequence in self._sequences[self._idx:]:
-        #     # counts number of differences between previous sequence and remaining unused sequences
-        #     distance = sum(1 for base1, base2 in zip(previous_sequence, sequence) if base1 != base2)
-        #     neighbors[distance].append(sequence)
-        # return neighbors
         remaining_sequences = self._sequences.sublist(self._idx)
         return remaining_sequences.hamming_map(previous_sequence)
 
