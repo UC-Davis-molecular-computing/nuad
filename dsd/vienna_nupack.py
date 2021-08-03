@@ -36,26 +36,6 @@ default_temperature = 37.0
 default_magnesium = 0.0125
 default_sodium = 0.05
 
-
-# unix path must be able to find NUPACK, and NUPACKHOME must be set,
-# as described in NUPACK installation instructions.
-
-def _dg_adjust(temperature: float, num_seqs: int) -> float:
-    """
-    Additive adjustment factor to convert NUPACK's mole fraction units to molar.
-
-    :param temperature: temperature in Celsius
-    :param num_seqs: number of sequences
-    :return: Additive adjustment factor to convert NUPACK's mole fraction units to molar.
-    """
-    r = 0.0019872041  # Boltzmann's constant in kcal/mol/K
-    water_conc = 55.14  # molar concentration of water at 37 C; ignore temperature dependence, ~5%
-    temperature_kelvin = temperature + 273.15  # Kelvin
-    # converts from NUPACK mole fraction units to molar units, per association
-    adjust = r * temperature_kelvin * math.log(water_conc)
-    return adjust * (num_seqs - 1)
-
-
 _cached_pfunc4_models = {}
 
 
@@ -64,7 +44,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           sodium: float = default_sodium,
           magnesium: float = default_magnesium,
-          adjust: bool = False,
           ) -> float:
     """
     Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
@@ -84,10 +63,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         molarity of sodium in moles per liter (Default: 0.05)
     :param magnesium:
         molarity of magnesium in moles per liter (Default: 0.0125)
-    :param adjust:
-        whether to adjust from NUPACK mole fraction units to molar units
-        (was necessary in NUPACK 3, but might not be necessary in NUPACK 4; leaving as an option
-        until we know for sure)
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
@@ -109,9 +84,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     else:
         model = _cached_pfunc4_models[param]
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
-
-    if adjust:
-        dg += _dg_adjust(temperature, len(seqs))
 
     return dg
 
