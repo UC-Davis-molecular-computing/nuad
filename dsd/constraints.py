@@ -3560,6 +3560,8 @@ def rna_duplex_strand_pairs_constraint(
     from dsd.stopwatch import Stopwatch
 
     num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
+    # we use ThreadPool instead of pathos because we're farming this out to processes through
+    # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
     def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
