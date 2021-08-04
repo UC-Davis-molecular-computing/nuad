@@ -685,7 +685,6 @@ class DomainPool(JSONSerializable):
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
         """
-        log_debug_sequence_constraints_accepted = False
         if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
@@ -890,11 +889,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     and also modifying the pool (letting the pool be assigned after it is created).
     """
 
-    name: str
+    _name: str
     """
     Name of the :any:`Domain`.
     This is the "unstarred" version of the name, and it cannot end in `*`.
     """
+
+    _starred_name: str
 
     _pool: Optional[DomainPool] = field(init=False, default=None, compare=False, hash=False)
     """
@@ -973,9 +974,11 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                  subdomains: Optional[List["Domain"]] = None) -> None:
         if subdomains is None:
             subdomains = []
-        self.name = name
+        self._name = name
+        self._starred_name = name + '*'
         self._pool = pool
         self._sequence = sequence
+        self._starred_sequence = None if sequence is None else dv.wc(sequence)
         self.fixed = fixed
         self.label = label
         self.dependent = dependent
@@ -1073,15 +1076,30 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         return domain
 
     def __hash__(self) -> int:
-        return hash(self.name)
+        return hash(self._name)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Domain):
             return False
-        return self.name == other.name
+        return self._name == other._name
 
     def __repr__(self) -> str:
-        return self.name
+        return self._name
+
+    @property
+    def name(self) -> str:
+        """
+        :return: :any:`DomainPool` of this :any:`Domain`
+        """
+        return self._name
+
+    @name.setter
+    def name(self, new_name: str) -> None:
+        """
+        :param new_name: new name to set
+        """
+        self._name = new_name
+        self._starred_name = new_name + '*'
 
     @property
     def pool(self) -> DomainPool:
@@ -1159,9 +1177,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                     f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
                     f'length of {sd_total_length}')
         self._sequence = new_sequence
+        self._starred_sequence = dv.wc(self.sequence)
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
-        self._starred_sequence = dv.wc(self.sequence)
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -1218,7 +1236,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: The value :py:data:`Domain.name` with `*` appended to it.
         """
-        return self.name + '*'
+        return self._starred_name
 
     @property
     def starred_sequence(self) -> str:
@@ -1236,7 +1254,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: The value :py:data:`Domain.name` or :py:data:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
-        return self.starred_name if starred else self.name
+        return self._starred_name if starred else self._name
 
     def concrete_sequence(self, starred: bool) -> str:
         """
@@ -1245,7 +1263,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        return self.starred_sequence if starred else self.sequence
+        if self._sequence is None:
+            raise ValueError('no DNA sequence has been assigned to this Domain')
+        return self._starred_sequence if starred else self._sequence
 
     def has_sequence(self) -> bool:
         """
@@ -1962,7 +1982,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self._partition_constraints(constraints)
         self._compute_derived_fields()
 
-    def _check_constraint_types(self, constraints: Iterable['Constraint']) -> None:
+    @staticmethod
+    def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
         idx = 0
         for constraint in constraints:
             if not isinstance(constraint, Constraint):
@@ -2025,8 +2046,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if domain._pool is not None:  # noqa
                 self.domain_pools[domain.pool].append(domain)
 
+        # set up quick access to domain by name, and ensure each domain name unique
         self.domains_by_name = {}
         for domain in self.domains:
+            if domain.name in self.domains_by_name:
+                raise ValueError(f'domain names must be unique, '
+                                 f'but I found two domains with name {domain.name}')
             self.domains_by_name[domain.name] = domain
 
     def to_json(self) -> str:
@@ -3614,7 +3639,7 @@ def rna_duplex_strand_pairs_constraint(
 
         domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, strand1, strand2)
+            excess = energy_excess(energy, threshold)
             if excess > 0.0:
                 domain_set_weights = (
                     OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
@@ -3642,7 +3667,7 @@ def rna_duplex_strand_pairs_constraint(
         num_violations = 0
         lines: List[str] = []
         for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, strand1, strand2) <= 0.0
+            passed = energy_excess(energy, threshold) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -3674,7 +3699,7 @@ def rna_duplex_strand_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def energy_excess(energy: float, threshold: float, strand1: Strand, strand2: Strand) -> float:
+def energy_excess(energy: float, threshold: float) -> float:
     excess = threshold - energy
     return excess
 
@@ -3760,7 +3785,7 @@ def rna_cofold_strand_pairs_constraint(
         energies = calculate_energies(sequence_pairs)
 
         for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, strand1, strand2)
+            excess = energy_excess(energy, threshold)
             if excess > 0.0:
                 domain_set_weights = (OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()),
                                       excess)
@@ -3787,7 +3812,7 @@ def rna_cofold_strand_pairs_constraint(
         num_violations = 0
         lines: List[str] = []
         for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, strand1, strand2) <= 0.0
+            passed = energy_excess(energy, threshold) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -3871,6 +3896,8 @@ def rna_duplex_domain_pairs_constraint(
         how much to weigh this :any:`Constraint`
     :param weight_transfer_function:
         See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        long description of constraint suitable for printing in report file
     :param short_description:
         short description of constraint suitable for logging to stdout
     :param pairs:

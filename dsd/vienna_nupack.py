@@ -121,24 +121,6 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     return output_decoded, stderr_decoded
 
 
-def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str], Dict[str, int]]:
-    """
-    :param seq_pairs: iterable of pairs of strings
-    :return: list of unique strings in pairs in `seq_pairs` in the order they appear, along with
-             dict mapping each string to the order in which it appears in the list
-    """
-    seq_orders: Dict[str, int] = defaultdict(int)
-    seqs_list: List[str] = []
-    order = 0
-    for pair in seq_pairs:
-        for seq in pair:
-            if seq not in seq_orders:
-                seq_orders[seq] = order
-                order += 1
-                seqs_list.append(seq)
-    return seqs_list, seq_orders
-
-
 # https://github.com/python/cpython/blob/42336def77f53861284336b3335098a1b9b8cab2/Lib/functools.py#L485
 _sentinel = object()
 _max_size = 1_000_000
@@ -198,7 +180,6 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
 
     # fill in cached energies and determine which indices still need to have their energies calculated
-    print(f'size of queue: {len(_rna_duplex_queue)}')
     if cache:
         energies = [_rna_duplex_single_cacheable(seq_pair, temperature, parameters_filename)
                     for seq_pair in seq_pairs]

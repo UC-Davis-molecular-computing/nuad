@@ -1480,6 +1480,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                             or current_time - time_of_last_improvement >= params.report_delay):
                         time_of_last_improvement = current_time
                         write_report = True
+                        logger.debug('writing report')
+                    else:
+                        logger.debug('skipping report')
 
                     _write_intermediate_files(design=design, num_new_optimal=num_new_optimal,
                                               write_report=write_report, directories=directories,
