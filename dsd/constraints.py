@@ -591,6 +591,25 @@ class DomainPool(JSONSerializable):
                 self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
             self.hamming_probability[self.length] *= 2
 
+        idx = 0
+        for numpy_constraint in self.numpy_constraints:
+            if not isinstance(numpy_constraint, NumpyConstraint):
+                raise ValueError('each element of numpy_constraints must be an instance of NumpyConstraint, '
+                                 f'but the element at index {idx} is of type {type(numpy_constraint)}')
+            idx += 1
+
+        idx = 0
+        for seq_constraint in self.sequence_constraints:
+            # SequenceConstraint is an alias for Callable[[str], float],
+            # which is not checkable using isinstance
+            # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
+            if not callable(seq_constraint):
+                raise ValueError('each element of numpy_constraints must be an instance of '
+                                 'SequenceConstraint (i.e., be a function that takes a single string '
+                                 'and returns a bool), '
+                                 f'but the element at index {idx} is of type {type(seq_constraint)}')
+            idx += 1
+
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         dct = {
             name_key: self.name,
@@ -640,7 +659,6 @@ class DomainPool(JSONSerializable):
         """
         remaining_sequences = self._sequences.sublist(self._idx)
         return remaining_sequences.hamming_map(previous_sequence)
-
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -1939,9 +1957,18 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         if constraints is None:
             constraints = []
+        self._check_constraint_types(constraints)
         self.strands = strands if isinstance(strands, list) else list(strands)
         self._partition_constraints(constraints)
         self._compute_derived_fields()
+
+    def _check_constraint_types(self, constraints: Iterable['Constraint']) -> None:
+        idx = 0
+        for constraint in constraints:
+            if not isinstance(constraint, Constraint):
+                raise ValueError('each element of constraints must be an instance of Constraint, '
+                                 f'but the element at index {idx} is of type {type(constraint)}')
+            idx += 1
 
     # sort constraints from constructor constraints parameter into the various types
     def _partition_constraints(self, constraints: Iterable['Constraint']) -> None:
