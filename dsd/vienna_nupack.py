@@ -13,7 +13,6 @@ import logging
 import random
 import subprocess as sub
 import sys
-from collections import defaultdict
 from functools import lru_cache
 from multiprocessing.pool import ThreadPool
 from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast, Deque
