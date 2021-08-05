@@ -12,6 +12,8 @@ legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyCo
 and  :any:`SequenceConstraint`, an alias for a function taking a string as input and returning a bool.
 """
 
+from __future__ import annotations
+
 import os
 import math
 import json
@@ -58,6 +60,7 @@ domain_pool_key = 'pool'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
+rng_state_key = 'rng_state'
 
 Complex = Tuple['Strand', ...]
 """A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
@@ -591,6 +594,25 @@ class DomainPool(JSONSerializable):
                 self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
             self.hamming_probability[self.length] *= 2
 
+        idx = 0
+        for numpy_constraint in self.numpy_constraints:
+            if not isinstance(numpy_constraint, NumpyConstraint):
+                raise ValueError('each element of numpy_constraints must be an instance of NumpyConstraint, '
+                                 f'but the element at index {idx} is of type {type(numpy_constraint)}')
+            idx += 1
+
+        idx = 0
+        for seq_constraint in self.sequence_constraints:
+            # SequenceConstraint is an alias for Callable[[str], float],
+            # which is not checkable using isinstance
+            # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
+            if not callable(seq_constraint):
+                raise ValueError('each element of numpy_constraints must be an instance of '
+                                 'SequenceConstraint (i.e., be a function that takes a single string '
+                                 'and returns a bool), '
+                                 f'but the element at index {idx} is of type {type(seq_constraint)}')
+            idx += 1
+
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
         dct = {
             name_key: self.name,
@@ -629,18 +651,20 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
+    def find_hamming_distances(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
         """
         Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
         in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
-        different the sequence is to the previous sequence.
+        different the sequence is to `previous_sequence`.
 
-        :param previous_sequence: DNA sequence to be replaced
-        :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
+        :param previous_sequence:
+            DNA sequence to be replaced
+        :return:
+            dictionary mapping Hamming distances to remaining sequences that are that
+            Hamming distance from `previous_sequence`
         """
         remaining_sequences = self._sequences.sublist(self._idx)
         return remaining_sequences.hamming_map(previous_sequence)
-
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -667,7 +691,6 @@ class DomainPool(JSONSerializable):
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
         """
-        log_debug_sequence_constraints_accepted = False
         if not self.replace_with_close_sequences or previous_sequence is None:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
@@ -681,7 +704,7 @@ class DomainPool(JSONSerializable):
 
             # import time
             # before = time.perf_counter_ns()
-            neighbors = self.find_neighbor_sequences(previous_sequence)  # dict mapping distance:sequences
+            neighbors = self.find_hamming_distances(previous_sequence)  # dict mapping distance:sequences
             # after = time.perf_counter_ns()
             # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
 
@@ -872,11 +895,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     and also modifying the pool (letting the pool be assigned after it is created).
     """
 
-    name: str
+    _name: str
     """
     Name of the :any:`Domain`.
     This is the "unstarred" version of the name, and it cannot end in `*`.
     """
+
+    _starred_name: str
 
     _pool: Optional[DomainPool] = field(init=False, default=None, compare=False, hash=False)
     """
@@ -955,9 +980,11 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                  subdomains: Optional[List["Domain"]] = None) -> None:
         if subdomains is None:
             subdomains = []
-        self.name = name
+        self._name = name
+        self._starred_name = name + '*'
         self._pool = pool
         self._sequence = sequence
+        self._starred_sequence = None if sequence is None else dv.wc(sequence)
         self.fixed = fixed
         self.label = label
         self.dependent = dependent
@@ -1055,15 +1082,30 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         return domain
 
     def __hash__(self) -> int:
-        return hash(self.name)
+        return hash(self._name)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Domain):
             return False
-        return self.name == other.name
+        return self._name == other._name
 
     def __repr__(self) -> str:
-        return self.name
+        return self._name
+
+    @property
+    def name(self) -> str:
+        """
+        :return: :any:`DomainPool` of this :any:`Domain`
+        """
+        return self._name
+
+    @name.setter
+    def name(self, new_name: str) -> None:
+        """
+        :param new_name: new name to set
+        """
+        self._name = new_name
+        self._starred_name = new_name + '*'
 
     @property
     def pool(self) -> DomainPool:
@@ -1141,9 +1183,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                     f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
                     f'length of {sd_total_length}')
         self._sequence = new_sequence
+        self._starred_sequence = dv.wc(self.sequence)
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
-        self._starred_sequence = dv.wc(self.sequence)
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -1200,7 +1242,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         :return: The value :py:data:`Domain.name` with `*` appended to it.
         """
-        return self.name + '*'
+        return self._starred_name
 
     @property
     def starred_sequence(self) -> str:
@@ -1218,7 +1260,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :return: The value :py:data:`Domain.name` or :py:data:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
-        return self.starred_name if starred else self.name
+        return self._starred_name if starred else self._name
 
     def concrete_sequence(self, starred: bool) -> str:
         """
@@ -1227,7 +1269,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        return self.starred_sequence if starred else self.sequence
+        if self._sequence is None:
+            raise ValueError('no DNA sequence has been assigned to this Domain')
+        return self._starred_sequence if starred else self._sequence
 
     def has_sequence(self) -> bool:
         """
@@ -1365,10 +1409,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 _domains_interned: Dict[str, Domain] = {}
 
 
-# remove quotes when Python 3.6 support dropped
 def domains_not_substrings_of_each_other_domain_pair_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0) \
-        -> 'DomainPairConstraint':
+        -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -1654,17 +1697,21 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return OrderedSet(self.starred_domains())
 
-    def sequence(self, spaces_between_domains: bool = False) -> str:
+    def sequence(self, dashes_between_domains: bool = False) -> str:
         """
-        :return: DNA sequence assigned to this :any:`Strand`, calculated by concatenating all sequences
-                 assigned to its :any:`Domain`'s.
-        :raises ValueError: if any :any:`Domain` of this :any:`Strand` does not have a sequence assigned
+        :param dashes_between_domains:
+            If true, separates each domain sequence by "-".
+        :return:
+            DNA sequence assigned to this :any:`Strand`, calculated by concatenating all sequences
+            assigned to its :any:`Domain`'s.
+        :raises ValueError:
+            if any :any:`Domain` of this :any:`Strand` does not have a sequence assigned
         """
         seqs = []
         for idx, domain in enumerate(self.domains):
             starred = idx in self.starred_domain_indices
             seqs.append(domain.concrete_sequence(starred))
-        delim = ' ' if spaces_between_domains else ''
+        delim = '-' if dashes_between_domains else ''
         return delim.join(seqs)
 
     def assign_dna(self, sequence: str) -> None:
@@ -1845,53 +1892,52 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     #################################################
     # these fields are calculated from the single constructor parameter constraints
 
-    # remove quotes when Python 3.6 support dropped
-    domain_constraints: List['DomainConstraint'] = field(default_factory=list, init=False)
+    domain_constraints: List[DomainConstraint] = field(default_factory=list, init=False)
     """
     Applied to individual domain constraints across all :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_constraints: List['StrandConstraint'] = field(default_factory=list, init=False)
+    strand_constraints: List[StrandConstraint] = field(default_factory=list, init=False)
     """
     Applied to individual strand constraints across all :any:`Strand`'s in the :any:`Design`.
     """
 
-    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list, init=False)
+    domain_pair_constraints: List[DomainPairConstraint] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list, init=False)
+    strand_pair_constraints: List[StrandPairConstraint] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
-    complex_constraints: List['ComplexConstraint'] = field(default_factory=list, init=False)
+    complex_constraints: List[ComplexConstraint] = field(default_factory=list, init=False)
     """
     Applied to tuple of :any:`Strand`'s in the :any:`Design`.
     """
 
-    domains_constraints: List['DomainsConstraint'] = field(default_factory=list, init=False)
+    domains_constraints: List[DomainsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strands_constraints: List['StrandsConstraint'] = field(default_factory=list, init=False)
+    strands_constraints: List[StrandsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list, init=False)
+    domain_pairs_constraints: List[DomainPairsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list, init=False)
+    strand_pairs_constraints: List[StrandPairsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    design_constraints: List['DesignConstraint'] = field(default_factory=list, init=False)
+    design_constraints: List[DesignConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process whole design at once, for anything not expressible as one of the others
     (for example, in case it needs access to all the :any:`StrandGroup`'s and :any:`DomainPool`'s at once).
@@ -1939,9 +1985,19 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         if constraints is None:
             constraints = []
+        self._check_constraint_types(constraints)
         self.strands = strands if isinstance(strands, list) else list(strands)
         self._partition_constraints(constraints)
         self._compute_derived_fields()
+
+    @staticmethod
+    def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
+        idx = 0
+        for constraint in constraints:
+            if not isinstance(constraint, Constraint):
+                raise ValueError('each element of constraints must be an instance of Constraint, '
+                                 f'but the element at index {idx} is of type {type(constraint)}')
+            idx += 1
 
     # sort constraints from constructor constraints parameter into the various types
     def _partition_constraints(self, constraints: Iterable['Constraint']) -> None:
@@ -1998,8 +2054,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if domain._pool is not None:  # noqa
                 self.domain_pools[domain.pool].append(domain)
 
+        # set up quick access to domain by name, and ensure each domain name unique
         self.domains_by_name = {}
         for domain in self.domains:
+            if domain.name in self.domains_by_name:
+                raise ValueError(f'domain names must be unique, '
+                                 f'but I found two domains with name {domain.name}')
             self.domains_by_name[domain.name] = domain
 
     def to_json(self) -> str:
@@ -2121,8 +2181,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 domains_in_pool.append(domain)
         return domains_in_pool
 
-    # remove quotes when Python 3.6 support dropped
-    def all_constraints(self) -> List['Constraint']:
+    def all_constraints(self) -> List[Constraint]:
         # Since list types are covariant, we cannot use + to concatenate them without upsetting mypy:
         # https://stackoverflow.com/questions/56738485/why-do-i-get-a-warning-when-concatenating-lists-of-mixed-types-in-pycharm
         # https://github.com/python/mypy/issues/4244
@@ -2150,8 +2209,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         return '\n'.join(summaries)
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_constraint(self, constraint: 'Constraint', report_only_violations: bool) -> str:
+    def summary_of_constraint(self, constraint: Constraint, report_only_violations: bool) -> str:
         # summary of constraint only if not a DomainConstraint in a DomainPool
         # or a StrandConstraint in a StrandGroup
         report: ConstraintReport
@@ -2192,8 +2250,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         summary = add_header_to_content_of_summary(report)
         return summary
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_constraint(self, constraint: 'DomainConstraint',
+    def summary_of_domain_constraint(self, constraint: DomainConstraint,
                                      report_only_violations: bool,
                                      domains_to_check: Optional[Iterable[Domain[DomainLabel]]] = None) \
             -> ConstraintReport:
@@ -2228,8 +2285,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_constraint(self, constraint: 'StrandConstraint',
+    def summary_of_strand_constraint(self, constraint: StrandConstraint,
                                      report_only_violations: bool,
                                      strands_to_check: Optional[
                                          Iterable[Strand[StrandLabel, DomainLabel]]] = None) \
@@ -2273,11 +2329,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                                  max_domain_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for fixed_domain in domains:
             num_checks += 1
             seq = fixed_domain.sequence
-            passed = constraint(seq, fixed_domain) <= 0.0
+            excess = constraint(seq, fixed_domain)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2285,10 +2342,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
-                lines.append(line)
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+                lines_and_excesses.append((line, excess))
 
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -2302,10 +2361,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                                  max_strand_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for strand in strands:
             num_checks += 1
-            passed = constraint(strand.sequence(), strand) <= 0.0
+            excess = constraint(strand.sequence(), strand)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2313,17 +2373,18 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
-                lines.append(line)
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+                lines_and_excesses.append((line, excess))
 
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
+
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pair_constraint(self, constraint: 'DomainPairConstraint',
+    def summary_of_domain_pair_constraint(self, constraint: DomainPairConstraint,
                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
 
@@ -2331,11 +2392,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for domain1, domain2 in pairs_to_check:
             num_checks += 1
             seq1, seq2 = domain1.sequence, domain2.sequence
-            passed = constraint(seq1, seq2, domain1, domain2) <= 0.0
+            excess = constraint(seq1, seq2, domain1, domain2)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2345,18 +2407,18 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         f'{domain2.name:{max_domain_name_length}}: '
                         f'{summary}'
                         f'{"" if passed else "  **violation**"}')
-                lines.append(line)
+                lines_and_excesses.append((line, excess))
 
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
 
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pair_constraint(self, constraint: 'StrandPairConstraint',
+    def summary_of_strand_pair_constraint(self, constraint: StrandPairConstraint,
                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
 
@@ -2364,10 +2426,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for strand1, strand2 in pairs_to_check:
             num_checks += 1
-            passed = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2) <= 0.0
+            excess = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2377,32 +2440,61 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         f'{strand2.name:{max_strand_name_length}}: '
                         f'{summary}'
                         f'{"" if passed else "  **violation**"}')
-                lines.append(line)
+                lines_and_excesses.append((line, excess))
 
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
 
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domains_constraint(self, constraint: 'DomainsConstraint',
+    @staticmethod
+    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+
+        lines_and_excesses: List[Tuple[str, float]] = []
+        for strand_complex in constraint.complexes:
+            num_checks += 1
+            excess = constraint(strand_complex)
+            passed = excess <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(strand_complex, False)
+                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
+                line = (f'strand complex: '
+                        f'{strand_names}'
+                        f'{"" if passed else "  **violation**"}'
+                        f'\n{summary}')
+                lines_and_excesses.append((line, excess))
+
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
+
+        lines = (line for line, _ in lines_and_excesses)
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    def summary_of_domains_constraint(self, constraint: DomainsConstraint,
                                       report_only_violations: bool) -> ConstraintReport:
         # summary = f'domains\n{constraint.generate_summary(self.domains)}'
         report = constraint.generate_summary(self.domains, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strands_constraint(self, constraint: 'StrandsConstraint',
+    def summary_of_strands_constraint(self, constraint: StrandsConstraint,
                                       report_only_violations: bool) -> ConstraintReport:
         # summary = f'strands\n{constraint.generate_summary(self.strands)}'
         report = constraint.generate_summary(self.strands, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pairs_constraint(self, constraint: 'DomainPairsConstraint',
+    def summary_of_domain_pairs_constraint(self, constraint: DomainPairsConstraint,
                                            report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
         # summary = f'domain pairs\n{constraint.generate_summary(pairs_to_check)}'
@@ -2413,8 +2505,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=0, num_checks=0)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pairs_constraint(self, constraint: 'StrandPairsConstraint',
+    def summary_of_strand_pairs_constraint(self, constraint: StrandPairsConstraint,
                                            report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
         report = constraint.generate_summary(pairs_to_check, report_only_violations) \
@@ -2424,47 +2515,16 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=0, num_checks=0)
         return report
 
-    @staticmethod
-    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
-                                      report_only_violations: bool) -> ConstraintReport:
-        num_violations = 0
-        num_checks = 0
-        lines: List[str] = []
-
-        for strand_complex in constraint.complexes:
-            num_checks += 1
-            passed = constraint(strand_complex) <= 0.0
-            if not passed:
-                num_violations += 1
-            if not report_only_violations or (report_only_violations and not passed):
-                summary = constraint.generate_summary(strand_complex, False)
-                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
-                line = (f'strand complex: '
-                        f'{strand_names}'
-                        f'{"" if passed else "  **violation**"}'
-                        f'\n{summary}')
-                lines.append(line)
-
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
-
-        content = '\n'.join(lines)
-        report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
-        return report
-
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_design_constraint(self, constraint: 'DesignConstraint',
+    def summary_of_design_constraint(self, constraint: DesignConstraint,
                                      report_only_violations: bool) -> ConstraintReport:
         # summary = f'design\n{constraint.generate_summary(self)}'
         report = constraint.generate_summary(self, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
     @staticmethod
     def from_scadnano_design(sc_design: sc.Design[StrandLabel, DomainLabel],
                              fix_assigned_sequences: bool,
-                             ignored_strands: Iterable) -> 'Design[StrandLabel, DomainLabel]':
+                             ignored_strands: Iterable) -> Design[StrandLabel, DomainLabel]:
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
@@ -2717,7 +2777,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                              check_length=True)
 
 
-# remove quotes when Python 3.6 support dropped
 def add_header_to_content_of_summary(report: ConstraintReport) -> str:
     indented_content = textwrap.indent(report.content, '  ')
     delim = '*' * 80
@@ -3587,7 +3646,7 @@ def rna_duplex_strand_pairs_constraint(
 
         domain_sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
         for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, strand1, strand2)
+            excess = energy_excess(energy, threshold)
             if excess > 0.0:
                 domain_set_weights = (
                     OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()), excess)
@@ -3615,7 +3674,7 @@ def rna_duplex_strand_pairs_constraint(
         num_violations = 0
         lines: List[str] = []
         for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, strand1, strand2) <= 0.0
+            passed = energy_excess(energy, threshold) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -3647,7 +3706,7 @@ def rna_duplex_strand_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def energy_excess(energy: float, threshold: float, strand1: Strand, strand2: Strand) -> float:
+def energy_excess(energy: float, threshold: float) -> float:
     excess = threshold - energy
     return excess
 
@@ -3733,7 +3792,7 @@ def rna_cofold_strand_pairs_constraint(
         energies = calculate_energies(sequence_pairs)
 
         for (strand1, strand2), energy in zip(strand_pairs, energies):
-            excess = energy_excess(energy, threshold, strand1, strand2)
+            excess = energy_excess(energy, threshold)
             if excess > 0.0:
                 domain_set_weights = (OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains()),
                                       excess)
@@ -3760,7 +3819,7 @@ def rna_cofold_strand_pairs_constraint(
         num_violations = 0
         lines: List[str] = []
         for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold, strand1, strand2) <= 0.0
+            passed = energy_excess(energy, threshold) <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -3844,6 +3903,8 @@ def rna_duplex_domain_pairs_constraint(
         how much to weigh this :any:`Constraint`
     :param weight_transfer_function:
         See :py:data:`Constraint.weight_transfer_function`.
+    :param description:
+        long description of constraint suitable for printing in report file
     :param short_description:
         short description of constraint suitable for logging to stdout
     :param pairs:

@@ -8,13 +8,11 @@ Generally this module processes Python 'ACTG' strings
 """  # noqa
 import collections
 import itertools
-import math
 import os
 import logging
 import random
 import subprocess as sub
 import sys
-from collections import defaultdict
 from functools import lru_cache
 from multiprocessing.pool import ThreadPool
 from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast, Deque
@@ -36,26 +34,6 @@ default_temperature = 37.0
 default_magnesium = 0.0125
 default_sodium = 0.05
 
-
-# unix path must be able to find NUPACK, and NUPACKHOME must be set,
-# as described in NUPACK installation instructions.
-
-def _dg_adjust(temperature: float, num_seqs: int) -> float:
-    """
-    Additive adjustment factor to convert NUPACK's mole fraction units to molar.
-
-    :param temperature: temperature in Celsius
-    :param num_seqs: number of sequences
-    :return: Additive adjustment factor to convert NUPACK's mole fraction units to molar.
-    """
-    r = 0.0019872041  # Boltzmann's constant in kcal/mol/K
-    water_conc = 55.14  # molar concentration of water at 37 C; ignore temperature dependence, ~5%
-    temperature_kelvin = temperature + 273.15  # Kelvin
-    # converts from NUPACK mole fraction units to molar units, per association
-    adjust = r * temperature_kelvin * math.log(water_conc)
-    return adjust * (num_seqs - 1)
-
-
 _cached_pfunc4_models = {}
 
 
@@ -64,7 +42,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           sodium: float = default_sodium,
           magnesium: float = default_magnesium,
-          adjust: bool = False,
           ) -> float:
     """
     Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
@@ -84,10 +61,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         molarity of sodium in moles per liter (Default: 0.05)
     :param magnesium:
         molarity of magnesium in moles per liter (Default: 0.0125)
-    :param adjust:
-        whether to adjust from NUPACK mole fraction units to molar units
-        (was necessary in NUPACK 3, but might not be necessary in NUPACK 4; leaving as an option
-        until we know for sure)
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
@@ -109,9 +82,6 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     else:
         model = _cached_pfunc4_models[param]
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
-
-    if adjust:
-        dg += _dg_adjust(temperature, len(seqs))
 
     return dg
 
@@ -148,24 +118,6 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     output_decoded = output.decode()
     stderr_decoded = stderr.decode()
     return output_decoded, stderr_decoded
-
-
-def unique_seqs_in_pairs(seq_pairs: Iterable[Tuple[str, str]]) -> Tuple[List[str], Dict[str, int]]:
-    """
-    :param seq_pairs: iterable of pairs of strings
-    :return: list of unique strings in pairs in `seq_pairs` in the order they appear, along with
-             dict mapping each string to the order in which it appears in the list
-    """
-    seq_orders: Dict[str, int] = defaultdict(int)
-    seqs_list: List[str] = []
-    order = 0
-    for pair in seq_pairs:
-        for seq in pair:
-            if seq not in seq_orders:
-                seq_orders[seq] = order
-                order += 1
-                seqs_list.append(seq)
-    return seqs_list, seq_orders
 
 
 # https://github.com/python/cpython/blob/42336def77f53861284336b3335098a1b9b8cab2/Lib/functools.py#L485
@@ -227,7 +179,6 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
 
     # fill in cached energies and determine which indices still need to have their energies calculated
-    print(f'size of queue: {len(_rna_duplex_queue)}')
     if cache:
         energies = [_rna_duplex_single_cacheable(seq_pair, temperature, parameters_filename)
                     for seq_pair in seq_pairs]
