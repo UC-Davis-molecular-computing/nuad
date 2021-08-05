@@ -61,8 +61,8 @@ def main() -> None:
     # num_strands = 2
     # num_strands = 5
     # num_strands = 10
-    # num_strands = 50
-    num_strands = 100
+    num_strands = 50
+    # num_strands = 100
     # num_strands = 355
 
     #                     si         wi         ni         ei
@@ -89,14 +89,14 @@ def main() -> None:
         threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
-        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded)
+        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.05)
 
     design = dc.Design(strands,
                        constraints=[
-                           # strand_individual_ss_constraint,
-                           # strand_pair_nupack_constraint,
+                           strand_individual_ss_constraint,
+                           strand_pair_nupack_constraint,
                            # domain_pair_nupack_constraint,
-                           domain_pairs_rna_duplex_constraint,
+                           # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                            # strand_pairs_no_comp_constraint,
                        ])
@@ -126,7 +126,7 @@ def main() -> None:
 
     length = 10
     domain_pool = dc.DomainPool(f'length-{length} domains', length,
-                                # numpy_constraints=numpy_constraints,
+                                numpy_constraints=numpy_constraints,
                                 replace_with_close_sequences=True,
                                 # replace_with_close_sequences=False,
                                 )  # ,
@@ -141,7 +141,7 @@ def main() -> None:
                                  report_only_violations=True,
                                  random_seed=random_seed,
                                  max_iterations=None,
-                                 force_overwrite=True,
+                                 # force_overwrite=True,
                                  # report_delay=0.0,
                                  )
     params.force_overwrite = True

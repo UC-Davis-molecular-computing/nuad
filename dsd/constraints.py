@@ -648,14 +648,17 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
-    def find_neighbor_sequences(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
+    def find_hamming_distances(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
         """
         Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
         in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
-        different the sequence is to the previous sequence.
+        different the sequence is to `previous_sequence`.
 
-        :param previous_sequence: DNA sequence to be replaced
-        :return: dictionary mapping Hamming distances to sequences that Hamming distance from previous_sequence
+        :param previous_sequence:
+            DNA sequence to be replaced
+        :return:
+            dictionary mapping Hamming distances to remaining sequences that are that
+            Hamming distance from `previous_sequence`
         """
         remaining_sequences = self._sequences.sublist(self._idx)
         return remaining_sequences.hamming_map(previous_sequence)
@@ -698,7 +701,7 @@ class DomainPool(JSONSerializable):
 
             # import time
             # before = time.perf_counter_ns()
-            neighbors = self.find_neighbor_sequences(previous_sequence)  # dict mapping distance:sequences
+            neighbors = self.find_hamming_distances(previous_sequence)  # dict mapping distance:sequences
             # after = time.perf_counter_ns()
             # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
 
@@ -2325,11 +2328,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                                  max_domain_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for fixed_domain in domains:
             num_checks += 1
             seq = fixed_domain.sequence
-            passed = constraint(seq, fixed_domain) <= 0.0
+            excess = constraint(seq, fixed_domain)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2337,10 +2341,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 line = f'domain {fixed_domain.name:{max_domain_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
-                lines.append(line)
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+                lines_and_excesses.append((line, excess))
 
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -2354,10 +2360,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                                  max_strand_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for strand in strands:
             num_checks += 1
-            passed = constraint(strand.sequence(), strand) <= 0.0
+            excess = constraint(strand.sequence(), strand)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2365,10 +2372,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 line = f'strand {strand.name:{max_strand_name_length}}: ' \
                        f'{summary} ' \
                        f'{"" if passed else " **violation**"}'
-                lines.append(line)
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+                lines_and_excesses.append((line, excess))
 
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
+
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -2383,11 +2392,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for domain1, domain2 in pairs_to_check:
             num_checks += 1
             seq1, seq2 = domain1.sequence, domain2.sequence
-            passed = constraint(seq1, seq2, domain1, domain2) <= 0.0
+            excess = constraint(seq1, seq2, domain1, domain2)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2397,11 +2407,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         f'{domain2.name:{max_domain_name_length}}: '
                         f'{summary}'
                         f'{"" if passed else "  **violation**"}')
-                lines.append(line)
+                lines_and_excesses.append((line, excess))
 
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
 
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -2416,10 +2427,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         num_violations = 0
         num_checks = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for strand1, strand2 in pairs_to_check:
             num_checks += 1
-            passed = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2) <= 0.0
+            excess = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -2429,11 +2441,43 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         f'{strand2.name:{max_strand_name_length}}: '
                         f'{summary}'
                         f'{"" if passed else "  **violation**"}')
-                lines.append(line)
+                lines_and_excesses.append((line, excess))
 
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
 
+        lines = (line for line, _ in lines_and_excesses)
+        content = '\n'.join(lines)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    @staticmethod
+    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
+                                      report_only_violations: bool) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+
+        lines_and_excesses: List[Tuple[str, float]] = []
+        for strand_complex in constraint.complexes:
+            num_checks += 1
+            excess = constraint(strand_complex)
+            passed = excess <= 0.0
+            if not passed:
+                num_violations += 1
+            if not report_only_violations or (report_only_violations and not passed):
+                summary = constraint.generate_summary(strand_complex, False)
+                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
+                line = (f'strand complex: '
+                        f'{strand_names}'
+                        f'{"" if passed else "  **violation**"}'
+                        f'\n{summary}')
+                lines_and_excesses.append((line, excess))
+
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
+
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -2474,35 +2518,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             else ConstraintReport(constraint=constraint,
                                   content='constraint.pairs is empty; nothing to report',
                                   num_violations=0, num_checks=0)
-        return report
-
-    @staticmethod
-    def summary_of_complex_constraint(constraint: 'ComplexConstraint',
-                                      report_only_violations: bool) -> ConstraintReport:
-        num_violations = 0
-        num_checks = 0
-        lines: List[str] = []
-
-        for strand_complex in constraint.complexes:
-            num_checks += 1
-            passed = constraint(strand_complex) <= 0.0
-            if not passed:
-                num_violations += 1
-            if not report_only_violations or (report_only_violations and not passed):
-                summary = constraint.generate_summary(strand_complex, False)
-                strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
-                line = (f'strand complex: '
-                        f'{strand_names}'
-                        f'{"" if passed else "  **violation**"}'
-                        f'\n{summary}')
-                lines.append(line)
-
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
-
-        content = '\n'.join(lines)
-        report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
         return report
 
     # remove quotes when Python 3.6 support dropped

@@ -618,11 +618,11 @@ class DNASeqList:
         sequence_1d_array = seq2arr(sequence)
         distances = np.sum(np.bitwise_xor(self.seqarr, sequence_1d_array) != 0, axis=1)
         distance_map = {}
-        for length in range(self.seqlen + 1):
-            indices = distances == length
-            arr = self.seqarr[indices]
+        for distance in range(self.seqlen + 1):
+            indices_at_distance = distances == distance
+            arr = self.seqarr[indices_at_distance]
             if arr.shape[0] > 9:  # don't bother putting empty array into map
-                distance_map[length] = DNASeqList(seqarr=arr)
+                distance_map[distance] = DNASeqList(seqarr=arr)
         return distance_map
 
     def sublist(self, start: int, end: Optional[int] = None) -> 'DNASeqList':
