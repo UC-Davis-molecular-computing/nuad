@@ -58,6 +58,7 @@ domain_pool_key = 'pool'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
+rng_state_key = 'rng_state'
 
 Complex = Tuple['Strand', ...]
 """A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
@@ -1695,17 +1696,21 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return OrderedSet(self.starred_domains())
 
-    def sequence(self, spaces_between_domains: bool = False) -> str:
+    def sequence(self, dashes_between_domains: bool = False) -> str:
         """
-        :return: DNA sequence assigned to this :any:`Strand`, calculated by concatenating all sequences
-                 assigned to its :any:`Domain`'s.
-        :raises ValueError: if any :any:`Domain` of this :any:`Strand` does not have a sequence assigned
+        :param dashes_between_domains:
+            If true, separates each domain sequence by "-".
+        :return:
+            DNA sequence assigned to this :any:`Strand`, calculated by concatenating all sequences
+            assigned to its :any:`Domain`'s.
+        :raises ValueError:
+            if any :any:`Domain` of this :any:`Strand` does not have a sequence assigned
         """
         seqs = []
         for idx, domain in enumerate(self.domains):
             starred = idx in self.starred_domain_indices
             seqs.append(domain.concrete_sequence(starred))
-        delim = ' ' if spaces_between_domains else ''
+        delim = '-' if dashes_between_domains else ''
         return delim.join(seqs)
 
     def assign_dna(self, sequence: str) -> None:

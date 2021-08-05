@@ -42,7 +42,7 @@ Stochastic local search for finding DNA sequences to assign to
 # contract, strict liability, or tort (including negligence or otherwise)
 # arising in any way out of the use of this software, even if advised of the
 # possibility of such damage.
-
+import json
 import math
 import itertools
 import os
@@ -62,6 +62,7 @@ import re
 import datetime
 from pprint import pprint
 
+import numpy.random
 from ordered_set import OrderedSet
 import numpy as np  # noqa
 
@@ -1041,42 +1042,48 @@ def _sequences_fragile_format_output_to_file(design: Design,
     return '\n'.join(
         f'{strand.name}  '
         f'{strand.group.name if include_group else ""}  '
-        f'{strand.sequence(spaces_between_domains=True)}' for strand in design.strands)
+        f'{strand.sequence(dashes_between_domains=True)}' for strand in design.strands)
 
 
 def _write_sequences(design: Design, directory_intermediate: str, directory_final: str,
-                     filename_with_iteration: str, filename_final: str,
+                     filename_with_iteration_no_ext: str, filename_final_no_ext: str,
                      include_group: bool = True) -> None:
-    content_fragile_format = _sequences_fragile_format_output_to_file(design, include_group)
-    for directory, filename in zip([directory_intermediate, directory_final],
-                                   [filename_with_iteration, filename_final]):
-        path = os.path.join(directory, filename)
-        with open(path, 'w') as file:
-            file.write(content_fragile_format)
+    sequences_content = _sequences_fragile_format_output_to_file(design, include_group)
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
+                                             sequences_content, '.txt')
 
 
 def _write_dsd_design_json(design: Design, directory_intermediate: str, directory_final: str,
                            filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
     json_str = design.to_json()
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
+                                             json_str, '.json')
+
+
+def _write_rng_state(rng: numpy.random.Generator, directory_intermediate: str, directory_final: str,
+                     filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
+    state = rng.bit_generator.state
+    json_str = json.dumps(state, indent=2)
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
+                                             json_str, '.json')
+
+
+def _write_text_intermediate_and_final_files(directory_final: str, directory_intermediate: str,
+                                             filename_final_no_ext: str, filename_with_iteration_no_ext: str,
+                                             content: str, ext: str) -> None:
     for directory, filename in zip([directory_intermediate, directory_final],
                                    [filename_with_iteration_no_ext, filename_final_no_ext]):
-        filename += '.json'
-        path = os.path.join(directory, filename)
-        with open(path, 'w') as file:
-            file.write(json_str)
+        full_filename = os.path.join(directory, filename + ext)
+        with open(full_filename, 'w') as file:
+            file.write(content)
 
 
 def _write_report(design: Design, directory_intermediate: str, directory_final: str,
                   filename_with_iteration: str, filename_final: str,
                   report_only_violations: bool) -> None:
-    #     sequences = _sequences_fragile_format_output_to_file(design, include_group=True)
-    #     sequences_content = f'''\
-    # Design
-    # ======
-    # {sequences}
-    #
-    # '''
-
     report_str = design.summary_of_constraints(report_only_violations)
     report = f'''\
 Report on constraints
@@ -1133,22 +1140,35 @@ call search_for_dna_sequences with the parameter restart=True.
 class _Directories:
     # Container for various directories and files associated with output from the search.
     # Easier than passing around several strings as parameters/return values.
+
+    # parent director of all output; typically named after script being run
     out: str
+
+    # directories "fully qualified relative to project root": out joined with "subdirectory" strings below
     dsd_design: str = field(init=False)
+    rng_state: str = field(init=False)
     report: str = field(init=False)
     sequence: str = field(init=False)
+
+    # relative to out directory
     dsd_design_subdirectory: str = field(init=False, default='dsd_designs')
+    rng_state_subdirectory: str = field(init=False, default='rng_state')
     report_subdirectory: str = field(init=False, default='reports')
     sequence_subdirectory: str = field(init=False, default='sequences')
+
+    # names of files to write (in subdirectories, and also "current-best" versions in out
     dsd_design_filename_no_ext: str = field(init=False, default='dsd-design')
+    rng_state_filename_no_ext: str = field(init=False, default='rng-state')
     sequences_filename_no_ext: str = field(init=False, default='sequences')
     report_filename_no_ext: str = field(init=False, default='report')
+
     debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
     info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
 
     def __init__(self, out: str, debug: bool, info: bool) -> None:
         self.out = out
         self.dsd_design = os.path.join(self.out, self.dsd_design_subdirectory)
+        self.rng_state = os.path.join(self.out, self.rng_state_subdirectory)
         self.report = os.path.join(self.out, self.report_subdirectory)
         self.sequence = os.path.join(self.out, self.sequence_subdirectory)
 
@@ -1408,18 +1428,17 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     try:
         if not params.restart:
-            assign_sequences_to_domains_randomly_from_pools(design=design,
-                                                            rng=rng, overwrite_existing_sequences=False)
+            assign_sequences_to_domains_randomly_from_pools(design=design, rng=rng,
+                                                            overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal = _restart_from_directory(directories.out, design,
-                                                      directories.dsd_design_subdirectory)
+            num_new_optimal, rng = _restart_from_directory(directories, design)
 
         violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
             design=design, never_increase_weight=params.never_increase_weight, iteration=-1)
 
         # write initial sequences and report
-        _write_intermediate_files(design=design, num_new_optimal=num_new_optimal, write_report=True,
+        _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal, write_report=True,
                                   directories=directories,
                                   report_only_violations=params.report_only_violations,
                                   num_digits_update=params.num_digits_update)
@@ -1484,7 +1503,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                     else:
                         logger.debug('skipping report')
 
-                    _write_intermediate_files(design=design, num_new_optimal=num_new_optimal,
+                    _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
                                               write_report=write_report, directories=directories,
                                               report_only_violations=params.report_only_violations,
                                               num_digits_update=params.num_digits_update)
@@ -1530,7 +1549,7 @@ def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restar
         os.makedirs(directories.out)
     if not restart:
         _clear_directory(directories.out, force_overwrite)
-    for subdir in [directories.dsd_design, directories.report, directories.sequence]:
+    for subdir in [directories.dsd_design, directories.rng_state, directories.report, directories.sequence]:
         if not os.path.exists(subdir):
             os.makedirs(subdir)
     return directories
@@ -1628,14 +1647,29 @@ def timestamp() -> str:
     return time_str
 
 
-def _restart_from_directory(directory: str, design: dc.Design, dsd_design_subdirectory: str) -> int:
-    # returns highest index found
-    design_filename, num_new_optimal = _find_latest_design_filename(directory, dsd_design_subdirectory)
+def _restart_from_directory(directories: _Directories, design: dc.Design) \
+        -> Tuple[int, np.random.Generator]:
+    # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
+    # which are ignored. This applies to both the design and the RNG state
+
+    # returns highest index found, as well as name of corresponding design file
+    highest_idx = _find_highest_index_in_dsd_design_subdir(directories.dsd_design)
+    design_filename = os.path.join(directories.dsd_design,
+                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx}.json')
     with open(design_filename, 'r') as file:
-        design_json_str: str = file.read()
+        design_json_str = file.read()
     design_with_sequences = dc.Design.from_json(design_json_str)
 
-    # dc.verify_designs_match(design_from_sc, initial_design, check_fixed=False)
+    # get RNG state
+    rng_filename = os.path.join(directories.rng_state,
+                                f'{directories.rng_state_filename_no_ext}-{highest_idx}.json')
+    with open(rng_filename, 'r') as file:
+        rng_state_json = file.read()
+    rng_state = json.loads(rng_state_json)
+    rng = numpy.random.default_rng()
+    rng.bit_generator.state = rng_state
+
+    dc.verify_designs_match(design_with_sequences, design, check_fixed=False)
     domains_with_seq = [domain for domain in design_with_sequences.domains if not domain.fixed]
     domains = [domain for domain in design.domains if not domain.fixed]
     domains_with_seq.sort(key=lambda domain: domain.name)
@@ -1644,12 +1678,11 @@ def _restart_from_directory(directory: str, design: dc.Design, dsd_design_subdir
     for domain_with_seq, domain in zip(domains_with_seq, domains):
         domain.sequence = domain_with_seq.sequence
 
-    return num_new_optimal
+    return highest_idx, rng
 
 
-def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -> Tuple[str, int]:
-    # return filename with latest new optimal sequences (and index)
-    dsd_design_directory = os.path.join(directory, dsd_design_subdirectory)
+def _find_highest_index_in_dsd_design_subdir(dsd_design_directory: str) -> int:
+    # return index of filename with latest new optimal sequences
     filenames = [filename
                  for filename in os.listdir(dsd_design_directory)
                  if os.path.isfile(os.path.join(dsd_design_directory, filename))]
@@ -1663,21 +1696,19 @@ def _find_latest_design_filename(directory: str, dsd_design_subdirectory: str) -
                          f'files:\n'
                          f'{filenames}')
 
-    max_filename = filenames_matching[0]
-    max_index_str = pattern.search(max_filename).group(1)
+    max_index_str = pattern.search(filenames_matching[0]).group(1)
     max_index = int(max_index_str)
     for filename in filenames_matching:
         index_str = pattern.search(filename).group(1)
         index = int(index_str)
         if max_index < index:
             max_index = index
-            max_filename = filename
 
-    full_filename = os.path.join(directory, dsd_design_subdirectory, max_filename)
-    return full_filename, max_index
+    return max_index
 
 
-def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_report: bool,
+def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
+                              num_new_optimal: int, write_report: bool,
                               directories: _Directories, report_only_violations: bool,
                               num_digits_update: Optional[int]) -> None:
     num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
@@ -1687,13 +1718,21 @@ def _write_intermediate_files(*, design: dc.Design, num_new_optimal: int, write_
                            directory_final=directories.out,
                            filename_with_iteration_no_ext=f'{directories.dsd_design_filename_no_ext}'
                                                           f'-{num_new_optimal_padded}',
-                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}', )
+                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
+
+    _write_rng_state(rng,
+                     directory_intermediate=directories.rng_state,
+                     directory_final=directories.out,
+                     filename_with_iteration_no_ext=f'{directories.rng_state_filename_no_ext}'
+                                                    f'-{num_new_optimal_padded}',
+                     filename_final_no_ext=f'current-best-{directories.rng_state_filename_no_ext}')
+
     _write_sequences(design,
                      directory_intermediate=directories.sequence,
                      directory_final=directories.out,
-                     filename_with_iteration=f'{directories.sequences_filename_no_ext}'
-                                             f'-{num_new_optimal_padded}.txt',
-                     filename_final=f'current-best-{directories.sequences_filename_no_ext}.txt')
+                     filename_with_iteration_no_ext=f'{directories.sequences_filename_no_ext}'
+                                                    f'-{num_new_optimal_padded}',
+                     filename_final_no_ext=f'current-best-{directories.sequences_filename_no_ext}')
     if write_report:
         _write_report(design,
                       directory_intermediate=directories.report,
