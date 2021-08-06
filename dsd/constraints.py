@@ -30,7 +30,6 @@ from numbers import Number
 from enum import Enum, auto
 
 import numpy as np  # noqa
-import nupack
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -5746,6 +5745,11 @@ def nupack_complex_secondary_structure_constraint(
     :param temperature:
         Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
     :param weight:
         See :py:data:`Constraint.weight`, defaults to 1.0
     :type weight:
