@@ -107,7 +107,7 @@ def nupack_complex_base_pair_probabilities(strand_complex: Complex,
         2D Numpy array of floats, with `result[i1][i2]` giving the base-pair probability of base at position
         `i1` with base at position `i2` (if `i1` != `i2`), where `i1` and `i2` are the absolute positions
         of the bases in the entire ordered list of strands. For example, with strands AAAA and TTTTT,
-        there are nine indices 0,1,2,3,4,5,6,6,7, with positions 0,1,2,3 on the first strand AAAA,
+        there are nine indices 0,1,2,3,4,5,6,7,8, with positions 0,1,2,3 on the first strand AAAA,
         and positions 4,5,6,7,8 on the second strand TTTTT.
         If `i1` == `i2`, then `result[i1][i1]` is the probability that the base at position `i1` is
         *unpaired*.
