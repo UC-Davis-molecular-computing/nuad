@@ -290,7 +290,7 @@ def _violations_of_constraints(design: Design,
 
         quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
-        if _quit_early(never_increase_weight, violation_set, violation_set_old):
+        if quit_early:
             return violation_set
 
     # individual strand constraints across all strands in Design
@@ -651,6 +651,11 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             weight: float = constraint(domain.sequence, domain)
             if weight > 0.0:
                 violating_domains_weights.append((domain, weight))
+                if current_weight_gap is not None:
+                    weight_discovered_here += constraint.weight * weight
+                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                        quit_early = True
+                        break
     else:
         logger.debug(f'using threading for domain constraint {constraint.description}')
 
