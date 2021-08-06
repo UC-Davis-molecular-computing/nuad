@@ -10,7 +10,7 @@ Based on the DNA single-stranded tile (SST) sequence designer used in the follow
 Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
 """  # noqa
 
-# from __future__ import annotations
+from __future__ import annotations
 
 from typing import Tuple, List, Collection, Optional, Union, Sequence, Dict, Iterable
 from dataclasses import dataclass
@@ -596,23 +596,7 @@ class DNASeqList:
         self.seqarr = np.vstack([self.seqarr, newarr])
         self.numseqs += 1
 
-    def filter_hamming(self, threshold: int) -> None:
-        seq = self.pop_array()
-        arr_keep = np.array([seq])
-        self.shuffle()
-        while self.seqarr.shape[0] > 0:
-            seq = self.pop_array()
-            while self.seqarr.shape[0] > 0:
-                hamming_min = np.min(np.sum(np.bitwise_xor(arr_keep, seq) != 0, axis=1))
-                too_close = (hamming_min < threshold)
-                if not too_close:
-                    break
-                seq = self.pop_array()
-            arr_keep = np.vstack([arr_keep, seq])
-        self.seqarr = arr_keep
-        self.numseqs = self.seqarr.shape[0]
-
-    def hamming_map(self, sequence: str) -> Dict[int, 'DNASeqList']:
+    def hamming_map(self, sequence: str) -> Dict[int, DNASeqList]:
         """Return dict mapping each length `d` to a :any:`DNASeqList` of sequences that are
         Hamming distance `d` from `seq`."""
         sequence_1d_array = seq2arr(sequence)
@@ -625,7 +609,7 @@ class DNASeqList:
                 distance_map[distance] = DNASeqList(seqarr=arr)
         return distance_map
 
-    def sublist(self, start: int, end: Optional[int] = None) -> 'DNASeqList':
+    def sublist(self, start: int, end: Optional[int] = None) -> DNASeqList:
         """Return sublist of DNASeqList from `start`, inclusive, to `end`, exclusive.
 
         If `end` is not specified, goes until the end of the list."""
@@ -634,14 +618,29 @@ class DNASeqList:
         arr = self.seqarr[start:end]
         return DNASeqList(seqarr=arr)
 
-    def hamming_min(self, arr: np.ndarray) -> int:
-        """Returns minimum Hamming distance between arr and any sequence in
-        this DNASeqList."""
-        distances = np.sum(np.bitwise_xor(self.seqarr, arr) != 0, axis=1)
-        return np.min(distances)
+    # def filter_hamming(self, threshold: int) -> None:
+    #     seq = self.pop_array()
+    #     arr_keep = np.array([seq])
+    #     self.shuffle()
+    #     while self.seqarr.shape[0] > 0:
+    #         seq = self.pop_array()
+    #         while self.seqarr.shape[0] > 0:
+    #             hamming_min = np.min(np.sum(np.bitwise_xor(arr_keep, seq) != 0, axis=1))
+    #             too_close = (hamming_min < threshold)
+    #             if not too_close:
+    #                 break
+    #             seq = self.pop_array()
+    #         arr_keep = np.vstack([arr_keep, seq])
+    #     self.seqarr = arr_keep
+    #     self.numseqs = self.seqarr.shape[0]
+    #
+    # def hamming_min(self, arr: np.ndarray) -> int:
+    #     """Returns minimum Hamming distance between arr and any sequence in
+    #     this DNASeqList."""
+    #     distances = np.sum(np.bitwise_xor(self.seqarr, arr) != 0, axis=1)
+    #     return np.min(distances)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_energy(self, low: float, high: float, temperature: float) -> 'DNASeqList':
+    def filter_energy(self, low: float, high: float, temperature: float) -> DNASeqList:
         """Return new DNASeqList with seqs whose wc complement energy is within
         the given range."""
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
@@ -653,8 +652,7 @@ class DNASeqList:
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
         return wcenergies
 
-    # remove quotes when Py3.6 support dropped
-    def filter_end_gc(self) -> 'DNASeqList':
+    def filter_end_gc(self) -> DNASeqList:
         """Remove any sequence with A or T on the end. Also remove domains that
         do not have an A or T either next to that base, or one away. Otherwise
         we could get a domain ending in {C,G}^3, which, placed next to any
@@ -676,8 +674,7 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_end_at(self, gc_near_end: bool = False) -> 'DNASeqList':
+    def filter_end_at(self, gc_near_end: bool = False) -> DNASeqList:
         """Remove any sequence with C or G on the end. Also, if gc_near_end is True,
         remove domains that do not have an C or G either next to that base,
         or one away, to prevent breathing."""
@@ -699,31 +696,27 @@ class DNASeqList:
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_base_nowhere(self, base: str) -> 'DNASeqList':
+    def filter_base_nowhere(self, base: str) -> DNASeqList:
         """Remove any sequence that has given base anywhere."""
         good = (self.seqarr != base2bits[base]).all(axis=1)
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_base_count(self, base: str, low: int, high: int) -> 'DNASeqList':
+    def filter_base_count(self, base: str, low: int, high: int) -> DNASeqList:
         """Remove any sequence not satisfying low <= #base <= high."""
         sumarr = np.sum(self.seqarr == base2bits[base], axis=1)
         good = (low <= sumarr) & (sumarr <= high)
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_base_at_pos(self, pos: int, base: str) -> 'DNASeqList':
+    def filter_base_at_pos(self, pos: int, base: str) -> DNASeqList:
         """Remove any sequence that does not have given base at position pos."""
         mid = self.seqarr[:, pos]
         good = (mid == base2bits[base])
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_substring(self, subs: Sequence[str]) -> 'DNASeqList':
+    def filter_substring(self, subs: Sequence[str]) -> DNASeqList:
         """Remove any sequence with any elements from subs as a substring."""
         if len(set([len(sub) for sub in subs])) != 1:
             raise ValueError('All substrings in subs must be equal length: %s' % subs)
@@ -740,13 +733,11 @@ class DNASeqList:
         seqarrpass = self.seqarr[passall]
         return DNASeqList(seqarr=seqarrpass)
 
-    # remove quotes when Py3.6 support dropped
-    def filter_seqs_by_g_quad(self) -> 'DNASeqList':
+    def filter_seqs_by_g_quad(self) -> DNASeqList:
         """Removes any sticky ends with 4 G's in a row (a G-quadruplex)."""
         return self.filter_substring(['GGGG'])
 
-    # remove quotes when Py3.6 support dropped
-    def filter_seqs_by_g_quad_c_quad(self) -> 'DNASeqList':
+    def filter_seqs_by_g_quad_c_quad(self) -> DNASeqList:
         """Removes any sticky ends with 4 G's or C's in a row (a quadruplex)."""
         return self.filter_substring(['GGGG', 'CCCC'])
 

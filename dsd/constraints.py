@@ -1451,10 +1451,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
 _domains_interned: Dict[str, Domain] = {}
 
 
-# remove quotes when Python 3.6 support dropped
 def domains_not_substrings_of_each_other_domain_pair_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0) \
-        -> 'DomainPairConstraint':
+        -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -1935,53 +1934,52 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     #################################################
     # these fields are calculated from the single constructor parameter constraints
 
-    # remove quotes when Python 3.6 support dropped
-    domain_constraints: List['DomainConstraint'] = field(default_factory=list, init=False)
+    domain_constraints: List[DomainConstraint] = field(default_factory=list, init=False)
     """
     Applied to individual domain constraints across all :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_constraints: List['StrandConstraint'] = field(default_factory=list, init=False)
+    strand_constraints: List[StrandConstraint] = field(default_factory=list, init=False)
     """
     Applied to individual strand constraints across all :any:`Strand`'s in the :any:`Design`.
     """
 
-    domain_pair_constraints: List['DomainPairConstraint'] = field(default_factory=list, init=False)
+    domain_pair_constraints: List[DomainPairConstraint] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Domain`'s in the :any:`Design`.
     """
 
-    strand_pair_constraints: List['StrandPairConstraint'] = field(default_factory=list, init=False)
+    strand_pair_constraints: List[StrandPairConstraint] = field(default_factory=list, init=False)
     """
     Applied to pairs of :any:`Strand`'s in the :any:`Design`.
     """
 
-    complex_constraints: List['ComplexConstraint'] = field(default_factory=list, init=False)
+    complex_constraints: List[ComplexConstraint] = field(default_factory=list, init=False)
     """
     Applied to tuple of :any:`Strand`'s in the :any:`Design`.
     """
 
-    domains_constraints: List['DomainsConstraint'] = field(default_factory=list, init=False)
+    domains_constraints: List[DomainsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strands_constraints: List['StrandsConstraint'] = field(default_factory=list, init=False)
+    strands_constraints: List[StrandsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    domain_pairs_constraints: List['DomainPairsConstraint'] = field(default_factory=list, init=False)
+    domain_pairs_constraints: List[DomainPairsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    strand_pairs_constraints: List['StrandPairsConstraint'] = field(default_factory=list, init=False)
+    strand_pairs_constraints: List[StrandPairsConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
     """
 
-    design_constraints: List['DesignConstraint'] = field(default_factory=list, init=False)
+    design_constraints: List[DesignConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process whole design at once, for anything not expressible as one of the others
     (for example, in case it needs access to all the :any:`StrandGroup`'s and :any:`DomainPool`'s at once).
@@ -2229,8 +2227,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 domains_in_pool.append(domain)
         return domains_in_pool
 
-    # remove quotes when Python 3.6 support dropped
-    def all_constraints(self) -> List['Constraint']:
+    def all_constraints(self) -> List[Constraint]:
         # Since list types are covariant, we cannot use + to concatenate them without upsetting mypy:
         # https://stackoverflow.com/questions/56738485/why-do-i-get-a-warning-when-concatenating-lists-of-mixed-types-in-pycharm
         # https://github.com/python/mypy/issues/4244
@@ -2258,8 +2255,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         return '\n'.join(summaries)
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_constraint(self, constraint: 'Constraint', report_only_violations: bool) -> str:
+    def summary_of_constraint(self, constraint: Constraint, report_only_violations: bool) -> str:
         # summary of constraint only if not a DomainConstraint in a DomainPool
         # or a StrandConstraint in a StrandGroup
         report: ConstraintReport
@@ -2300,8 +2296,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         summary = add_header_to_content_of_summary(report)
         return summary
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_constraint(self, constraint: 'DomainConstraint',
+    def summary_of_domain_constraint(self, constraint: DomainConstraint,
                                      report_only_violations: bool,
                                      domains_to_check: Optional[Iterable[Domain[DomainLabel]]] = None) \
             -> ConstraintReport:
@@ -2336,8 +2331,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_constraint(self, constraint: 'StrandConstraint',
+    def summary_of_strand_constraint(self, constraint: StrandConstraint,
                                      report_only_violations: bool,
                                      strands_to_check: Optional[
                                          Iterable[Strand[StrandLabel, DomainLabel]]] = None) \
@@ -2436,8 +2430,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pair_constraint(self, constraint: 'DomainPairConstraint',
+    def summary_of_domain_pair_constraint(self, constraint: DomainPairConstraint,
                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
 
@@ -2471,8 +2464,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pair_constraint(self, constraint: 'StrandPairConstraint',
+    def summary_of_strand_pair_constraint(self, constraint: StrandPairConstraint,
                                           report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
 
@@ -2536,22 +2528,19 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domains_constraint(self, constraint: 'DomainsConstraint',
+    def summary_of_domains_constraint(self, constraint: DomainsConstraint,
                                       report_only_violations: bool) -> ConstraintReport:
         # summary = f'domains\n{constraint.generate_summary(self.domains)}'
         report = constraint.generate_summary(self.domains, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strands_constraint(self, constraint: 'StrandsConstraint',
+    def summary_of_strands_constraint(self, constraint: StrandsConstraint,
                                       report_only_violations: bool) -> ConstraintReport:
         # summary = f'strands\n{constraint.generate_summary(self.strands)}'
         report = constraint.generate_summary(self.strands, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_domain_pairs_constraint(self, constraint: 'DomainPairsConstraint',
+    def summary_of_domain_pairs_constraint(self, constraint: DomainPairsConstraint,
                                            report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.domains)
         # summary = f'domain pairs\n{constraint.generate_summary(pairs_to_check)}'
@@ -2562,8 +2551,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=0, num_checks=0)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_strand_pairs_constraint(self, constraint: 'StrandPairsConstraint',
+    def summary_of_strand_pairs_constraint(self, constraint: StrandPairsConstraint,
                                            report_only_violations: bool) -> ConstraintReport:
         pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
         report = constraint.generate_summary(pairs_to_check, report_only_violations) \
@@ -2573,18 +2561,16 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=0, num_checks=0)
         return report
 
-    # remove quotes when Python 3.6 support dropped
-    def summary_of_design_constraint(self, constraint: 'DesignConstraint',
+    def summary_of_design_constraint(self, constraint: DesignConstraint,
                                      report_only_violations: bool) -> ConstraintReport:
         # summary = f'design\n{constraint.generate_summary(self)}'
         report = constraint.generate_summary(self, report_only_violations)
         return report
 
-    # remove quotes when Python 3.6 support dropped
     @staticmethod
     def from_scadnano_design(sc_design: sc.Design[StrandLabel, DomainLabel],
                              fix_assigned_sequences: bool,
-                             ignored_strands: Iterable) -> 'Design[StrandLabel, DomainLabel]':
+                             ignored_strands: Iterable) -> Design[StrandLabel, DomainLabel]:
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
@@ -2837,7 +2823,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                              check_length=True)
 
 
-# remove quotes when Python 3.6 support dropped
 def add_header_to_content_of_summary(report: ConstraintReport) -> str:
     indented_content = textwrap.indent(report.content, '  ')
     delim = '*' * 80
@@ -5720,6 +5705,8 @@ def nupack_complex_secondary_structure_constraint(
         base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
         base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
         temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
@@ -5804,6 +5791,11 @@ def nupack_complex_secondary_structure_constraint(
     :param temperature:
         Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
     :param weight:
         See :py:data:`Constraint.weight`, defaults to 1.0
     :type weight:
@@ -5850,7 +5842,8 @@ def nupack_complex_secondary_structure_constraint(
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. '
+            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     # Start Input Validation
     if len(strand_complexes) == 0:
@@ -5907,8 +5900,6 @@ def nupack_complex_secondary_structure_constraint(
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
     # End populating base_pair_probs
 
-    nupack_model = NupackModel(material='dna', celsius=temperature)
-
     if description is None:
         description = ' '.join([str(s) for s in strand_complex_template])
 
@@ -5939,15 +5930,9 @@ def nupack_complex_secondary_structure_constraint(
         return '\n'.join(summary_list)
 
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
-        nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
-        nupack_complex: NupackComplex = NupackComplex(nupack_strands)
-
-        nupack_complex_set = NupackComplexSet(
-            nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
-        nupack_complex_analysis_result = nupack_complex_analysis(
-            nupack_complex_set, compute=['pairs'], model=nupack_model)
-        pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
-        nupack_complex_result: np.ndarray = pairs.to_array()
+        nupack_complex_result = dv.nupack_complex_base_pair_probabilities(strand_complex_,
+                                                                          temperature=temperature,
+                                                                          sodium=sodium, magnesium=magnesium)
 
         # DEBUG: Print out result matrix
         # for r in nupack_complex_result:
@@ -6047,3 +6032,4 @@ def nupack_complex_secondary_structure_constraint(
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
+
