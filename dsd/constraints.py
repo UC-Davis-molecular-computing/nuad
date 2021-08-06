@@ -30,6 +30,7 @@ from numbers import Number
 from enum import Enum, auto
 
 import numpy as np  # noqa
+import nupack
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -5789,7 +5790,8 @@ def nupack_complex_secondary_structure_constraint(
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. '
+            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     # Start Input Validation
     if len(strand_complexes) == 0:
@@ -5878,15 +5880,7 @@ def nupack_complex_secondary_structure_constraint(
         return '\n'.join(summary_list)
 
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
-        nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
-        nupack_complex: NupackComplex = NupackComplex(nupack_strands)
-
-        nupack_complex_set = NupackComplexSet(
-            nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
-        nupack_complex_analysis_result = nupack_complex_analysis(
-            nupack_complex_set, compute=['pairs'], model=nupack_model)
-        pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
-        nupack_complex_result: np.ndarray = pairs.to_array()
+        nupack_complex_result = nupack_complex_base_pair_probabilities(strand_complex_, nupack_model)
 
         # DEBUG: Print out result matrix
         # for r in nupack_complex_result:
@@ -5986,3 +5980,45 @@ def nupack_complex_secondary_structure_constraint(
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
+
+
+def nupack_complex_base_pair_probabilities(strand_complex: Complex, model: nupack.Model) -> np.ndarray:
+    """
+    Calculates base-pair probabilities according to NUPACK 4.
+
+    :param strand_complex:
+        Ordered tuple of strands in complex (specifying a particular circular ordering, which is
+        imposed on all considered secondary structures)
+    :param model:
+        NUPACK model to use (e.g., to specify temperature and/or magnesium concentration)
+    :return:
+        2D Numpy array of floats, with `result[i1][i2]` giving the base-pair probability of base at position
+        `i1` with base at position `i2` (if `i1` != `i2`), where `i1` and `i2` are the absolute positions
+        of the bases in the entire ordered list of strands. For example, with strands AAAA and TTTTT,
+        there are nine indices 0,1,2,3,4,5,6,6,7, with positions 0,1,2,3 on the first strand AAAA,
+        and positions 4,5,6,7,8 on the second strand TTTTT.
+        If `i1` == `i2`, then `result[i1][i1]` is the probability that the base at position `i1` is
+        *unpaired*.
+    """
+    try:
+        from nupack import Complex as NupackComplex
+        from nupack import Model as NupackModel
+        from nupack import ComplexSet as NupackComplexSet
+        from nupack import Strand as NupackStrand
+        from nupack import SetSpec as NupackSetSpec
+        from nupack import complex_analysis as nupack_complex_analysis
+        from nupack import PairsMatrix as NupackPairsMatrix
+    except ModuleNotFoundError:
+        raise ImportError(
+            'NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. '
+            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex]
+    nupack_complex: NupackComplex = NupackComplex(nupack_strands)
+    nupack_complex_set = NupackComplexSet(
+        nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
+    nupack_complex_analysis_result = nupack_complex_analysis(
+        nupack_complex_set, compute=['pairs'], model=model)
+    pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
+    nupack_complex_result: np.ndarray = pairs.to_array()
+    return nupack_complex_result
