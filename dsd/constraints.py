@@ -12,6 +12,8 @@ legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyCo
 and  :any:`SequenceConstraint`, an alias for a function taking a string as input and returning a bool.
 """
 
+from __future__ import annotations
+
 import os
 import math
 import json
@@ -51,13 +53,18 @@ fixed_key = 'fixed'
 label_key = 'label'
 strands_key = 'strands'
 domains_key = 'domains'
+domain_pools_key = 'domain_pools'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
 group_name_key = 'group'
-domain_pool_key = 'pool'
+domain_pool_name_key = 'pool_name'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
+idx_key = 'idx'
+num_times_sequences_reset_key = 'num_times_sequences_reset'
+replace_with_close_sequences_key = 'replace_with_close_sequences'
+hamming_probability_key = 'hamming_probability'
 rng_state_key = 'rng_state'
 
 Complex = Tuple['Strand', ...]
@@ -70,7 +77,8 @@ Set of all DNA bases.
 """
 
 generation_upper_limit = 4 ** 12
-num_random_sequences_to_generate_at_once = 10 ** 5  # constant
+# num_random_sequences_to_generate_at_once = 10 ** 5  # constant
+num_random_sequences_to_generate_at_once = 30
 # num_random_sequences_to_generate_at_once = 2 * 10 ** 6
 updated_num_gen_sequences = num_random_sequences_to_generate_at_once
 # will be increased if no sequences satisfying constraints are found after generating 100,000
@@ -518,7 +526,7 @@ class RunsOfBasesConstraint(NumpyConstraint):
 
 
 @dataclass
-class DomainPool(JSONSerializable):
+class DomainPool:
     """
     Represents a group of related :any:`Domain`'s that share common properties in their sequence design,
     such as length of DNA sequence, or bounds on nearest-neighbor duplex energy.
@@ -565,8 +573,8 @@ class DomainPool(JSONSerializable):
     Optional; default is empty.
     """
 
-    _sequences: dn.DNASeqList = field(compare=False, hash=False,
-                                      default_factory=lambda: dn.DNASeqList(length=0), repr=False)
+    sequences: dn.DNASeqList = field(compare=False, hash=False,
+                                     default_factory=lambda: dn.DNASeqList(length=0), repr=False)
     # list of available sequences; we iterate through this and then generate new ones when they run out
     # They are randomly permuted, so if this is all sequences of a given length satisfying the numpy
     # sequence constraints, then we will go through them in a different order next time the second time.
@@ -575,7 +583,9 @@ class DomainPool(JSONSerializable):
     # This is represented as a DNASeqList for efficiency when calculating Hamming distances
     # when the option replace_with_close_sequences is True
 
-    _idx: int = field(compare=False, hash=False, default=0, repr=False)
+    idx: int = field(compare=False, hash=False, default=0)
+
+    num_times_sequences_reset: int = 0
 
     replace_with_close_sequences: bool = False
 
@@ -611,28 +621,64 @@ class DomainPool(JSONSerializable):
                                  f'but the element at index {idx} is of type {type(seq_constraint)}')
             idx += 1
 
-    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
+    def to_json(self, include_sequences: bool) -> str:
+        json_map = self.to_json_serializable(include_sequences)
+        json_str = json.dumps(json_map, indent=2)
+        return json_str
+
+    def to_json_serializable(self, include_sequences: bool) -> Dict[str, Any]:
+        # serialize _sequences and _idx only
         dct = {
             name_key: self.name,
             length_key: self.length,
+            idx_key: self.idx,
+            num_times_sequences_reset_key: self.num_times_sequences_reset,
+            replace_with_close_sequences_key: self.replace_with_close_sequences,
+            hamming_probability_key: self.hamming_probability,
         }
+        if include_sequences:
+            dct[sequences_key] = self.sequences.to_list()
         return dct
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
+        sequences_list = json_map[sequences_key]
+        sequences = dn.DNASeqList(seqs=sequences_list)
+        idx = json_map[idx_key]
+        name = json_map[name_key]
+        length = json_map[length_key]
+        num_times_sequences_reset = json_map[num_times_sequences_reset_key]
+        replace_with_close_sequences = json_map[replace_with_close_sequences_key]
+        hamming_probability_str_keys = json_map[hamming_probability_key]
+        hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
+        return DomainPool(name=name, length=length, sequences=sequences, idx=idx,
+                          num_times_sequences_reset=num_times_sequences_reset,
+                          replace_with_close_sequences=replace_with_close_sequences,
+                          hamming_probability=hamming_probability)
+
+    def sequences_and_idx_from_json_serializable(self, json_map: Dict[str, Any]) -> None:
+        # rehydrate _sequences and _idx only
+        sequences = json_map[sequences_key]
+        self.sequences = dn.DNASeqList(seqs=sequences)
+        idx = json_map[idx_key]
+        self.idx = idx
 
     def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
         # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
-        self._sequences = self._generate_sequences_satisfying_numpy_constraints(rng)
+        self.sequences = self._generate_sequences_satisfying_numpy_constraints(rng)
         self._filter_sequence_constraints()
-        self._idx = 0
+        self.idx = 0
+        self.num_times_sequences_reset += 1
 
     def _filter_sequence_constraints(self) -> None:
         if len(self.sequence_constraints) == 0:
             return
         idxs_to_keep = []
-        for idx in range(self._sequences.numseqs):
-            seq = self._sequences.get_seq_str(idx)
+        for idx in range(self.sequences.numseqs):
+            seq = self.sequences.get_seq_str(idx)
             if self.satisfies_sequence_constraints(seq):
                 idxs_to_keep.append(idx)
-        self._sequences.keep_seqs_at_indices(idxs_to_keep)
+        self.sequences.keep_seqs_at_indices(idxs_to_keep)
 
     def __hash__(self) -> int:
         return hash((self.name, self.length))
@@ -661,7 +707,7 @@ class DomainPool(JSONSerializable):
             dictionary mapping Hamming distances to remaining sequences that are that
             Hamming distance from `previous_sequence`
         """
-        remaining_sequences = self._sequences.sublist(self._idx)
+        remaining_sequences = self.sequences.sublist(self.idx)
         return remaining_sequences.hamming_map(previous_sequence)
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
@@ -693,7 +739,7 @@ class DomainPool(JSONSerializable):
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            if self._idx >= len(self._sequences):
+            if self.idx >= len(self.sequences):
                 logger.debug('All pool sequences have been used. Regenerating new sequences.')
                 self._reset_precomputed_sequences(rng)
 
@@ -706,8 +752,7 @@ class DomainPool(JSONSerializable):
             # after = time.perf_counter_ns()
             # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
 
-            # Some distances may not exist, so scale the probabilities of the remaining so that
-            # they sum to one
+            # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
             distances = np.array(list(neighbors.keys()))
             existing_hamming_probabilities = hamming_probabilities[distances - 1]
             prob_sum = existing_hamming_probabilities.sum()
@@ -716,19 +761,19 @@ class DomainPool(JSONSerializable):
             hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
             assert len(neighbors[hamming_dist]) > 0
             sequence = rng.choice(neighbors[hamming_dist])
-            swap_idx = self._sequences.index(sequence)
+            swap_idx = self.sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
-            self._sequences[self._idx], self._sequences[swap_idx] = \
-                self._sequences[swap_idx], self._sequences[self._idx]
-            self._idx += 1
+            self.sequences[self.idx], self.sequences[swap_idx] = \
+                self.sequences[swap_idx], self.sequences[self.idx]
+            self.idx += 1
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
-        if self._idx >= len(self._sequences):
+        if self.idx >= len(self.sequences):
             self._reset_precomputed_sequences(rng)
-        sequence = self._sequences[self._idx]
-        self._idx += 1
+        sequence = self.sequences[self.idx]
+        self.idx += 1
         return sequence
 
     # def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
@@ -1024,7 +1069,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         dct: Dict[str, Any] = {name_key: self.name}
         if self._pool is not None:
-            dct[domain_pool_key] = self._pool.to_json_serializable(suppress_indent)
+            dct[domain_pool_name_key] = self._pool.name
         if self.has_sequence():
             dct[sequence_key] = self._sequence
             if self.fixed:
@@ -1037,7 +1082,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     def from_json_serializable(json_map: Dict[str, Any],
                                pool_with_name: Optional[Dict[str, DomainPool]],
                                label_decoder: Callable[[Any], DomainLabel] = lambda label: label) \
-            -> 'Domain[DomainLabel]':
+            -> Domain[DomainLabel]:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1061,17 +1106,16 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         label = label_decoder(label_json)
 
         pool: Optional[DomainPool]
-        pool_map: Optional[Dict[str, Any]] = json_map.get(domain_pool_key)
-        if pool_map is not None:
-            pool_name: str = mandatory_field(Domain, pool_map, name_key)
-            pool_length: int = mandatory_field(Domain, pool_map, length_key)
+        pool_name: Optional[str] = json_map.get(domain_pool_name_key)
+        if pool_name is not None:
             if pool_with_name is not None:
                 pool = pool_with_name[pool_name] if pool_with_name is not None else None
-                if pool_length != pool.length:
-                    raise ValueError(f'JSON-stored DomainPool length {pool_length} not equal to pool length '
-                                     f'{pool.length} found in dictionary pool_with_name')
+                # if pool_length != pool.length:
+                #     raise ValueError(f'JSON-stored DomainPool length {pool_length} not equal to pool length '
+                #                      f'{pool.length} found in dictionary pool_with_name')
             else:
-                pool = DomainPool(name=pool_name, length=pool_length)
+                raise AssertionError()
+                # pool = DomainPool(name=pool_name, length=pool_length, idx=pool_idx)
         else:
             pool = None
 
@@ -1960,7 +2004,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    domain_pools: Dict[DomainPool, List[Domain]] = field(init=False)
+    domain_pools_to_domain_map: Dict[DomainPool, List[Domain]] = field(init=False)
     """
     Dict mapping each :any:`DomainPool` to a list of the :any:`Domain`'s in this :any:`Design` in the pool.
 
@@ -2049,10 +2093,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         for strand in self.strands:
             self.strand_groups[strand.group].append(strand)
 
-        self.domain_pools = defaultdict(list)
-        for domain in self.domains:
-            if domain._pool is not None:  # noqa
-                self.domain_pools[domain.pool].append(domain)
+        self.store_domain_pools()
 
         # set up quick access to domain by name, and ensure each domain name unique
         self.domains_by_name = {}
@@ -2062,11 +2103,18 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                  f'but I found two domains with name {domain.name}')
             self.domains_by_name[domain.name] = domain
 
+    def store_domain_pools(self) -> None:
+        self.domain_pools_to_domain_map = defaultdict(list)
+        for domain in self.domains:
+            if domain._pool is not None:  # noqa
+                self.domain_pools_to_domain_map[domain.pool].append(domain)
+
     def to_json(self) -> str:
         """
         :return:
             JSON string representing this :any:`Design`.
         """
+        self.store_domain_pools()
         return json_encode(self, suppress_indent=True)
 
     @staticmethod
@@ -2107,7 +2155,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         return {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
-            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains]
+            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
         }
 
     @staticmethod

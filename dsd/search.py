@@ -42,6 +42,9 @@ Stochastic local search for finding DNA sequences to assign to
 # contract, strict liability, or tort (including negligence or otherwise)
 # arising in any way out of the use of this software, even if advised of the
 # possibility of such damage.
+
+from __future__ import annotations
+
 import json
 import math
 import itertools
@@ -1054,28 +1057,54 @@ def _write_sequences(design: Design, directory_intermediate: str, directory_fina
                                              sequences_content, '.txt')
 
 
-def _write_dsd_design_json(design: Design, directory_intermediate: str, directory_final: str,
-                           filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
+def _write_dsd_design_json(design: Design, directories: _Directories,
+                           num_new_optimal_padded: str) -> None:
+    directory_intermediate = directories.dsd_design
+    filename_with_iteration_no_ext = f'{directories.dsd_design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
+    _write_text_intermediate_and_final_files(None, directory_intermediate,
+                                             None, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_rng_state(rng: numpy.random.Generator, directory_intermediate: str, directory_final: str,
-                     filename_with_iteration_no_ext: str, filename_final_no_ext: str) -> None:
+def _write_rng_state(rng: numpy.random.Generator, directories: _Directories,
+                     num_new_optimal_padded: str) -> None:
+    directory_intermediate = directories.rng_state
+    filename_with_iteration_no_ext = f'{directories.rng_state_filename_no_ext}-{num_new_optimal_padded}'
     state = rng.bit_generator.state
     json_str = json.dumps(state, indent=2)
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
+    _write_text_intermediate_and_final_files(None, directory_intermediate,
+                                             None, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_text_intermediate_and_final_files(directory_final: str, directory_intermediate: str,
-                                             filename_final_no_ext: str, filename_with_iteration_no_ext: str,
+def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], directories: _Directories) -> None:
+    directory_intermediate = directories.domain_pools
+
+    for pool in domain_pools:
+        # to avoid filling drive with large files of sequences, only write domain pool when it resets
+        try:
+            highest_idx = _find_highest_index_in_directory(directories.domain_pools, pool.name, 'json')
+        except ValueError:
+            highest_idx = -1
+
+        if highest_idx < pool.num_times_sequences_reset:
+            filename_no_ext = f'{pool.name}-{pool.num_times_sequences_reset}'
+            domain_pools_json_map = pool.to_json_serializable(include_sequences=True)
+            domain_pools_json_str = json.dumps(domain_pools_json_map, indent=2)
+            _write_text_intermediate_and_final_files(None, directory_intermediate,
+                                                     None, filename_no_ext,
+                                                     domain_pools_json_str, '.json')
+
+
+def _write_text_intermediate_and_final_files(directory_final: Optional[str], directory_intermediate: str,
+                                             filename_final_no_ext: Optional[str],
+                                             filename_with_iteration_no_ext: str,
                                              content: str, ext: str) -> None:
     for directory, filename in zip([directory_intermediate, directory_final],
                                    [filename_with_iteration_no_ext, filename_final_no_ext]):
+        if directory is None or filename is None:
+            continue
         full_filename = os.path.join(directory, filename + ext)
         with open(full_filename, 'w') as file:
             file.write(content)
@@ -1147,12 +1176,14 @@ class _Directories:
     # directories "fully qualified relative to project root": out joined with "subdirectory" strings below
     dsd_design: str = field(init=False)
     rng_state: str = field(init=False)
+    domain_pools: str = field(init=False)
     report: str = field(init=False)
     sequence: str = field(init=False)
 
     # relative to out directory
     dsd_design_subdirectory: str = field(init=False, default='dsd_designs')
     rng_state_subdirectory: str = field(init=False, default='rng_state')
+    domain_pools_subdirectory: str = field(init=False, default='domain_pools')
     report_subdirectory: str = field(init=False, default='reports')
     sequence_subdirectory: str = field(init=False, default='sequences')
 
@@ -1165,10 +1196,14 @@ class _Directories:
     debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
     info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
 
+    def all_subdirectories(self) -> List[str]:
+        return [self.dsd_design, self.rng_state, self.domain_pools, self.report, self.sequence]
+
     def __init__(self, out: str, debug: bool, info: bool) -> None:
         self.out = out
         self.dsd_design = os.path.join(self.out, self.dsd_design_subdirectory)
         self.rng_state = os.path.join(self.out, self.rng_state_subdirectory)
+        self.domain_pools = os.path.join(self.out, self.domain_pools_subdirectory)
         self.report = os.path.join(self.out, self.report_subdirectory)
         self.sequence = os.path.join(self.out, self.sequence_subdirectory)
 
@@ -1420,7 +1455,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
 
-    if params.random_seed is not None:
+    if params.random_seed is not None and not params.restart:
         logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
     # need to assign to local function variable so it doesn't look like a method call
@@ -1491,12 +1526,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                     current_time: float = time.time()
                     write_report = False
                     # don't write report unless it is
-                    #   the first iteration (time_of_last_improvement < 0 ),
-                    #   the last iteration (len(violation_set_opt.all_violations) == 0), or
-                    #   it has been more than report_delay seconds since writing the last report
-                    if (time_of_last_improvement < 0
-                            or len(violation_set_opt.all_violations) == 0
-                            or current_time - time_of_last_improvement >= params.report_delay):
+                    if (time_of_last_improvement < 0  # first iteration
+                            or len(violation_set_opt.all_violations) == 0  # last iteration (search is over)
+                            or current_time - time_of_last_improvement >= params.report_delay):  # > report_delay seconds since last report
                         time_of_last_improvement = current_time
                         write_report = True
                         logger.debug('writing report')
@@ -1549,7 +1581,7 @@ def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restar
         os.makedirs(directories.out)
     if not restart:
         _clear_directory(directories.out, force_overwrite)
-    for subdir in [directories.dsd_design, directories.rng_state, directories.report, directories.sequence]:
+    for subdir in directories.all_subdirectories():
         if not os.path.exists(subdir):
             os.makedirs(subdir)
     return directories
@@ -1652,17 +1684,21 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
     # which are ignored. This applies to both the design and the RNG state
 
+    # get DomainPools
+    pool_with_name = read_domain_pools(directories)
+
     # returns highest index found, as well as name of corresponding design file
-    highest_idx = _find_highest_index_in_dsd_design_subdir(directories.dsd_design)
+    highest_idx_design = _find_highest_index_in_directory(directories.dsd_design,
+                                                          directories.dsd_design_filename_no_ext, 'json')
     design_filename = os.path.join(directories.dsd_design,
-                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx}.json')
+                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx_design}.json')
     with open(design_filename, 'r') as file:
         design_json_str = file.read()
-    design_with_sequences = dc.Design.from_json(design_json_str)
+    design_with_sequences = dc.Design.from_json(design_json_str, pool_with_name=pool_with_name)
 
     # get RNG state
     rng_filename = os.path.join(directories.rng_state,
-                                f'{directories.rng_state_filename_no_ext}-{highest_idx}.json')
+                                f'{directories.rng_state_filename_no_ext}-{highest_idx_design}.json')
     with open(rng_filename, 'r') as file:
         rng_state_json = file.read()
     rng_state = json.loads(rng_state_json)
@@ -1678,21 +1714,54 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     for domain_with_seq, domain in zip(domains_with_seq, domains):
         domain.sequence = domain_with_seq.sequence
 
-    return highest_idx, rng
+    return highest_idx_design, rng
 
 
-def _find_highest_index_in_dsd_design_subdir(dsd_design_directory: str) -> int:
-    # return index of filename with latest new optimal sequences
+def read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
+    # return dict mapping name of DomainPool to DomainPool, read from highest index of file with certain
+    # name in directories.domain_pool subdirectory
+
+    # first find pool names from dsd_design files
+    highest_idx_design = _find_highest_index_in_directory(directories.dsd_design,
+                                                          directories.dsd_design_filename_no_ext, 'json')
+    design_filename = os.path.join(directories.dsd_design,
+                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx_design}.json')
+    with open(design_filename, 'r') as file:
+        design_json_str = file.read()
+    design_json = json.loads(design_json_str)
+    domains_json = design_json[dc.domains_key]
+    pool_names: Set[str] = set()
+    for domain_json in domains_json:
+        pool_name = domain_json[dc.domain_pool_name_key]
+        pool_names.add(pool_name)
+
+    pool_with_name = {}
+    for pool_name in pool_names:
+        highest_idx_pool = _find_highest_index_in_directory(directories.domain_pools,
+                                                            pool_name, 'json')
+        pool_filename = os.path.join(directories.domain_pools, f'{pool_name}-{highest_idx_pool}.json')
+        with open(pool_filename, 'r') as file:
+            pool_json_str = file.read()
+        pool_json = json.loads(pool_json_str)
+        pool = dc.DomainPool.from_json_serializable(pool_json)
+        assert pool.name == pool_name
+        pool_with_name[pool_name] = pool
+
+    return pool_with_name
+
+
+def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
+    # return highest index of filename (name matches "<filename_start>-<index>.<ext>"
     filenames = [filename
-                 for filename in os.listdir(dsd_design_directory)
-                 if os.path.isfile(os.path.join(dsd_design_directory, filename))]
+                 for filename in os.listdir(directory)
+                 if os.path.isfile(os.path.join(directory, filename))]
 
-    pattern = re.compile(r'-(\d+)\.json')
+    pattern = re.compile(filename_start + r'-(\d+)\.' + ext)
     filenames_matching = [filename for filename in filenames if pattern.search(filename)]
 
     if len(filenames_matching) == 0:
-        raise ValueError(f'no files in directory "{dsd_design_directory}" '
-                         f'match the pattern "*-<index>.json";\n'
+        raise ValueError(f'no files in directory "{directory}" '
+                         f'match the pattern "{filename_start}-<index>.{ext}";\n'
                          f'files:\n'
                          f'{filenames}')
 
@@ -1713,19 +1782,10 @@ def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
                               num_digits_update: Optional[int]) -> None:
     num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
         else f'{num_new_optimal:0{num_digits_update}d}'
-    _write_dsd_design_json(design,
-                           directory_intermediate=directories.dsd_design,
-                           directory_final=directories.out,
-                           filename_with_iteration_no_ext=f'{directories.dsd_design_filename_no_ext}'
-                                                          f'-{num_new_optimal_padded}',
-                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
 
-    _write_rng_state(rng,
-                     directory_intermediate=directories.rng_state,
-                     directory_final=directories.out,
-                     filename_with_iteration_no_ext=f'{directories.rng_state_filename_no_ext}'
-                                                    f'-{num_new_optimal_padded}',
-                     filename_final_no_ext=f'current-best-{directories.rng_state_filename_no_ext}')
+    _write_dsd_design_json(design, directories, num_new_optimal_padded)
+    _write_rng_state(rng, directories, num_new_optimal_padded)
+    _write_domain_pools(design.domain_pools_to_domain_map.keys(), directories)
 
     _write_sequences(design,
                      directory_intermediate=directories.sequence,
@@ -1733,6 +1793,7 @@ def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
                      filename_with_iteration_no_ext=f'{directories.sequences_filename_no_ext}'
                                                     f'-{num_new_optimal_padded}',
                      filename_final_no_ext=f'current-best-{directories.sequences_filename_no_ext}')
+
     if write_report:
         _write_report(design,
                       directory_intermediate=directories.report,

@@ -124,17 +124,23 @@ def main() -> None:
     #     # nupack_binding_energy_in_bounds,
     # ]
 
-    length = 10
-    domain_pool = dc.DomainPool(f'length-{length} domains', length,
+    numpy_constraints = []
+    replace_with_close_sequences = True
+    # replace_with_close_sequences = False
+    domain_pool_10 = dc.DomainPool(f'length-{10}_domains', 10,
                                 numpy_constraints=numpy_constraints,
-                                replace_with_close_sequences=True,
-                                # replace_with_close_sequences=False,
-                                )  # ,
-    # sequence_constraints=sequence_constraints)
+                                replace_with_close_sequences=replace_with_close_sequences,
+                                )
+    domain_pool_11 = dc.DomainPool(f'length-{11}_domains', 11,
+                                numpy_constraints=numpy_constraints,
+                                replace_with_close_sequences=replace_with_close_sequences,
+                                )
 
     for strand in strands:
-        for domain in strand.domains:
-            domain.pool = domain_pool
+        for domain in strand.domains[:2]:
+            domain.pool = domain_pool_10
+        for domain in strand.domains[2:]:
+            domain.pool = domain_pool_11
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,

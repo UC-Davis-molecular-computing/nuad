@@ -621,7 +621,7 @@ class DNASeqList:
         for distance in range(self.seqlen + 1):
             indices_at_distance = distances == distance
             arr = self.seqarr[indices_at_distance]
-            if arr.shape[0] > 9:  # don't bother putting empty array into map
+            if arr.shape[0] > 0:  # don't bother putting empty array into map
                 distance_map[distance] = DNASeqList(seqarr=arr)
         return distance_map
 
