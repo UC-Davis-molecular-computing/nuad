@@ -15,7 +15,9 @@ import subprocess as sub
 import sys
 from functools import lru_cache
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Union, Tuple, List, Dict, Iterable, Optional, cast, Deque
+from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
+
+import numpy as np
 
 os_is_windows = sys.platform == 'win32'
 
@@ -34,7 +36,7 @@ default_temperature = 37.0
 default_magnesium = 0.0125
 default_sodium = 0.05
 
-_cached_pfunc4_models = {}
+_cached_nupack_models = {}
 
 
 @lru_cache(maxsize=10_000)
@@ -76,14 +78,70 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
             'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     param = (temperature, sodium, magnesium)
-    if param not in _cached_pfunc4_models:
+    if param not in _cached_nupack_models:
         model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
-        _cached_pfunc4_models[param] = model
+        _cached_nupack_models[param] = model
     else:
-        model = _cached_pfunc4_models[param]
+        model = _cached_nupack_models[param]
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
 
     return dg
+
+
+Complex = Tuple['Strand', ...]
+
+
+def nupack_complex_base_pair_probabilities(strand_complex: Complex,
+                                           temperature: float = default_temperature,
+                                           sodium: float = default_sodium,
+                                           magnesium: float = default_magnesium) -> np.ndarray:
+    """
+    Calculates base-pair probabilities according to NUPACK 4.
+
+    :param strand_complex:
+        Ordered tuple of strands in complex (specifying a particular circular ordering, which is
+        imposed on all considered secondary structures)
+    :param model:
+        NUPACK model to use (e.g., to specify temperature and/or magnesium concentration)
+    :return:
+        2D Numpy array of floats, with `result[i1][i2]` giving the base-pair probability of base at position
+        `i1` with base at position `i2` (if `i1` != `i2`), where `i1` and `i2` are the absolute positions
+        of the bases in the entire ordered list of strands. For example, with strands AAAA and TTTTT,
+        there are nine indices 0,1,2,3,4,5,6,6,7, with positions 0,1,2,3 on the first strand AAAA,
+        and positions 4,5,6,7,8 on the second strand TTTTT.
+        If `i1` == `i2`, then `result[i1][i1]` is the probability that the base at position `i1` is
+        *unpaired*.
+    """
+    try:
+        from nupack import Complex as NupackComplex
+        from nupack import Model as NupackModel
+        from nupack import ComplexSet as NupackComplexSet
+        from nupack import Strand as NupackStrand
+        from nupack import SetSpec as NupackSetSpec
+        from nupack import complex_analysis as nupack_complex_analysis
+        from nupack import PairsMatrix as NupackPairsMatrix
+        from nupack import Model  # type: ignore
+    except ModuleNotFoundError:
+        raise ImportError(
+            'NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. '
+            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+
+    param = (temperature, sodium, magnesium)
+    if param not in _cached_nupack_models:
+        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
+        _cached_nupack_models[param] = model
+    else:
+        model = _cached_nupack_models[param]
+
+    nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex]
+    nupack_complex: NupackComplex = NupackComplex(nupack_strands)
+    nupack_complex_set = NupackComplexSet(
+        nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
+    nupack_complex_analysis_result = nupack_complex_analysis(
+        nupack_complex_set, compute=['pairs'], model=model)
+    pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
+    nupack_complex_result: np.ndarray = pairs.to_array()
+    return nupack_complex_result
 
 
 def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]:

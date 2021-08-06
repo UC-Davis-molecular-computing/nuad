@@ -5659,6 +5659,8 @@ def nupack_complex_secondary_structure_constraint(
         base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
         base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
         temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         weight_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
@@ -5743,6 +5745,11 @@ def nupack_complex_secondary_structure_constraint(
     :param temperature:
         Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
     :param weight:
         See :py:data:`Constraint.weight`, defaults to 1.0
     :type weight:
@@ -5789,7 +5796,8 @@ def nupack_complex_secondary_structure_constraint(
         from nupack import PairsMatrix as NupackPairsMatrix
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. '
+            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     # Start Input Validation
     if len(strand_complexes) == 0:
@@ -5846,8 +5854,6 @@ def nupack_complex_secondary_structure_constraint(
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
     # End populating base_pair_probs
 
-    nupack_model = NupackModel(material='dna', celsius=temperature)
-
     if description is None:
         description = ' '.join([str(s) for s in strand_complex_template])
 
@@ -5878,15 +5884,9 @@ def nupack_complex_secondary_structure_constraint(
         return '\n'.join(summary_list)
 
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
-        nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex_]
-        nupack_complex: NupackComplex = NupackComplex(nupack_strands)
-
-        nupack_complex_set = NupackComplexSet(
-            nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
-        nupack_complex_analysis_result = nupack_complex_analysis(
-            nupack_complex_set, compute=['pairs'], model=nupack_model)
-        pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
-        nupack_complex_result: np.ndarray = pairs.to_array()
+        nupack_complex_result = dv.nupack_complex_base_pair_probabilities(strand_complex_,
+                                                                          temperature=temperature,
+                                                                          sodium=sodium, magnesium=magnesium)
 
         # DEBUG: Print out result matrix
         # for r in nupack_complex_result:
@@ -5986,3 +5986,4 @@ def nupack_complex_secondary_structure_constraint(
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
+
