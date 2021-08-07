@@ -124,24 +124,29 @@ class _Violation(Generic[DesignPart]):
     domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
     """:any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`"""
 
-    _weight: float
+    _unweighted_score: float
 
-    def __init__(self, constraint: Constraint, domains: Iterable[Domain], weight: float):
+    def __init__(self, constraint: Constraint, domains: Iterable[Domain], score: float):
         """
-        :param constraint: :any:`Constraint` that was violated to result in this
-        :param domains: :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
+        :param constraint:
+            :any:`Constraint` that was violated to result in this
+        :param domains:
+            :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
+        :param score:
+            total "score" of this violation, typically something like an excess energy over a
+            threshold, squared, multiplied by the :data:`Constraint.weight`
         """
         object.__setattr__(self, 'constraint', constraint)
         domains_frozen = frozenset(domains)
         object.__setattr__(self, 'domains', domains_frozen)
-        object.__setattr__(self, '_weight', weight)
+        object.__setattr__(self, '_unweighted_score', score)
 
     @property
-    def weight(self) -> float:
-        return self.constraint.weight * self._weight
+    def score(self) -> float:
+        return self.constraint.weight * self._unweighted_score
 
     def __repr__(self) -> str:
-        return f'Violation({self.constraint.short_description}, weight={self._weight:.2f})'
+        return f'Violation({self.constraint.short_description}, score={self._unweighted_score:.2f})'
 
     def __str__(self) -> str:
         return repr(self)
@@ -220,11 +225,11 @@ class _ViolationSet:
             violations_of_other_domain -= violations_of_domain
         assert len(self.domain_to_violations[domain]) == 0
 
-    def total_weight(self) -> float:
+    def total_score(self) -> float:
         """
-        :return: Total weight of all violations.
+        :return: Total score of all violations.
         """
-        return sum(violation.weight for violation in self.all_violations)
+        return sum(violation.score for violation in self.all_violations)
 
     def num_violations(self) -> float:
         """
@@ -234,7 +239,7 @@ class _ViolationSet:
 
 
 def _violations_of_constraints(design: Design,
-                               never_increase_weight: bool,
+                               never_increase_score: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[_ViolationSet],
                                iteration: int,
@@ -247,10 +252,10 @@ def _violations_of_constraints(design: Design,
         constraints changed that do not involve a :any:`Domain` in `domains_changed`.
     :param violation_set_old:
         :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed.
-    :param never_increase_weight:
-        Indicates whether the search algorithm is using an update rule that never increases the total weight
+    :param never_increase_score:
+        Indicates whether the search algorithm is using an update rule that never increases the total score
         of violations (i.e., it only goes downhill). If so we can optimize and stop this function early as
-        soon as we find that the violations discovered so far exceed the total weight of the current optimal
+        soon as we find that the violations discovered so far exceed the total score of the current optimal
         solution. In later stages of the search, when the optimal solution so far has very few violated
         constraints, this vastly speeds up the search by allowing most of the constraint checking to be
         skipping for most choices of DNA sequences to `domain_changed`.
@@ -280,18 +285,17 @@ def _violations_of_constraints(design: Design,
             violation_set.remove_violations_of_domain(domain_changed)
 
     # individual domain constraints across all domains in Design
-    # most of the time we only check one of these, so we don't bother passing in the current weight gap
     for domain_constraint in design.domain_constraints:
         domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domain_constraint)
 
-        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-            if never_increase_weight and violation_set_old is not None else None
+        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
+            if never_increase_score and violation_set_old is not None else None
 
         domain_violations, quit_early_in_func = _violations_of_domain_constraint(
-            domains=domains_to_check, constraint=domain_constraint, current_weight_gap=current_weight_gap)
+            domains=domains_to_check, constraint=domain_constraint, current_score_gap=current_score_gap)
         violation_set.update(domain_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
         if quit_early:
             return violation_set
@@ -300,56 +304,56 @@ def _violations_of_constraints(design: Design,
     for strand_constraint in design.strand_constraints:
         strands_to_check = _determine_strands_to_check(design.strands, domains_changed, strand_constraint)
 
-        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-            if never_increase_weight and violation_set_old is not None else None
+        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
+            if never_increase_score and violation_set_old is not None else None
 
         strand_violations, quit_early_in_func = _violations_of_strand_constraint(
-            strands=strands_to_check, constraint=strand_constraint, current_weight_gap=current_weight_gap)
+            strands=strands_to_check, constraint=strand_constraint, current_score_gap=current_score_gap)
         violation_set.update(strand_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
         if quit_early:
             return violation_set
 
     # pairs of domains
     for domain_pair_constraint in design.domain_pair_constraints:
-        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-            if never_increase_weight and violation_set_old is not None else None
+        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
+            if never_increase_score and violation_set_old is not None else None
         domain_pair_violations, quit_early_in_func = _violations_of_domain_pair_constraint(
             domains=design.domains, constraint=domain_pair_constraint, domains_changed=domains_changed,
-            current_weight_gap=current_weight_gap)
+            current_score_gap=current_score_gap)
         violation_set.update(domain_pair_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
         if quit_early:
             return violation_set
 
     # pairs of strands
     for strand_pair_constraint in design.strand_pair_constraints:
-        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-            if never_increase_weight and violation_set_old is not None else None
+        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
+            if never_increase_score and violation_set_old is not None else None
         strand_pair_violations, quit_early_in_func = _violations_of_strand_pair_constraint(
             strands=design.strands, constraint=strand_pair_constraint, domains_changed=domains_changed,
-            current_weight_gap=current_weight_gap)
+            current_score_gap=current_score_gap)
         violation_set.update(strand_pair_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
         if quit_early:
             return violation_set
 
     # complexes
     for complex_constraint in design.complex_constraints:
-        current_weight_gap = violation_set_old.total_weight() - violation_set.total_weight() \
-            if never_increase_weight and violation_set_old is not None else None
+        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
+            if never_increase_score and violation_set_old is not None else None
         complex_violations, quit_early_in_func = _violations_of_complex_constraint(
             constraint=complex_constraint, domains_changed=domains_changed,
-            current_weight_gap=current_weight_gap)
+            current_score_gap=current_score_gap)
         violation_set.update(complex_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
         if quit_early:
             return violation_set
@@ -368,7 +372,7 @@ def _violations_of_constraints(design: Design,
             domains_constraint, sets_of_violating_domains_weights)
         violation_set.update(domains_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         if quit_early:
             return violation_set
 
@@ -387,7 +391,7 @@ def _violations_of_constraints(design: Design,
                 strands_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
-            quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
             if quit_early:
                 return violation_set
 
@@ -407,7 +411,7 @@ def _violations_of_constraints(design: Design,
                 domain_pairs_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
-            quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
             if quit_early:
                 return violation_set
 
@@ -426,7 +430,7 @@ def _violations_of_constraints(design: Design,
                 strand_pairs_constraint, sets_of_violating_domains_weights)
             violation_set.update(domains_violations)
 
-            quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
             if quit_early:
                 return violation_set
 
@@ -438,7 +442,7 @@ def _violations_of_constraints(design: Design,
             design_constraint, sets_of_violating_domains_weights)
         violation_set.update(domains_violations)
 
-        quit_early = _quit_early(never_increase_weight, violation_set, violation_set_old)
+        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         if quit_early:
             return violation_set
 
@@ -455,11 +459,11 @@ def _is_significantly_greater(x: float, y: float) -> bool:
     return x > y + epsilon
 
 
-def _quit_early(never_increase_weight: bool,
+def _quit_early(never_increase_score: bool,
                 violation_set: _ViolationSet,
                 violation_set_old: Optional[_ViolationSet]) -> bool:
-    return (never_increase_weight and violation_set_old is not None
-            and _is_significantly_greater(violation_set.total_weight(), violation_set_old.total_weight()))
+    return (never_increase_score and violation_set_old is not None
+            and _is_significantly_greater(violation_set.total_score(), violation_set_old.total_score()))
 
 
 def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
@@ -615,8 +619,8 @@ def _convert_sets_of_violating_domains_to_violations(
         constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]]) \
         -> Dict[Domain, OrderedSet[_Violation]]:
     domains_violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    for domain_set, weight in sets_of_violating_domains:
-        violation = _Violation(constraint, domain_set, weight)
+    for domain_set, score in sets_of_violating_domains:
+        violation = _Violation(constraint, domain_set, score)
         for domain in domain_set:
             domain_violations = domains_violations[domain]
             domain_violations.add(violation)
@@ -631,13 +635,13 @@ _empty_frozen_set: FrozenSet = frozenset()
 # quitting early since we are usually only checking a single constraint.
 def _violations_of_domain_constraint(domains: Iterable[Domain],
                                      constraint: DomainConstraint,
-                                     current_weight_gap: Optional[float],
+                                     current_score_gap: Optional[float],
                                      ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
     unfixed_domains = [domain for domain in domains if not domain.fixed]
-    violating_domains_weights: List[Optional[Tuple[Domain, float]]] = []
+    violating_domains_scores: List[Optional[Tuple[Domain, float]]] = []
 
-    weight_discovered_here: float = 0.0
+    score_discovered_here: float = 0.0
     quit_early = False
     num_threads = dc.cpu_count()
     chunk_size = num_threads
@@ -651,12 +655,12 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             or len(unfixed_domains) == 1):
         logger.debug(f'NOT using threading for domain constraint {constraint.description}')
         for domain in unfixed_domains:
-            weight: float = constraint(domain.sequence, domain)
-            if weight > 0.0:
-                violating_domains_weights.append((domain, weight))
-                if current_weight_gap is not None:
-                    weight_discovered_here += constraint.weight * weight
-                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+            score: float = constraint(domain.sequence, domain)
+            if score > 0.0:
+                violating_domains_scores.append((domain, score))
+                if current_score_gap is not None:
+                    score_discovered_here += constraint.weight * score
+                    if _is_significantly_greater(score_discovered_here, current_score_gap):
                         quit_early = True
                         break
     else:
@@ -664,34 +668,34 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
 
         domains_to_check = unfixed_domains
 
-        def sequence_to_weight(sequence: str) -> float:
+        def sequence_to_score(sequence: str) -> float:
             return constraint(sequence, None)
 
-        if current_weight_gap is None:
+        if current_score_gap is None:
             sequences_to_check = (domain.sequence for domain in domains_to_check)
-            weights = list(_process_pool.map(sequence_to_weight, sequences_to_check))
-            violating_domains_weights = [(domain, weight) for domain, weight in zip(domains_to_check, weights)
-                                         if weight > 0]
+            scores = list(_process_pool.map(sequence_to_score, sequences_to_check))
+            violating_domains_scores = [(domain, score) for domain, score in zip(domains_to_check, scores)
+                                        if score > 0]
         else:
             chunks = dc.chunker(domains_to_check, chunk_size)
             for domain_chunk in chunks:
                 sequence_chunk = [domain.sequence for domain in domain_chunk]
-                weights = list(_process_pool.map(sequence_to_weight, sequence_chunk))
-                violating_domains_chunk = [(strand, weight) for strand, weight in zip(domain_chunk, weights)
-                                           if weight > 0]
-                violating_domains_weights.extend(violating_domains_chunk)
+                scores = list(_process_pool.map(sequence_to_score, sequence_chunk))
+                violating_domains_chunk = [(strand, score) for strand, score in zip(domain_chunk, scores)
+                                           if score > 0]
+                violating_domains_scores.extend(violating_domains_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(weight for _, weight in violating_domains_chunk)
-                weight_discovered_here += constraint.weight * total_weight_chunk
-                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                total_score_chunk = sum(score for _, score in violating_domains_chunk)
+                score_discovered_here += constraint.weight * total_score_chunk
+                if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
                     break
 
-    for violating_domain_weight in violating_domains_weights:
-        if violating_domain_weight is not None:
-            violating_domain, weight = violating_domain_weight
-            violation = _Violation(constraint, [violating_domain], weight)
+    for violating_domain_score in violating_domains_scores:
+        if violating_domain_score is not None:
+            violating_domain, score = violating_domain_score
+            violation = _Violation(constraint, [violating_domain], score)
             violations[violating_domain].add(violation)
 
     return violations, quit_early
@@ -699,15 +703,15 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
 
 def _violations_of_strand_constraint(strands: Iterable[Strand],
                                      constraint: StrandConstraint,
-                                     current_weight_gap: Optional[float],
+                                     current_score_gap: Optional[float],
                                      ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     """
     :param strands:
         Strands to check for violations
     :param constraint:
         Constraint to check.
-    :param current_weight_gap:
-        Current gap between total weight of constraint violations found so far and total weight of
+    :param current_score_gap:
+        Current gap between total score of constraint violations found so far and total score of
         optimal design. Used for quitting early.
     :return:
         1. dict mapping each domain to the set of violations that blame it
@@ -715,9 +719,9 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
     """
     strands_to_check = [strand for strand in strands if not strand.fixed]
 
-    violating_strands_weights: List[Tuple[Strand, float]] = []
+    violating_strands_scores: List[Tuple[Strand, float]] = []
 
-    weight_discovered_here: float = 0.0
+    score_discovered_here: float = 0.0
     quit_early = False
     num_threads = dc.cpu_count()
     chunk_size = num_threads
@@ -729,50 +733,49 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
     if (not constraint.threaded
             or num_threads == 1
             or len(strands_to_check) == 1
-            or (current_weight_gap is not None and chunk_size == 1)):
+            or (current_score_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand constraint {constraint.description}')
         for strand in strands_to_check:
-            weight: float = constraint(strand.sequence(), strand)
-            if weight > 0.0:
-                violating_strands_weights.append((strand, weight))
-                if current_weight_gap is not None:
-                    weight_discovered_here += constraint.weight * weight
-                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+            score: float = constraint(strand.sequence(), strand)
+            if score > 0.0:
+                violating_strands_scores.append((strand, score))
+                if current_score_gap is not None:
+                    score_discovered_here += constraint.weight * score
+                    if _is_significantly_greater(score_discovered_here, current_score_gap):
                         quit_early = True
                         break
     else:
         logger.debug(f'using threading for strand constraint {constraint.description}')
         assert constraint.sequence_only  # should have been checked in constraint post_init
 
-        def sequence_to_weight(sequence: str) -> float:
+        def sequence_to_score(sequence: str) -> float:
             return constraint(sequence, None)
 
-        if current_weight_gap is None:
+        if current_score_gap is None:
             sequences_to_check = (strand.sequence() for strand in strands_to_check)
-            weights = list(_process_pool.map(sequence_to_weight, sequences_to_check))
-            violating_strands_weights = [(strand, weight) for strand, weight in zip(strands_to_check, weights)
-                                         if weight > 0]
+            scores = list(_process_pool.map(sequence_to_score, sequences_to_check))
+            violating_strands_scores = [(strand, score) for strand, score in zip(strands_to_check, scores)
+                                        if score > 0]
         else:
             chunks = dc.chunker(strands_to_check, chunk_size)
             for strand_chunk in chunks:
                 sequence_chunk = [strand.sequence() for strand in strand_chunk]
-                weights = list(_process_pool.map(sequence_to_weight, sequence_chunk))
-                violating_strands_chunk = [(strand, weight) for strand, weight in zip(strand_chunk, weights)
-                                           if weight > 0]
-                violating_strands_weights.extend(violating_strands_chunk)
+                scores = list(_process_pool.map(sequence_to_score, sequence_chunk))
+                violating_strands_chunk = [(strand, score) for strand, score in zip(strand_chunk, scores)
+                                           if score > 0]
+                violating_strands_scores.extend(violating_strands_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(weight for _, weight in violating_strands_chunk)
-                weight_discovered_here += constraint.weight * total_weight_chunk
-                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                total_score_chunk = sum(score for _, score in violating_strands_chunk)
+                score_discovered_here += constraint.weight * total_score_chunk
+                if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
                     break
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    violating_strand_pair_weight: Optional[Tuple[Strand, Strand, float]]
-    for strand, weight in violating_strands_weights:
+    for strand, score in violating_strands_scores:
         unfixed_domains_set = OrderedSet(strand.unfixed_domains())
-        violation = _Violation(constraint, unfixed_domains_set, weight)
+        violation = _Violation(constraint, unfixed_domains_set, score)
         for domain in unfixed_domains_set:
             violations[domain].add(violation)
 
@@ -789,14 +792,14 @@ def remove_none_from_list(lst: Iterable[Optional[T]]) -> List[T]:
 def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                                           constraint: DomainPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
-                                          current_weight_gap: Optional[float],
+                                          current_score_gap: Optional[float],
                                           ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
-    # If specified, current_weight_gap is the current difference between the weight of violated constraints
-    # that have been found so far in the current iteration, compared to the total weight of violated
+    # If specified, current_score_gap is the current difference between the score of violated constraints
+    # that have been found so far in the current iteration, compared to the total score of violated
     # constraints in the optimal solution so far. It is positive
-    # (i.e., total_weight_opt - total_weight_cur_so_far)
-    # If specified and it is discovered while looping in this function that total_weight_cur_so_far plus
-    # the weight of violated constraints discovered in this function exceeds total_weight_opt, quit early.
+    # (i.e., total_score_opt - total_score_cur_so_far)
+    # If specified and it is discovered while looping in this function that total_score_cur_so_far plus
+    # the score of violated constraints discovered in this function exceeds total_score_opt, quit early.
     domain_pairs_to_check: Sequence[Tuple[Domain, Domain]] = \
         _determine_domain_pairs_to_check(domains, domains_changed, constraint)
 
@@ -804,9 +807,9 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
         logger.debug(f'$ for domain pair constraint {constraint.description}, checking these domain pairs:')
         logger.debug(f'$ {pprint.pformat(domain_pairs_to_check, indent=pprint_indent)}')
 
-    violating_domain_pairs_weights: List[Optional[Tuple[Domain, Domain, float]]] = []
+    violating_domain_pairs_scores: List[Optional[Tuple[Domain, Domain, float]]] = []
 
-    weight_discovered_here: float = 0.0
+    score_discovered_here: float = 0.0
     quit_early = False
 
     cpu_count = dc.cpu_count()
@@ -817,61 +820,61 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
 
     if (not constraint.threaded
             or cpu_count == 1
-            or (current_weight_gap is not None and chunk_size == 1)):
+            or (current_score_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for domain pair constraint {constraint.description}')
         for domain1, domain2 in domain_pairs_to_check:
             assert not domain1.fixed or not domain2.fixed
             assert domain1.name != domain2.name
-            weight: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
-            if weight > 0.0:
-                violating_domain_pairs_weights.append((domain1, domain2, weight))
-                if current_weight_gap is not None:
-                    weight_discovered_here += constraint.weight * weight
-                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+            score: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
+            if score > 0.0:
+                violating_domain_pairs_scores.append((domain1, domain2, score))
+                if current_score_gap is not None:
+                    score_discovered_here += constraint.weight * score
+                    if _is_significantly_greater(score_discovered_here, current_score_gap):
                         quit_early = True
                         break
     else:
         logger.debug(f'using threading for domain pair constraint {constraint.description}')
 
-        def sequence_pair_to_weight(seq_pair: Tuple[str, str]) -> float:
+        def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
             seq1, seq2 = seq_pair
             return constraint(seq1, seq2, None, None)
 
-        if current_weight_gap is None:
+        if current_score_gap is None:
             sequence_pairs_to_check = [(domain1.sequence, domain2.sequence)
                                        for domain1, domain2 in domain_pairs_to_check]
-            weights = list(_process_pool.map(sequence_pair_to_weight, sequence_pairs_to_check))
-            violating_domain_pairs_weights = [(domain1, domain2, weight) for (domain1, domain2), weight in
-                                              zip(domain_pairs_to_check, weights) if weight > 0]
+            scores = list(_process_pool.map(sequence_pair_to_score, sequence_pairs_to_check))
+            violating_domain_pairs_scores = [(domain1, domain2, score) for (domain1, domain2), score in
+                                             zip(domain_pairs_to_check, scores) if score > 0]
 
         else:
             chunks = dc.chunker(domain_pairs_to_check, chunk_size)
             for domain_pair_chunk in chunks:
                 sequence_chunk = [(domain1.sequence, domain2.sequence)
                                   for domain1, domain2 in domain_pair_chunk]
-                weights = list(_process_pool.map(sequence_pair_to_weight, sequence_chunk))
-                violating_domain_pairs_chunk = [(domain1, domain2, weight) for (domain1, domain2), weight in
-                                                zip(domain_pair_chunk, weights) if weight > 0]
-                violating_domain_pairs_weights.extend(violating_domain_pairs_chunk)
+                scores = list(_process_pool.map(sequence_pair_to_score, sequence_chunk))
+                violating_domain_pairs_chunk = [(domain1, domain2, score) for (domain1, domain2), score in
+                                                zip(domain_pair_chunk, scores) if score > 0]
+                violating_domain_pairs_scores.extend(violating_domain_pairs_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(weight for _, _, weight in violating_domain_pairs_chunk)
-                weight_discovered_here += constraint.weight * total_weight_chunk
-                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                total_score_chunk = sum(score for _, _, score in violating_domain_pairs_chunk)
+                score_discovered_here += constraint.weight * total_score_chunk
+                if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
                     break
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    violating_domain_pair_weight: Optional[Tuple[Domain, Domain, float]]
-    for violating_domain_pair_weight in violating_domain_pairs_weights:
-        if violating_domain_pair_weight is not None:
-            domain1, domain2, weight = violating_domain_pair_weight
+    violating_domain_pair_score: Optional[Tuple[Domain, Domain, float]]
+    for violating_domain_pair_score in violating_domain_pairs_scores:
+        if violating_domain_pair_score is not None:
+            domain1, domain2, score = violating_domain_pair_score
             unfixed_domains_set: Set[Domain] = set()
             if not domain1.fixed:
                 unfixed_domains_set.add(domain1)
             if not domain2.fixed:
                 unfixed_domains_set.add(domain2)
-            violation = _Violation(constraint, frozenset(unfixed_domains_set), weight)
+            violation = _Violation(constraint, frozenset(unfixed_domains_set), score)
             if not domain1.fixed:
                 violations[domain1].add(violation)
             if not domain2.fixed:
@@ -883,7 +886,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
 def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                                           constraint: StrandPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
-                                          current_weight_gap: Optional[float],
+                                          current_score_gap: Optional[float],
                                           ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = \
         _determine_strand_pairs_to_check(strands, domains_changed, constraint)
@@ -892,28 +895,28 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         logger.debug(f'$ for strand pair constraint {constraint.description}, checking these strand pairs:')
         logger.debug(f'$ {pprint.pformat(strand_pairs_to_check, indent=pprint_indent)}')
 
-    violating_strand_pairs_weights: List[Tuple[Strand, Strand, float]] = []
+    violating_strand_pairs_scores: List[Tuple[Strand, Strand, float]] = []
 
-    weight_discovered_here: float = 0.0
+    score_discovered_here: float = 0.0
     quit_early = False
     cpu_count = dc.cpu_count()
     chunk_size = cpu_count
 
     if (not constraint.threaded
             or cpu_count == 1
-            or (current_weight_gap is not None and chunk_size == 1)):
+            or (current_score_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
         for strand1, strand2 in strand_pairs_to_check:
             assert not strand1.fixed or not strand2.fixed
             if constraint.sequence_only:
-                weight = constraint(strand1.sequence(), strand2.sequence(), None, None)
+                score = constraint(strand1.sequence(), strand2.sequence(), None, None)
             else:
-                weight = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
-            if weight > 0.0:
-                violating_strand_pairs_weights.append((strand1, strand2, weight))
-                if current_weight_gap is not None:
-                    weight_discovered_here += constraint.weight * weight
-                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                score = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
+            if score > 0.0:
+                violating_strand_pairs_scores.append((strand1, strand2, score))
+                if current_score_gap is not None:
+                    score_discovered_here += constraint.weight * score
+                    if _is_significantly_greater(score_discovered_here, current_score_gap):
                         quit_early = True
                         break
     else:
@@ -921,39 +924,38 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 
         assert constraint.sequence_only  # should have been checked in StrandPairConstraint post_init
 
-        def sequence_pair_to_weight(seq_pair: Tuple[str, str]) -> float:
+        def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
             seq1, seq2 = seq_pair
             return constraint(seq1, seq2, None, None)
 
-        if current_weight_gap is None:
+        if current_score_gap is None:
             sequence_pairs_to_check = [(strand1.sequence(), strand2.sequence())
                                        for strand1, strand2 in strand_pairs_to_check]
-            weights = list(_process_pool.map(sequence_pair_to_weight, sequence_pairs_to_check))
-            violating_strand_pairs_weights = [(strand1, strand2, weight) for (strand1, strand2), weight in
-                                              zip(strand_pairs_to_check, weights) if weight > 0]
+            scores = list(_process_pool.map(sequence_pair_to_score, sequence_pairs_to_check))
+            violating_strand_pairs_scores = [(strand1, strand2, score) for (strand1, strand2), score in
+                                             zip(strand_pairs_to_check, scores) if score > 0]
 
         else:
             chunks = dc.chunker(strand_pairs_to_check, chunk_size)
             for strand_pair_chunk in chunks:
                 sequence_chunk = [(strand1.sequence(), strand2.sequence())
                                   for strand1, strand2 in strand_pair_chunk]
-                weights = list(_process_pool.map(sequence_pair_to_weight, sequence_chunk))
-                violating_strand_pairs_chunk = [(strand1, strand2, weight) for (strand1, strand2), weight in
-                                                zip(strand_pair_chunk, weights) if weight > 0]
-                violating_strand_pairs_weights.extend(violating_strand_pairs_chunk)
+                scores = list(_process_pool.map(sequence_pair_to_score, sequence_chunk))
+                violating_strand_pairs_chunk = [(strand1, strand2, score) for (strand1, strand2), score in
+                                                zip(strand_pair_chunk, scores) if score > 0]
+                violating_strand_pairs_scores.extend(violating_strand_pairs_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(weight for _, _, weight in violating_strand_pairs_chunk)
-                weight_discovered_here += constraint.weight * total_weight_chunk
-                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                total_score_chunk = sum(score for _, _, score in violating_strand_pairs_chunk)
+                score_discovered_here += constraint.weight * total_score_chunk
+                if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
                     break
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    violating_strand_pair_weight: Optional[Tuple[Strand, Strand, float]]
-    for strand1, strand2, weight in violating_strand_pairs_weights:
+    for strand1, strand2, score in violating_strand_pairs_scores:
         unfixed_domains_set = OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains())
-        violation = _Violation(constraint, unfixed_domains_set, weight)
+        violation = _Violation(constraint, unfixed_domains_set, score)
         for domain in unfixed_domains_set:
             violations[domain].add(violation)
 
@@ -962,7 +964,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 
 def _violations_of_complex_constraint(constraint: ComplexConstraint,
                                       domains_changed: Optional[Iterable[Domain]],
-                                      current_weight_gap: Optional[float],
+                                      current_score_gap: Optional[float],
                                       ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
     complexes_to_check: Tuple[Complex] = \
         _determine_complexes_to_check(domains_changed, constraint)
@@ -971,24 +973,24 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
         logger.debug(f'$ for complex constraint {constraint.description}, checking these complexes:')
         logger.debug(f'$ {pprint.pformat(complexes_to_check, indent=pprint_indent)}')
 
-    violating_complexes_weights: List[Optional[Tuple[Complex, float]]] = []
+    violating_complexes_scores: List[Optional[Tuple[Complex, float]]] = []
 
-    weight_discovered_here: float = 0.0
+    score_discovered_here: float = 0.0
     quit_early = False
     cpu_count = dc.cpu_count()
     chunk_size = cpu_count
 
     if (not constraint.threaded
             or cpu_count == 1
-            or (current_weight_gap is not None and chunk_size == 1)):
+            or (current_score_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
         for strand_complex in complexes_to_check:
-            weight = constraint(strand_complex)
-            if weight > 0.0:
-                violating_complexes_weights.append((strand_complex, weight))
-                if current_weight_gap is not None:
-                    weight_discovered_here += constraint.weight * weight
-                    if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+            score = constraint(strand_complex)
+            if score > 0.0:
+                violating_complexes_scores.append((strand_complex, score))
+                if current_score_gap is not None:
+                    score_discovered_here += constraint.weight * score
+                    if _is_significantly_greater(score_discovered_here, current_score_gap):
                         quit_early = True
                         break
             if quit_early:
@@ -997,48 +999,48 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
     else:
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
 
-        def complex_weight_if_violates(strand_complex_: Complex) \
+        def complex_score_if_violates(strand_complex_: Complex) \
                 -> Optional[Tuple[Complex, float]]:
             # return strand pair if it violates the constraint, else None
-            weight_ = constraint(strand_complex_)
-            if weight_ > 0.0:
-                return strand_complex_, weight_
+            score_ = constraint(strand_complex_)
+            if score_ > 0.0:
+                return strand_complex_, score_
             else:
                 return None
 
-        if current_weight_gap is None:
-            violating_complexes_weights = list(
-                _process_pool.map(complex_weight_if_violates, complexes_to_check))
+        if current_score_gap is None:
+            violating_complexes_scores = list(
+                _process_pool.map(complex_score_if_violates, complexes_to_check))
         else:
             chunks = dc.chunker(complexes_to_check, chunk_size)
             for complex_chunk in chunks:
                 violating_complexes_chunk_with_none: List[Optional[Tuple[Complex, float]]] = \
-                    _process_pool.map(complex_weight_if_violates, complex_chunk)
+                    _process_pool.map(complex_score_if_violates, complex_chunk)
                 violating_complexes_chunk: List[Tuple[Complex, float]] = \
                     remove_none_from_list(violating_complexes_chunk_with_none)
-                violating_complexes_weights.extend(violating_complexes_chunk)
+                violating_complexes_scores.extend(violating_complexes_chunk)
 
                 # quit early if possible
-                total_weight_chunk = sum(
-                    complex_pair_weight[1]
-                    for complex_pair_weight in violating_complexes_chunk
-                    if complex_pair_weight is not None)
-                weight_discovered_here += constraint.weight * total_weight_chunk
-                if _is_significantly_greater(weight_discovered_here, current_weight_gap):
+                total_score_chunk = sum(
+                    complex_pair_score[1]
+                    for complex_pair_score in violating_complexes_chunk
+                    if complex_pair_score is not None)
+                score_discovered_here += constraint.weight * total_score_chunk
+                if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
                     break
 
     violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
-    violating_complex_weight: Optional[Tuple[Complex, float]]
-    for violating_complex_weight in violating_complexes_weights:
-        if violating_complex_weight is not None:
-            strand_complex, weight = violating_complex_weight
+    violating_complex_score: Optional[Tuple[Complex, float]]
+    for violating_complex_score in violating_complexes_scores:
+        if violating_complex_score is not None:
+            strand_complex, score = violating_complex_score
             unfixed_domains_set_builder = set()
             strand: Strand
             for strand in strand_complex:
                 unfixed_domains_set_builder.update(strand.unfixed_domains())
             unfixed_domains_set = frozenset(unfixed_domains_set_builder)
-            violation = _Violation(constraint, unfixed_domains_set, weight)
+            violation = _Violation(constraint, unfixed_domains_set, score)
             for domain in unfixed_domains_set:
                 violations[domain].add(violation)
 
@@ -1266,8 +1268,8 @@ class SearchParameters:
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
     """
     Function giving the probability of keeping a change in one
-    :any:`Domain`'s DNA sequence, if the new sequence affects the total weight of all violated
-    :any:`Constraint`'s by `weight_delta`, the input to `probability_of_keeping_change`.
+    :any:`Domain`'s DNA sequence, if the new sequence affects the total score of all violated
+    :any:`Constraint`'s by `score_delta`, the input to `probability_of_keeping_change`.
     See :py:meth:`default_probability_of_keeping_change_function` for a description of the default
     behavior if this parameter is not specified.
     """
@@ -1278,17 +1280,17 @@ class SearchParameters:
     all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
     """
 
-    never_increase_weight: Optional[bool] = None
+    never_increase_score: Optional[bool] = None
     """
     If specified and True, then it is assumed that the function
-    probability_of_keeping_change returns 0 for any negative value of `weight_delta` (i.e., the search
-    never goes "uphill"), and the search for violations is optimized to quit as soon as the total weight
+    probability_of_keeping_change returns 0 for any negative value of `score_delta` (i.e., the search
+    never goes "uphill"), and the search for violations is optimized to quit as soon as the total score
     of violations exceeds that of the current optimal solution. This vastly speeds up the search in later
-    stages, when the current optimal solution is low weight. If both `probability_of_keeping_change` and
-    `never_increase_weight` are left unspecified, then `probability_of_keeping_change` uses the default,
-    which never goes uphill, and `never_increase_weight` is set to True. If
-    `probability_of_keeping_change` is specified and `never_increase_weight` is not, then
-    `never_increase_weight` is set to False. If both are specified and `never_increase_weight` is set to
+    stages, when the current optimal solution is low score. If both `probability_of_keeping_change` and
+    `never_increase_score` are left unspecified, then `probability_of_keeping_change` uses the default,
+    which never goes uphill, and `never_increase_score` is set to True. If
+    `probability_of_keeping_change` is specified and `never_increase_score` is not, then
+    `never_increase_score` is set to False. If both are specified and `never_increase_score` is set to
     True, then take caution that `probability_of_keeping_change` really has the property that it never
     goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
     """
@@ -1356,7 +1358,7 @@ class SearchParameters:
     """
     Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
     `max_domains_to_change` is selected uniformly at random, and then that many
-    :any:`constraints.Domain`'s are selected proportional to the weight of :any:`constraints.Constraint`'s
+    :any:`constraints.Domain`'s are selected proportional to the score of :any:`constraints.Constraint`'s
     that they violated.
     """
 
@@ -1384,20 +1386,21 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     **Search algorithm:**
     This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
-    More precisely, it adds the total weight of all violated constraints
-    (sum of :py:data:`constraints.Constraint.weight` over all violated :any:`Constraint`'s).
-    The goal is to reduce this total weight until it is 0 (i.e., no violated constraints).
+    More precisely, it adds the total score of all violated constraints
+    (sum of :py:data:`constraints.Constraint.weight`*score_of_violation over all violated
+    :any:`Constraint`'s).
+    The goal is to reduce this total score until it is 0 (i.e., no violated constraints).
     Any :any:`Domain` "involved" in the violated :any:`Constraint` is noted as being one of the
     :any:`Domain`'s responsible for the violation. (For example, if a :any:`DomainConstraint` is violated,
     only one :any:`Domain` is blamed, whereas if a :any:`StrandConstraint` is violated, every :any:`Domain`
     in the :any:`Strand` is blamed.) While any :any:`Constraint`'s are violated, a :any:`Domain` is picked
-    at random, with probability proportional to the total weight of all the :any:`Constraint`'s
+    at random, with probability proportional to the total score of all the :any:`Constraint`'s
     for which the :any:`Domain` was blamed. A new DNA sequence is assigned to this
     :any:`Domain` by calling :py:meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
     of that :any:`Domain`. The way to decide whether to keep the changed sequence, or revert to the
-    old sequence, is to calculate the total weight of all violated constraints in the original and changed
-    :any:`Design`, calling their difference `weight_delta` = `new_total_weight` - `old_total_weight`.
-    The value ``probability_of_keeping_change(weight_delta)`` is the probability that the change
+    old sequence, is to calculate the total score of all violated constraints in the original and changed
+    :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
+    The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
     is kept. The default function computing this probability is returned by
     :py:meth:`default_probability_of_keeping_change_function`.
 
@@ -1450,12 +1453,12 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     if params.probability_of_keeping_change is None:
         params.probability_of_keeping_change = default_probability_of_keeping_change_function(design)
-        if params.never_increase_weight is None:
-            params.never_increase_weight = True
-    elif params.never_increase_weight is None:
-        params.never_increase_weight = False
+        if params.never_increase_score is None:
+            params.never_increase_score = True
+    elif params.never_increase_score is None:
+        params.never_increase_score = False
 
-    assert params.never_increase_weight is not None
+    assert params.never_increase_score is not None
 
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
@@ -1472,16 +1475,17 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal, rng = _restart_from_directory(directories, design)
+            num_new_optimal, rng, design = _restart_from_directory(directories, design)
 
-        violation_set_opt, domains_opt, weights_opt = _find_violations_and_weigh(
-            design=design, never_increase_weight=params.never_increase_weight, iteration=-1)
+        violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
+            design=design, never_increase_score=params.never_increase_score, iteration=-1)
 
-        # write initial sequences and report
-        _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal, write_report=True,
-                                  directories=directories,
-                                  report_only_violations=params.report_only_violations,
-                                  num_digits_update=params.num_digits_update)
+        if not params.restart:
+            # write initial sequences and report
+            _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
+                                      write_report=True, directories=directories,
+                                      report_only_violations=params.report_only_violations,
+                                      num_digits_update=params.num_digits_update)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
@@ -1493,38 +1497,35 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                 (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 
-            domains_changed, original_sequences = _reassign_domains(domains_opt, weights_opt,
+            domains_changed, original_sequences = _reassign_domains(domains_opt, scores_opt,
                                                                     params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            violation_set_new, domains_new, weights_new = _find_violations_and_weigh(
+            violation_set_new, domains_new, scores_new = _find_violations_and_score(
                 design=design, domains_changed=domains_changed, violation_set_old=violation_set_opt,
-                never_increase_weight=params.never_increase_weight, iteration=iteration)
+                never_increase_score=params.never_increase_score, iteration=iteration)
 
-            _debug = False
-            # _debug = True
-            if _debug:
-                _double_check_violations_from_scratch(design, iteration, params.never_increase_weight,
-                                                      violation_set_new, violation_set_opt)
+            # _double_check_violations_from_scratch(design, iteration, params.never_increase_score,
+            #                                       violation_set_new, violation_set_opt)
 
             _log_constraint_summary(design=design,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                     iteration=iteration, num_new_optimal=num_new_optimal)
 
-            # based on total weight of new constraint violations compared to optimal assignment so far,
+            # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
-            weight_delta = violation_set_new.total_weight() - violation_set_opt.total_weight()
-            prob_keep_change = params.probability_of_keeping_change(weight_delta)
-            keep_change = rng.random() < prob_keep_change
+            score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
+            prob_keep_change = params.probability_of_keeping_change(score_delta)
+            keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
 
             if not keep_change:
                 _unassign_domains(domains_changed, original_sequences)
             else:
                 # keep new sequence and update information about optimal solution so far
                 domains_opt = domains_new
-                weights_opt = weights_new
+                scores_opt = scores_new
                 violation_set_opt = violation_set_new
-                if weight_delta < 0:  # increment whenever we actually improve the design
+                if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
 
@@ -1592,10 +1593,10 @@ def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restar
     return directories
 
 
-def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_domains_to_change: int,
+def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_domains_to_change: int,
                       rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
-    # pick domain to change, with probability proportional to total weight of constraints it violates
-    probs_opt = np.asarray(weights_opt)
+    # pick domain to change, with probability proportional to total score of constraints it violates
+    probs_opt = np.asarray(scores_opt)
     probs_opt /= probs_opt.sum()
     num_domains_to_change = rng.choice(a=range(1, max_domains_to_change + 1))
     domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
@@ -1618,17 +1619,6 @@ def _reassign_domains(domains_opt: List[Domain], weights_opt: List[float], max_d
     for domain in dependent_domains:
         original_sequences[domain] = domain.sequence
 
-    # Commented out code below due to redefinition of dependent
-    # for dependent domains, ensure each strand is only changed once
-    # strands_dependent = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
-    # for strand in strands_dependent:
-    #     for domain in strand.domains:
-    #         assert domain not in original_sequences
-    #         original_sequences[domain] = domain.sequence
-    #         if domain not in domains_changed:
-    #             domains_changed.append(domain)
-    #     strand.assign_dna_from_pool(rng)
-
     return domains_changed, original_sequences
 
 
@@ -1638,29 +1628,29 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 
 
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
-# to think a new assignment was better than the optimal so far, but a mistake in weight accounting
+# to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
-def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_weight: bool,
+def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_score: bool,
                                           violation_set_new: _ViolationSet, violation_set_opt: _ViolationSet):
-    violation_set_new_fs, domains_new_fs, weights_new_fs = _find_violations_and_weigh(
-        design=design, never_increase_weight=never_increase_weight, iteration=iteration)
-    # XXX: we shouldn't check that the actual weights are close if quit_early is enabled, because then
-    # the total weight found on quitting early will be less than the total weight if not.
-    # But uncomment this, while disabling quitting early, to test more precisely for "wrong total weight".
+    violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
+        design=design, never_increase_score=never_increase_score, iteration=iteration)
+    # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
+    # the total score found on quitting early will be less than the total score if not.
+    # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
     # import math
-    # if not math.isclose(violation_set_new.total_weight(), violation_set_new_fs.total_weight()):
-    # Instead, we check whether the total weight lie on different sides of the opt total weight, i.e.,
+    # if not math.isclose(violation_set_new.total_score(), violation_set_new_fs.total_score()):
+    # Instead, we check whether the total score lie on different sides of the opt total score, i.e.,
     # they make different decisions about whether to change to the new assignment
-    if (violation_set_new_fs.total_weight()
-        > violation_set_opt.total_weight()
-        >= violation_set_new.total_weight()) or \
-            (violation_set_new_fs.total_weight()
-             <= violation_set_opt.total_weight()
-             < violation_set_new.total_weight()):
+    if (violation_set_new_fs.total_score()
+        > violation_set_opt.total_score()
+        >= violation_set_new.total_score()) or \
+            (violation_set_new_fs.total_score()
+             <= violation_set_opt.total_score()
+             < violation_set_new.total_score()):
         logger.warning(f'WARNING! There is a bug in dsd.')
-        logger.warning(f'total weight opt = {violation_set_opt.total_weight()}')
-        logger.warning(f'from scratch, we found {violation_set_new_fs.total_weight()} total weight.')
-        logger.warning(f'iteratively, we found  {violation_set_new.total_weight()} total weight.')
+        logger.warning(f'total score opt = {violation_set_opt.total_score()}')
+        logger.warning(f'from scratch, we found {violation_set_new_fs.total_score()} total score.')
+        logger.warning(f'iteratively, we found  {violation_set_new.total_score()} total score.')
         logger.warning(f'This means the iterative search is saying something different about '
                        f'quitting early than the full search. It indicates a bug in dsd.')
         logger.warning(f'This happened on iteration {iteration}.')
@@ -1685,7 +1675,7 @@ def timestamp() -> str:
 
 
 def _restart_from_directory(directories: _Directories, design: dc.Design) \
-        -> Tuple[int, np.random.Generator]:
+        -> Tuple[int, np.random.Generator, dc.Design]:
     # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
     # which are ignored. This applies to both the design and the RNG state
 
@@ -1699,7 +1689,8 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
                                    f'{directories.dsd_design_filename_no_ext}-{highest_idx_design}.json')
     with open(design_filename, 'r') as file:
         design_json_str = file.read()
-    design_with_sequences = dc.Design.from_json(design_json_str, pool_with_name=pool_with_name)
+    design_stored = dc.Design.from_json(design_json_str, pool_with_name=pool_with_name)
+    dc.verify_designs_match(design_stored, design, check_fixed=False)
 
     # get RNG state
     rng_filename = os.path.join(directories.rng_state,
@@ -1710,16 +1701,18 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     rng = numpy.random.default_rng()
     rng.bit_generator.state = rng_state
 
-    dc.verify_designs_match(design_with_sequences, design, check_fixed=False)
-    domains_with_seq = [domain for domain in design_with_sequences.domains if not domain.fixed]
-    domains = [domain for domain in design.domains if not domain.fixed]
-    domains_with_seq.sort(key=lambda domain: domain.name)
-    domains.sort(key=lambda domain: domain.name)
+    # this is really ugly how we do this, taking parts of the design from `design`,
+    # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
+    # to avoid writing the entire DomainPool (with its 100,000 sequences) every time we write a Design.
+    design_stored.copy_constraints_from(design)
 
-    for domain_with_seq, domain in zip(domains_with_seq, domains):
-        domain.sequence = domain_with_seq.sequence
+    design_json = json.loads(design_json_str)
+    stored_pool_idxs = design_json[dc.domain_pool_idxs_key]
+    for pool in design_stored.domain_pools():
+        idx = stored_pool_idxs[pool.name]
+        pool.num_sampled = idx
 
-    return highest_idx_design, rng
+    return highest_idx_design, rng, design_stored
 
 
 def read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
@@ -1853,10 +1846,10 @@ def _log_time(stopwatch: Stopwatch) -> None:
         time_last_n_calls_available = True
 
 
-def _find_violations_and_weigh(design: Design,
+def _find_violations_and_score(design: Design,
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[_ViolationSet] = None,
-                               never_increase_weight: bool = False,
+                               never_increase_score: bool = False,
                                iteration: int = -1) \
         -> Tuple[_ViolationSet, List[Domain], List[float]]:
     """
@@ -1868,28 +1861,28 @@ def _find_violations_and_weigh(design: Design,
         otherwise assume no constraints changed that do not involve `domain`
     :param violation_set_old:
         :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed
-    :param never_increase_weight:
+    :param never_increase_score:
         See _violations_of_constraints for explanation of this parameter.
     :param iteration:
         Current iteration number; useful for debugging (e.g., conditional breakpoints).
     :return:
-        Tuple (violations, domains, weights)
+        Tuple (violations, domains, scores)
             `violations`: dict mapping each domain to list of constraints that they violated
             `domains`:    list of :any:`Domain`'s that caused violations
-            `weights`:    list of weights for each :any:`Domain`, in same order the domains appear, giving
-                          the total weight of :any:`Constraint`'s violated by the corresponding :any:`Domain`
+            `scores`:    list of scores for each :any:`Domain`, in same order the domains appear, giving
+                          the total score of :any:`Constraint`'s violated by the corresponding :any:`Domain`
     """
     stopwatch = Stopwatch()
 
     violation_set: _ViolationSet = _violations_of_constraints(
-        design, never_increase_weight, domains_changed, violation_set_old, iteration)
+        design, never_increase_score, domains_changed, violation_set_old, iteration)
 
-    domain_to_weight: Dict[Domain, float] = {
-        domain: sum(violation.weight for violation in domain_violations)
+    domain_to_score: Dict[Domain, float] = {
+        domain: sum(violation.score for violation in domain_violations)
         for domain, domain_violations in violation_set.domain_to_violations.items()
     }
-    domains = list(domain_to_weight.keys())
-    weights = list(domain_to_weight.values())
+    domains = list(domain_to_score.keys())
+    scores = list(domain_to_score.values())
 
     stopwatch.stop()
 
@@ -1897,7 +1890,7 @@ def _find_violations_and_weigh(design: Design,
     if log_time:
         _log_time(stopwatch)
 
-    return violation_set, domains, weights
+    return violation_set, domains, scores
 
 
 def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> Iterable[Any]:
@@ -1915,26 +1908,27 @@ def _log_constraint_summary(*, design: Design,
         violation.constraint.short_description for violation in violation_set_new.all_violations]
     violation_description_counts: Counter = Counter(all_violation_descriptions)
 
-    weight_header = 'iteration|#updates|opt weight|new weight|opt count|new count||'
+    score_header = 'iteration|updates|opt score|new score|opt count|new count||'
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in all_constraints)
-    header = weight_header + all_constraints_header
+    header = score_header + all_constraints_header
     header_width = len(header)
-    logger.info('-' * header_width + '\n' + header)
+    logger.info(#'-' * header_width + '\n' +
+                header)
 
-    weight_opt = violation_set_opt.total_weight()
-    weight_new = violation_set_new.total_weight()
-    dec_opt = max(1, math.ceil(math.log(1 / weight_opt, 10)) + 2) if weight_opt > 0 else 1
-    dec_new = max(1, math.ceil(math.log(1 / weight_new, 10)) + 2) if weight_new > 0 else 1
-    weight_str = f'{iteration:9}|{num_new_optimal:8}|' \
-                 f'{weight_opt :10.{dec_opt}f}|' \
-                 f'{weight_new :10.{dec_new}f}|' \
-                 f'{violation_set_opt.num_violations():9}|' \
-                 f'{violation_set_new.num_violations():9}||'
+    score_opt = violation_set_opt.total_score()
+    score_new = violation_set_new.total_score()
+    dec_opt = max(1, math.ceil(math.log(1 / score_opt, 10)) + 2) if score_opt > 0 else 1
+    dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
+    score_str = f'{iteration:9}|{num_new_optimal:7}|' \
+                f'{score_opt :9.{dec_opt}f}|' \
+                f'{score_new :9.{dec_new}f}|' \
+                f'{violation_set_opt.num_violations():9}|' \
+                f'{violation_set_new.num_violations():9}||'
     all_constraints_str = '|'.join(
         f'{violation_description_counts[constraint.short_description]:{len(constraint.short_description)}}'
         for constraint in all_constraints)
-    logger.info(weight_str + all_constraints_str)
+    logger.info(score_str + all_constraints_str)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
@@ -2000,23 +1994,23 @@ def _iterable_is_empty(iterable: abc.Iterable) -> bool:
 
 def default_probability_of_keeping_change_function(design: dc.Design) -> Callable[[float], float]:
     """
-    Returns a function that takes a float input `weight_delta` representing a change in weight of
+    Returns a function that takes a float input `score_delta` representing a change in score of
     violated constraint, which returns a probability of keeping the change in the DNA sequence assignment.
     The probability is 1 if the change it is at least as good as the previous
-    (roughly, the weight change is not positive), and the probability is 0 otherwise.
+    (roughly, the score change is not positive), and the probability is 0 otherwise.
 
     To mitigate floating-point rounding errors, the actual condition checked is that
-    `weight_delta` < :py:data:`epsilon`,
-    on the assumption that if the same weight of constraints are violated,
-    rounding errors in calculating `weight_delta` could actually make it slightly above than 0
+    `score_delta` < :py:data:`epsilon`,
+    on the assumption that if the same score of constraints are violated,
+    rounding errors in calculating `score_delta` could actually make it slightly above than 0
     and result in reverting to the old assignment when we really want to keep the change.
-    If all values of :py:data:`Constraint.weight` are significantly about :py:data:`epsilon`
+    If all values of :py:data:`Constraint.score` are significantly about :py:data:`epsilon`
     (e.g., 1.0 or higher), then this should be is equivalent to keeping a change in the DNA sequence
     assignment if and only if it is no worse than the previous.
 
-    :param design: :any:`Design` to apply this rule for; `design` is required because the weight of
+    :param design: :any:`Design` to apply this rule for; `design` is required because the score of
                    :any:`Constraint`'s in the :any:`Design` are used to calculate an appropriate
-                   epsilon value for determining when a weight change is too small to be significant
+                   epsilon value for determining when a score change is too small to be significant
                    (i.e., is due to rounding error)
     :return: the "keep change" function `f`: :math:`\\mathbb{R} \\to [0,1]`,
              where :math:`f(w_\\delta) = 1` if :math:`w_\\delta \\leq \\epsilon`
@@ -2027,11 +2021,11 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
     min_weight = min(constraint.weight for constraint in design.all_constraints())
     epsilon_from_min_weight = min_weight / 1000000.0
 
-    def keep_change_only_if_no_worse(weight_delta: float) -> float:
-        return 1.0 if weight_delta <= epsilon_from_min_weight else 0.0
+    def keep_change_only_if_no_worse(score_delta: float) -> float:
+        return 1.0 if score_delta <= epsilon_from_min_weight else 0.0
 
-    # def keep_change_only_if_better(weight_delta: float) -> float:
-    #     return 1.0 if weight_delta <= -epsilon_from_min_weight else 0.0
+    # def keep_change_only_if_better(score_delta: float) -> float:
+    #     return 1.0 if score_delta <= -epsilon_from_min_weight else 0.0
 
     return keep_change_only_if_no_worse
     # return keep_change_only_if_better

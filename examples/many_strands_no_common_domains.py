@@ -58,10 +58,10 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    num_strands = 2
+    # num_strands = 2
     # num_strands = 5
     # num_strands = 10
-    # num_strands = 50
+    num_strands = 50
     # num_strands = 100
     # num_strands = 355
 
@@ -89,7 +89,7 @@ def main() -> None:
         threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
-        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.05)
+        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.1)
 
     design = dc.Design(strands,
                        constraints=[

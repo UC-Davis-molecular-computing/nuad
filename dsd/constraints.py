@@ -54,6 +54,7 @@ label_key = 'label'
 strands_key = 'strands'
 domains_key = 'domains'
 domain_pools_key = 'domain_pools'
+domain_pool_idxs_key = 'domain_pool_idxs'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
 group_name_key = 'group'
@@ -61,7 +62,8 @@ domain_pool_name_key = 'pool_name'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
-idx_key = 'idx'
+num_sampled_key = 'num_sampled'
+max_samples_key = 'max_samples'
 num_times_sequences_reset_key = 'num_times_sequences_reset'
 replace_with_close_sequences_key = 'replace_with_close_sequences'
 hamming_probability_key = 'hamming_probability'
@@ -76,10 +78,16 @@ all_dna_bases: Set[str] = {'A', 'C', 'G', 'T'}
 Set of all DNA bases.
 """
 
+
+def default_score_transfer_function(x: float) -> float:
+    """
+    :return: max(0.0, x**2)
+    """
+    return max(0.0, x ** 2)
+
+
 generation_upper_limit = 4 ** 12
-# num_random_sequences_to_generate_at_once = 10 ** 5  # constant
-num_random_sequences_to_generate_at_once = 30
-# num_random_sequences_to_generate_at_once = 2 * 10 ** 6
+num_random_sequences_to_generate_at_once = 10 ** 5  # constant
 updated_num_gen_sequences = num_random_sequences_to_generate_at_once
 # will be increased if no sequences satisfying constraints are found after generating 100,000
 
@@ -575,15 +583,15 @@ class DomainPool:
 
     sequences: dn.DNASeqList = field(compare=False, hash=False,
                                      default_factory=lambda: dn.DNASeqList(length=0), repr=False)
-    # list of available sequences; we iterate through this and then generate new ones when they run out
-    # They are randomly permuted, so if this is all sequences of a given length satisfying the numpy
-    # sequence constraints, then we will go through them in a different order next time the second time.
-    # If a subset of random sequences were generated, then some new sequences could be considered
-    # the second time.
+    # list of available sequences.
+    # We sample with replacement (uniform if :data:`DomainPool.replace_with_close_sequences` = False,
+    # according to :data:`DomainPool.hamming_probability` otherwise)
     # This is represented as a DNASeqList for efficiency when calculating Hamming distances
-    # when the option replace_with_close_sequences is True
+    # when the option `replace_with_close_sequences` is True.
 
-    idx: int = field(compare=False, hash=False, default=0)
+    num_sampled: int = 0
+
+    max_samples: Optional[int] = None
 
     num_times_sequences_reset: int = 0
 
@@ -627,11 +635,11 @@ class DomainPool:
         return json_str
 
     def to_json_serializable(self, include_sequences: bool) -> Dict[str, Any]:
-        # serialize _sequences and _idx only
         dct = {
             name_key: self.name,
             length_key: self.length,
-            idx_key: self.idx,
+            num_sampled_key: self.num_sampled,
+            max_samples_key: self.max_samples,
             num_times_sequences_reset_key: self.num_times_sequences_reset,
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
@@ -642,33 +650,37 @@ class DomainPool:
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
-        sequences_list = json_map[sequences_key]
-        sequences = dn.DNASeqList(seqs=sequences_list)
-        idx = json_map[idx_key]
         name = json_map[name_key]
         length = json_map[length_key]
+        num_sampled = json_map[num_sampled_key]
+        max_samples = json_map[max_samples_key]
         num_times_sequences_reset = json_map[num_times_sequences_reset_key]
         replace_with_close_sequences = json_map[replace_with_close_sequences_key]
         hamming_probability_str_keys = json_map[hamming_probability_key]
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
-        return DomainPool(name=name, length=length, sequences=sequences, idx=idx,
+        sequences_list = json_map[sequences_key]
+        sequences = dn.DNASeqList(seqs=sequences_list)
+        return DomainPool(name=name, length=length, sequences=sequences,
+                          num_sampled=num_sampled, max_samples=max_samples,
                           num_times_sequences_reset=num_times_sequences_reset,
                           replace_with_close_sequences=replace_with_close_sequences,
                           hamming_probability=hamming_probability)
 
-    def sequences_and_idx_from_json_serializable(self, json_map: Dict[str, Any]) -> None:
-        # rehydrate _sequences and _idx only
-        sequences = json_map[sequences_key]
-        self.sequences = dn.DNASeqList(seqs=sequences)
-        idx = json_map[idx_key]
-        self.idx = idx
-
     def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
         # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
-        self.sequences = self._generate_sequences_satisfying_numpy_constraints(rng)
+        self.sequences, use_random_subset = self._generate_sequences_satisfying_numpy_constraints(rng)
         self._filter_sequence_constraints()
-        self.idx = 0
+        self.num_sampled = 0
         self.num_times_sequences_reset += 1
+
+        if use_random_subset:
+            # sampling 2 * self.sequences.numseqs uniformly at random will leave 1/e^2 fraction unsampled
+            # in expectation: https://www.cs.purdue.edu/homes/hmaji/teaching/Spring%202017/lectures/03.pdf
+            self.max_samples = 2 * self.sequences.numseqs
+        else:
+            # if we didn't pick a random subset, we have all the sequences of this length satisfying
+            # the constraints, so never reset and just keep sampling them with replacement forever
+            self.max_samples = None
 
     def _filter_sequence_constraints(self) -> None:
         if len(self.sequence_constraints) == 0:
@@ -707,8 +719,7 @@ class DomainPool:
             dictionary mapping Hamming distances to remaining sequences that are that
             Hamming distance from `previous_sequence`
         """
-        remaining_sequences = self.sequences.sublist(self.idx)
-        return remaining_sequences.hamming_map(previous_sequence)
+        return self.sequences.hamming_map(previous_sequence)
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -739,8 +750,9 @@ class DomainPool:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            if self.idx >= len(self.sequences):
-                logger.debug('All pool sequences have been used. Regenerating new sequences.')
+            if self.max_samples is not None and self.num_sampled >= self.max_samples:
+                logger.info('Twice as many pool sequences have been sampled with replacement from a '
+                            'randomly chosen subset. Regenerating fresh sequences.')
                 self._reset_precomputed_sequences(rng)
 
             # takes neighbor to previous sequence; difference in bases randomly chosen
@@ -761,23 +773,23 @@ class DomainPool:
             hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
             assert len(neighbors[hamming_dist]) > 0
             sequence = rng.choice(neighbors[hamming_dist])
-            swap_idx = self.sequences.index(sequence)
+            # swap_idx = self.sequences.index(sequence)
             # swaps positions of sequence used and the current indexed position so that all
             # sequences after self._idx are unused
-            self.sequences[self.idx], self.sequences[swap_idx] = \
-                self.sequences[swap_idx], self.sequences[self.idx]
-            self.idx += 1
+            # self.sequences[self.num_sampled], self.sequences[swap_idx] = \
+            #     self.sequences[swap_idx], self.sequences[self.num_sampled]
+            self.num_sampled += 1
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
-        if self.idx >= len(self.sequences):
+        if self.num_sampled >= len(self.sequences):
             self._reset_precomputed_sequences(rng)
-        sequence = self.sequences[self.idx]
-        self.idx += 1
+        sequence = self.sequences[self.num_sampled]
+        self.num_sampled += 1
         return sequence
 
-    # def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> List[str]:
-    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) -> dn.DNASeqList:
+    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) \
+            -> Tuple[dn.DNASeqList, bool]:
         global updated_num_gen_sequences  # 10 ** 5 initial value
         bases = self._bases_to_use()
         length = self.length
@@ -805,12 +817,13 @@ class DomainPool:
                 raise ValueError("Too many sequences need to be generated to find a satisfactory sequence. "
                                  "Please adjust constraints. ")
         num_decimals = len(str(num_random_sequences_to_generate_at_once))
+
         logger.info(f'generated {num_starting_seqs:{num_decimals}} sequences '
                     f'of length {length:2}, '
                     f'of which {len(seqs_satisfying_numpy_constraints):{num_decimals}} '
                     f'passed the numpy sequence constraints'
                     f'{" (generated at random)" if use_random_subset else ""}')
-        return seqs_satisfying_numpy_constraints
+        return seqs_satisfying_numpy_constraints, use_random_subset
 
     def _bases_to_use(self) -> Collection[str]:
         # checks explicitly for NumpyRestrictBasesConstraint
@@ -2107,6 +2120,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if domain._pool is not None:  # noqa
                 self.domain_pools_to_domain_map[domain.pool].append(domain)
 
+    def domain_pools(self) -> List[DomainPool]:
+        """
+        :return:
+            list of all :any:`DomainPool`'s in this :any:`Design`
+        """
+        return list(self.domain_pools_to_domain_map.keys())
+
     def to_json(self) -> str:
         """
         :return:
@@ -2154,6 +2174,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
             domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
+            domain_pool_idxs_key: {pool.name: pool.num_sampled for pool in self.domain_pools()}
         }
 
     @staticmethod
@@ -2226,6 +2247,18 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if domain.pool.name == domain_pool_name:
                 domains_in_pool.append(domain)
         return domains_in_pool
+
+    def copy_constraints_from(self, design: Design) -> None:
+        self.domain_constraints = design.domain_constraints
+        self.strand_constraints = design.strand_constraints
+        self.domain_pair_constraints = design.domain_pair_constraints
+        self.strand_pair_constraints = design.strand_pair_constraints
+        self.domains_constraints = design.domains_constraints
+        self.strands_constraints = design.strands_constraints
+        self.domain_pairs_constraints = design.domain_pairs_constraints
+        self.strand_pairs_constraints = design.strand_pairs_constraints
+        self.complex_constraints = design.complex_constraints
+        self.design_constraints = design.design_constraints
 
     def all_constraints(self) -> List[Constraint]:
         # Since list types are covariant, we cannot use + to concatenate them without upsetting mypy:
@@ -2863,20 +2896,21 @@ class Constraint(ABC, Generic[DesignPart]):
 
     weight: float = 1.0
     """
-    Weight of the problem; the higher the total weight of all the :any:`Constraint`'s a :any:`Domain`
-    has caused, the greater likelihood its sequence is changed when stochastically searching for sequences
-    to satisfy all constraints.
+    Constant multiplier Weight of the problem; the higher the total weight of all the :any:`Constraint`'s 
+    a :any:`Domain` has caused, the greater likelihood its sequence is changed when stochastically searching 
+    for sequences to satisfy all constraints.
     """
 
-    weight_transfer_function: Callable[[float], float] = lambda x: max(0, x ** 2)
+    score_transfer_function: Callable[[float], float] = default_score_transfer_function
     """
-    Weight transfer function to use. When a constraint is violated, the constraint returns a nonnegative
-    float indicating the "severity" of the violation. For example, if a :any:`Strand` has secondary structure
-    energy exceeding a threshold, it will return the difference between the energy and the threshold.
-    It is then passed through the weight_transfer_function.
+    Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
+    float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
+    secondary structure energy exceeding a threshold, it will return the difference between the energy and 
+    the threshold.
+    It is then passed through the `score_transfer_function`.
     The default is the squared ReLU function: f(x) = max(0, x^2).
     This "punishes" more severe violations more, i.e., it would
-    bring down the total weight of violations more to reduce a violation 3 kcal/mol in excess of its
+    bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
 
@@ -2977,8 +3011,8 @@ class DomainConstraint(ConstraintWithDomains[Domain]):
         excess = (self.evaluate)(sequence, domain)  # noqa
         if excess < 0:
             return 0.0
-        weight = (self.weight_transfer_function)(excess)  # noqa
-        return weight
+        score = (self.score_transfer_function)(excess)  # noqa
+        return score
 
     def generate_summary(self, domain: Domain, report_only_violations: bool) -> str:
         return (self.summary)(domain)  # noqa
@@ -2999,8 +3033,8 @@ class StrandConstraint(ConstraintWithStrands[Strand]):
         excess = (self.evaluate)(sequence, strand)  # noqa
         if excess < 0:
             return 0.0
-        weight = (self.weight_transfer_function)(excess)  # noqa
-        return weight
+        score = (self.score_transfer_function)(excess)  # noqa
+        return score
 
     def generate_summary(self, strand: Strand, report_only_violations: bool) -> str:
         return self.summary(strand)  # noqa
@@ -3047,8 +3081,8 @@ class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
         excess = (self.evaluate)(sequence1, sequence2, domain1, domain2)  # noqa
         if excess < 0:
             return 0.0
-        weight = (self.weight_transfer_function)(excess)  # noqa
-        return weight
+        score = (self.score_transfer_function)(excess)  # noqa
+        return score
 
     def generate_summary(self, domain_pair: Tuple[Domain, Domain], report_only_violations: bool) -> str:
         domain1, domain2 = domain_pair
@@ -3077,8 +3111,8 @@ class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
         excess = (self.evaluate)(sequence1, sequence2, strand1, strand2)  # noqa
         if excess < 0:
             return 0.0
-        weight = (self.weight_transfer_function)(excess)  # noqa
-        return weight
+        score = (self.score_transfer_function)(excess)  # noqa
+        return score
 
     def generate_summary(self, strand_pair: Tuple[Strand, Strand], report_only_violations: bool) -> str:
         strand1, strand2 = strand_pair
@@ -3104,8 +3138,8 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Dom
     def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
         sets_excesses = (self.evaluate)(domain_pairs)  # noqa
-        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
-        return sets_weights
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]],
                          report_only_violations: bool) -> ConstraintReport:
@@ -3131,8 +3165,8 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Str
     def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
         sets_excesses = (self.evaluate)(strand_pairs)  # noqa
-        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
-        return sets_weights
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]],
                          report_only_violations: bool) -> ConstraintReport:
@@ -3166,8 +3200,8 @@ class DomainsConstraint(ConstraintWithDomains[Iterable[Domain]]):
 
     def __call__(self, domains: Iterable[Domain]) -> List[Tuple[OrderedSet[Domain], float]]:
         sets_excesses = (self.evaluate)(domains)  # noqa
-        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
-        return sets_weights
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, domains: Iterable[Domain], report_only_violations: bool) -> ConstraintReport:
         return (self.summary)(domains, report_only_violations)  # noqa
@@ -3200,8 +3234,8 @@ class StrandsConstraint(ConstraintWithStrands[Iterable[Strand]]):
 
     def __call__(self, strands: Iterable[Strand]) -> List[Tuple[OrderedSet[Domain], float]]:
         sets_excesses = (self.evaluate)(strands)  # noqa
-        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
-        return sets_weights
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, strands: Iterable[Strand], report_only_violations: bool) -> ConstraintReport:
         return (self.summary)(strands, report_only_violations)  # noqa
@@ -3235,8 +3269,8 @@ class DesignConstraint(Constraint[Design]):
     def __call__(self, design: Design, domains_changed: Optional[Iterable[Domain]]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
         sets_excesses = (self.evaluate)(design, domains_changed)  # noqa
-        sets_weights = _alter_weights_by_transfer(sets_excesses, self.weight_transfer_function)
-        return sets_weights
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
         return (self.summary)(design, report_only_violations)  # noqa
@@ -3311,7 +3345,7 @@ def nupack_strand_secondary_structure_constraint(
         sodium: float = dv.default_sodium,
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         threaded: bool = True,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
@@ -3334,8 +3368,8 @@ def nupack_strand_secondary_structure_constraint(
         molarity of magnesium (Mg++) in moles per liter
     :param weight:
         how much to weigh this :any:`Constraint`
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param threaded:
         Whether to use threadds to parallelize.
     :param strands:
@@ -3372,7 +3406,7 @@ def nupack_strand_secondary_structure_constraint(
     return StrandConstraint(description=description,
                             short_description=short_description,
                             weight=weight,
-                            weight_transfer_function=weight_transfer_function,
+                            score_transfer_function=score_transfer_function,
                             evaluate=evaluate,
                             threaded=threaded,
                             strands=strands,
@@ -3384,7 +3418,7 @@ def nupack_domain_pair_constraint(
         temperature: float = dv.default_temperature,
         threaded: bool = False,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
 ) -> DomainPairConstraint:
@@ -3404,8 +3438,8 @@ def nupack_domain_pair_constraint(
         :py:data:`Constraint.threaded`)
     :param weight:
         How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param description:
         Detailed description of constraint suitable for summary report.
     :param short_description:
@@ -3478,7 +3512,7 @@ def nupack_domain_pair_constraint(
     return DomainPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
-                                weight_transfer_function=weight_transfer_function,
+                                score_transfer_function=score_transfer_function,
                                 evaluate=evaluate,
                                 summary=summary,
                                 threaded=threaded)
@@ -3490,7 +3524,7 @@ def nupack_strand_pair_constraint(
         sodium: float = dv.default_sodium,
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'strand_pair_nupack',
         threaded: bool = False,
@@ -3511,8 +3545,8 @@ def nupack_strand_pair_constraint(
         concentration of Mg++ in molar
     :param weight:
         How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param threaded:
         Whether to use threading to parallelize evaluating this constraint.
     :param description:
@@ -3550,7 +3584,7 @@ def nupack_strand_pair_constraint(
     return StrandPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
-                                weight_transfer_function=weight_transfer_function,
+                                score_transfer_function=score_transfer_function,
                                 threaded=threaded,
                                 pairs=pairs,
                                 evaluate=evaluate,
@@ -3627,7 +3661,7 @@ def rna_duplex_strand_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
         threaded: bool = False,
@@ -3644,8 +3678,8 @@ def rna_duplex_strand_pairs_constraint(
         Temperature in Celsius.
     :param weight:
         How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param description:
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
@@ -3746,7 +3780,7 @@ def rna_duplex_strand_pairs_constraint(
     return StrandPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
+                                 score_transfer_function=score_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
@@ -3773,7 +3807,7 @@ def rna_cofold_strand_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
         threaded: bool = False,
@@ -3790,8 +3824,8 @@ def rna_cofold_strand_pairs_constraint(
         Temperature in Celsius.
     :param weight:
         How much to weigh this :any:`Constraint`.
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param description:
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
@@ -3889,7 +3923,7 @@ def rna_cofold_strand_pairs_constraint(
     return StrandPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
+                                 score_transfer_function=score_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
@@ -3931,7 +3965,7 @@ def rna_duplex_domain_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_dom_pairs',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
@@ -3947,8 +3981,8 @@ def rna_duplex_domain_pairs_constraint(
         temperature in Celsius
     :param weight:
         how much to weigh this :any:`Constraint`
-    :param weight_transfer_function:
-        See :py:data:`Constraint.weight_transfer_function`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
     :param description:
         long description of constraint suitable for printing in report file
     :param short_description:
@@ -4015,7 +4049,7 @@ def rna_duplex_domain_pairs_constraint(
     return DomainPairsConstraint(description=description,
                                  short_description=short_description,
                                  weight=weight,
-                                 weight_transfer_function=weight_transfer_function,
+                                 score_transfer_function=score_transfer_function,
                                  evaluate=evaluate,
                                  summary=summary,
                                  pairs=pairs_tuple)
@@ -4060,15 +4094,15 @@ class ComplexConstraint(ConstraintWithComplexes[Complex]):
         excess = (self.evaluate)(strand_complex)  # noqa
         if excess < 0:
             return 0.0
-        weight = (self.weight_transfer_function)(excess)  # noqa
-        return weight
+        score = (self.score_transfer_function)(excess)  # noqa
+        return score
 
     def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
         return (self.summary)(strand_complex)  # noqa
 
 
-def _alter_weights_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
-                               transfer_callback: Callable[[float], float]) \
+def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
+                              transfer_callback: Callable[[float], float]) \
         -> List[Tuple[OrderedSet[Domain], float]]:
     sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
     for set_, excess in sets_excesses:
@@ -4098,20 +4132,13 @@ class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
 
     def __call__(self, complexes: Iterable[Complex]) \
             -> List[Tuple[OrderedSet[Domain], float]]:
-        evaluate_callback = cast(Callable[[Iterable[Complex]],  # noqa
-                                          List[Tuple[OrderedSet[Domain], float]]],  # noqa
-                                 self.evaluate)  # type: ignore
-        transfer_callback = cast(Callable[[float], float],  # noqa
-                                 self.weight_transfer_function)  # type: ignore
-        sets_excesses = evaluate_callback(complexes)
-        sets_weights = _alter_weights_by_transfer(sets_excesses, transfer_callback)
-        return sets_weights
+        sets_excesses = (self.evaluate)(strands)  # noqa
+        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
+        return sets_scores
 
     def generate_summary(self, complexes: Iterable[Complex],
                          report_only_violations: bool) -> ConstraintReport:
-        summary_callback = cast(Callable[[Iterable[Complex], bool], ConstraintReport],  # noqa
-                                self.summary)  # type: ignore
-        return summary_callback(complexes, report_only_violations)
+        return (self.summary)(strands, report_only_violations)  # noqa
 
 
 class _AdjacentDuplexType(Enum):
@@ -5708,7 +5735,7 @@ def nupack_complex_secondary_structure_constraint(
         sodium: float = dv.default_sodium,
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
-        weight_transfer_function: Callable[[float], float] = lambda x: x,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'complex_secondary_structure_nupack',
         threaded: bool = False,
@@ -5800,11 +5827,11 @@ def nupack_complex_secondary_structure_constraint(
         See :py:data:`Constraint.weight`, defaults to 1.0
     :type weight:
         float, optional
-    :param weight_transfer_function:
-        Weight transfer function to use. By default, f(x) = x is used, where x
+    :param score_transfer_function:
+        Score transfer function to use. By default, f(x) = x**2 is used, where x
         is the sum of the squared errors of each base pair that violates the
         threshold.
-    :type weight_transfer_function: Callable[[float], float], optional
+    :type score_transfer_function: Callable[[float], float], optional
     :param description:
         See :py:data:`Constraint.description`, defaults to None
     :type description:
@@ -6027,9 +6054,8 @@ def nupack_complex_secondary_structure_constraint(
     return ComplexConstraint(description=description,
                              short_description=short_description,
                              weight=weight,
-                             weight_transfer_function=weight_transfer_function,
+                             score_transfer_function=score_transfer_function,
                              threaded=threaded,
                              complexes=tuple(strand_complexes),
                              evaluate=evaluate,
                              summary=summary)
-
