@@ -127,11 +127,11 @@ def main() -> None:
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
     domain_pool_10 = dc.DomainPool(f'length-{10}_domains', 10,
-                                # numpy_constraints=numpy_constraints,
+                                numpy_constraints=numpy_constraints,
                                 replace_with_close_sequences=replace_with_close_sequences,
                                 )
     domain_pool_11 = dc.DomainPool(f'length-{11}_domains', 11,
-                                # numpy_constraints=numpy_constraints,
+                                numpy_constraints=numpy_constraints,
                                 replace_with_close_sequences=replace_with_close_sequences,
                                 )
 
