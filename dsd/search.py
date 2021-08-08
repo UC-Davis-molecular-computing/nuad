@@ -231,6 +231,15 @@ class _ViolationSet:
         """
         return sum(violation.score for violation in self.all_violations)
 
+    def score_of_constraint(self, constraint: Constraint) -> float:
+        """
+        :param constraint:
+            constraint to filter scores on
+        :return:
+            Total score of all violations due to `constraint`.
+        """
+        return sum(violation.score for violation in self.all_violations if violation.constraint == constraint)
+
     def num_violations(self) -> float:
         """
         :return: Total number of violations.
@@ -1906,15 +1915,17 @@ def _log_constraint_summary(*, design: Design,
     all_constraints = design.all_constraints()
     all_violation_descriptions = [
         violation.constraint.short_description for violation in violation_set_new.all_violations]
-    violation_description_counts: Counter = Counter(all_violation_descriptions)
 
-    score_header = 'iteration|updates|opt score|new score|opt count|new count||'
+    # violation_description_counts: Counter = Counter(all_violation_descriptions)
+
+    # score_header = 'iteration|updates|opt score|new score|opt count|new count||'
+    score_header = 'iteration|updates|opt score|new score||'
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in all_constraints)
     header = score_header + all_constraints_header
     header_width = len(header)
-    logger.info(#'-' * header_width + '\n' +
-                header)
+    logger.info(  # '-' * header_width + '\n' +
+        header)
 
     score_opt = violation_set_opt.total_score()
     score_new = violation_set_new.total_score()
@@ -1922,13 +1933,22 @@ def _log_constraint_summary(*, design: Design,
     dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
     score_str = f'{iteration:9}|{num_new_optimal:7}|' \
                 f'{score_opt :9.{dec_opt}f}|' \
-                f'{score_new :9.{dec_new}f}|' \
-                f'{violation_set_opt.num_violations():9}|' \
-                f'{violation_set_new.num_violations():9}||'
-    all_constraints_str = '|'.join(
-        f'{violation_description_counts[constraint.short_description]:{len(constraint.short_description)}}'
-        for constraint in all_constraints)
-    logger.info(score_str + all_constraints_str)
+                f'{score_new :9.{dec_new}f}|'  # \
+    # f'{violation_set_opt.num_violations():9}|' \
+    # f'{violation_set_new.num_violations():9}||'
+    # all_constraints_str = '|'.join(
+    #     f'{violation_description_counts[constraint.short_description]:{len(constraint.short_description)}}'
+    #     for constraint in all_constraints)
+    all_constraints_strs = []
+    for constraint in all_constraints:
+        score = violation_set_new.score_of_constraint(constraint)
+        length = len(constraint.short_description)
+        num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        constraint_str = f'{score:{length}.{num_decimals}f}'
+        all_constraints_strs.append(constraint_str)
+    all_constraints_str = '|'.join(all_constraints_strs)
+
+    logger.info(score_str + '|' + all_constraints_str)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
