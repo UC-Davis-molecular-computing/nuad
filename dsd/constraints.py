@@ -764,13 +764,25 @@ class DomainPool:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng)
+            # import time
+            # before = time.perf_counter_ns()
+            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng, True)
+            # after = time.perf_counter_ns()
+            # print(f'time spent sampling Hamming neighbors: {(after - before) / 1e6:.1f} ms')
 
         self.num_sampled += 1
 
         return sequence
 
-    def _sample_hamming_distance_from_sequence(self, previous_sequence, rng):
+    def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator,
+                                               pick_distance_first: bool) -> str:
+        # all possible distances from 1 to len(previous_sequence) are calculated.
+        # if pick_distance_first is true, we save some time by not gathering sequences at all distances
+        # into a dict. Instead we first sample a distance and then look up only those sequences at that
+        # distance to sample. The tradeoff is that if there are no sequences at that distance, we have
+        # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
+        # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
+
         if self.max_samples is not None and self.num_sampled >= self.max_samples:
             logger.info('Twice as many pool sequences have been sampled with replacement from a '
                         'randomly chosen subset. Regenerating fresh sequences.')
@@ -778,29 +790,42 @@ class DomainPool:
         # takes neighbor to previous sequence; difference in bases randomly chosen
         hamming_probabilities = np.array(list(self.hamming_probability.values()))
 
-        # import time
-        # before = time.perf_counter_ns()
-        neighbors = self.find_hamming_distances(previous_sequence)
-        # neighbors_at_distance = self.sequences_at_hamming_distance(previous_sequence, distance)
-        # after = time.perf_counter_ns()
-        # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
+        if pick_distance_first:
+            # pick a distance at random, then re-pick if no sequences are at that distance
+            sequences = None
+            sequence = None
+            while sequences is None or sequences.numseqs == 0:
+                distances = np.array(range(1, len(previous_sequence) + 1))
+                existing_hamming_probabilities = hamming_probabilities[distances - 1]
+                distance = rng.choice(distances, p=existing_hamming_probabilities)
+                sequences = self.sequences_at_hamming_distance(previous_sequence, distance)
+                sequence = rng.choice(sequences)
+                if sequences.numseqs == 0:
+                    logger.info(f'found no sequences Hamming distance {distance} from {previous_sequence}; '
+                                f'trying a new distance')
+            assert sequence is not None
+        else:
+            # first determine all sequences at all distances, then pick distance at random from list of
+            # distances that have at least one sequence at that distance (takes more time usually)
+            neighbors = self.find_hamming_distances(previous_sequence)
 
-        # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
-        distances = np.array(list(neighbors.keys()))
-        existing_hamming_probabilities = hamming_probabilities[distances - 1]
-        prob_sum = existing_hamming_probabilities.sum()
-        existing_hamming_probabilities /= prob_sum
+            # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
+            distances = np.array(list(neighbors.keys()))
+            existing_hamming_probabilities = hamming_probabilities[distances - 1]
+            prob_sum = existing_hamming_probabilities.sum()
+            existing_hamming_probabilities /= prob_sum
 
-        # randomly chooses a Hamming distance to change previous_sequence by
-        hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
-        assert len(neighbors[hamming_dist]) > 0
-        sequence = rng.choice(neighbors[hamming_dist])
+            # randomly chooses a Hamming distance to change previous_sequence by
+            distance = rng.choice(distances, p=existing_hamming_probabilities)
+            assert len(neighbors[distance]) > 0
+            sequence = rng.choice(neighbors[distance])
+
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         if self.num_sampled >= len(self.sequences):
             self._reset_precomputed_sequences(rng)
-        idx = rng.integers(self.sequences.numseqs)
+        idx = int(rng.integers(self.sequences.numseqs))
         sequence = self.sequences[idx]
         self.num_sampled += 1
         return sequence
