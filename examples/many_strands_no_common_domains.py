@@ -79,8 +79,8 @@ def main() -> None:
         threshold=-5.5, temperature=52, short_description='DomainPairNoCompl',
         threaded=threaded)
 
-    # strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
-    #     threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', threaded=threaded)
+    strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
+        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', threaded=threaded)
 
     # strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
     #     threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
@@ -98,12 +98,12 @@ def main() -> None:
                            # domain_pair_nupack_constraint,
                            # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                           # strand_pairs_no_comp_constraint,
+                           # strand_pairs_rna_duplex_constraint,
                        ])
 
     numpy_constraints: List[NumpyConstraint] = [
         # dc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
-        dc.BaseCountConstraint(base='G', high_count=1),
+        # dc.BaseCountConstraint(base='G', high_count=1),
         # dc.BaseEndConstraint(bases=('C', 'G')),
         dc.RunsOfBasesConstraint(['C', 'G'], 4),
         dc.RunsOfBasesConstraint(['A', 'T'], 4),
@@ -124,7 +124,6 @@ def main() -> None:
     #     # nupack_binding_energy_in_bounds,
     # ]
 
-    numpy_constraints = []
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
     domain_pool_10 = dc.DomainPool(f'length-{10}_domains', 10,

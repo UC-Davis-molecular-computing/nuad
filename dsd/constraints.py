@@ -709,17 +709,31 @@ class DomainPool:
 
     def find_hamming_distances(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
         """
-        Makes a dictionary mapping a Hamming distance to a list of sequences, where unused sequences
-        in :py:data:`DomainPool._sequences` are placed in lists corresponding to how many bases
-        different the sequence is to `previous_sequence`.
+        Makes a dictionary mapping a Hamming distance to a :any:`DNASeqList`, corresponding to how many bases
+        different the sequence is from `previous_sequence` (i.e., the Hamming distance).
 
         :param previous_sequence:
-            DNA sequence to be replaced
+            DNA sequence to be find Hamming distances from
         :return:
-            dictionary mapping Hamming distances to remaining sequences that are that
-            Hamming distance from `previous_sequence`
+            dictionary mapping Hamming distances to sequences (represented as :any:`DNASeqList`)
+            that are that Hamming distance from `previous_sequence`
         """
         return self.sequences.hamming_map(previous_sequence)
+
+    def sequences_at_hamming_distance(self, previous_sequence: str,
+                                      distance: int) -> dn.DNASeqList:
+        """
+        Returns a :any:`DNASeqList`, which are `distance` bases
+        different from `previous_sequence` (i.e., the Hamming distance).
+
+        :param previous_sequence:
+            DNA sequence to be find Hamming distances from
+        :param distance:
+            target Hamming distance
+        :return:
+            :any:`DNASeqList` of sequences that are that Hamming distance from `previous_sequence`
+        """
+        return self.sequences.sequences_at_hamming_distance(previous_sequence, distance)
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -750,41 +764,87 @@ class DomainPool:
             # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            if self.max_samples is not None and self.num_sampled >= self.max_samples:
-                logger.info('Twice as many pool sequences have been sampled with replacement from a '
-                            'randomly chosen subset. Regenerating fresh sequences.')
-                self._reset_precomputed_sequences(rng)
-
-            # takes neighbor to previous sequence; difference in bases randomly chosen
-            hamming_probabilities = np.array(list(self.hamming_probability.values()))
-
             # import time
             # before = time.perf_counter_ns()
-            neighbors = self.find_hamming_distances(previous_sequence)  # dict mapping distance:sequences
+            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng, True)
             # after = time.perf_counter_ns()
-            # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
+            # print(f'time spent sampling Hamming neighbors: {(after - before) / 1e6:.1f} ms')
+
+        self.num_sampled += 1
+
+        return sequence
+
+    def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator,
+                                               pick_distance_first: bool) -> str:
+        # all possible distances from 1 to len(previous_sequence) are calculated.
+        # if pick_distance_first is true, we save some time by not gathering sequences at all distances
+        # into a dict. Instead we first sample a distance and then look up only those sequences at that
+        # distance to sample. The tradeoff is that if there are no sequences at that distance, we have
+        # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
+        # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
+
+        if self.max_samples is not None and self.num_sampled >= self.max_samples:
+            logger.info('Twice as many pool sequences have been sampled with replacement from a '
+                        'randomly chosen subset. Regenerating fresh sequences.')
+            self._reset_precomputed_sequences(rng)
+        # takes neighbor to previous sequence; difference in bases randomly chosen
+        hamming_probabilities = np.array(list(self.hamming_probability.values()))
+
+        if pick_distance_first:
+            # pick a distance at random, then re-pick if no sequences are at that distance
+            sequence = None
+            previous_sequence_1d_array = dn.seq2arr(previous_sequence)
+            available_distances_list = list(range(1, len(previous_sequence) + 1))
+
+            # For efficiency we inline the logic of self.sequences_at_hamming_distance()
+            # The next line is the most expensive part of the calculation, so we only do it once,
+            # rather than calling self.sequences_at_hamming_distance() repeatedly, which would recalculate
+            # the next line for each sampled distance even though it doesn't change.
+            computed_distances = np.sum(
+                np.bitwise_xor(self.sequences.seqarr, previous_sequence_1d_array) != 0, axis=1)
+
+            while sequence is None:
+                available_distances_arr = np.array(available_distances_list)
+                existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
+                prob_sum = existing_hamming_probabilities.sum()
+                existing_hamming_probabilities /= prob_sum
+                sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+
+                # sequences = self.sequences_at_hamming_distance(previous_sequence, distance)
+                indices_at_distance = computed_distances == sampled_distance
+                arr = self.sequences.seqarr[indices_at_distance]
+                sequences = dn.DNASeqList(seqarr=arr)
+
+                if sequences.numseqs == 0:
+                    logger.debug(f'found no sequences Hamming distance {sampled_distance} '
+                                 f'from {previous_sequence}; sampling a new distance')
+                    available_distances_list.remove(sampled_distance)
+                else:
+                    sequence = rng.choice(sequences)
+
+        else:
+            # first determine all sequences at all distances, then pick distance at random from list of
+            # distances that have at least one sequence at that distance (takes more time usually)
+            neighbors = self.find_hamming_distances(previous_sequence)
 
             # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
-            distances = np.array(list(neighbors.keys()))
-            existing_hamming_probabilities = hamming_probabilities[distances - 1]
+            available_distances_arr = np.array(list(neighbors.keys()))
+            existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
             prob_sum = existing_hamming_probabilities.sum()
             existing_hamming_probabilities /= prob_sum
+
             # randomly chooses a Hamming distance to change previous_sequence by
-            hamming_dist = rng.choice(distances, p=existing_hamming_probabilities)
-            assert len(neighbors[hamming_dist]) > 0
-            sequence = rng.choice(neighbors[hamming_dist])
-            # swap_idx = self.sequences.index(sequence)
-            # swaps positions of sequence used and the current indexed position so that all
-            # sequences after self._idx are unused
-            # self.sequences[self.num_sampled], self.sequences[swap_idx] = \
-            #     self.sequences[swap_idx], self.sequences[self.num_sampled]
-            self.num_sampled += 1
+            sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+            assert len(neighbors[sampled_distance]) > 0
+            sequence = rng.choice(neighbors[sampled_distance])
+
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         if self.num_sampled >= len(self.sequences):
             self._reset_precomputed_sequences(rng)
-        sequence = self.sequences[self.num_sampled]
+        idx = int(rng.integers(self.sequences.numseqs))
+        sequence = self.sequences[idx]
         self.num_sampled += 1
         return sequence
 

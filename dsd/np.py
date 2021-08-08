@@ -596,17 +596,35 @@ class DNASeqList:
         self.seqarr = np.vstack([self.seqarr, newarr])
         self.numseqs += 1
 
+    def sequences_at_hamming_distance(self, sequence: str, distance: int) -> DNASeqList:
+        sequence_1d_array = seq2arr(sequence)
+        distances = np.sum(np.bitwise_xor(self.seqarr, sequence_1d_array) != 0, axis=1)
+        indices_at_distance = distances == distance
+        arr = self.seqarr[indices_at_distance]
+        return DNASeqList(seqarr=arr)
+
     def hamming_map(self, sequence: str) -> Dict[int, DNASeqList]:
         """Return dict mapping each length `d` to a :any:`DNASeqList` of sequences that are
         Hamming distance `d` from `seq`."""
+        # import time
+        # times = []
+        # before = time.perf_counter_ns()
         sequence_1d_array = seq2arr(sequence)
         distances = np.sum(np.bitwise_xor(self.seqarr, sequence_1d_array) != 0, axis=1)
         distance_map = {}
+        # after_it_prev = time.perf_counter_ns()
+        # print(f'time to calculate Hamming distances: {(after_it_prev - before) / 1e6:.1f} ms')
         for distance in range(self.seqlen + 1):
             indices_at_distance = distances == distance
             arr = self.seqarr[indices_at_distance]
             if arr.shape[0] > 0:  # don't bother putting empty array into map
                 distance_map[distance] = DNASeqList(seqarr=arr)
+            # after_it_next = time.perf_counter_ns()
+            # times.append((after_it_next - after_it_prev) / 1e6)
+            # after_it_prev = after_it_next
+        # after = time.perf_counter_ns()
+        # print(f'time spent finding neighbors: {(after - before) / 1e6:.1f} ms')
+        # print(f'times in each iteration: {times}')
         return distance_map
 
     def sublist(self, start: int, end: Optional[int] = None) -> DNASeqList:
