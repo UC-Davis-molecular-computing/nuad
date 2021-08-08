@@ -1716,7 +1716,7 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     design_stored.copy_constraints_from(design)
 
     design_json = json.loads(design_json_str)
-    stored_pool_idxs = design_json[dc.domain_pool_idxs_key]
+    stored_pool_idxs = design_json[dc.domain_pools_num_sampled_key]
     for pool in design_stored.domain_pools():
         idx = stored_pool_idxs[pool.name]
         pool.num_sampled = idx

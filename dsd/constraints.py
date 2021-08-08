@@ -54,7 +54,7 @@ label_key = 'label'
 strands_key = 'strands'
 domains_key = 'domains'
 domain_pools_key = 'domain_pools'
-domain_pool_idxs_key = 'domain_pool_idxs'
+domain_pools_num_sampled_key = 'domain_pools_num_sampled'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
 group_name_key = 'group'
@@ -2234,7 +2234,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
             domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
-            domain_pool_idxs_key: {pool.name: pool.num_sampled for pool in self.domain_pools()}
+            domain_pools_num_sampled_key: {pool.name: pool.num_sampled for pool in self.domain_pools()}
         }
 
     @staticmethod
