@@ -792,33 +792,51 @@ class DomainPool:
 
         if pick_distance_first:
             # pick a distance at random, then re-pick if no sequences are at that distance
-            sequences = None
             sequence = None
-            while sequences is None or sequences.numseqs == 0:
-                distances = np.array(range(1, len(previous_sequence) + 1))
-                existing_hamming_probabilities = hamming_probabilities[distances - 1]
-                distance = rng.choice(distances, p=existing_hamming_probabilities)
-                sequences = self.sequences_at_hamming_distance(previous_sequence, distance)
-                sequence = rng.choice(sequences)
+            previous_sequence_1d_array = dn.seq2arr(previous_sequence)
+            available_distances_list = list(range(1, len(previous_sequence) + 1))
+
+            # For efficiency we inline the logic of self.sequences_at_hamming_distance()
+            # The next line is the most expensive part of the calculation, so we only do it once,
+            # rather than calling self.sequences_at_hamming_distance() repeatedly, which would recalculate
+            # the next line for each sampled distance even though it doesn't change.
+            computed_distances = np.sum(
+                np.bitwise_xor(self.sequences.seqarr, previous_sequence_1d_array) != 0, axis=1)
+
+            while sequence is None:
+                available_distances_arr = np.array(available_distances_list)
+                existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
+                prob_sum = existing_hamming_probabilities.sum()
+                existing_hamming_probabilities /= prob_sum
+                sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+
+                # sequences = self.sequences_at_hamming_distance(previous_sequence, distance)
+                indices_at_distance = computed_distances == sampled_distance
+                arr = self.sequences.seqarr[indices_at_distance]
+                sequences = dn.DNASeqList(seqarr=arr)
+
                 if sequences.numseqs == 0:
-                    logger.info(f'found no sequences Hamming distance {distance} from {previous_sequence}; '
-                                f'trying a new distance')
-            assert sequence is not None
+                    logger.debug(f'found no sequences Hamming distance {sampled_distance} '
+                                 f'from {previous_sequence}; sampling a new distance')
+                    available_distances_list.remove(sampled_distance)
+                else:
+                    sequence = rng.choice(sequences)
+
         else:
             # first determine all sequences at all distances, then pick distance at random from list of
             # distances that have at least one sequence at that distance (takes more time usually)
             neighbors = self.find_hamming_distances(previous_sequence)
 
             # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
-            distances = np.array(list(neighbors.keys()))
-            existing_hamming_probabilities = hamming_probabilities[distances - 1]
+            available_distances_arr = np.array(list(neighbors.keys()))
+            existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
             prob_sum = existing_hamming_probabilities.sum()
             existing_hamming_probabilities /= prob_sum
 
             # randomly chooses a Hamming distance to change previous_sequence by
-            distance = rng.choice(distances, p=existing_hamming_probabilities)
-            assert len(neighbors[distance]) > 0
-            sequence = rng.choice(neighbors[distance])
+            sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+            assert len(neighbors[sampled_distance]) > 0
+            sequence = rng.choice(neighbors[sampled_distance])
 
         return sequence
 
