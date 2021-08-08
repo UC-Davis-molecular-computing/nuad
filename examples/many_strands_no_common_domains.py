@@ -90,7 +90,6 @@ def main() -> None:
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
         threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.1)
-        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.05)
 
     design = dc.Design(strands,
                        constraints=[
