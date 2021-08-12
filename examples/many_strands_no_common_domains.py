@@ -105,12 +105,12 @@ def main() -> None:
         # dc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
         dc.BaseCountConstraint(base='G', high_count=1),
         # dc.BaseEndConstraint(bases=('C', 'G')),
-        dc.RunsOfBasesConstraint(['C', 'G'], 4),
-        dc.RunsOfBasesConstraint(['A', 'T'], 4),
+        # dc.RunsOfBasesConstraint(['C', 'G'], 4),
+        # dc.RunsOfBasesConstraint(['A', 'T'], 4),
         # dc.BaseEndConstraint(bases=('A', 'T')),
         # dc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
         # dc.BaseAtPositionConstraint(bases='T', position=3),
-        # dc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
+        dc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
         # dc.RestrictBasesConstraint(bases=['A', 'T', 'C']),
     ]
 

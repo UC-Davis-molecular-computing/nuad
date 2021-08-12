@@ -772,22 +772,28 @@ class DNASeqList:
         return int(first_index)
 
 
-def create_toeplitz(seqlen: int, sublen: int) -> np.ndarray:
+def create_toeplitz(seqlen: int, sublen: int, indices: Optional[Sequence[int]] = None) -> np.ndarray:
     """Creates a toeplitz matrix, useful for finding subsequences.
 
-    seqlen is length of larger sequence; sublen is length of substring we're checking for."""
+    seqlen is length of larger sequence; sublen is length of substring we're checking for.
+    If `indices` is None, then all rows are created, otherwise only rows for checking those indices
+    are created."""
     powarr = [4 ** k for k in range(sublen)]
-    # if _SCIPY_AVAIL:
-    #     import scipy.linalg as linalg
-    #     toeplitz = linalg.toeplitz([1] + [0] * (seqlen - sublen),
-    #                                powarr + [0] * (seqlen - sublen))
-    # else:
-    rows = seqlen - (sublen - 1)
-    cols = seqlen
-    toeplitz = np.zeros((rows, cols), dtype=np.int)
-    toeplitz[:, 0:sublen] = [powarr] * rows
-    shift = list(range(rows))
-    for i in range(rows):
+    if indices is None:
+        rows = list(range(seqlen - (sublen - 1)))
+    else:
+        rows = sorted(list(set(indices)))
+        for idx in rows:
+            if idx < 0:
+                raise ValueError(f'index must be nonnegative, but {idx} is not; all indices = {indices}')
+            if idx >= seqlen - (sublen - 1):
+                raise ValueError(f'index must be less than {seqlen - (sublen - 1)}, but {idx} is not; all indices = {indices}')
+    num_rows = len(rows)
+    num_cols = seqlen
+    toeplitz = np.zeros((num_rows, num_cols), dtype=np.int)
+    toeplitz[:, 0:sublen] = [powarr] * num_rows
+    shift = list(rows)
+    for i in range(len(rows)):
         toeplitz[i] = np.roll(toeplitz[i], shift[i])
     return toeplitz
 

@@ -451,6 +451,12 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
     If a collection, all substrings must have the same length.
     """
 
+    indices: Optional[Sequence[int]] = None
+    """
+    Indices at which to check for each substring in :data:`ForbiddenSubstringConstraint.substrings`.
+    If not specified, all appropriate indices are checked.
+    """
+
     def __post_init__(self) -> None:
         self.name = 'forbidden_substrings'
 
@@ -468,6 +474,8 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
             if len(substring) == 0:
                 raise ValueError('substring cannot be empty')
 
+
+
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences that have a string in :py:data:`ForbiddenSubstringConstraint.substrings`
         as a substring."""
@@ -476,7 +484,7 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
         sub_ints = [[dn.base2bits[base] for base in sub] for sub in self.substrings]
         pow_arr = [4 ** k for k in range(sub_len)]
         sub_vals = np.dot(sub_ints, pow_arr)
-        toeplitz = dn.create_toeplitz(seqs.seqlen, sub_len)
+        toeplitz = dn.create_toeplitz(seqs.seqlen, sub_len, self.indices)
         convolution = np.dot(toeplitz, seqs.seqarr.transpose())
         pass_all = np.ones(seqs.numseqs, dtype=np.bool)
         for sub_val in sub_vals:
