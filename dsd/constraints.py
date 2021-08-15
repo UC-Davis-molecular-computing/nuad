@@ -474,8 +474,6 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
             if len(substring) == 0:
                 raise ValueError('substring cannot be empty')
 
-
-
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences that have a string in :py:data:`ForbiddenSubstringConstraint.substrings`
         as a substring."""
@@ -791,9 +789,10 @@ class DomainPool:
         # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
         # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
 
-        if self.max_samples is not None and self.num_sampled >= self.max_samples:
-            logger.info('Twice as many pool sequences have been sampled with replacement from a '
-                        'randomly chosen subset. Regenerating fresh sequences.')
+        if self.sequences.numseqs == 0 or (self.max_samples is not None and self.num_sampled >= self.max_samples):
+            if self.sequences.numseqs > 0:
+                logger.info('Twice as many pool sequences have been sampled with replacement from a '
+                            'randomly chosen subset. Regenerating fresh sequences.')
             self._reset_precomputed_sequences(rng)
         # takes neighbor to previous sequence; difference in bases randomly chosen
         hamming_probabilities = np.array(list(self.hamming_probability.values()))
@@ -849,7 +848,7 @@ class DomainPool:
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
-        if self.num_sampled >= len(self.sequences):
+        if self.sequences.numseqs == 0 or self.num_sampled >= len(self.sequences):
             self._reset_precomputed_sequences(rng)
         idx = int(rng.integers(self.sequences.numseqs))
         sequence = self.sequences[idx]
@@ -1261,6 +1260,14 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         for s in new_subdomains:
             s.parent = self
 
+    def has_length(self) -> bool:
+        """
+        :return:
+            True if this :any:`Domain` has a length, which means either a sequence has been assigned
+            to it, or it has a :any:`DomainPool`.
+        """
+        return self._sequence is not None or self._pool is not None
+
     @property
     def length(self) -> int:
         """
@@ -1293,7 +1300,7 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         if self.fixed:
             raise ValueError('cannot assign a new sequence to this Domain; its sequence is fixed as '
                              f'{self._sequence}')
-        if len(new_sequence) != self.length:
+        if self.has_length() and len(new_sequence) != self.length:
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
                              f'it is length {len(new_sequence)}, but this domain is length {self.length}')
         # Check that total length of subdomains (if used) adds up domain length.
@@ -1358,6 +1365,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         :param fixed_sequence: new fixed DNA sequence to set
         """
         self._sequence = fixed_sequence
+        self._starred_sequence = dv.wc(self.sequence)
+        self._set_subdomain_sequences(fixed_sequence)
+        self._set_parent_sequence(fixed_sequence)
         self.fixed = True
 
     @property
@@ -1394,6 +1404,9 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         """
         if self._sequence is None:
             raise ValueError('no DNA sequence has been assigned to this Domain')
+        if self._starred_sequence is None:
+            raise AssertionError('_starred_sequence should be set to non-None if _sequence is not None. '
+                                 'Something went wrong in the logic of dsd.')
         return self._starred_sequence if starred else self._sequence
 
     def has_sequence(self) -> bool:
@@ -1820,10 +1833,12 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return OrderedSet(self.starred_domains())
 
-    def sequence(self, dashes_between_domains: bool = False) -> str:
+    def sequence(self, delimiter: str = '') -> str:
         """
-        :param dashes_between_domains:
-            If true, separates each domain sequence by "-".
+        :param delimiter:
+            Delimiter string to place between sequences of each :any:`Domain` in this :any:`Strand`.
+            For instance, if `delimiter` = ``'--'``, then it will return a string such as
+            ``ACGTAGCTGA--CGCTAGCTGA--CGATCGATC--GCGATCGAT``
         :return:
             DNA sequence assigned to this :any:`Strand`, calculated by concatenating all sequences
             assigned to its :any:`Domain`'s.
@@ -1834,8 +1849,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         for idx, domain in enumerate(self.domains):
             starred = idx in self.starred_domain_indices
             seqs.append(domain.concrete_sequence(starred))
-        delim = '-' if dashes_between_domains else ''
-        return delim.join(seqs)
+        return delimiter.join(seqs)
 
     def assign_dna(self, sequence: str) -> None:
         """
@@ -2113,6 +2127,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self._partition_constraints(constraints)
         self._compute_derived_fields()
 
+
     @staticmethod
     def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
         idx = 0
@@ -2122,19 +2137,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                  f'but the element at index {idx} is of type {type(constraint)}')
             idx += 1
 
-    # sort constraints from constructor constraints parameter into the various types
-    def _partition_constraints(self, constraints: Iterable['Constraint']) -> None:
-        self.domain_constraints = []
-        self.strand_constraints = []
-        self.domain_pair_constraints = []
-        self.strand_pair_constraints = []
-        self.complex_constraints = []
-        self.domains_constraints = []
-        self.strands_constraints = []
-        self.domain_pairs_constraints = []
-        self.strand_pairs_constraints = []
-        self.design_constraints = []
-
+    def add_constraints(self, constraints: Iterable[Constraint]) -> None:
+        """
+        :param constraints:
+            :any:`Constraint`'s to add to this :any:`Design`
+        """
         for constraint in constraints:
             if isinstance(constraint, DomainConstraint):
                 self.domain_constraints.append(constraint)
@@ -2158,6 +2165,21 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 self.design_constraints.append(constraint)
             else:
                 raise ValueError(f'{constraint} is not a valid type of Constraint')
+
+    # sort constraints from constructor constraints parameter into the various types
+    def _partition_constraints(self, constraints: Iterable[Constraint]) -> None:
+        self.domain_constraints = []
+        self.strand_constraints = []
+        self.domain_pair_constraints = []
+        self.strand_pair_constraints = []
+        self.complex_constraints = []
+        self.domains_constraints = []
+        self.strands_constraints = []
+        self.domain_pairs_constraints = []
+        self.strand_pairs_constraints = []
+        self.design_constraints = []
+
+        self.add_constraints(constraints)
 
     def _compute_derived_fields(self):
         # Get domains not explicitly listed on strands that are part of domain tree.
@@ -2669,9 +2691,40 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return report
 
     @staticmethod
+    def from_scadnano_file(sc_filename: str,
+                           fix_assigned_sequences: bool = True,
+                           ignored_strands: Optional[Iterable] = None) -> Design[StrandLabel, DomainLabel]:
+        """
+        Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
+        DNA sequence design.
+        Each Strand name and Domain name from the scadnano Design are assigned as
+        :py:data:`Strand.name` and :py:data:`Domain.name` in the obvious way.
+        Assumes each Strand label is a string describing the strand group.
+
+        The scadnano package must be importable.
+
+        Also assigns sequences from domains in sc_design to those of the returned :any:`Design`.
+        If `fix_assigned_sequences` is true, then these DNA sequences are fixed; otherwise not.
+
+        :param sc_filename:
+            Name of file containing scadnano Design.
+        :param fix_assigned_sequences:
+            Whether to fix the sequences that are assigned from those found in `sc_design`.
+        :param ignored_strands:
+            Strands to ignore
+        :return:
+            An equivalent :any:`Design`, ready to be given constraints for DNA sequence design.
+        :raises TypeError:
+            If any scadnano strand label is not a string.
+        """
+        sc_design = sc.Design.from_scadnano_file(sc_filename)
+        return Design.from_scadnano_design(sc_design, fix_assigned_sequences, ignored_strands)
+
+    @staticmethod
     def from_scadnano_design(sc_design: sc.Design[StrandLabel, DomainLabel],
-                             fix_assigned_sequences: bool,
-                             ignored_strands: Iterable) -> Design[StrandLabel, DomainLabel]:
+                             fix_assigned_sequences: bool = True,
+                             ignored_strands: Optional[Iterable] = None,
+                             warn_existing_domain_labels: bool = True) -> Design[StrandLabel, DomainLabel]:
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
@@ -2688,7 +2741,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         :param fix_assigned_sequences:
             Whether to fix the sequences that are assigned from those found in `sc_design`.
         :param ignored_strands:
-            Strands to ignore
+            Strands to ignore; none are ignore if not specified.
+        :param warn_existing_domain_labels:
+            If True, logs warning when dsd :any:`Domain` already has a label and so does scadnano domain,
+            since scadnano label will not be assigned to the dsd :any:`Domain`.
         :return:
             An equivalent :any:`Design`, ready to be given constraints for DNA sequence design.
         :raises TypeError:
@@ -2698,31 +2754,33 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # check types
         if not isinstance(sc_design, sc.Design):
             raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
-        for ignored_strand in ignored_strands:
-            if not isinstance(ignored_strand, sc.Strand):
-                raise TypeError('each ignored strand must be an instance of scadnano.Strand, but one is '
-                                f'{type(ignored_strand)}: {ignored_strand}')
+        if ignored_strands is not None:
+            for ignored_strand in ignored_strands:
+                if not isinstance(ignored_strand, sc.Strand):
+                    raise TypeError('each ignored strand must be an instance of scadnano.Strand, but one is '
+                                    f'{type(ignored_strand)}: {ignored_strand}')
 
         # filter out ignored strands
-        strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
+        strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands] \
+            if ignored_strands is not None else sc_design.strands
 
         # warn if not labels are dicts containing group_name_key on strands
         for sc_strand in strands_to_include:
             if (isinstance(sc_strand.label, dict) and group_name_key not in sc_strand.label) or \
                     (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_name_key)):
-                logger.warning(f'Strand label {sc_strand.label} should be an object with attribute '
-                               f'{group_name_key} (for instance a dict or namedtuple).\n'
-                               f'The label is type {type(sc_strand.label)}.\n'
-                               f'Make the label has attribute {group_name_key} with associated value '
-                               f'of type str in order to auto-population StrandGroups.')
+                logger.warning(f'Strand label {sc_strand.label} should be an object with attribute named '
+                               f'"{group_name_key}" (for instance a dict or namedtuple).\n'
+                               f'  The label is type {type(sc_strand.label)}. '
+                               f'In order to auto-populate StrandGroups, ensure the label has attribute '
+                               f'named "{group_name_key}" with associated value of type str.')
             else:
                 label_value = Design.get_group_name_from_strand_label(sc_strand)
                 if not isinstance(label_value, str):
-                    logger.warning(f'Strand label {sc_strand.label} has attribute '
-                                   f'{group_name_key}, but its associated value is not a string.\n'
-                                   f'The value is type {type(label_value)}.\n'
-                                   f'Make the label has attribute {group_name_key} with associated value '
-                                   f'of type str in order to auto-population StrandGroups.')
+                    logger.warning(f'Strand label {sc_strand.label} has attribute named '
+                                   f'"{group_name_key}", but its associated value is not a string.\n'
+                                   f'The value is type {type(label_value)}. '
+                                   f'In order to auto-populate StrandGroups, ensure the label has attribute '
+                                   f'named "{group_name_key}" with associated value of type str.')
 
                 # raise TypeError(f'strand label {sc_strand.label} must be a dict, '
                 #                 f'but instead is type {type(sc_strand.label)}')
@@ -2769,15 +2827,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         if sc_domain.name[-1] == '*':
                             domain_sequence = dv.wc(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
-                            dsd_domain._sequence = domain_sequence
-                            dsd_domain.fixed = fix_assigned_sequences
+                            dsd_domain.set_fixed_sequence(domain_sequence)
 
                 # set domain labels
                 for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
                     if dsd_domain.label is None:
                         dsd_domain.label = sc_domain.label
-                    elif sc_domain.label is not None:
-                        logger.warning(f'warning; dsd domain already has label {dsd_domain.label};\n'
+                    elif sc_domain.label is not None and warn_existing_domain_labels:
+                        logger.warning(f'warning; dsd domain already has label {dsd_domain.label}; '
                                        f'skipping assignment of scadnano label {sc_domain.label}')
 
                 strands.append(dsd_strand)
@@ -3414,7 +3471,7 @@ def nupack_strand_secondary_structure_constraint(
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
-        threaded: bool = True,
+        threaded: bool = False,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
         strands: Optional[Iterable[Strand]] = None) -> StrandConstraint:
@@ -3820,9 +3877,10 @@ def rna_duplex_strand_pairs_constraint(
 
         num_checks = len(energies)
         num_violations = 0
-        lines: List[str] = []
+        lines_and_excesses: List[Tuple[str, float]] = []
         for (strand1, strand2), energy in strand_pairs_energies:
-            passed = energy_excess(energy, threshold) <= 0.0
+            excess = energy_excess(energy, threshold)
+            passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
@@ -3831,11 +3889,12 @@ def rna_duplex_strand_pairs_constraint(
                         f'{strand2.name:{max_name_length}}: '
                         f'{energy:6.2f} kcal/mol'
                         f'{"" if passed else "  **violation**"}')
-                lines.append(line)
+                lines_and_excesses.append((line, excess))
 
-        if not report_only_violations:
-            lines.sort(key=lambda line_: ' **violation**' not in line_)  # put violations first
+        # put in descending order of excess
+        lines_and_excesses.sort(key=lambda line_and_excess: line_and_excess[1], reverse=True)
 
+        lines = (line for line, _ in lines_and_excesses)
         content = '\n'.join(lines)
         report = ConstraintReport(constraint=None, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
@@ -5807,7 +5866,6 @@ def nupack_complex_secondary_structure_constraint(
         description: Optional[str] = None,
         short_description: str = 'complex_secondary_structure_nupack',
         threaded: bool = False,
-        # threaded: bool = True,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
