@@ -113,7 +113,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         model = _cached_nupack_models[param]
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
 
-    if strand_association_penalty:
+    if strand_association_penalty and len(seqs) > 1:
         dg += calculate_strand_association_penalty(temperature, len(seqs))
 
     return dg
