@@ -10,7 +10,8 @@ numpy_constraints = [energy_constraint,
                      dc.RunsOfBasesConstraint(['A', 'T'], 4)
                      ]
 domain_pool = dc.DomainPool(f'length-{domain_length} domains', domain_length,
-                            numpy_constraints=numpy_constraints)
+                            numpy_constraints=numpy_constraints,
+                            generation_upper_limit=10**7)
 
 
 def main():
@@ -23,9 +24,7 @@ def main():
                                  # weigh_violations_equally=True
                                  report_only_violations=False,
                                  random_seed=random_seed,
-                                 max_iterations=None,
-                                 sequence_generation_upper_limit=4**8,
-                                 current_sequence_generation_amount=1000)
+                                 max_iterations=None)
     params.force_overwrite = True  # directly deletes output folder contents w/o user input
     # params.report_delay = 0.0
     design = dc.Design(strands, constraints=[dc.nupack_strand_secondary_structure_constraint(
