@@ -21,8 +21,6 @@ import numpy as np
 
 os_is_windows = sys.platform == 'win32'
 
-global_thread_pool = ThreadPool()
-
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
@@ -101,8 +99,12 @@ def nupack_complex_base_pair_probabilities(strand_complex: Complex,
     :param strand_complex:
         Ordered tuple of strands in complex (specifying a particular circular ordering, which is
         imposed on all considered secondary structures)
-    :param model:
-        NUPACK model to use (e.g., to specify temperature and/or magnesium concentration)
+        :param temperature:
+        temperature in Celsius
+    :param sodium:
+        molarity of sodium in moles per liter (Default: 0.05)
+    :param magnesium:
+        molarity of magnesium in moles per liter (Default: 0.0125)
     :return:
         2D Numpy array of floats, with `result[i1][i2]` giving the base-pair probability of base at position
         `i1` with base at position `i2` (if `i1` != `i2`), where `i1` and `i2` are the absolute positions
@@ -435,14 +437,19 @@ def log_energy(energy: float) -> None:
         print(f'{energy:.1f}')
 
 
+global_thread_pool = ThreadPool()
+
+
 def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium: float,
                       magnesium: float, orthogonality: float,
-                      orthogonality_ave: float = -1, threaded: bool = True) -> bool:
+                      orthogonality_ave: float = -1, threaded: bool = False) -> bool:
     """test orthogonality of domain with all others and their wc complements
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
+    if threaded:
+        raise NotImplementedError()
 
     def binding_callback(s1: str, s2: str) -> float:
         return binding(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
@@ -502,13 +509,16 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
 def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], temperature: float,
                                                sodium: float, magnesium: float,
                                                concat: float, concat_ave: float = -1,
-                                               threaded: bool = True) -> bool:
+                                               threaded: bool = False) -> bool:
     """test lack of secondary structure in concatenated domains
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    #     if hairpin(seq+seq,temperature) > concat: return False
-    #     if hairpin(wc(seq)+wc(seq),temperature) > concat: return False
+
+    if threaded:
+        raise NotImplementedError()
+
     energy_sum = 0.0
     for altseq in seqs:
         wc_seq = wc(seq)

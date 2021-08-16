@@ -789,7 +789,8 @@ class DomainPool:
         # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
         # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
 
-        if self.sequences.numseqs == 0 or (self.max_samples is not None and self.num_sampled >= self.max_samples):
+        if self.sequences.numseqs == 0 or (
+                self.max_samples is not None and self.num_sampled >= self.max_samples):
             if self.sequences.numseqs > 0:
                 logger.info('Twice as many pool sequences have been sampled with replacement from a '
                             'randomly chosen subset. Regenerating fresh sequences.')
@@ -2015,6 +2016,11 @@ class ConstraintReport:
     """
 
 
+def _small_header(header: str, delim: str) -> str:
+    width = len(header)
+    return f'\n{header}\n{delim * width}'
+
+
 @dataclass
 class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """
@@ -2126,7 +2132,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self.strands = strands if isinstance(strands, list) else list(strands)
         self._partition_constraints(constraints)
         self._compute_derived_fields()
-
 
     @staticmethod
     def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
@@ -2419,80 +2424,35 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         summary = add_header_to_content_of_summary(report)
         return summary
 
-    def summary_of_domain_constraint(self, constraint: DomainConstraint,
-                                     report_only_violations: bool,
-                                     domains_to_check: Optional[Iterable[Domain[DomainLabel]]] = None) \
+    def summary_of_domain_constraint(self, constraint: DomainConstraint, report_only_violations: bool) \
             -> ConstraintReport:
         num_violations = 0
         num_checks = 0
-        if domains_to_check is None:
-            domains_to_check = self.domains if constraint.domains is None else constraint.domains
-        fixed_domains = [domain for domain in domains_to_check if domain.fixed]
-        unfixed_domains = [domain for domain in domains_to_check if not domain.fixed]
-
+        domains_to_check = self.domains if constraint.domains is None else constraint.domains
         max_domain_name_length = max(len(domain.name) for domain in domains_to_check)
 
-        if len(fixed_domains) > 0:
-            fixed_report = self._summary_of_domains_in_domain_constraint(
-                constraint, report_only_violations, fixed_domains, max_domain_name_length)
-            fixed_domains_summary = f'fixed domains\n{fixed_report.content}\n'
-            num_violations += fixed_report.num_violations
-            num_checks += fixed_report.num_checks
-        else:
-            fixed_domains_summary = ''
+        summaries = []
 
-        unfixed_report = self._summary_of_domains_in_domain_constraint(
-            constraint, report_only_violations, unfixed_domains, max_domain_name_length)
-        num_violations += unfixed_report.num_violations
-        num_checks += unfixed_report.num_checks
+        fixed_domains = [domain for domain in domains_to_check if domain.fixed]
+        unfixed_domains = [domain for domain in domains_to_check if not domain.fixed]
+        for domains_to_check, header_name in [(unfixed_domains, 'unfixed domains'),
+                                              (fixed_domains, 'fixed domains')]:
+            if len(domains_to_check) > 0:
+                report = self._summary_of_domains_in_domain_constraint(
+                    constraint, report_only_violations, domains_to_check, max_domain_name_length)
+                summary = _small_header(header_name, "=") + f'\n{report.content}\n'
+                num_violations += report.num_violations
+                num_checks += report.num_checks
+                summaries.append(summary)
 
-        unfixed_domains_header = "unfixed domains\n" if len(fixed_domains) > 0 else ""
-        unfixed_domains_summary = f'{unfixed_domains_header}{unfixed_report.content}'
-
-        content = fixed_domains_summary + unfixed_domains_summary
-        report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
-        return report
-
-    def summary_of_strand_constraint(self, constraint: StrandConstraint,
-                                     report_only_violations: bool,
-                                     strands_to_check: Optional[
-                                         Iterable[Strand[StrandLabel, DomainLabel]]] = None) \
-            -> ConstraintReport:
-        num_violations = 0
-        num_checks = 0
-        if strands_to_check is None:
-            strands_to_check = self.strands if constraint.strands is None else constraint.strands
-        fixed_strands = [strand for strand in strands_to_check if strand.fixed]
-        unfixed_strands = [strand for strand in strands_to_check if not strand.fixed]
-
-        max_strand_name_length = max(len(strand.name) for strand in strands_to_check)
-
-        if len(fixed_strands) > 0:
-            fixed_report = self._summary_of_strands_in_strand_constraint(
-                constraint, report_only_violations, fixed_strands, max_strand_name_length)
-            fixed_strands_summary = f'fixed domains\n{fixed_report.content}\n'
-            num_violations += fixed_report.num_violations
-            num_checks += fixed_report.num_checks
-        else:
-            fixed_strands_summary = ''
-
-        unfixed_report = self._summary_of_strands_in_strand_constraint(
-            constraint, report_only_violations, unfixed_strands, max_strand_name_length)
-        num_violations += unfixed_report.num_violations
-        num_checks += unfixed_report.num_checks
-
-        unfixed_domains_header = "unfixed strands\n" if len(fixed_strands) > 0 else ""
-        unfixed_strands_summary = f'{unfixed_domains_header}{unfixed_report.content}'
-
-        content = fixed_strands_summary + unfixed_strands_summary
+        content = ''.join(summaries)
         report = ConstraintReport(constraint=constraint, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
     # this function reuses code between summarizing fixed and unfixed domains
     @staticmethod
-    def _summary_of_domains_in_domain_constraint(constraint: 'DomainConstraint',
+    def _summary_of_domains_in_domain_constraint(constraint: DomainConstraint,
                                                  report_only_violations: bool,
                                                  domains: Iterable[Domain[DomainLabel]],
                                                  max_domain_name_length: int) -> ConstraintReport:
@@ -2522,9 +2482,35 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
+    def summary_of_strand_constraint(self, constraint: StrandConstraint, report_only_violations: bool) \
+            -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+        all_strands_to_check = self.strands if constraint.strands is None else constraint.strands
+        max_strand_name_length = max(len(strand.name) for strand in all_strands_to_check)
+
+        summaries = []
+
+        fixed_strands = [strand for strand in all_strands_to_check if strand.fixed]
+        unfixed_strands = [strand for strand in all_strands_to_check if not strand.fixed]
+        for strands_to_check, header_name in [(unfixed_strands, 'unfixed strands'),
+                                              (fixed_strands, 'fixed strands')]:
+            if len(strands_to_check) > 0:
+                report = self._summary_of_strands_in_strand_constraint(
+                    constraint, report_only_violations, strands_to_check, max_strand_name_length)
+                summary = _small_header(header_name, "=") + f'\n{report.content}\n'
+                num_violations += report.num_violations
+                num_checks += report.num_checks
+                summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
     # this function reuses code between summarizing fixed and unfixed strands
     @staticmethod
-    def _summary_of_strands_in_strand_constraint(constraint: 'StrandConstraint',
+    def _summary_of_strands_in_strand_constraint(constraint: StrandConstraint,
                                                  report_only_violations: bool,
                                                  strands: Iterable[Strand[StrandLabel, DomainLabel]],
                                                  max_strand_name_length: int) -> ConstraintReport:
@@ -2589,14 +2575,47 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def summary_of_strand_pair_constraint(self, constraint: StrandPairConstraint,
                                           report_only_violations: bool) -> ConstraintReport:
-        pairs_to_check = constraint.pairs if constraint.pairs is not None else all_pairs(self.strands)
+        num_violations = 0
+        num_checks = 0
+        all_pairs_to_check: List[
+            Tuple[Strand, Strand]] = constraint.pairs if constraint.pairs is not None else all_pairs(
+            self.strands)
 
-        max_strand_name_length = max(len(strand.name) for strand in _flatten(pairs_to_check))
+        # distinguish between pairs in which both strands are fixed (so cannot remove violation)
+        # versus those pairs in which at least one element of the pair is unfixed
+        both_fixed_pairs = [(s1,s2) for s1, s2 in all_pairs_to_check if s1.fixed and s2.fixed]
+        one_unfixed_pairs = [(s1,s2) for s1, s2 in all_pairs_to_check if not (s1.fixed and s2.fixed)]
 
+        max_strand_name_length = max(len(strand.name) for strand in _flatten(all_pairs_to_check))
+
+        summaries = []
+
+        for pairs_to_check, header_name in [(one_unfixed_pairs, 'pairs with at least one unfixed'),
+                                            (both_fixed_pairs, 'pairs with both fixed')]:
+            if len(pairs_to_check) > 0:
+                report = self._summary_of_strand_pairs_in_strand_pair_constraint(
+                    constraint, report_only_violations, pairs_to_check, max_strand_name_length)
+                summary = _small_header(header_name, "=") + f'\n{report.content}\n'
+                num_violations += report.num_violations
+                num_checks += report.num_checks
+                summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    # this function reuses code between summarizing fixed and unfixed strands
+    @staticmethod
+    def _summary_of_strand_pairs_in_strand_pair_constraint(constraint: StrandPairConstraint,
+                                                 report_only_violations: bool,
+                                                 pairs: Iterable[Tuple[Strand[StrandLabel, DomainLabel],
+                                                                       Strand[StrandLabel, DomainLabel]]],
+                                                 max_strand_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
         lines_and_excesses: List[Tuple[str, float]] = []
-        for strand1, strand2 in pairs_to_check:
+        for strand1, strand2 in pairs:
             num_checks += 1
             excess = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
             passed = excess <= 0.0
@@ -2827,7 +2846,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         if sc_domain.name[-1] == '*':
                             domain_sequence = dv.wc(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
-                            dsd_domain.set_fixed_sequence(domain_sequence)
+                            if fix_assigned_sequences:
+                                dsd_domain.set_fixed_sequence(domain_sequence)
+                            else:
+                                dsd_domain.sequence = domain_sequence
 
                 # set domain labels
                 for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
@@ -3869,9 +3891,36 @@ def rna_duplex_strand_pairs_constraint(
 
     def summary(strand_pairs: Iterable[Tuple[Strand, Strand]],
                 report_only_violations: bool) -> ConstraintReport:
+        num_violations = 0
+        num_checks = 0
+
+        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
+
+        # distinguish between pairs in which both strands are fixed (so cannot remove violation)
+        # versus those pairs in which at least one element of the pair is unfixed
+        both_fixed_pairs = [(s1, s2) for s1, s2 in strand_pairs if s1.fixed and s2.fixed]
+        one_unfixed_pairs = [(s1, s2) for s1, s2 in strand_pairs if not (s1.fixed and s2.fixed)]
+
+        summaries = []
+
+        for pairs_to_check, header_name in [(one_unfixed_pairs, 'pairs with at least one unfixed'),
+                                            (both_fixed_pairs, 'pairs with both fixed')]:
+            if len(pairs_to_check) > 0:
+                report = _summary_of_pairs(pairs_to_check, report_only_violations, max_name_length)
+                summary = _small_header(header_name, "=") + f'\n{report.content}\n'
+                num_violations += report.num_violations
+                num_checks += report.num_checks
+                summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=None, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+        return report
+
+    def _summary_of_pairs(strand_pairs: Iterable[Tuple[Strand, Strand]],
+                report_only_violations: bool, max_name_length: int) -> ConstraintReport:
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
         energies = calculate_energies(sequence_pairs)
-        max_name_length = max(len(strand.name) for strand in _flatten(strand_pairs))
 
         strand_pairs_energies = zip(strand_pairs, energies)
 

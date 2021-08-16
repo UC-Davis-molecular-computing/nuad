@@ -1,6 +1,8 @@
 """
-Stochastic local search for finding DNA sequences to assign to
+The main export of the search module is the function :meth:`search_for_dna_sequences`,
+which is a stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
+Various parameters of the search can be controlled using :any:`SearchParameters`.
 """
 
 # Since dsd is distributed with NUPACK, we include the following license
@@ -174,7 +176,11 @@ class _ViolationSet:
 
     domain_to_violations: Dict[Domain, OrderedSet[_Violation]] = field(
         default_factory=lambda: defaultdict(OrderedSet))
-    """Dict mapping each :any:`Domain` to the set of all :any:`Violation`'s for which it is blamed."""
+    """Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is 
+    blamed."""
+
+    non_fixed_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
+    """Set of all :any:`Violations` that are associated to non-fixed :any:`constraint.Domain`'s."""
 
     def __repr__(self):
         lines = "\n  ".join(map(str, self.all_violations))
@@ -193,6 +199,8 @@ class _ViolationSet:
         for domain, domain_violations in new_violations.items():
             self.all_violations.update(domain_violations)
             self.domain_to_violations[domain].update(domain_violations)
+            if not domain.fixed:
+                self.non_fixed_violations.update(domain_violations)
 
     def clone(self) -> '_ViolationSet':
         """
@@ -210,7 +218,8 @@ class _ViolationSet:
         domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
         for domain, violations in domain_to_violations_deep_copy.items():
             domain_to_violations_deep_copy[domain] = OrderedSet(violations)
-        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy)
+        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy,
+                             OrderedSet(self.non_fixed_violations))
 
     def remove_violations_of_domain(self, domain: Domain) -> None:
         """
@@ -221,6 +230,7 @@ class _ViolationSet:
         # (values in self.domain_to_violations)
         violations_of_domain = set(self.domain_to_violations[domain])
         self.all_violations -= violations_of_domain
+        self.non_fixed_violations -= violations_of_domain
         for violations_of_other_domain in self.domain_to_violations.values():
             violations_of_other_domain -= violations_of_domain
         assert len(self.domain_to_violations[domain]) == 0
@@ -231,6 +241,14 @@ class _ViolationSet:
         """
         return sum(violation.score for violation in self.all_violations)
 
+    def total_nonfixed_score(self) -> float:
+        """
+        :return:
+            Total score of all violations attributed to :any:`constraint.Domain`'s with
+            :any:`constraint.Domain.fixed` = False.
+        """
+        return sum(violation.score for violation in self.non_fixed_violations)
+
     def score_of_constraint(self, constraint: Constraint) -> float:
         """
         :param constraint:
@@ -240,11 +258,27 @@ class _ViolationSet:
         """
         return sum(violation.score for violation in self.all_violations if violation.constraint == constraint)
 
+    def nonfixed_score_of_constraint(self, constraint: Constraint) -> float:
+        """
+        :param constraint:
+            constraint to filter scores on
+        :return:
+            Total score of all nonfixed violations due to `constraint`.
+        """
+        return sum(
+            violation.score for violation in self.non_fixed_violations if violation.constraint == constraint)
+
     def num_violations(self) -> float:
         """
         :return: Total number of violations.
         """
         return len(self.all_violations)
+
+    def num_nonfixed_violations(self) -> float:
+        """
+        :return: Total number of nonfixed violations.
+        """
+        return len(self.non_fixed_violations)
 
 
 def _violations_of_constraints(design: Design,
@@ -1274,6 +1308,11 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 
 @dataclass
 class SearchParameters:
+    """
+    This class describes various parameters to give to the search algorithm
+    :meth:`search_for_dna_sequences`.
+    """
+
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
     """
     Function giving the probability of keeping a change in one
@@ -1509,7 +1548,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         iteration = 0
         time_of_last_improvement: float = -1.0
 
-        while len(violation_set_opt.all_violations) > 0 and \
+        while len(violation_set_opt.non_fixed_violations) > 0 and \
                 (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 
@@ -1530,7 +1569,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
-            score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
+            # score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
+            score_delta = violation_set_new.total_nonfixed_score() - violation_set_opt.total_nonfixed_score()
             prob_keep_change = params.probability_of_keeping_change(score_delta)
             keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
 
@@ -1962,8 +2002,8 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
     :param design:
         Design to which to assign DNA sequences.
     :param warn_fixed_sequences:
-        Whether to log warning that each :any:`Domain` with :data:`Domain.fixed` = True is not being
-        assigned.
+        Whether to log warning that each :any:`Domain` with :data:`constraints.Domain.fixed` = True
+        is not being assigned.
     :param rng:
         numpy random number generator (type returned by numpy.random.default_rng()).
     :param overwrite_existing_sequences:
