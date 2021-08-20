@@ -1,10 +1,12 @@
 """
-Shipped with DNA single-stranded tile (SST) sequence designer used in the following publication.
- "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly"
- Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
+Contains utility functions for accessing NUPACK 4 and ViennaRNA energy calculation algorithms.
 
-Generally this module processes Python 'ACTG' strings
-(as opposed to numpy arrays which are processed by dsd.np).
+The main functions are 
+:meth:`pfunc` (for calculating complex free energy with NUPACK, although with its helper functions
+:meth:`secondary_structure_single_strand` and :meth:`binding`),
+:meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
+:meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
+that is much faster than calling :meth:`pfunc` on the same pair of strands).
 """  # noqa
 
 import collections
