@@ -1663,7 +1663,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     with using a :any:`DomainPool` for any :any:`Domain` on this :any:`Strand`.
     """
 
-
     def __init__(self,
                  domain_names: Optional[List[str]] = None,
                  domains: Optional[List[Domain[DomainLabel]]] = None,
@@ -1767,7 +1766,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return sum(domain.length for domain in self.domains)
 
-    def domain_names_concatenated(self, delim: str='-') -> str:
+    def domain_names_concatenated(self, delim: str = '-') -> str:
         """
         :param delim:
             Delimiter to put between domain names.
@@ -2234,7 +2233,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         raise ValueError(f'domain names must be unique, '
                                          f'but I found two different domains with name {domain_in_tree.name}')
                     self.domains_by_name[domain_in_tree.name] = domain_in_tree
-
 
         self.domains = remove_duplicates(domains)
 
@@ -3607,6 +3605,7 @@ def nupack_domain_pair_constraint(
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
 ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -3628,6 +3627,9 @@ def nupack_domain_pair_constraint(
         Detailed description of constraint suitable for summary report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
+    :param pairs:
+        Pairs of :any:`Domain`'s to compare; if not specified, checks all pairs (including a
+        :any:`Domain` against itself).
     :return:
         The :any:`DomainPairConstraint`.
     """
@@ -3654,12 +3656,17 @@ def nupack_domain_pair_constraint(
             seq_pairs, name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
                 [(domain1, domain2)])
         else:
+            # If seq1==seq2, don't check d-d* or d*-d in this case, but do check d-d and d*-d*
             seq_pairs = [
                 (seq1, seq2),
-                (seq1, dv.wc(seq2)),
-                (dv.wc(seq1), seq2),
                 (dv.wc(seq1), dv.wc(seq2)),
             ]
+            if seq1 != seq2:
+                # only check these if domains are not the same
+                seq_pairs.extend([
+                    (seq1, dv.wc(seq2)),
+                    (dv.wc(seq1), seq2),
+                ])
 
         energies: List[float]
         energies = []
@@ -3693,13 +3700,17 @@ def nupack_domain_pair_constraint(
                  for (name1, name2), energy in zip(domain_name_pairs, energies)]
         return '\n  ' + '\n  '.join(lines)
 
+    if pairs is not None:
+        pairs = tuple(pairs)
+
     return DomainPairConstraint(description=description,
                                 short_description=short_description,
                                 weight=weight,
                                 score_transfer_function=score_transfer_function,
                                 evaluate=evaluate,
                                 summary=summary,
-                                threaded=threaded)
+                                threaded=threaded,
+                                pairs=pairs)
 
 
 def nupack_strand_pair_constraint(
@@ -3712,7 +3723,8 @@ def nupack_strand_pair_constraint(
         description: Optional[str] = None,
         short_description: str = 'strand_pair_nupack',
         threaded: bool = False,
-        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None) -> StrandPairConstraint:
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
@@ -3739,7 +3751,8 @@ def nupack_strand_pair_constraint(
     :param short_description:
         Short description of constraint suitable for logging to stdout.
     :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs (including a
+        :any:`Strand` against itself).
     :return:
         The :any:`StrandPairConstraint`.
     """
@@ -4160,7 +4173,12 @@ def _all_pairs_domain_sequences_complements_names_from_domains(
     names: List[Tuple[str, str]] = []
     domains: List[Tuple[Domain, Domain]] = []
     for d1, d2 in domain_pairs:
-        for starred1, starred2 in itertools.product([False, True], repeat=2):
+        if d1 == d2:
+            # don't check d-d* or d*-d in this case, but do check d-d and d*-d*
+            starred_each = [(False, False), (True, True)]
+        else:
+            starred_each = [(False, False), (True, True), (False, True), (True, False)]
+        for starred1, starred2 in starred_each:
             seq1 = d1.concrete_sequence(starred1)
             seq2 = d2.concrete_sequence(starred2)
             name1 = d1.get_name(starred1)
