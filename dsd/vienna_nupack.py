@@ -30,11 +30,6 @@ parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 
 default_temperature = 37.0
-"""Default temperature used to specify a `NUPACK 4 model`_.
-
-.. _NUPACK 4 model: https://piercelab-caltech.github.io/nupack-docs/model/
-"""
-
 default_magnesium = 0.0125
 default_sodium = 0.05
 
