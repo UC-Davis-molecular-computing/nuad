@@ -596,6 +596,13 @@ class DomainPool:
     num_times_sequences_reset: int = 0
 
     replace_with_close_sequences: bool = False
+    """
+    If True, instead of picking a sequence uniformly at random from all those satisfying the constraints
+    when returning a sequence from :meth:`DomainPool.generate_sequence`,
+    one is picked "close" in Hamming distance to the previous sequence of the :any:`Domain`.
+    The field :data:`DomainPool.hamming_probability` is used to pick a distance at random, after which
+    a sequence that distance from the previous sequence is selected to return from .
+    """
 
     hamming_probability: Dict[int, float] = field(default_factory=dict)
     """
@@ -1657,6 +1664,26 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         self.label = label
 
         self.compute_derived_fields()
+
+    def clone(self, name: Optional[str]) -> Strand:
+        """
+        Returns a copy of this :any:`Strand`. The copy is "shallow" in that the :any:`Domain`'s are shared.
+        This is useful for creating multiple versions of each :any:`Strand`, e.g., for having a
+        variant with an extension.
+
+        WARNING: the :data:`Strand.label` will be shared between them. If it should be copied,
+        this must be done manually.
+
+        :param name:
+            new name to give this Strand
+        :return:
+            A copy of this :any:`Strand`.
+        """
+        domains = list(self.domains)
+        starred_domain_indices = list(self.starred_domain_indices)
+        name = name if name is not None else self.name
+        return Strand(domains=domains, starred_domain_indices=starred_domain_indices, name=name,
+                      group=self.group, label=self.label)
 
     def compute_derived_fields(self):
         """
