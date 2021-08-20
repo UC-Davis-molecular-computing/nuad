@@ -275,6 +275,9 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
 
     def __post_init__(self) -> None:
         self.name = 'nearest_neighbor_energy'
+        if self.low_energy > self.high_energy:
+            raise ValueError(f'low_energy = {self.low_energy} must be less than '
+                             f'high_energy = {self.high_energy}')
 
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""

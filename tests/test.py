@@ -132,6 +132,11 @@ class TestFromScadnanoDesign(unittest.TestCase):
         self.assertIs(dsd_d00, dsd_d10)
         self.assertIs(dsd_d01, dsd_d11)
 
+class TestNumpyConstraints(unittest.TestCase):
+    def test_NearestNeighborEnergyConstraint_raises_exception_if_energies_in_wrong_order(self) -> None:
+        with self.assertRaises(ValueError) as _:
+            dc.NearestNeighborEnergyConstraint(-10, -15)
+
 
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
     def setUp(self) -> None:
