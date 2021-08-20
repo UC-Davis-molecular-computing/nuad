@@ -67,6 +67,8 @@ max_samples_key = 'max_samples'
 num_times_sequences_reset_key = 'num_times_sequences_reset'
 replace_with_close_sequences_key = 'replace_with_close_sequences'
 hamming_probability_key = 'hamming_probability'
+num_sequences_to_generate_upper_limit_key = 'num_sequences_to_generate_upper_limit'
+num_sequences_to_generate_key = 'num_sequences_to_generate'
 rng_state_key = 'rng_state'
 
 Complex = Tuple['Strand', ...]
@@ -85,17 +87,6 @@ def default_score_transfer_function(x: float) -> float:
     """
     return max(0.0, x ** 2)
 
-
-generation_upper_limit = 4 ** 12
-num_random_sequences_to_generate_at_once = 10 ** 5  # constant
-updated_num_gen_sequences = num_random_sequences_to_generate_at_once
-# will be increased if no sequences satisfying constraints are found after generating 100,000
-
-# For lengths at most this value, we generate all DNA sequences in advance.
-# Above this value, a random subset of DNA sequences will be generated.
-_length_threshold_numpy = math.floor(math.log(num_random_sequences_to_generate_at_once, 4))  # 6.64 -> 6
-
-# _length_threshold_numpy = 10
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
 """
@@ -609,6 +600,19 @@ class DomainPool:
     number of bases different from the previous sequence (Hamming distance). 
     """
 
+    num_sequences_to_generate_upper_limit: int = 4 ** 12
+    """
+    Maximum number of sequences to generate at once. If :py:data:`DomainPool.num_sequences_to_generate` 
+    exceeds this number, the user is asked to re-adjust constraint strictness. The number may be changed to 
+    satisfy individual device capabilities.  
+    """
+
+    num_sequences_to_generate: int = 10 ** 5
+    """
+    Number of sequences to be generated at once. Will be increased if no sequences satisfying constraints 
+    are found after generating the current specified amount of sequences. 
+    """
+
     def __post_init__(self) -> None:
         if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
             for i in range(self.length):
@@ -649,6 +653,8 @@ class DomainPool:
             num_times_sequences_reset_key: self.num_times_sequences_reset,
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
+            num_sequences_to_generate_upper_limit_key: self.num_sequences_to_generate_upper_limit,
+            num_sequences_to_generate_key: self.num_sequences_to_generate
         }
         if include_sequences:
             dct[sequences_key] = self.sequences.to_list()
@@ -664,13 +670,18 @@ class DomainPool:
         replace_with_close_sequences = json_map[replace_with_close_sequences_key]
         hamming_probability_str_keys = json_map[hamming_probability_key]
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
+        num_sequences_to_generate_upper_limit = json_map[num_sequences_to_generate_upper_limit_key]
+        num_sequences_to_generate = json_map[num_sequences_to_generate_key]
         sequences_list = json_map[sequences_key]
         sequences = dn.DNASeqList(seqs=sequences_list)
         return DomainPool(name=name, length=length, sequences=sequences,
                           num_sampled=num_sampled, max_samples=max_samples,
                           num_times_sequences_reset=num_times_sequences_reset,
                           replace_with_close_sequences=replace_with_close_sequences,
-                          hamming_probability=hamming_probability)
+                          hamming_probability=hamming_probability,
+                          num_sequences_to_generate_upper_limit=num_sequences_to_generate_upper_limit,
+                          num_sequences_to_generate=num_sequences_to_generate
+                          )
 
     def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
         # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
@@ -858,33 +869,36 @@ class DomainPool:
 
     def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) \
             -> Tuple[dn.DNASeqList, bool]:
-        global updated_num_gen_sequences  # 10 ** 5 initial value
         bases = self._bases_to_use()
         length = self.length
+        # For lengths at most _length_threshold_numpy, we generate all DNA sequences in advance.
+        # Above this value, a random subset of DNA sequences will be generated.
+        _length_threshold_numpy = math.floor(math.log(self.num_sequences_to_generate, 4))
+        # _length_threshold_numpy = 10
         use_random_subset = length > _length_threshold_numpy
         if not use_random_subset:
             seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True, rng=rng)
             num_starting_seqs = seqs.numseqs
         else:
-            num_starting_seqs = updated_num_gen_sequences
+            num_starting_seqs = self.num_sequences_to_generate
             seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                                  num_random_seqs=num_starting_seqs, rng=rng)
         seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
         while seqs_satisfying_numpy_constraints.numseqs == 0 and \
-                updated_num_gen_sequences < generation_upper_limit:
+                self.num_sequences_to_generate < self.num_sequences_to_generate_upper_limit:
             # 4 ** 13 sequences or more takes over a minute to generate and an excessive amount of memory
-            print(f'No valid sequences found in {updated_num_gen_sequences} sequences examined. '
+            print(f'No valid sequences found in {self.num_sequences_to_generate} sequences examined. '
                   f'Increasing number of sequences generated by a factor of 10.')
-            updated_num_gen_sequences *= 10
-            num_starting_seqs = updated_num_gen_sequences
+            self.num_sequences_to_generate *= 10
+            num_starting_seqs = self.num_sequences_to_generate
             seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                                  num_random_seqs=num_starting_seqs, rng=rng)
             seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
         else:
-            if updated_num_gen_sequences >= generation_upper_limit:
+            if self.num_sequences_to_generate >= self.num_sequences_to_generate_upper_limit:
                 raise ValueError("Too many sequences need to be generated to find a satisfactory sequence. "
                                  "Please adjust constraints. ")
-        num_decimals = len(str(num_random_sequences_to_generate_at_once))
+        num_decimals = len(str(self.num_sequences_to_generate))
 
         logger.info(f'generated {num_starting_seqs:{num_decimals}} sequences '
                     f'of length {length:2}, '
