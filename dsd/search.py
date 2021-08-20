@@ -525,10 +525,8 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     it is all pairs where one of the two is `domain_changed`.
     """
     # either all pairs, or just constraint.pairs if specified
-    # domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-    #     else all_pairs_iterator(all_domains, with_replacement=False, where=_at_least_one_domain_unfixed)
     domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-        else all_pairs(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
+        else all_pairs_iterator(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
 
     # filter out those not containing domain_change if specified
     domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
@@ -1094,7 +1092,7 @@ def _sequences_fragile_format_output_to_file(design: Design,
                                              include_group: bool = True) -> str:
     return '\n'.join(
         f'{strand.name}  '
-        f'{strand.group.name if include_group else ""}  '
+        f'{strand.group if include_group else ""}  '
         f'{strand.sequence(delimiter="-")}' for strand in design.strands)
 
 
@@ -1268,42 +1266,21 @@ class _Directories:
             dc.logger.addHandler(self.info_file_handler)
 
 
-def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
-    # verify design is legal, and also build map of non-independent domains to the strand that contains them,
-    # to help when changing DNA sequences for those Domains.
-    # TODO: we don't seem to use the dictionary any more, so we can probably get rid of that
-
-    domain_to_strand: Dict[dc.Domain, dc.Strand] = {}
+def _check_design(design: dc.Design) -> None:
+    # verify design is legal
 
     for strand in design.strands:
-        if strand.pool is not None:
-            for domain in strand.domains:
-                domain.dependent = True
-                if domain.fixed:
-                    raise ValueError(f'for strand {strand.name}, Strand.pool is not None, but it has a '
-                                     f'domain {domain.name} that is fixed.\nNone of the domains can be '
-                                     f'fixed on a strand with a StrandPool.')
-                if domain in domain_to_strand.keys():
-                    other_strand = domain_to_strand[domain]
-                    raise ValueError(f'strand {strand.name}, which has a StrandPool, has domain {domain}. '
-                                     f'But another strand {other_strand.name} also has a StrandPool, and it '
-                                     f'shares the domain.\nA strand with a StrandPool may only share domains '
-                                     f'with strands have have no StrandPool.')
-                domain_to_strand[domain] = strand
-        else:
-            for domain in strand.domains:
-                # noinspection PyProtectedMember
-                if domain._pool is None and not domain.fixed:
-                    raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
-                                     f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
-                                     f'For non-fixed domains, exactly one of these must be None.')
-                # noinspection PyProtectedMember
-                elif domain.fixed and domain._pool is not None:
-                    raise ValueError(f'for strand {strand.name}, it has a '
-                                     f'domain {domain.name} that is fixed, even though that Domain has a '
-                                     f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.')
-
-    return domain_to_strand
+        for domain in strand.domains:
+            # noinspection PyProtectedMember
+            if domain._pool is None and not domain.fixed:
+                raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
+                                 f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
+                                 f'For non-fixed domains, exactly one of these must be None.')
+            # noinspection PyProtectedMember
+            elif domain._pool is not None and domain.fixed:
+                raise ValueError(f'for strand {strand.name}, it has a '
+                                 f'domain {domain.name} that is fixed, even though that Domain has a '
+                                 f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.')
 
 
 @dataclass
