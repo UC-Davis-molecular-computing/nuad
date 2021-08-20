@@ -1,6 +1,8 @@
 """
-Stochastic local search for finding DNA sequences to assign to
+The main export of the search module is the function :meth:`search_for_dna_sequences`,
+which is a stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
+Various parameters of the search can be controlled using :any:`SearchParameters`.
 """
 
 # Since dsd is distributed with NUPACK, we include the following license
@@ -53,7 +55,7 @@ import shutil
 import sys
 import logging
 import pprint
-from collections import Counter, defaultdict, deque
+from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
 from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Generic, Any, \
@@ -174,7 +176,11 @@ class _ViolationSet:
 
     domain_to_violations: Dict[Domain, OrderedSet[_Violation]] = field(
         default_factory=lambda: defaultdict(OrderedSet))
-    """Dict mapping each :any:`Domain` to the set of all :any:`Violation`'s for which it is blamed."""
+    """Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is 
+    blamed."""
+
+    non_fixed_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
+    """Set of all :any:`Violations` that are associated to non-fixed :any:`constraint.Domain`'s."""
 
     def __repr__(self):
         lines = "\n  ".join(map(str, self.all_violations))
@@ -193,6 +199,8 @@ class _ViolationSet:
         for domain, domain_violations in new_violations.items():
             self.all_violations.update(domain_violations)
             self.domain_to_violations[domain].update(domain_violations)
+            if not domain.fixed:
+                self.non_fixed_violations.update(domain_violations)
 
     def clone(self) -> '_ViolationSet':
         """
@@ -210,7 +218,8 @@ class _ViolationSet:
         domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
         for domain, violations in domain_to_violations_deep_copy.items():
             domain_to_violations_deep_copy[domain] = OrderedSet(violations)
-        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy)
+        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy,
+                             OrderedSet(self.non_fixed_violations))
 
     def remove_violations_of_domain(self, domain: Domain) -> None:
         """
@@ -221,6 +230,7 @@ class _ViolationSet:
         # (values in self.domain_to_violations)
         violations_of_domain = set(self.domain_to_violations[domain])
         self.all_violations -= violations_of_domain
+        self.non_fixed_violations -= violations_of_domain
         for violations_of_other_domain in self.domain_to_violations.values():
             violations_of_other_domain -= violations_of_domain
         assert len(self.domain_to_violations[domain]) == 0
@@ -231,6 +241,14 @@ class _ViolationSet:
         """
         return sum(violation.score for violation in self.all_violations)
 
+    def total_nonfixed_score(self) -> float:
+        """
+        :return:
+            Total score of all violations attributed to :any:`constraint.Domain`'s with
+            :any:`constraint.Domain.fixed` = False.
+        """
+        return sum(violation.score for violation in self.non_fixed_violations)
+
     def score_of_constraint(self, constraint: Constraint) -> float:
         """
         :param constraint:
@@ -240,11 +258,27 @@ class _ViolationSet:
         """
         return sum(violation.score for violation in self.all_violations if violation.constraint == constraint)
 
+    def nonfixed_score_of_constraint(self, constraint: Constraint) -> float:
+        """
+        :param constraint:
+            constraint to filter scores on
+        :return:
+            Total score of all nonfixed violations due to `constraint`.
+        """
+        return sum(
+            violation.score for violation in self.non_fixed_violations if violation.constraint == constraint)
+
     def num_violations(self) -> float:
         """
         :return: Total number of violations.
         """
         return len(self.all_violations)
+
+    def num_nonfixed_violations(self) -> float:
+        """
+        :return: Total number of nonfixed violations.
+        """
+        return len(self.non_fixed_violations)
 
 
 def _violations_of_constraints(design: Design,
@@ -1061,7 +1095,7 @@ def _sequences_fragile_format_output_to_file(design: Design,
     return '\n'.join(
         f'{strand.name}  '
         f'{strand.group.name if include_group else ""}  '
-        f'{strand.sequence(dashes_between_domains=True)}' for strand in design.strands)
+        f'{strand.sequence(delimiter="-")}' for strand in design.strands)
 
 
 def _write_sequences(design: Design, directory_intermediate: str, directory_final: str,
@@ -1274,6 +1308,11 @@ def _check_design(design: dc.Design) -> Dict[Domain, Strand]:
 
 @dataclass
 class SearchParameters:
+    """
+    This class describes various parameters to give to the search algorithm
+    :meth:`search_for_dna_sequences`.
+    """
+
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
     """
     Function giving the probability of keeping a change in one
@@ -1387,6 +1426,11 @@ class SearchParameters:
     until the integers are sufficiently large that more digits are required.
     """
 
+    warn_fixed_sequences: bool = True
+    """
+    Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
+    """
+
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
@@ -1480,7 +1524,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     try:
         if not params.restart:
-            assign_sequences_to_domains_randomly_from_pools(design=design, rng=rng,
+            assign_sequences_to_domains_randomly_from_pools(design=design,
+                                                            warn_fixed_sequences=params.warn_fixed_sequences,
+                                                            rng=rng,
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
@@ -1502,7 +1548,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         iteration = 0
         time_of_last_improvement: float = -1.0
 
-        while len(violation_set_opt.all_violations) > 0 and \
+        while len(violation_set_opt.non_fixed_violations) > 0 and \
                 (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 
@@ -1523,7 +1569,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
-            score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
+            # score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
+            score_delta = violation_set_new.total_nonfixed_score() - violation_set_opt.total_nonfixed_score()
             prob_keep_change = params.probability_of_keeping_change(score_delta)
             keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
 
@@ -1739,8 +1786,9 @@ def read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
     domains_json = design_json[dc.domains_key]
     pool_names: Set[str] = set()
     for domain_json in domains_json:
-        pool_name = domain_json[dc.domain_pool_name_key]
-        pool_names.add(pool_name)
+        if dc.domain_pool_name_key in domain_json:
+            pool_name = domain_json[dc.domain_pool_name_key]
+            pool_names.add(pool_name)
 
     pool_with_name = {}
     for pool_name in pool_names:
@@ -1913,19 +1961,13 @@ def _log_constraint_summary(*, design: Design,
                             iteration: int,
                             num_new_optimal: int) -> None:
     all_constraints = design.all_constraints()
-    all_violation_descriptions = [
-        violation.constraint.short_description for violation in violation_set_new.all_violations]
 
-    # violation_description_counts: Counter = Counter(all_violation_descriptions)
-
-    # score_header = 'iteration|updates|opt score|new score|opt count|new count||'
     score_header = 'iteration|updates|opt score|new score||'
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in all_constraints)
     header = score_header + all_constraints_header
-    header_width = len(header)
-    logger.info(  # '-' * header_width + '\n' +
-        header)
+    # logger.info('-' * len(header) + '\n')
+    logger.info(header)
 
     score_opt = violation_set_opt.total_score()
     score_new = violation_set_new.total_score()
@@ -1934,11 +1976,7 @@ def _log_constraint_summary(*, design: Design,
     score_str = f'{iteration:9}|{num_new_optimal:7}|' \
                 f'{score_opt :9.{dec_opt}f}|' \
                 f'{score_new :9.{dec_new}f}|'  # \
-    # f'{violation_set_opt.num_violations():9}|' \
-    # f'{violation_set_new.num_violations():9}||'
-    # all_constraints_str = '|'.join(
-    #     f'{violation_description_counts[constraint.short_description]:{len(constraint.short_description)}}'
-    #     for constraint in all_constraints)
+
     all_constraints_strs = []
     for constraint in all_constraints:
         score = violation_set_new.score_of_constraint(constraint)
@@ -1952,6 +1990,7 @@ def _log_constraint_summary(*, design: Design,
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
+                                                    warn_fixed_sequences: bool,
                                                     rng: np.random.Generator = dn.default_rng,
                                                     overwrite_existing_sequences: bool = False) -> None:
     """
@@ -1962,6 +2001,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
 
     :param design:
         Design to which to assign DNA sequences.
+    :param warn_fixed_sequences:
+        Whether to log warning that each :any:`Domain` with :data:`constraints.Domain.fixed` = True
+        is not being assigned.
     :param rng:
         numpy random number generator (type returned by numpy.random.default_rng()).
     :param overwrite_existing_sequences:
@@ -1971,37 +2013,40 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         search. Non-fixed sequences can be skipped for overwriting on this initial assignment, but they
         are subject to change by the subsequent search algorithm.
     """
+    at_least_one_domain_unfixed = False
     independent_domains = [domain for domain in design.domains if not domain.dependent]
     for domain in independent_domains:
-        skip_fixed_msg = skip_nonfixed_msg = None
-        if domain.has_sequence():
-            # TODO check var names (appear swapped)
-            skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                             f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
-                             f'which the search will attempt to replace.'
+        skip_nonfixed_msg = skip_fixed_msg = None
+        if warn_fixed_sequences and domain.has_sequence():
             skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                                f'That domain has a FIXED sequence {domain.sequence}.'
+                                f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
+                                f'which the search will attempt to replace.'
+            skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
+                             f'That domain has a FIXED sequence {domain.sequence}.'
         if overwrite_existing_sequences:
             if not domain.fixed:
+                at_least_one_domain_unfixed = True
                 domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
                 assert len(domain.sequence) == domain.pool.length
             else:
-                logger.info(skip_fixed_msg)
+                logger.info(skip_nonfixed_msg)
         else:
-            if not domain.has_sequence():
+            if not domain.fixed:
+                # even though we don't assign a new sequence here, we want to record that at least one
+                # domain is not fixed so that we know it is eligible to be overwritten during the search
+                at_least_one_domain_unfixed = True
+            if not domain.fixed and not domain.has_sequence():
                 domain.sequence = domain.pool.generate_sequence(rng)
                 assert len(domain.sequence) == domain.pool.length
-            else:
+            elif warn_fixed_sequences:
                 if domain.fixed:
-                    logger.info(skip_nonfixed_msg)
-                else:
                     logger.info(skip_fixed_msg)
+                else:
+                    logger.info(skip_nonfixed_msg)
 
-    # Below lines have been commented out due to redefinition of dependent
-    # dependent_domains = [domain for domain in design.domains if domain.dependent]
-    # dependent_strands = OrderedSet(domain_to_strand[domain] for domain in dependent_domains)
-    # for strand in dependent_strands:
-    #     strand.assign_dna_from_pool(rng)
+    if not at_least_one_domain_unfixed:
+        raise ValueError('No domains are unfixed, so we cannot do any sequence design. '
+                         'Please make at least one domain not fixed.')
 
 
 _sentinel = object()

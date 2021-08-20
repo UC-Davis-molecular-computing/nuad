@@ -1,12 +1,16 @@
 """
-Shipped with DNA single-stranded tile (SST) sequence designer used in the following publication.
- "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly"
- Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
+Contains utility functions for accessing NUPACK 4 and ViennaRNA energy calculation algorithms.
 
-Generally this module processes Python 'ACTG' strings
-(as opposed to numpy arrays which are processed by dsd.np).
+The main functions are 
+:meth:`pfunc` (for calculating complex free energy with NUPACK, although with its helper functions
+:meth:`secondary_structure_single_strand` and :meth:`binding`),
+:meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
+:meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
+that is much faster than calling :meth:`pfunc` on the same pair of strands).
 """  # noqa
+
 import collections
+import math
 import itertools
 import os
 import logging
@@ -20,8 +24,6 @@ from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
 import numpy as np
 
 os_is_windows = sys.platform == 'win32'
-
-global_thread_pool = ThreadPool()
 
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 
@@ -39,11 +41,34 @@ default_sodium = 0.05
 _cached_nupack_models = {}
 
 
+def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> float:
+    """
+    Additive adjustment factor to convert NUPACK's mole fraction units to molar.
+
+    For details on why this is needed for multi-stranded complexes, see
+    http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
+
+    :param temperature:
+        temperature in Celsius
+    :param num_seqs:
+        number of sequences
+    :return:
+        Additive adjustment factor to convert NUPACK's mole fraction units to molar.
+    """
+    r = 0.0019872041  # Boltzmann's constant in kcal/mol/K
+    water_conc = 55.14  # molar concentration of water at 37 C; ignore temperature dependence, ~5%
+    temperature_kelvin = temperature + 273.15  # Kelvin
+    # converts from NUPACK mole fraction units to molar units, per association
+    adjust = r * temperature_kelvin * math.log(water_conc)
+    return adjust * (num_seqs - 1)
+
+
 @lru_cache(maxsize=10_000)
 def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           sodium: float = default_sodium,
           magnesium: float = default_magnesium,
+          strand_association_penalty: bool = True,
           ) -> float:
     """
     Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
@@ -60,9 +85,14 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :param temperature:
         temperature in Celsius
     :param sodium:
-        molarity of sodium in moles per liter (Default: 0.05)
+        molarity of sodium in moles per liter
     :param magnesium:
-        molarity of magnesium in moles per liter (Default: 0.0125)
+        molarity of magnesium in moles per liter
+    :param strand_association_penalty:
+        Add strand association penalty for a complex. The quantity added is that returned by
+        :meth:`calculate_strand_association_penalty`.
+        For details on why this is needed for multi-stranded complexes, see
+        http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
@@ -85,6 +115,9 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         model = _cached_nupack_models[param]
     (_, dg) = nupack_pfunc(strands=seqs, model=model)
 
+    if strand_association_penalty and len(seqs) > 1:
+        dg += calculate_strand_association_penalty(temperature, len(seqs))
+
     return dg
 
 
@@ -101,8 +134,12 @@ def nupack_complex_base_pair_probabilities(strand_complex: Complex,
     :param strand_complex:
         Ordered tuple of strands in complex (specifying a particular circular ordering, which is
         imposed on all considered secondary structures)
-    :param model:
-        NUPACK model to use (e.g., to specify temperature and/or magnesium concentration)
+    :param temperature:
+        temperature in Celsius
+    :param sodium:
+        molarity of sodium in moles per liter
+    :param magnesium:
+        molarity of magnesium in moles per liter
     :return:
         2D Numpy array of floats, with `result[i1][i2]` giving the base-pair probability of base at position
         `i1` with base at position `i2` (if `i1` != `i2`), where `i1` and `i2` are the absolute positions
@@ -124,7 +161,8 @@ def nupack_complex_base_pair_probabilities(strand_complex: Complex,
     except ModuleNotFoundError:
         raise ImportError(
             'NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. '
-            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'Installation instructions can be found at '
+            'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
@@ -435,14 +473,19 @@ def log_energy(energy: float) -> None:
         print(f'{energy:.1f}')
 
 
+global_thread_pool = ThreadPool()
+
+
 def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium: float,
                       magnesium: float, orthogonality: float,
-                      orthogonality_ave: float = -1, threaded: bool = True) -> bool:
+                      orthogonality_ave: float = -1, threaded: bool = False) -> bool:
     """test orthogonality of domain with all others and their wc complements
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
+    if threaded:
+        raise NotImplementedError()
 
     def binding_callback(s1: str, s2: str) -> float:
         return binding(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
@@ -502,13 +545,16 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
 def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], temperature: float,
                                                sodium: float, magnesium: float,
                                                concat: float, concat_ave: float = -1,
-                                               threaded: bool = True) -> bool:
+                                               threaded: bool = False) -> bool:
     """test lack of secondary structure in concatenated domains
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    #     if hairpin(seq+seq,temperature) > concat: return False
-    #     if hairpin(wc(seq)+wc(seq),temperature) > concat: return False
+
+    if threaded:
+        raise NotImplementedError()
+
     energy_sum = 0.0
     for altseq in seqs:
         wc_seq = wc(seq)

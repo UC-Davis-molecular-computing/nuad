@@ -59,15 +59,21 @@ def main() -> None:
     # just for testing parallel processing
 
     # num_strands = 2
-    # num_strands = 5
+    num_strands = 5
     # num_strands = 10
-    num_strands = 50
+    # num_strands = 50
     # num_strands = 100
     # num_strands = 355
 
     #                     si         wi         ni         ei
     # strand i is    [----------|----------|----------|---------->
     strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
+
+    # fix all domains of strand 0 and one domain of strand 1
+    for domain in strands[0].domains:
+        domain.set_fixed_sequence('ACGTACGTAC')
+    strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
+
 
     threaded = False
     # threaded = True
@@ -86,10 +92,10 @@ def main() -> None:
     #     threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
 
     strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
-        threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
+        threshold=-1.0, temperature=52, short_description='StrandSS', threaded=threaded)
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
-        threshold=-5.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.1)
+        threshold=-3.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.1)
 
     design = dc.Design(strands,
                        constraints=[
@@ -98,19 +104,19 @@ def main() -> None:
                            # domain_pair_nupack_constraint,
                            # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                           # strand_pairs_rna_duplex_constraint,
+                           strand_pairs_rna_duplex_constraint,
                        ])
 
     numpy_constraints: List[NumpyConstraint] = [
         # dc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
-        dc.BaseCountConstraint(base='G', high_count=1),
+        # dc.BaseCountConstraint(base='G', high_count=1),
         # dc.BaseEndConstraint(bases=('C', 'G')),
-        dc.RunsOfBasesConstraint(['C', 'G'], 4),
-        dc.RunsOfBasesConstraint(['A', 'T'], 4),
+        # dc.RunsOfBasesConstraint(['C', 'G'], 4),
+        # dc.RunsOfBasesConstraint(['A', 'T'], 4),
         # dc.BaseEndConstraint(bases=('A', 'T')),
         # dc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
         # dc.BaseAtPositionConstraint(bases='T', position=3),
-        # dc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
+        dc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
         # dc.RestrictBasesConstraint(bases=['A', 'T', 'C']),
     ]
 
@@ -135,9 +141,11 @@ def main() -> None:
                                 replace_with_close_sequences=replace_with_close_sequences,
                                 )
 
-    for strand in strands:
+
+    for strand in strands[1:]: # skip all domains on strand 0 since all its domains are fixed
         for domain in strand.domains[:2]:
-            domain.pool = domain_pool_10
+            if domain.name != 's1': # skip for s1 since that domain is fixed
+                domain.pool = domain_pool_10
         for domain in strand.domains[2:]:
             domain.pool = domain_pool_11
 
