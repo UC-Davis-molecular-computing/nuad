@@ -43,10 +43,11 @@ _cached_nupack_models = {}
 
 def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> float:
     """
-    Additive adjustment factor to convert NUPACK's mole fraction units to molar.
+    Additive adjustment factor to convert NUPACK's mole fraction units to molarity.
 
-    For details on why this is needed for multi-stranded complexes, see
-    http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
+    For details on why this is needed for multi-stranded complexes, see Section S1.1 of
+    http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf and Figure 2 of
+    http://www.nupack.org/downloads/serve_public_file/nupack_user_guide_3.2.2.pdf?type=pdf
 
     :param temperature:
         temperature in Celsius
@@ -89,10 +90,17 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :param magnesium:
         molarity of magnesium in moles per liter
     :param strand_association_penalty:
-        Add strand association penalty for a complex. The quantity added is that returned by
-        :meth:`calculate_strand_association_penalty`.
-        For details on why this is needed for multi-stranded complexes, see
-        http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
+        Add strand association penalty for a complex, related to converting NUPACK's mole fraction units
+        to molarity. The quantity added is that returned by :meth:`calculate_strand_association_penalty`
+        with parameters `temperature` and `len(seqs)`.
+        For most constraints, which involve only one size of complex, this factor won't matter other than
+        to adjust the energy threshold by the same factor. The factor depends only on the number of strands
+        in `seqs`, but not on their sequences. However, this factor is needed for a meaningful comparison
+        of energies between complexes of different sizes, e.g., to calculate equilibrium concentrations
+        of complexes of various sizes.
+        For details on why this is needed for multi-stranded complexes, see Section S1.1 of
+        http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf and Figure 2 of
+        http://www.nupack.org/downloads/serve_public_file/nupack_user_guide_3.2.2.pdf?type=pdf
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
@@ -107,6 +115,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
             'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at '
             'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
+    # expensive to create a Model, so don't create the same one twice
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
         model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
