@@ -3613,8 +3613,6 @@ def nupack_domain_pair_constraint(
     NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
     are compared.
 
-    NUPACK version 2 or 3 must be installed and on the PATH.
-
     :param threshold:
         Energy threshold in kcal/mol.
     :param temperature:
