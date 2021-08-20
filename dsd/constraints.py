@@ -1019,23 +1019,18 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     dependent: bool = False
     """
     Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
-    However, if using a :any:`StrandPool`, which assigns a DNA sequence to a whole :any:`Strand`, then
-    this will be marked as True (dependent).
-    Such a :any:`Domain` is not fixed, since its DNA sequence can change, but it is not independent,
-    since it must be set along with other :any;`Domain`'s in the same :any:`Strand`.
-
-    An dependent :any:`Domain` still requires a :any:`DomainPool`, to enable it to have a length, stored
-    in the field :py:data:`DomainPool.length`. But that pool's method
-    :py:meth:`DomainPool.generate_sequence` will not be called to generate sequences for the :any:`Domain`;
-    instead they will be assigned through the :any:`StrandPool` of a :any:`Strand` containing this
-    :any:`Domain`.
-
+    However, domains can be subdivided hierarchically into a tree of domains. In this case exactly
+    one domain along every path from the root to any leaf must be independent, and the rest dependent:
+    the dependent domains will have their sequences calculated from the indepenedent ones.
+    
     A possible use case is that one strand represents a subsequence of M13 of length 300,
     of which there are 7249 possible DNA sequences to assign based on the different
     rotations of M13. If this strand is bound to several other strands, it will have
     several domains, but they cannot be set independently of each other.
-    Only the entire strand can be assigned at once, changing every domain at once,
-    so the domains are dependent on this strand's assigned sequence.
+    This can be done by creating a strand with a single long domain, which is subdivided into many dependent 
+    child domains.
+    Only the entire strand, the root domain, can be assigned at once, changing every domain at once,
+    so the domains are dependent on the root domain's assigned sequence.
     """
 
     _subdomains: List[Domain] = field(init=False, default_factory=list)
@@ -2018,7 +2013,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     design_constraints: List[DesignConstraint] = field(default_factory=list, init=False)
     """
     Constraints that process whole design at once, for anything not expressible as one of the others
-    (for example, in case it needs access to all the :any:`StrandGroup`'s and :any:`DomainPool`'s at once).
+    (for example, in case it needs access to all the :any:`DomainPool`'s at once).
     """
 
     #################################################
@@ -2031,7 +2026,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    strand_groups: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
+    _strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
@@ -2144,9 +2139,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domains = remove_duplicates(domains)
 
-        self.strand_groups = defaultdict(list)
+        self._strands_by_group_name = defaultdict(list)
         for strand in self.strands:
-            self.strand_groups[strand.group].append(strand)
+            self._strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
 
@@ -2252,10 +2247,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def strands_by_group_name(self, group: str) -> List[Strand[StrandLabel, DomainLabel]]:
         """
-        :param group: name of a :any:`StrandGroup`
+        :param group: name of a group
         :return: list of :any:`Strand`'s in that group
         """
-        return self.strand_groups[group]
+        return self._strands_by_group_name[group]
 
     def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain[DomainLabel]]:
         """
