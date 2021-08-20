@@ -43,10 +43,11 @@ _cached_nupack_models = {}
 
 def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> float:
     """
-    Additive adjustment factor to convert NUPACK's mole fraction units to molar.
+    Additive adjustment factor to convert NUPACK's mole fraction units to molarity.
 
-    For details on why this is needed for multi-stranded complexes, see
-    http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
+    For details on why this is needed for multi-stranded complexes, see Section S1.1 of
+    http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf and Figure 2 of
+    http://www.nupack.org/downloads/serve_public_file/nupack_user_guide_3.2.2.pdf?type=pdf
 
     :param temperature:
         temperature in Celsius
@@ -55,7 +56,11 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     :return:
         Additive adjustment factor to convert NUPACK's mole fraction units to molar.
     """
-    r = 0.0019872041  # Boltzmann's constant in kcal/mol/K
+    r = 0.0019872041  # Boltzmann's constant in kcal/mol/K (value on Wikipedia under Molar Gas Constant:
+    # https://en.wikipedia.org/wiki/Gas_constant)
+    # r = 0.001985875  # Boltzmann's constant in kcal/mol/K (value on Wikipedia under Boltzman's Constant:
+    # https://en.wikipedia.org/wiki/Boltzmann_constant#Value_in_different_units, not sure why different
+    # from the Molar Gas Constant, but luckily it's not until the fourth non-zero digit)
     water_conc = 55.14  # molar concentration of water at 37 C; ignore temperature dependence, ~5%
     temperature_kelvin = temperature + 273.15  # Kelvin
     # converts from NUPACK mole fraction units to molar units, per association
@@ -89,10 +94,17 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :param magnesium:
         molarity of magnesium in moles per liter
     :param strand_association_penalty:
-        Add strand association penalty for a complex. The quantity added is that returned by
-        :meth:`calculate_strand_association_penalty`.
-        For details on why this is needed for multi-stranded complexes, see
-        http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf
+        Add strand association penalty for a complex, related to converting NUPACK's mole fraction units
+        to molarity. The quantity added is that returned by :meth:`calculate_strand_association_penalty`
+        with parameters `temperature` and `len(seqs)`.
+        For most constraints, which involve only one size of complex, this factor won't matter other than
+        to adjust the energy threshold by the same factor. The factor depends only on the number of strands
+        in `seqs`, but not on their sequences. However, this factor is needed for a meaningful comparison
+        of energies between complexes of different sizes, e.g., to calculate equilibrium concentrations
+        of complexes of various sizes.
+        For details on why this is needed for multi-stranded complexes, see Section S1.1 of
+        http://www.nupack.org/downloads/serve_public_file/fornace20_supp.pdf?type=pdf and Figure 2 of
+        http://www.nupack.org/downloads/serve_public_file/nupack_user_guide_3.2.2.pdf?type=pdf
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
@@ -107,6 +119,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
             'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at '
             'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
+    # expensive to create a Model, so don't create the same one twice
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
         model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
@@ -414,11 +427,23 @@ def wc(seq: str) -> str:
     return seq.translate(_wctable)[::-1]
 
 
+def secondary_structure_single_strand(
+        seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
+        magnesium: float = default_magnesium) -> float:
+    """Computes the (partition function) free energy of single-strand secondary structure.
+
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
+    """
+    return pfunc((seq,), temperature, sodium, magnesium)
+
+
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
                        magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
     """Computes the (partition function) free energy of a strand with its perfect WC complement.
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     seq1 = seq
     seq2 = wc(seq)
@@ -429,20 +454,10 @@ def binding_complement(seq: str, temperature: float = default_temperature, sodiu
         seq1, seq2 = seq2, seq1
     association_energy = pfunc((seq1, seq2), temperature, sodium, magnesium)
     if subtract_indv:
-        # ddG_reaction == dG(products) - dG(reactants)
+        # ddG_reaction = dG(products) - dG(reactants)
         association_energy -= (pfunc(seq1, temperature, sodium, magnesium) +
                                pfunc(seq2, temperature, sodium, magnesium))
     return association_energy
-
-
-def secondary_structure_single_strand(
-        seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
-        magnesium: float = default_magnesium) -> float:
-    """Computes the (partition function) free energy of single-strand secondary structure.
-
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
-    """
-    return pfunc((seq,), temperature, sodium, magnesium)
 
 
 def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,

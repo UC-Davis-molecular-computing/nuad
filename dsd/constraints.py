@@ -186,8 +186,8 @@ class NumpyConstraint(ABC):
     such as :any:`RestrictBasesConstraint` or :any:`NearestNeighborEnergyConstraint`,
     are dataclasses (https://docs.python.org/3/library/dataclasses.html).
     There is no requirement that your custom subclasses be dataclasses, but since the subclasses will
-    inherit the field :py:data:`NumpyConstraint.name`, you can easily make them dataclasses to get, for example,
-    free ``repr`` and ``str`` implementations. See the source code for the example subclasses.
+    inherit the field :py:data:`NumpyConstraint.name`, you can easily make them dataclasses to get,
+    for example, free ``repr`` and ``str`` implementations. See the source code for the example subclasses.
     """
 
     name: str = field(init=False, default='TODO: give a concrete name to this NumpyConstraint')
@@ -944,7 +944,7 @@ class StrandPool(JSONSerializable):
     Currently, one simply specifies a list of all possible sequences to choose from.
     """
 
-    strand: 'Strand'
+    strand: Strand
     """:any:`Strand` using this :any:`StrandPool`."""
 
     sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
@@ -1104,13 +1104,13 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
     so the domains are dependent on this strand's assigned sequence.
     """
 
-    _subdomains: List["Domain"] = field(init=False, default_factory=list)
+    _subdomains: List[Domain] = field(init=False, default_factory=list)
     """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
     """
 
-    parent: Optional["Domain"] = field(init=False, default=None)
-    """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based on the
-    :py:data:`Domain.subdomains` of other domains in the same tree.
+    parent: Optional[Domain] = field(init=False, default=None)
+    """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based 
+    on the :py:data:`Domain.subdomains` of other domains in the same tree.
     """
 
     def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
@@ -1129,10 +1129,6 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         self._subdomains = subdomains
 
         self.__post_init__()
-
-    # TODO: Add private methods set_subdomain_sequence and set_parent_sequence called in response to setter sequence
-    # TODO: Test case: one long strand, make it have a single long domain, and it consist of shorter domains
-    # TODO: And other test cases...
 
     def __post_init__(self) -> None:
         if self.name.endswith('*'):
@@ -1205,12 +1201,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         if pool_name is not None:
             if pool_with_name is not None:
                 pool = pool_with_name[pool_name] if pool_with_name is not None else None
-                # if pool_length != pool.length:
-                #     raise ValueError(f'JSON-stored DomainPool length {pool_length} not equal to pool length '
-                #                      f'{pool.length} found in dictionary pool_with_name')
             else:
                 raise AssertionError()
-                # pool = DomainPool(name=pool_name, length=pool_length, idx=pool_idx)
         else:
             pool = None
 
@@ -1483,7 +1475,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         self_independent = not self.dependent or self.fixed
 
         if self_independent:
-            # Since this domain is independent, check that there are no more independent subdomains in any children recursively
+            # Since this domain is independent, check that there are no more independent subdomains
+            # in any children recursively
             for sd in self._subdomains:
                 if sd._contains_any_independent_subdomain_recursively():
                     # Too many independent subdomains in this path
@@ -1492,7 +1485,8 @@ class Domain(JSONSerializable, Generic[DomainLabel]):
         else:
             if len(self._subdomains) == 0:
                 raise ValueError(f"Domain {self} is dependent and does not contain any subdomains.")
-            # Since this domain is dependent, check that each subdomain has exactly one independent subdomain in all paths.
+            # Since this domain is dependent, check that each subdomain has
+            # exactly one independent subdomain in all paths.
             for sd in self._subdomains:
                 try:
                     sd._check_exactly_one_independent_subdomain_all_paths()
@@ -1639,6 +1633,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """Each :any:`Strand` in the same :any:`StrandGroup` as this one share a set of properties, such as
     bounds on secondary structure energy."""
 
+    _domain_names_concatenated: str
+    """Concatenation of domain names; cached for efficiency since these are used in calculating 
+    hash values."""
+
+    _hash_domain_names_concatenated: int
+    """Hash value of _domain_names_concatenated; cached for efficiency."""
+
     _name: Optional[str] = None
     """Optional name of strand."""
 
@@ -1659,6 +1660,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     with using a :any:`DomainPool` for any :any:`Domain` on this :any:`Strand`.
     """
 
+
     def __init__(self,
                  domain_names: Optional[List[str]] = None,
                  domains: Optional[List[Domain[DomainLabel]]] = None,
@@ -1672,8 +1674,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         A :any:`Strand` can be created either by listing explicit :any:`Domain` objects
         via parameter `domains`, or by giving names via parameter `domain_names`.
         If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned";
-        no two :any:`Domain`'s with the same name will be created.
+        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as global variables;
+        no two :any:`Domain`'s with the same name will be created, and subsequent uses of the same
+        name will refer to the same :any:`Domain` object.
 
         :param domain_names:
             Names of the :any:`Domain`'s on this :any:`Strand`.
@@ -1735,18 +1738,23 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
 
+        self.compute_derived_fields()
+
+    def compute_derived_fields(self):
+        """
+        Re-computes derived fields of this :any:`Strand`. Should be called after modifications to the
+        Strand. (Done automatically at the start of :meth:`search.search_for_dna_sequences`.)
+        """
         self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
 
     def __hash__(self) -> int:
-        # return hash(self.domain_names_concatenated())
-        # return hash(self._domain_names_concatenated)
         return self._hash_domain_names_concatenated
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Strand):
             return False
-        return self.domain_names_concatenated() == other.domain_names_concatenated()
+        return self._domain_names_concatenated == other._domain_names_concatenated
 
     def length(self) -> int:
         """
@@ -1756,11 +1764,14 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return sum(domain.length for domain in self.domains)
 
-    def domain_names_concatenated(self) -> str:
+    def domain_names_concatenated(self, delim: str='-') -> str:
         """
-        :return: names of :any:`Domain`'s in this :any:`Strand`, concatenated with `delim` in between.
+        :param delim:
+            Delimiter to put between domain names.
+        :return:
+            names of :any:`Domain`'s in this :any:`Strand`, concatenated with `delim` in between.
         """
-        return self._domain_names_concatenated
+        return delim.join(self.domain_names_tuple())
 
     def domain_names_tuple(self) -> Tuple[str, ...]:
         """
@@ -2145,7 +2156,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self._check_constraint_types(constraints)
         self.strands = strands if isinstance(strands, list) else list(strands)
         self._partition_constraints(constraints)
-        self._compute_derived_fields()
+        self.compute_derived_fields()
 
     @staticmethod
     def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
@@ -2200,12 +2211,27 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.add_constraints(constraints)
 
-    def _compute_derived_fields(self):
+    def compute_derived_fields(self) -> None:
+        """
+        Computes derived fields of this :any:`Design`. Used to ensure that all fields are valid in case
+        the :any:`Design` was manually modified after being created, before running
+        :meth:`search.search_for_dna_sequences`.
+        """
         # Get domains not explicitly listed on strands that are part of domain tree.
+        # Also set up quick access to domain by name, and ensure each domain name unique.
+        self.domains_by_name = {}
         domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
-                domains.extend(domain_in_strand.all_domains_in_tree())
+                domains_in_tree = domain_in_strand.all_domains_in_tree()
+                domains.extend(domains_in_tree)
+                for domain_in_tree in domains_in_tree:
+                    name = domain_in_tree.name
+                    if name in self.domains_by_name and domain_in_tree is not self.domains_by_name[name]:
+                        raise ValueError(f'domain names must be unique, '
+                                         f'but I found two different domains with name {domain_in_tree.name}')
+                    self.domains_by_name[domain_in_tree.name] = domain_in_tree
+
 
         self.domains = remove_duplicates(domains)
 
@@ -2215,13 +2241,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.store_domain_pools()
 
-        # set up quick access to domain by name, and ensure each domain name unique
-        self.domains_by_name = {}
-        for domain in self.domains:
-            if domain.name in self.domains_by_name:
-                raise ValueError(f'domain names must be unique, '
-                                 f'but I found two domains with name {domain.name}')
-            self.domains_by_name[domain.name] = domain
+        for strand in self.strands:
+            strand.compute_derived_fields()
 
     def store_domain_pools(self) -> None:
         self.domain_pools_to_domain_map = defaultdict(list)
@@ -2597,8 +2618,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # distinguish between pairs in which both strands are fixed (so cannot remove violation)
         # versus those pairs in which at least one element of the pair is unfixed
-        both_fixed_pairs = [(s1,s2) for s1, s2 in all_pairs_to_check if s1.fixed and s2.fixed]
-        one_unfixed_pairs = [(s1,s2) for s1, s2 in all_pairs_to_check if not (s1.fixed and s2.fixed)]
+        both_fixed_pairs = [(s1, s2) for s1, s2 in all_pairs_to_check if s1.fixed and s2.fixed]
+        one_unfixed_pairs = [(s1, s2) for s1, s2 in all_pairs_to_check if not (s1.fixed and s2.fixed)]
 
         max_strand_name_length = max(len(strand.name) for strand in _flatten(all_pairs_to_check))
 
@@ -2622,10 +2643,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     # this function reuses code between summarizing fixed and unfixed strands
     @staticmethod
     def _summary_of_strand_pairs_in_strand_pair_constraint(constraint: StrandPairConstraint,
-                                                 report_only_violations: bool,
-                                                 pairs: Iterable[Tuple[Strand[StrandLabel, DomainLabel],
-                                                                       Strand[StrandLabel, DomainLabel]]],
-                                                 max_strand_name_length: int) -> ConstraintReport:
+                                                           report_only_violations: bool,
+                                                           pairs: Iterable[
+                                                               Tuple[Strand[StrandLabel, DomainLabel],
+                                                                     Strand[StrandLabel, DomainLabel]]],
+                                                           max_strand_name_length: int) -> ConstraintReport:
         num_violations = 0
         num_checks = 0
         lines_and_excesses: List[Tuple[str, float]] = []
@@ -2833,7 +2855,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
-        strands: List[Strand] = []
+        dsd_strands: List[Strand] = []
         strand_names: Set[str] = set()
         for group_name, sc_strands in sc_strand_groups.items():
             group = StrandGroup(name=group_name)
@@ -2873,10 +2895,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                         logger.warning(f'warning; dsd domain already has label {dsd_domain.label}; '
                                        f'skipping assignment of scadnano label {sc_domain.label}')
 
-                strands.append(dsd_strand)
+                dsd_strands.append(dsd_strand)
                 strand_names.add(dsd_strand.name)
 
-        design: Design[StrandLabel, DomainLabel] = Design(strands=strands)
+        design: Design[StrandLabel, DomainLabel] = Design(strands=dsd_strands)
         return design
 
     @staticmethod
@@ -3694,7 +3716,8 @@ def nupack_strand_pair_constraint(
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc executable.
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
 
     :param threshold:
         Energy threshold in kcal/mol
@@ -3921,18 +3944,18 @@ def rna_duplex_strand_pairs_constraint(
                                             (both_fixed_pairs, 'pairs with both fixed')]:
             if len(pairs_to_check) > 0:
                 report = _summary_of_pairs(pairs_to_check, report_only_violations, max_name_length)
-                summary = _small_header(header_name, "=") + f'\n{report.content}\n'
+                summary_ = _small_header(header_name, "=") + f'\n{report.content}\n'
                 num_violations += report.num_violations
                 num_checks += report.num_checks
-                summaries.append(summary)
+                summaries.append(summary_)
 
         content = ''.join(summaries)
         report = ConstraintReport(constraint=None, content=content,
                                   num_violations=num_violations, num_checks=num_checks)
         return report
 
-    def _summary_of_pairs(strand_pairs: Iterable[Tuple[Strand, Strand]],
-                report_only_violations: bool, max_name_length: int) -> ConstraintReport:
+    def _summary_of_pairs(strand_pairs: Iterable[Tuple[Strand, Strand]], report_only_violations: bool,
+                          max_name_length: int) -> ConstraintReport:
         sequence_pairs = [(s1.sequence(), s2.sequence()) for s1, s2 in strand_pairs]
         energies = calculate_energies(sequence_pairs)
 
@@ -4119,7 +4142,8 @@ def rna_cofold_strand_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs: Iterable[Tuple[Domain, Domain]]) \
+def _all_pairs_domain_sequences_complements_names_from_domains(
+        domain_pairs: Iterable[Tuple[Domain, Domain]]) \
         -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
     """
     :param domain_pairs:
@@ -4204,8 +4228,8 @@ def rna_duplex_domain_pairs_constraint(
 
     def summary(domain_pairs: Iterable[Tuple[Domain, Domain]],
                 report_only_violations: bool) -> ConstraintReport:
-        sequence_pairs, domain_name_pairs, domains = _all_pairs_domain_sequences_complements_names_from_domains(
-            domain_pairs)
+        sequence_pairs, domain_name_pairs, domains = \
+            _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
         max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
 
@@ -4307,7 +4331,8 @@ def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], floa
 @dataclass(frozen=True, eq=False)  # type: ignore
 class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
     """
-    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes (tuples of :any:`Strand`'s).
+    Similar to :any:`ComplexConstraint` but operates on a specified list of complexes
+    (tuples of :any:`Strand`'s).
     """
 
     evaluate: Callable[[Iterable[Complex]],
@@ -5618,7 +5643,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 
 
 def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
-                                           nonimplicit_base_pairs_domain_names: Set[str] = None) \
+                                           nonimplicit_base_pairs_domain_names: Optional[Set[str]] = None) \
         -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
@@ -5738,6 +5763,8 @@ def _leafify_strand(
     for idx, new_idxs in addr_translation_table_without_strand.items():
         new_addrs = [StrandDomainAddress(new_strand, new_idx) for new_idx in new_idxs]
         addr_translation_table[StrandDomainAddress(strand, idx)] = new_addrs
+
+    new_strand.compute_derived_fields()
 
     return new_strand
 

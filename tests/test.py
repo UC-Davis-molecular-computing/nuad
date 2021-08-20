@@ -1,7 +1,15 @@
 from typing import Dict, List
 import unittest
+
+import numpy
+
 from dsd import constraints
-from dsd.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, Strand, DomainPool, BasePairType, StrandDomainAddress
+import dsd.constraints as dc
+import dsd.search as ds
+import scadnano as sc
+from dsd.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
+    _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
+    Strand, DomainPool, BasePairType, StrandDomainAddress
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -48,14 +56,88 @@ def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Stra
     s: Strand = Strand(domain_names)
     for (i, length) in enumerate(domain_lengths):
         s.domains[i].pool = assign_domain_pool_of_size(length)
+    s.compute_derived_fields()
     return s
 
 
+class TestModifyDesignAfterCreated(unittest.TestCase):
+    def setUp(self) -> None:
+        strand = dc.Strand(domain_names=['x', 'y'])
+        self.design = dc.Design(strands=[strand])
+
+    def add_domain(self):
+        strand = self.design.strands[0]
+        strand.domains.append(dc.Domain('z'))
+        self.design.compute_derived_fields()
+        return strand
+
+    def test_add_domain(self) -> None:
+        strand = self.add_domain()
+
+        self.assertEqual(3, len(self.design.domains))
+
+        actual_domain_names = sorted([d.name for d in self.design.domains])
+        self.assertEqual(['x', 'y', 'z'], actual_domain_names)
+
+        self.assertEqual('x-y-z', strand.name)
+
+    def test_add_domain_assign_sequence(self):
+        strand = self.add_domain()
+        pool = DomainPool('a domain pool', 10)
+        for domain in strand.domains:
+            domain.pool = pool
+        rng = numpy.random.default_rng(0)
+        ds.assign_sequences_to_domains_randomly_from_pools(self.design, True, rng)
+
+        # assert we don't raise an exception trying to access the sequence of each domain
+        s0 = strand.domains[0].sequence  # noqa
+        s1 = strand.domains[1].sequence  # noqa
+        s2 = strand.domains[2].sequence  # noqa
+
+
+class TestFromScadnanoDesign(unittest.TestCase):
+    def test_two_instances_of_domain(self) -> None:
+        '''
+            x           x
+        [--------+ [--------+
+                 |          |
+        <--------+ <--------+
+            y           y*
+        '''
+        helices = [sc.Helix(max_offset=100) for _ in range(2)]
+        sc_design = sc.Design(helices=helices)
+        sc_design.strand(0, 0).move(10).cross(1).move(-10)
+        sc_design.strand(0, 10).move(10).cross(1).move(-10)
+        s0, s1 = sc_design.strands
+        d00: sc.Domain = s0.domains[0]
+        d01: sc.Domain = s0.domains[1]
+        d10: sc.Domain = s1.domains[0]
+        d11: sc.Domain = s1.domains[1]
+        d00.set_name('x')
+        d01.set_name('y')
+        d10.set_name('x')
+        d11.set_name('y*')
+
+        dsd_design = dc.Design.from_scadnano_design(sc_design)
+        dsd_d00 = dsd_design.strands[0].domains[0]
+        dsd_d01 = dsd_design.strands[0].domains[1]
+        dsd_d10 = dsd_design.strands[1].domains[0]
+        dsd_d11 = dsd_design.strands[1].domains[1]
+
+        self.assertEqual('x', dsd_d00.name)
+        self.assertEqual('y', dsd_d01.name)
+        self.assertEqual('x', dsd_d10.name)
+        self.assertEqual('y', dsd_d11.name)
+
+        self.assertIs(dsd_d00, dsd_d10)
+        self.assertIs(dsd_d01, dsd_d11)
+
+
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         clear_domains_interned()
 
-    def test_adjacent_to_exterior_base_pair_on_length_2_domain(self):
+    def test_adjacent_to_exterior_base_pair_on_length_2_domain(self) -> None:
         """Test that base pair on domain of length two is properly classified as
         ADJACENT_TO_EXTERIOR_BASE_PAIR
 
@@ -219,7 +301,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                 domain1_3p_domain1_base_pair_type=BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR), ])
 
         actual = _get_base_pair_domain_endpoints_to_check(input_gate_complex, nonimplicit_base_pairs)
-        self.assertEqual(actual, expected)
+        self.assertEqual(expected, actual)
 
     def test_seesaw_gate_output_complex(self):
         """Test endpoints for seesaw gate gate:output complex
@@ -567,7 +649,8 @@ class TestSubdomains(unittest.TestCase):
         b = Domain('b', assign_domain_pool_of_size(5), fixed=False)
         c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=True, subdomains=[b, c])
+        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=True,
+                          subdomains=[b, c])
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
         """
@@ -583,7 +666,8 @@ class TestSubdomains(unittest.TestCase):
         b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
         c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=False, subdomains=[b, c])
+        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=False,
+                          subdomains=[b, c])
 
     def test_construst_strand(self):
         """
