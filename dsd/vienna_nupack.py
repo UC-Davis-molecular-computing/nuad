@@ -2,7 +2,7 @@
 Contains utility functions for accessing NUPACK 4 and ViennaRNA energy calculation algorithms.
 
 The main functions are 
-:meth:`pfunc` (for calculating complex free energy with NUPACK, although with its helper functions
+:meth:`pfunc` (for calculating complex free energy with NUPACK, along with its helper functions
 :meth:`secondary_structure_single_strand` and :meth:`binding`),
 :meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
 :meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
