@@ -1493,6 +1493,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
     # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
+    design.compute_derived_fields()
     _check_design(design)
 
     directories = _setup_directories(
