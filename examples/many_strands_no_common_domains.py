@@ -58,8 +58,8 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    # num_strands = 2
-    num_strands = 5
+    num_strands = 2
+    # num_strands = 5
     # num_strands = 10
     # num_strands = 50
     # num_strands = 100
@@ -82,7 +82,7 @@ def main() -> None:
         threshold=-2.0, temperature=52, short_description='DomainPairNoCompl')
 
     domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
-        threshold=-5.5, temperature=52, short_description='DomainPairNoCompl',
+        threshold=-0.5, temperature=52, short_description='DomainPairNoCompl',
         threaded=threaded)
 
     strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
@@ -99,12 +99,12 @@ def main() -> None:
 
     design = dc.Design(strands,
                        constraints=[
-                           strand_individual_ss_constraint,
-                           strand_pair_nupack_constraint,
-                           # domain_pair_nupack_constraint,
+                           # strand_individual_ss_constraint,
+                           # strand_pair_nupack_constraint,
+                           domain_pair_nupack_constraint,
                            # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                           strand_pairs_rna_duplex_constraint,
+                           # strand_pairs_rna_duplex_constraint,
                        ])
 
     numpy_constraints: List[NumpyConstraint] = [

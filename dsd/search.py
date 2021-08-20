@@ -525,9 +525,10 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     it is all pairs where one of the two is `domain_changed`.
     """
     # either all pairs, or just constraint.pairs if specified
-    # Note with_replacement is False, i.e., we don't check a domain against itself.
+    # domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
+    #     else all_pairs_iterator(all_domains, with_replacement=False, where=_at_least_one_domain_unfixed)
     domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-        else all_pairs_iterator(all_domains, with_replacement=False, where=_at_least_one_domain_unfixed)
+        else all_pairs(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
 
     # filter out those not containing domain_change if specified
     domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
@@ -867,7 +868,6 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
         logger.debug(f'NOT using threading for domain pair constraint {constraint.description}')
         for domain1, domain2 in domain_pairs_to_check:
             assert not domain1.fixed or not domain2.fixed
-            assert domain1.name != domain2.name
             score: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
             if score > 0.0:
                 violating_domain_pairs_scores.append((domain1, domain2, score))

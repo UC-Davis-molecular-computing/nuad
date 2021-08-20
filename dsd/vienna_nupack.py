@@ -2,7 +2,7 @@
 Contains utility functions for accessing NUPACK 4 and ViennaRNA energy calculation algorithms.
 
 The main functions are 
-:meth:`pfunc` (for calculating complex free energy with NUPACK, although with its helper functions
+:meth:`pfunc` (for calculating complex free energy with NUPACK, along with its helper functions
 :meth:`secondary_structure_single_strand` and :meth:`binding`),
 :meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
 :meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
@@ -30,11 +30,6 @@ parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 
 default_temperature = 37.0
-"""Default temperature used to specify a `NUPACK 4 model`_.
-
-.. _NUPACK 4 model: https://piercelab-caltech.github.io/nupack-docs/model/
-"""
-
 default_magnesium = 0.0125
 default_sodium = 0.05
 
@@ -430,7 +425,7 @@ def wc(seq: str) -> str:
 def secondary_structure_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
         magnesium: float = default_magnesium) -> float:
-    """Computes the (partition function) free energy of single-strand secondary structure.
+    """Computes the complex free energy of a single strand.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -440,7 +435,7 @@ def secondary_structure_single_strand(
 
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
                        magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
-    """Computes the (partition function) free energy of a strand with its perfect WC complement.
+    """Computes the complex free energy of a strand with its perfect WC complement.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -462,9 +457,10 @@ def binding_complement(seq: str, temperature: float = default_temperature, sodiu
 
 def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
             sodium: float = default_sodium, magnesium: float = default_magnesium) -> float:
-    """Computes the (partition function) free energy of association between two strands.
+    """Computes the complex free energy of association between two strands.
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
