@@ -57,7 +57,7 @@ domain_pools_key = 'domain_pools'
 domain_pools_num_sampled_key = 'domain_pools_num_sampled'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
-group_name_key = 'group'
+group_key = 'group'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
@@ -928,75 +928,6 @@ class DomainPool:
         return seqs
 
 
-@dataclass
-class StrandPool(JSONSerializable):
-    """
-    Represents a source of DNA sequences for assigning to a :any:`Strand`. This is analogous to a
-    :any:`DomainPool`, but for a whole :any:`Strand` instead of a single :any:`Domain`.
-
-    A typical use case is "sequence design" for DNA origami, where one uses a natural scaffold
-    DNA strand such as M13. Although we cannot pick the sequence, we can pick which rotation to use.
-    Thus, one has some control over the sequence, but the :any:`Domain`'s on the :any:`Strand` are not
-    independent: it only makes sense to think about assigning to the whole :any:`Strand` at once, which
-    will assign DNA sequences to all :any:`Domain`'s on the :any:`Strand` at once.
-
-    Unlike a :any:`DomainPool`, which can be shared by many :any:`Domain`'s, a :any:`StrandPool` is intended
-    to be used by only a single :any:`Strand`.
-
-    Also, unlike a :any:`DomainPool`, no constraints are applied nor sequences automatically generated.
-    Currently, one simply specifies a list of all possible sequences to choose from.
-    """
-
-    strand: Strand
-    """:any:`Strand` using this :any:`StrandPool`."""
-
-    sequences: List[str] = field(compare=False, hash=False, default_factory=list, repr=False)
-    """List of DNA sequences to choose for the :any:`Strand` using this :any:`StrandPool`."""
-
-    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
-        dct = {
-            strand_name_in_strand_pool_key: self.strand.name,
-            sequences_key: self.sequences,
-        }
-        return dct
-
-    def __hash__(self) -> int:
-        return hash(self.strand.name)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, StrandPool):
-            return False
-        return self.strand.name == other.strand.name
-
-    def generate_sequence(self, rng: np.random.Generator) -> str:
-        """
-        :param rng:
-            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
-        :return: DNA sequence of uniformly at random from :py:data:`StrandPool.sequences`
-        """
-        sequence = rng.choice(a=self.sequences)
-        return sequence
-
-
-@dataclass
-class StrandGroup:
-    """
-    Represents a group of related :any:`Strand`'s that share common properties in their sequence design,
-    such as bounds on secondary structure energy.
-    """
-
-    name: str
-    """Name of this :any:`StrandGroup`. Must be unique."""
-
-    def __hash__(self) -> int:
-        return hash(self.name)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, StrandGroup):
-            return False
-        return self.name == other.name
-
-
 def add_quotes(string: str) -> str:
     # adds quotes around a string
     return f'"{string}"'
@@ -1615,8 +1546,7 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
                                 summary=summary)
 
 
-default_strand_group_name = 'default_strand_group'
-default_strand_group = StrandGroup(name=default_strand_group_name)
+default_strand_group = 'default_strand_group'
 
 StrandLabel = TypeVar('StrandLabel')
 
@@ -1632,9 +1562,8 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains`
     on this :any:`Strand` that are starred."""
 
-    group: StrandGroup
-    """Each :any:`Strand` in the same :any:`StrandGroup` as this one share a set of properties, such as
-    bounds on secondary structure energy."""
+    group: str
+    """Optional "group" field to describe strands that share similar properties."""
 
     _domain_names_concatenated: str
     """Concatenation of domain names; cached for efficiency since these are used in calculating 
@@ -1657,20 +1586,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     on the object should succeed without having to specify a custom encoder.)
     """
 
-    pool: Optional[StrandPool] = None
-    """
-    :any:`StrandPool` used to select DNA sequences for this :any:`Strand`. Note that this is incompatible
-    with using a :any:`DomainPool` for any :any:`Domain` on this :any:`Strand`.
-    """
-
     def __init__(self,
                  domain_names: Optional[List[str]] = None,
                  domains: Optional[List[Domain[DomainLabel]]] = None,
                  starred_domain_indices: Optional[Iterable[int]] = None,
-                 group: StrandGroup = default_strand_group,
+                 group: str = default_strand_group,
                  name: Optional[str] = None,
                  label: Optional[StrandLabel] = None,
-                 pool: Optional[StrandPool] = None,
                  ) -> None:
         """
         A :any:`Strand` can be created either by listing explicit :any:`Domain` objects
@@ -1693,7 +1615,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
             :py:data:`Strand.domains`.
         :param group:
-            :any:`StrandGroup` of this :any:`Strand`.
+            name of group of this :any:`Strand`.
         :param name:
             Name of this :any:`Strand`.
         :param label:
@@ -1701,7 +1623,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         self.group = group
         self._name = name
-        self.pool = pool
         if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
                 (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
             raise ValueError('exactly one of domain_names or '
@@ -1791,7 +1712,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             Dictionary ``d`` representing this :any:`Strand` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
-        dct: Dict[str, Any] = {name_key: self.name, group_name_key: self.group.name}
+        dct: Dict[str, Any] = {name_key: self.name, group_key: self.group}
 
         domains_list = [domain.name for domain in self.domains]
         dct[domain_names_key] = NoIndent(domains_list) if suppress_indent else domains_list
@@ -1808,7 +1729,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
                                domain_with_name: Dict[str, Domain[DomainLabel]],
-                               group_with_name: Optional[Dict[str, StrandGroup]],
                                label_decoder: Callable[[Any], StrandLabel] = (lambda label: label),
                                ) -> 'Strand[StrandLabel, DomainLabel]':
         """
@@ -1821,8 +1741,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         domains: List[Domain[DomainLabel]] = [domain_with_name[name] for name in domain_names_json]
         starred_domain_indices = mandatory_field(Strand, json_map, starred_domain_indices_key)
 
-        group_name = mandatory_field(Strand, json_map, group_name_key)
-        group = group_with_name[group_name] if group_with_name is not None else StrandGroup(group_name)
+        group = json_map.get(group_key, default_strand_group)
 
         label_json = json_map.get(label_key)
         label = label_decoder(label_json)
@@ -1894,17 +1813,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             domain_sequence = sequence[start:end]
             domain.sequence = domain_sequence
             start = end
-
-    def assign_dna_from_pool(self, rng: np.random.Generator) -> None:
-        """
-        Assigns a random DNA sequence from this :any:`Strand`'s :any:`StrandPool`.
-
-        :param rng:
-            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
-        """
-        assert self.pool is not None
-        sequence = self.pool.generate_sequence(rng)
-        self.assign_dna(sequence)
 
     @property
     def fixed(self) -> bool:
@@ -2123,9 +2031,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    strand_groups: Dict[StrandGroup, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
+    strand_groups: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
-    Dict mapping each :any:`StrandGroup` to a list of the :any:`Strand`'s in this :any:`Design` in the group.
+    Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
@@ -2268,7 +2176,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     @staticmethod
     def from_json(json_str: str,
-                  group_with_name: Optional[Dict[str, StrandGroup]] = None,
                   pool_with_name: Optional[Dict[str, DomainPool]] = None,
                   strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
                   domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
@@ -2276,8 +2183,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         :param json_str:
             The string representing the :any:`Design` as a JSON object.
-        :param group_with_name:
-            If specified should map a name to the :any:`StrandGroup` with that name.
         :param pool_with_name:
             If specified should map a name to the :any:`DomainPool` with that name.
         :param domain_label_decoder:
@@ -2290,7 +2195,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         json_map = json.loads(json_str)
         design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
-            json_map, group_with_name=group_with_name, pool_with_name=pool_with_name,
+            json_map, pool_with_name=pool_with_name,
             domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
         return design
 
@@ -2310,7 +2215,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
-                               group_with_name: Optional[Dict[str, StrandGroup]] = None,
                                pool_with_name: Optional[Dict[str, DomainPool]] = None,
                                domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
                                strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
@@ -2319,9 +2223,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         :param json_map:
             JSON serializable object encoding this :any:`Design`, as returned by
             :py:meth:`Design.to_json_serializable`.
-        :param group_with_name:
-            dict mapping name to :any:`StrandGroup` with that name; required to rehydrate :any:`Strand`'s.
-            If None, then a group with no constraints is created with the name found in the JSON.
         :param pool_with_name:
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
@@ -2343,29 +2244,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [Strand.from_json_serializable(
-            json_map=strand_json, domain_with_name=domain_with_name, group_with_name=group_with_name,
+            json_map=strand_json, domain_with_name=domain_with_name,
             label_decoder=strand_label_decoder)
             for strand_json in strands_json]
 
         return Design(strands=strands)
 
-    def strand_group_by_name(self, name: str) -> StrandGroup:
+    def strands_by_group_name(self, group: str) -> List[Strand[StrandLabel, DomainLabel]]:
         """
-        :param name: name of a :any:`StrandGroup`
-        :return: the :any:`StrandGroup` with name `name`
-        """
-        for group in self.strand_groups.keys():
-            if group.name == name:
-                return group
-        raise ValueError(f'no strand group named {name} in this design; valid strand group names are '
-                         f'{", ".join(group.name for group in self.strand_groups.keys())}')
-
-    def strands_by_group_name(self, name: str) -> List[Strand[StrandLabel, DomainLabel]]:
-        """
-        :param name: name of a :any:`StrandGroup`
+        :param group: name of a :any:`StrandGroup`
         :return: list of :any:`Strand`'s in that group
         """
-        group = self.strand_group_by_name(name)
         return self.strand_groups[group]
 
     def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain[DomainLabel]]:
@@ -2822,21 +2711,21 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # warn if not labels are dicts containing group_name_key on strands
         for sc_strand in strands_to_include:
-            if (isinstance(sc_strand.label, dict) and group_name_key not in sc_strand.label) or \
-                    (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_name_key)):
+            if (isinstance(sc_strand.label, dict) and group_key not in sc_strand.label) or \
+                    (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_key)):
                 logger.warning(f'Strand label {sc_strand.label} should be an object with attribute named '
-                               f'"{group_name_key}" (for instance a dict or namedtuple).\n'
+                               f'"{group_key}" (for instance a dict or namedtuple).\n'
                                f'  The label is type {type(sc_strand.label)}. '
                                f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                               f'named "{group_name_key}" with associated value of type str.')
+                               f'named "{group_key}" with associated value of type str.')
             else:
                 label_value = Design.get_group_name_from_strand_label(sc_strand)
                 if not isinstance(label_value, str):
                     logger.warning(f'Strand label {sc_strand.label} has attribute named '
-                                   f'"{group_name_key}", but its associated value is not a string.\n'
+                                   f'"{group_key}", but its associated value is not a string.\n'
                                    f'The value is type {type(label_value)}. '
                                    f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                                   f'named "{group_name_key}" with associated value of type str.')
+                                   f'named "{group_key}" with associated value of type str.')
 
                 # raise TypeError(f'strand label {sc_strand.label} must be a dict, '
                 #                 f'but instead is type {type(sc_strand.label)}')
@@ -2845,21 +2734,20 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_strand_groups: DefaultDict[str, List[sc.Strand]] = defaultdict(list)
         for sc_strand in strands_to_include:
             assigned = False
-            if hasattr(sc_strand.label, group_name_key) or (
-                    isinstance(sc_strand.label, dict) and group_name_key in sc_strand.label):
-                group_name = Design.get_group_name_from_strand_label(sc_strand)
-                if isinstance(group_name, str):
-                    sc_strand_groups[group_name].append(sc_strand)
+            if hasattr(sc_strand.label, group_key) or (
+                    isinstance(sc_strand.label, dict) and group_key in sc_strand.label):
+                group = Design.get_group_name_from_strand_label(sc_strand)
+                if isinstance(group, str):
+                    sc_strand_groups[group].append(sc_strand)
                     assigned = True
             if not assigned:
-                sc_strand_groups[default_strand_group_name].append(sc_strand)
+                sc_strand_groups[default_strand_group].append(sc_strand)
 
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
         dsd_strands: List[Strand] = []
         strand_names: Set[str] = set()
-        for group_name, sc_strands in sc_strand_groups.items():
-            group = StrandGroup(name=group_name)
+        for group, sc_strands in sc_strand_groups.items():
             for sc_strand in sc_strands:
                 # do not include strands with the same name more than once
                 if sc_strand.name in strand_names:
@@ -2904,12 +2792,12 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     @staticmethod
     def get_group_name_from_strand_label(sc_strand: Strand) -> Any:
-        if hasattr(sc_strand.label, group_name_key):
-            return getattr(sc_strand.label, group_name_key)
-        elif isinstance(sc_strand.label, dict) and group_name_key in sc_strand.label:
-            return sc_strand.label[group_name_key]
+        if hasattr(sc_strand.label, group_key):
+            return getattr(sc_strand.label, group_key)
+        elif isinstance(sc_strand.label, dict) and group_key in sc_strand.label:
+            return sc_strand.label[group_key]
         else:
-            raise AssertionError(f'label does not have either an attribute or a dict key "{group_name_key}"')
+            raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
 
     def assign_sequences_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                             ignored_strands: Iterable[Strand] = ()) -> None:
@@ -3488,8 +3376,8 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 and strand2.group is not None
                 and strand1.group.name != strand2.group.name):  # noqa
             raise ValueError(f'strand {strand2.name} group name does not match:'
-                             f'design1 strand {strand1.name} group = {strand1.group.name},\n'
-                             f'design2 strand {strand2.name} group = {strand2.group.name}')
+                             f'design1 strand {strand1.name} group = {strand1.group},\n'
+                             f'design2 strand {strand2.name} group = {strand2.group}')
         for domain1, domain2 in zip(strand1.domains, strand2.domains):
             if domain1.name != domain2.name:
                 raise ValueError(f'domain of strand {strand2.name} don\'t match: '
