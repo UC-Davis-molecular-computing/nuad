@@ -430,7 +430,7 @@ def wc(seq: str) -> str:
 def secondary_structure_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
         magnesium: float = default_magnesium) -> float:
-    """Computes the (partition function) free energy of single-strand secondary structure.
+    """Computes the complex free energy of a single strand.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -440,7 +440,7 @@ def secondary_structure_single_strand(
 
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
                        magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
-    """Computes the (partition function) free energy of a strand with its perfect WC complement.
+    """Computes the complex free energy of a strand with its perfect WC complement.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -462,9 +462,10 @@ def binding_complement(seq: str, temperature: float = default_temperature, sodiu
 
 def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
             sodium: float = default_sodium, magnesium: float = default_magnesium) -> float:
-    """Computes the (partition function) free energy of association between two strands.
+    """Computes the complex free energy of association between two strands.
 
-    NUPACK 4 must be installed. Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.
+    NUPACK 4 must be installed. Installation instructions can be found at
+    https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
