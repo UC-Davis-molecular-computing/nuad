@@ -29,6 +29,7 @@ from multiprocessing.pool import ThreadPool
 from numbers import Number
 from enum import Enum, auto
 
+import enum
 import numpy as np  # noqa
 from ordered_set import OrderedSet
 
@@ -70,6 +71,18 @@ hamming_probability_key = 'hamming_probability'
 num_sequences_to_generate_upper_limit_key = 'num_sequences_to_generate_upper_limit'
 num_sequences_to_generate_key = 'num_sequences_to_generate'
 rng_state_key = 'rng_state'
+
+idt_key = 'idt'
+idt_scale_key = 'scale'
+idt_purification_key = 'purification'
+idt_plate_key = 'plate'
+idt_well_key = 'well'
+
+default_idt_scale = "25nm"
+default_idt_purification = "STD"
+
+T = TypeVar('T')
+KeyFunction = Callable[[T], Any]
 
 Complex = Tuple['Strand', ...]
 """A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary 
@@ -1548,6 +1561,86 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
                                 summary=summary)
 
 
+@dataclass
+class IDTFields(JSONSerializable):
+    """Data required when ordering DNA strands from the synthesis company
+    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
+    This data is used when automatically generating files used to order DNA from IDT.
+
+    When exporting to IDT files via :py:meth:`Design.write_idt_plate_excel_file`
+    or :py:meth:`Design.write_idt_bulk_input_file`, the field :py:data:`Strand.name` is used for the
+    name if it exists, otherwise a reasonable default is chosen."""
+
+    scale: str = default_idt_scale
+    """Synthesis scale at which to synthesize the strand (third field in IDT bulk input:
+    https://www.idtdna.com/site/order/oligoentry).
+    Choices supplied by IDT at the time this was written: 
+    ``"25nm"``, ``"100nm"``, ``"250nm"``, ``"1um"``, ``"5um"``, 
+    ``"10um"``, ``"4nmU"``, ``"20nmU"``, ``"PU"``, ``"25nmS"``.
+    """
+
+    purification: str = default_idt_purification
+    """Purification options (fourth field in IDT bulk input:
+    https://www.idtdna.com/site/order/oligoentry). 
+    Choices supplied by IDT at the time this was written: 
+    ``"STD"``, ``"PAGE"``, ``"HPLC"``, ``"IEHPLC"``, ``"RNASE"``, ``"DUALHPLC"``, ``"PAGEHPLC"``.
+    """
+
+    plate: Optional[str] = None
+    """Name of plate in case this strand will be ordered on a 96-well or 384-well plate.
+
+    Optional field, but non-optional if :data:`IDTFields.well` is not ``None``.
+    """
+
+    well: Optional[str] = None
+    """Well position on plate in case this strand will be ordered on a 96-well or 384-well plate.
+
+    Optional field, but non-optional if :data:`IDTFields.plate` is not ``None``.
+    """
+
+    def __post_init__(self) -> None:
+        _check_idt_string_not_none_or_empty(self.scale, 'scale')
+        _check_idt_string_not_none_or_empty(self.purification, 'purification')
+        if self.plate is None and self.well is not None:
+            raise ValueError(f'IDTFields.plate cannot be None if IDTFields.well is not None\n'
+                             f'IDTFields.well = {self.well}')
+        if self.plate is not None and self.well is None:
+            raise ValueError(f'IDTFields.well cannot be None if IDTFields.plate is not None\n'
+                             f'IDTFields.plate = {self.plate}')
+
+    def to_json_serializable(self, suppress_indent: bool = True,
+                             **kwargs: Any) -> Union[NoIndent, Dict[str, Any]]:
+        dct: Dict[str, Any] = dict(self.__dict__)
+        if self.plate is None:
+            del dct['plate']
+        if self.well is None:
+            del dct['well']
+        return NoIndent(dct)
+
+    @staticmethod
+    def from_json(json_map: Dict[str, Any]) -> IDTFields:
+        scale = mandatory_field(IDTFields, json_map, idt_scale_key)
+        purification = mandatory_field(IDTFields, json_map, idt_purification_key)
+        plate = json_map.get(idt_plate_key)
+        well = json_map.get(idt_well_key)
+        return IDTFields(scale=scale, purification=purification, plate=plate, well=well)
+
+    def clone(self) -> IDTFields:
+        return IDTFields(scale=self.scale, purification=self.purification,
+                         plate=self.plate, well=self.well)
+
+    def to_scadnano_idt(self) -> sc.IDTFields:
+        return sc.IDTFields(scale=self.scale, purification=self.purification,
+                            plate=self.plate, well=self.well)
+
+
+def _check_idt_string_not_none_or_empty(value: str, field_name: str) -> None:
+    if value is None:
+        raise ValueError(f'field {field_name} in IDTFields cannot be None')
+    if len(value) == 0:
+        raise ValueError(f'field {field_name} in IDTFields cannot be empty')
+
+
 default_strand_group = 'default_strand_group'
 
 StrandLabel = TypeVar('StrandLabel')
@@ -1574,6 +1667,16 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     _hash_domain_names_concatenated: int
     """Hash value of _domain_names_concatenated; cached for efficiency."""
 
+    idt: Optional[IDTFields] = None
+    """Fields used when ordering strands from the synthesis company IDT 
+    (Integrated DNA Technologies, Coralville, IA). If present (i.e., not equal to :const:`None`)
+    then the method :py:meth:`Design.write_idt_bulk_input_file` can be called to automatically
+    generate an text file for ordering strands in test tubes: 
+    https://www.idtdna.com/site/order/oligoentry,
+    as can the method :py:meth:`Design.write_idt_plate_excel_file` for writing a Microsoft Excel 
+    file that can be uploaded to IDT's website for describing DNA sequences to be ordered in 96-well
+    or 384-well plates."""
+
     _name: Optional[str] = None
     """Optional name of strand."""
 
@@ -1595,6 +1698,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
                  group: str = default_strand_group,
                  name: Optional[str] = None,
                  label: Optional[StrandLabel] = None,
+                 idt: Optional[IDTFields] = None,
                  ) -> None:
         """
         A :any:`Strand` can be created either by listing explicit :any:`Domain` objects
@@ -1622,6 +1726,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
             Name of this :any:`Strand`.
         :param label:
             Label to associate with this :any:`Strand`.
+        :param idt:
+            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
+            methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         """
         self.group = group
         self._name = name
@@ -1662,6 +1769,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
+        self.idt = idt
 
         self.compute_derived_fields()
 
@@ -1672,7 +1780,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         variant with an extension.
 
         WARNING: the :data:`Strand.label` will be shared between them. If it should be copied,
-        this must be done manually.
+        this must be done manually. A shallow copy of it can be made by setting
 
         :param name:
             new name to give this Strand
@@ -1682,8 +1790,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         domains = list(self.domains)
         starred_domain_indices = list(self.starred_domain_indices)
         name = name if name is not None else self.name
+        idt = None if self.idt is None else self.idt.clone()
         return Strand(domains=domains, starred_domain_indices=starred_domain_indices, name=name,
-                      group=self.group, label=self.label)
+                      group=self.group, label=self.label, idt=idt)
 
     def compute_derived_fields(self):
         """
@@ -1745,6 +1854,9 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
         if self.label is not None:
             dct[label_key] = NoIndent(self.label) if suppress_indent else self.label
+
+        if self.idt is not None:
+            dct[idt_key] = self.idt.to_json_serializable(suppress_indent)
 
         return dct
 
@@ -1924,6 +2036,56 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         return self.address_of_nth_domain_occurence(domain_name, 1, forward=False)
 
+    def append_domain(self, domain: Domain, starred: bool = False) -> None:
+        """
+        Appends `domain` to 3' end of this :any:`Strand`.
+        :param domain:
+            :any:`Domain` to append
+        :param starred:
+            whether `domain` is starred
+        """
+        self.insert_domain(len(self.domains), domain, starred)
+
+    def prepend_domain(self, domain: Domain, starred: bool = False) -> None:
+        """
+        Prepends `domain` to 5' end of this :any:`Strand` (i.e., the beginning of the :any:`Strand`).
+        :param domain:
+            :any:`Domain` to prepend
+        :param starred:
+            whether `domain` is starred
+        """
+        self.insert_domain(0, domain, starred)
+
+    def insert_domain(self, idx: int, domain: Domain, starred: bool = False) -> None:
+        """
+        Inserts `domain` at index `idx` of this :any:`Strand`, with same semantics as Python's List.insert.
+        For example, ``strand.insert(0, domain)`` is equivalent to ``strand.prepend_domain(domain)``
+        and ``strand.insert(len(strand.domains), domain)`` is equivalent to ``strand.append_domain(domain)``.
+
+        :param idx:
+            index at which to insert `domain` into this :any:`Strand`
+        :param domain:
+            :any:`Domain` to append
+        :param starred:
+            whether `domain` is starred
+        """
+        self.domains.insert(idx, domain)
+
+        new_starred_idx = frozenset([idx]) if starred else frozenset()
+
+        # increment all starred indices >= idx
+        starred_domain_indices_at_least_idx = frozenset([idx_
+                                                         for idx_ in self.starred_domain_indices
+                                                         if idx_ >= idx])
+        starred_domain_indices_at_least_idx_inc = frozenset([idx_ + 1
+                                                             for idx_ in starred_domain_indices_at_least_idx
+                                                             if idx_ >= idx])
+        # remove old starred indices >= idx, union in their increments,
+        # and if new domain is starred, union it in also
+        self.starred_domain_indices = self.starred_domain_indices.difference(
+            starred_domain_indices_at_least_idx).union(starred_domain_indices_at_least_idx_inc).union(
+            new_starred_idx)
+
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
@@ -1976,6 +2138,84 @@ class ConstraintReport:
 def _small_header(header: str, delim: str) -> str:
     width = len(header)
     return f'\n{header}\n{delim * width}'
+
+
+def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> sc.Design:
+    """
+    Exports a dummy scadnano design from this dsd :any:`Design`.
+    Useful for reusing scadnano methods such as to_idt_bulk_input_format.
+
+    :param strands:
+        strands to export
+    :return:
+        a "dummy" scadnano design, where domains are positioned arbitrarily on helices,
+        with the only goal to make the scadnano Design legal
+    """
+    helices = [sc.Helix(max_offset=strand.length()) for strand in strands]
+    sc_strands = []
+    for helix_idx, strand in enumerate(strands):
+        idt_export = strand.idt.to_scadnano_idt() if strand.idt is not None else None
+        sc_domains = []
+        prev_end = 0
+        for domain in strand.domains:
+            sc_domain = sc.Domain(helix=helix_idx, forward=True,
+                                  start=prev_end, end=prev_end + domain.length)
+            prev_end = sc_domain.end
+            sc_domains.append(sc_domain)
+        sc_strand = sc.Strand(domains=sc_domains, idt=idt_export,
+                              dna_sequence=strand.sequence(), name=strand.name)
+        sc_strands.append(sc_strand)
+    design = sc.Design(helices=helices, strands=sc_strands, grid=sc.square)
+    return design
+
+
+_96WELL_PLATE_ROWS: List[str] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+_96WELL_PLATE_COLS: List[int] = list(range(1, 13))
+
+_384WELL_PLATE_ROWS: List[str] = [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
+_384WELL_PLATE_COLS: List[int] = list(range(1, 25))
+
+
+@enum.unique
+class PlateType(int, enum.Enum):
+    """Represents two different types of plates in which DNA sequences can be ordered."""
+
+    wells96 = 96
+    """96-well plate."""
+
+    wells384 = 384
+    """384-well plate."""
+
+    def rows(self) -> List[str]:
+        return _96WELL_PLATE_ROWS if self is PlateType.wells96 else _384WELL_PLATE_ROWS
+
+    def cols(self) -> List[int]:
+        return _96WELL_PLATE_COLS if self is PlateType.wells96 else _384WELL_PLATE_COLS
+
+    def num_wells_per_plate(self) -> int:
+        """
+        :return:
+            number of wells in this plate type
+        """
+        if self is PlateType.wells96:
+            return 96
+        elif self is PlateType.wells384:
+            return 384
+        else:
+            raise AssertionError('unreachable')
+
+    def min_wells_per_plate(self) -> int:
+        """
+        :return:
+            minimum number of wells in this plate type to avoid extra charge by IDT
+        """
+        if self is PlateType.wells96:
+            return 24
+        elif self is PlateType.wells384:
+            return 96
+        else:
+            raise AssertionError('unreachable')
 
 
 @dataclass
@@ -2174,6 +2414,165 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         for strand in self.strands:
             strand.compute_derived_fields()
+
+    def to_idt_bulk_input_format(self,
+                                 delimiter: str = ',',
+                                 key: Optional[KeyFunction[Strand]] = None,
+                                 warn_duplicate_name: bool = False,
+                                 only_strands_with_idt: bool = False,
+                                 strands: Optional[Iterable[Strand]] = None) -> str:
+        """Called by :meth:`Design.write_idt_bulk_input_file` to determine what string to write to
+        the file. This function can be used to get the string directly without creating a file.
+
+        Parameters have the same meaning as in :meth:`Design.write_idt_bulk_input_file`.
+
+        :return:
+            string that is written to the file in the method :meth:`Design.write_idt_bulk_input_file`.
+        """
+        if strands is None:
+            strands = self.strands
+        sc_design = _export_dummy_scadnano_design_for_idt_export(strands)
+        return sc_design.to_idt_bulk_input_format(delimiter, key, warn_duplicate_name, only_strands_with_idt)
+
+    def write_idt_bulk_input_file(self, *, directory: str = '.', filename: str = None,
+                                  key: Optional[KeyFunction[Strand]] = None,
+                                  extension: Optional[str] = None,
+                                  delimiter: str = ',',
+                                  warn_duplicate_name: bool = True,
+                                  only_strands_with_idt: bool = False,
+                                  strands: Optional[Iterable[Strand]] = None) -> None:
+        """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
+        :any:`Strand.idt`, suitable for pasting into the "Bulk Input" field of IDT
+        (Integrated DNA Technologies, Coralville, IA, https://www.idtdna.com/),
+        with the output file having the same name as the running script but with ``.py`` changed to ``.idt``,
+        unless `filename` is explicitly specified.
+        For instance, if the script is named ``my_origami.py``,
+        then the sequences will be written to ``my_origami.idt``.
+        If `filename` is not specified but `extension` is, then that extension is used instead of ``idt``.
+        At least one of `filename` or `extension` must be ``None``.
+
+        The string written is that returned by :meth:`Design.to_idt_bulk_input_format`.
+
+        :param directory:
+            specifies a directory in which to place the file, either absolute or relative to
+            the current working directory. Default is the current working directory.
+        :param filename:
+            optional custom filename to use (instead of currently running script)
+        :param key:
+            `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
+            order in which to output strand sequences. Some useful defaults are provided by
+            :meth:`strand_order_key_function`
+        :param extension:
+            alternate filename extension to use (instead of idt)
+        :param delimiter:
+            is the symbol to delimit the four IDT fields name,sequence,scale,purification.
+        :param warn_duplicate_name:
+            if ``True`` prints a warning when two different :any:`Strand`'s have the same
+            :data:`IDTFields.name` and the same :any:`Strand.dna_sequence`. An :any:`IllegalDesignError`
+            is raised (regardless of the value of this parameter)
+            if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
+            purifications.
+        :param only_strands_with_idt:
+            If False (the default), all non-scaffold sequences are output, with reasonable default values
+            chosen if the field :data:`Strand.idt` is missing.
+            (though scaffold is included if `export_scaffold` is True).
+            If True, then strands lacking the field :data:`Strand.idt` will not be exported.
+        :param strands:
+            strands to export; if not specified, all strands in design are exported.
+            NOTE: it is not checked that each :any:`Strand` in `strands` is actually contained in this
+            any:`Design`
+        """
+        contents = self.to_idt_bulk_input_format(delimiter=delimiter,
+                                                 key=key,
+                                                 warn_duplicate_name=warn_duplicate_name,
+                                                 only_strands_with_idt=only_strands_with_idt,
+                                                 strands=strands)
+        if extension is None:
+            extension = 'idt'
+        sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
+
+    def write_idt_plate_excel_file(self, *, directory: str = '.', filename: str = None,
+                                   key: Optional[KeyFunction[Strand]] = None,
+                                   warn_duplicate_name: bool = False,
+                                   only_strands_with_idt: bool = False,
+                                   use_default_plates: bool = True, warn_using_default_plates: bool = True,
+                                   plate_type: PlateType = PlateType.wells96,
+                                   strands: Optional[Iterable[Strand]] = None) -> None:
+        """
+        Write ``.xls`` (Microsoft Excel) file encoding the strands of this :any:`Design` with the field
+        :py:data:`Strand.idt`, suitable for uploading to IDT
+        (Integrated DNA Technologies, Coralville, IA, https://www.idtdna.com/)
+        to describe a 96-well or 384-well plate
+        (https://www.idtdna.com/site/order/plate/index/dna/),
+        with the output file having the same name as the running script but with ``.py`` changed to ``.xls``,
+        unless `filename` is explicitly specified.
+        For instance, if the script is named ``my_origami.py``,
+        then the sequences will be written to ``my_origami.xls``.
+
+        If the last plate as fewer than 24 strands for a 96-well plate, or fewer than 96 strands for a
+        384-well plate, then the last two plates are rebalanced to ensure that each plate has at least
+        that number of strands, because IDT charges extra for a plate with too few strands:
+        https://www.idtdna.com/pages/products/custom-dna-rna/dna-oligos/custom-dna-oligos
+
+        :param directory:
+            specifies a directory in which to place the file, either absolute or relative to
+            the current working directory. Default is the current working directory.
+        :param filename:
+            custom filename if default (explained above) is not desired
+        :param key:
+            `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
+            order in which to output strand sequences. Some useful defaults are provided by
+            :py:meth:`strand_order_key_function`
+        :param warn_duplicate_name:
+            if ``True`` prints a warning when two different :any:`Strand`'s have the same
+            :py:attr:`IDTFields.name` and the same :any:`Strand.dna_sequence`. An :any:`IllegalDesignError` is
+            raised (regardless of the value of this parameter)
+            if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
+            purifications.
+        :param only_strands_with_idt:
+            If False (the default), all non-scaffold sequences are output, with reasonable default values
+            chosen if the field :py:data:`Strand.idt` is missing.
+            (though scaffold is included if `export_scaffold` is True).
+            If True, then strands lacking the field :any:`Strand.idt` will not be exported.
+            If False, then `use_default_plates` must be True.
+        :param use_default_plates:
+            Use default values for plate and well (ignoring those in idt fields, which may be None).
+            If False, each Strand to export must have the field :py:data:`Strand.idt`, so in particular
+            the parameter `only_strands_with_idt` must be True.
+        :param warn_using_default_plates:
+            specifies whether, if `use_default_plates` is True, to print a warning for strands whose
+            :py:data:`Strand.idt` has the fields :py:data:`IDTFields.plate` and :py:data:`IDTFields.well`,
+            since `use_default_plates` directs these fields to be ignored.
+        :param plate_type:
+            a :any:`PlateType` specifying whether to use a 96-well plate or a 384-well plate
+            if the `use_default_plates` parameter is ``True``.
+            Ignored if `use_default_plates` is ``False``, because in that case the wells are explicitly set
+            by the user, who is free to use coordinates for either plate type.
+        :param strands:
+            strands to export; if not specified, all strands in design are exported.
+            NOTE: it is not checked that each :any:`Strand` in `strands` is actually contained in this
+            any:`Design`
+        """
+        if strands is None:
+            strands = self.strands
+
+        import time
+        before = time.perf_counter_ns()
+        sc_design = _export_dummy_scadnano_design_for_idt_export(strands)
+        after = time.perf_counter_ns()
+        print(f'time spent exporting dsd to scadnano: {(after - before) / 1e6:.1f} ms')
+
+        before = time.perf_counter_ns()
+        sc_design.write_idt_plate_excel_file(directory=directory,
+                                             filename=filename,
+                                             key=key,
+                                             warn_duplicate_name=warn_duplicate_name,
+                                             only_strands_with_idt=only_strands_with_idt,
+                                             use_default_plates=use_default_plates,
+                                             warn_using_default_plates=warn_using_default_plates,
+                                             plate_type=plate_type)
+        after = time.perf_counter_ns()
+        print(f'time spent exporting scadnano to Excel: {(after - before) / 1e6:.1f} ms')
 
     def store_domain_pools(self) -> None:
         self.domain_pools_to_domain_map = defaultdict(list)
@@ -6073,7 +6472,7 @@ def nupack_complex_secondary_structure_constraint(
     # End populating base_pair_probs
 
     if description is None:
-        description = ' '.join([str(s) for s in strand_complex_template])
+        description = 'Base pair probability of complex'
 
     def evaluate(strand_complex_: Complex) -> float:
         bps = _violation_base_pairs(strand_complex_)

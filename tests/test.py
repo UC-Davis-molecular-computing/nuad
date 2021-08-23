@@ -1,7 +1,9 @@
 from typing import Dict, List
 import unittest
+import os
 
 import numpy
+import xlrd
 
 from dsd import constraints
 import dsd.constraints as dc
@@ -132,10 +134,124 @@ class TestFromScadnanoDesign(unittest.TestCase):
         self.assertIs(dsd_d00, dsd_d10)
         self.assertIs(dsd_d01, dsd_d11)
 
+
+class TestExportDNASequences(unittest.TestCase):
+
+    def test_idt_bulk_export(self) -> None:
+        custom_idt = dc.IDTFields(scale='100nm', purification='PAGE')
+        strands = [
+            dc.Strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt),
+            dc.Strand(domain_names=['d', 'c*', 'e', 'f'], name='s1'),
+        ]
+        design = dc.Design(strands)
+        #        a      b       c       d       e           f
+        seqs = ['AACG', 'CCGT', 'GGTA', 'TTAC', 'AAAACCCC', 'AAAAGGGG']
+        # s0: AACG-ACGG-GGTA-GTAA
+        # s1: TTAC-TACC-AAAACCCC-AAAAGGGG
+        for domain, seq in zip(design.domains, seqs):
+            domain.set_fixed_sequence(seq)
+
+        idt_bulk_input = design.to_idt_bulk_input_format()
+        for i, line in enumerate(idt_bulk_input.splitlines()):
+            name, seq, scale, pur = line.split(',')
+            if i == 0:
+                self.assertEqual('s0', name)
+                self.assertEqual('AACGACGGGGTAGTAA', seq)
+                self.assertEqual('100nm', scale)
+                self.assertEqual('PAGE', pur)
+            elif i == 1:
+                self.assertEqual('s1', name)
+                self.assertEqual('TTACTACCAAAACCCCAAAAGGGG', seq)
+                self.assertEqual('25nm', scale)
+                self.assertEqual('STD', pur)
+
+    def test_write_idt_plate_excel_file(self) -> None:
+        strand_len = 10
+
+        # add 10 strands in excess of 3 plates
+        for plate_type in [sc.PlateType.wells96, sc.PlateType.wells384]:
+            filename = f'test_excel_export_{plate_type.num_wells_per_plate()}.xls'
+
+            strands = []
+            for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
+                idt = dc.IDTFields()
+                strand = dc.Strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
+                strand.domains[0].set_fixed_sequence('T' * strand_len)
+                strands.append(strand)
+            design = dc.Design(strands=strands)
+
+            design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
+
+            book = xlrd.open_workbook(filename)
+            self.assertEqual(4, book.nsheets)
+            for plate in range(4):
+                sheet = book.sheet_by_index(plate)
+                self.assertEqual(3, sheet.ncols)
+
+                if plate == 2:  # penultimate plate
+                    expected_wells = plate_type.num_wells_per_plate() - plate_type.min_wells_per_plate() + 10
+                elif plate == 3:  # last plate
+                    expected_wells = plate_type.min_wells_per_plate()
+                else:
+                    expected_wells = plate_type.num_wells_per_plate()
+
+                self.assertEqual(expected_wells + 1, sheet.nrows)
+
+            os.remove(filename)
+
+
 class TestNumpyConstraints(unittest.TestCase):
     def test_NearestNeighborEnergyConstraint_raises_exception_if_energies_in_wrong_order(self) -> None:
-        with self.assertRaises(ValueError) as _:
+        with self.assertRaises(ValueError):
             dc.NearestNeighborEnergyConstraint(-10, -15)
+
+
+class TestInsertDomains(unittest.TestCase):
+    def setUp(self) -> None:
+        strands = [dc.Strand(domain_names=['a', 'b*', 'c', 'd*'])]
+        self.design = dc.Design(strands)
+        self.strand = self.design.strands[0]
+
+    def test_no_insertion(self) -> None:
+        # 0 1  2 3
+        # a-b*-c-d*
+        self.assertEqual({1, 3}, self.strand.starred_domain_indices)
+
+    def test_append_domain_unstarred(self) -> None:
+        # 0 1  2 3  4
+        # a-b*-c-d*-e
+        self.strand.append_domain(Domain('e'))
+        self.assertEqual({1, 3}, self.strand.starred_domain_indices)
+
+    def test_append_domain_starred(self) -> None:
+        # 0 1  2 3  4
+        # a-b*-c-d*-e*
+        self.strand.append_domain(Domain('e'), starred=True)
+        self.assertEqual({1, 3, 4}, self.strand.starred_domain_indices)
+
+    def test_prepend_domain_unstarred(self) -> None:
+        # 0 1 2  3  4
+        # e-a-b*-c-d*
+        self.strand.prepend_domain(Domain('e'))
+        self.assertEqual({2, 4}, self.strand.starred_domain_indices)
+
+    def test_prepend_domain_starred(self) -> None:
+        # 0  1 2  3  4
+        # e*-a-b*-c-d*
+        self.strand.prepend_domain(Domain('e'), starred=True)
+        self.assertEqual({0, 2, 4}, self.strand.starred_domain_indices)
+
+    def test_insert_idx_2_domain_unstarred(self) -> None:
+        # 0 1  2 3 4
+        # a-b*-e-c-d*
+        self.strand.insert_domain(2, Domain('e'))
+        self.assertEqual({1, 4}, self.strand.starred_domain_indices)
+
+    def test_insert_idx_2_domain_starred(self) -> None:
+        # 0 1  2  3 4
+        # a-b*-e*-c-d*
+        self.strand.insert_domain(2, Domain('e'), starred=True)
+        self.assertEqual({1, 2, 4}, self.strand.starred_domain_indices)
 
 
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
