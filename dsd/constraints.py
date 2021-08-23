@@ -2711,17 +2711,29 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         constraints.extend(self.design_constraints)
         return constraints
 
-    def summary_of_constraints(self, report_only_violations: bool) -> str:
+    def summary_of_constraints(self, report_only_violations: bool, violation_set: ViolationSet) -> str:
         summaries: List[str] = []
 
         # other constraints
         for constraint in self.all_constraints():
-            summary = self.summary_of_constraint(constraint, report_only_violations)
+            summary = self.summary_of_constraint(constraint, report_only_violations, violation_set)
             summaries.append(summary)
 
-        return '\n'.join(summaries)
+        score = violation_set.total_score()
+        score_unfixed = violation_set.total_nonfixed_score()
+        score_total_summary =   f'total score of constraint violations: {score:.1f}'
+        score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.1f}'
 
-    def summary_of_constraint(self, constraint: Constraint, report_only_violations: bool) -> str:
+        summary = score_total_summary + '\n'
+        if score_unfixed != score:
+            summary += score_unfixed_summary + '\n\n'
+        else:
+            summary += '\n'
+
+        return summary + '\n'.join(summaries)
+
+    def summary_of_constraint(self, constraint: Constraint, report_only_violations: bool,
+                              violation_set: ViolationSet) -> str:
         # summary of constraint only if not a DomainConstraint in a DomainPool
         # or a StrandConstraint in a StrandGroup
         report: ConstraintReport
@@ -2759,7 +2771,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             report = ConstraintReport(constraint=constraint, content=_no_summary_string,
                                       num_violations=0, num_checks=0)
 
-        summary = add_header_to_content_of_summary(report)
+        summary = add_header_to_content_of_summary(report, violation_set)
         return summary
 
     def summary_of_domain_constraint(self, constraint: DomainConstraint, report_only_violations: bool) \
@@ -3341,7 +3353,15 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                              check_length=True)
 
 
-def add_header_to_content_of_summary(report: ConstraintReport) -> str:
+def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet) -> str:
+    score = violation_set.score_of_constraint(report.constraint)
+    score_unfixed = violation_set.nonfixed_score_of_constraint(report.constraint)
+
+    if score != score_unfixed:
+        summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
+    else:
+        summary_score_unfixed = None
+
     indented_content = textwrap.indent(report.content, '  ')
     delim = '*' * 80
     summary = f'''
@@ -3349,6 +3369,7 @@ def add_header_to_content_of_summary(report: ConstraintReport) -> str:
 * {report.constraint.description}
 * checks:     {report.num_checks}
 * violations: {report.num_violations}
+* score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
 {indented_content}'''
     return summary
 
@@ -3367,6 +3388,156 @@ DesignPart = TypeVar('DesignPart',
                      Iterable[Tuple[Strand, Strand]],  # noqa
                      Iterable[Complex],  # noqa
                      Design)
+
+
+@dataclass
+class Violation(Generic[DesignPart]):
+    # Represents a violation of a single :any:`Constraint` in a :any:`Design`. The "part" of the :any:`Design`
+    # that violated the constraint is generic type `DesignPart` (e.g., for :any:`StrandPairConstraint`,
+    # DesignPart = :any:`Pair` [:any:`Strand`]).
+
+    constraint: Constraint
+    # :any:`Constraint` that was violated to result in this :any:`Violation`.
+
+    domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
+    # :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
+
+    _unweighted_score: float
+
+    def __init__(self, constraint: Constraint, domains: Iterable[Domain], score: float):
+        # :param constraint:
+        #     :any:`Constraint` that was violated to result in this
+        # :param domains:
+        #     :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
+        # :param score:
+        #     total "score" of this violation, typically something like an excess energy over a
+        #     threshold, squared, multiplied by the :data:`Constraint.weight`
+        object.__setattr__(self, 'constraint', constraint)
+        domains_frozen = frozenset(domains)
+        object.__setattr__(self, 'domains', domains_frozen)
+        object.__setattr__(self, '_unweighted_score', score)
+
+    @property
+    def score(self) -> float:
+        return self.constraint.weight * self._unweighted_score
+
+    def __repr__(self) -> str:
+        return f'Violation({self.constraint.short_description}, score={self._unweighted_score:.2f})'
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    # _Violation equality based on identity; different Violations in memory are considered different,
+    # even if all data between them matches. Don't create the same Violation twice!
+    def __hash__(self):
+        return super().__hash__()
+
+    def __eq__(self, other):
+        return self is other
+
+
+@dataclass
+class ViolationSet:
+    # Represents violations of :any:`Constraint`'s in a :any:`Design`.
+    #
+    # It is designed to be efficiently updateable when a single :any:`Domain` changes, to efficiently update
+    # only those violations of :any:`Constraint`'s that could have been affected by the changed :any:`Domain`.
+
+    all_violations: OrderedSet[Violation] = field(default_factory=OrderedSet)
+    # Set of all :any:`Violation`'s.
+
+    domain_to_violations: Dict[Domain, OrderedSet[Violation]] = field(
+        default_factory=lambda: defaultdict(OrderedSet))
+    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is blamed
+
+    non_fixed_violations: OrderedSet[Violation] = field(default_factory=OrderedSet)
+
+    # Set of all :any:`Violations` that are associated to non-fixed :any:`constraint.Domain`'s.
+
+    def __repr__(self):
+        lines = "\n  ".join(map(str, self.all_violations))
+        return f'ViolationSet(\n  {lines})'
+
+    def __str__(self):
+        return repr(self)
+
+    def update(self, new_violations: Dict[Domain, OrderedSet[Violation]]) -> None:
+        # Update this :any:`ViolationSet` by merging in new violations from `new_violations`.
+        #
+        # :param new_violations: dict mapping each :any:`Domain` to the set of :any:`Violation`'s
+        #                        for which it is blamed
+        for domain, domain_violations in new_violations.items():
+            self.all_violations.update(domain_violations)
+            self.domain_to_violations[domain].update(domain_violations)
+            if not domain.fixed:
+                self.non_fixed_violations.update(domain_violations)
+
+    def clone(self) -> ViolationSet:
+        # Returns a deep-ish copy of this :any:`ViolationSet`.
+        # :py:data:`ViolationSet.all_violations` is a new list,
+        # but containing the same :any:`Violation`'s.
+        # :py:data:`ViolationSet.domain_to_violations` is a new dict,
+        # and each of its values is a new set, but each of the :any:`Domain`'s and :any:`Violation`'s
+        # is the same object as in the original :any:`ViolationSet`.
+        #
+        # This is required for efficiently processing :any:`Violation`'s from one search iteration to the next.
+        #
+        # :return: A deep-ish copy of this :any:`ViolationSet`.
+        domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
+        for domain, violations in domain_to_violations_deep_copy.items():
+            domain_to_violations_deep_copy[domain] = OrderedSet(violations)
+        return ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy,
+                            OrderedSet(self.non_fixed_violations))
+
+    def remove_violations_of_domain(self, domain: Domain) -> None:
+        # Removes any :any:`Violation`'s blamed on `domain`.
+        # :param domain: the :any:`Domain` whose :any:`Violation`'s should be removed
+
+        # XXX: need to make a copy of this set, since we are modifying the sets in place
+        # (values in self.domain_to_violations)
+        violations_of_domain = set(self.domain_to_violations[domain])
+        self.all_violations -= violations_of_domain
+        self.non_fixed_violations -= violations_of_domain
+        for violations_of_other_domain in self.domain_to_violations.values():
+            violations_of_other_domain -= violations_of_domain
+        assert len(self.domain_to_violations[domain]) == 0
+
+    def total_score(self) -> float:
+        """
+        :return: Total score of all violations.
+        """
+        return sum(violation.score for violation in self.all_violations)
+
+    def total_nonfixed_score(self) -> float:
+        # :return:
+        #     Total score of all violations attributed to :any:`constraint.Domain`'s with
+        #     :any:`constraint.Domain.fixed` = False.
+        return sum(violation.score for violation in self.non_fixed_violations)
+
+    def score_of_constraint(self, constraint: Constraint) -> float:
+        """
+        :param constraint:
+            constraint to filter scores on
+        :return:
+            Total score of all violations due to `constraint`.
+        """
+        return sum(violation.score for violation in self.all_violations if violation.constraint == constraint)
+
+    def nonfixed_score_of_constraint(self, constraint: Constraint) -> float:
+        # :param constraint:
+        #     constraint to filter scores on
+        # :return:
+        #     Total score of all nonfixed violations due to `constraint`.
+        return sum(
+            violation.score for violation in self.non_fixed_violations if violation.constraint == constraint)
+
+    def num_violations(self) -> float:
+        # :return: Total number of violations.
+        return len(self.all_violations)
+
+    def num_nonfixed_violations(self) -> float:
+        # :return: Total number of nonfixed violations.
+        return len(self.non_fixed_violations)
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore

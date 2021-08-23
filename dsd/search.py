@@ -58,7 +58,7 @@ import pprint
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Generic, Any, \
+from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
     Deque, TypeVar
 import statistics
 import textwrap
@@ -90,7 +90,7 @@ import pathos
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
-    logger, DesignPart, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
+    logger, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
     ComplexConstraint, ConstraintWithComplexes, Complex
 import dsd.constraints as dc
 
@@ -112,181 +112,12 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-@dataclass
-class _Violation(Generic[DesignPart]):
-    """
-    Represents a violation of a single :any:`Constraint` in a :any:`Design`. The "part" of the :any:`Design`
-    that violated the constraint is generic type `DesignPart` (e.g., for :any:`StrandPairConstraint`,
-    DesignPart = :any:`Pair` [:any:`Strand`]).
-    """
-
-    constraint: Constraint
-    """:any:`Constraint` that was violated to result in this :any:`Violation`."""
-
-    domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
-    """:any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`"""
-
-    _unweighted_score: float
-
-    def __init__(self, constraint: Constraint, domains: Iterable[Domain], score: float):
-        """
-        :param constraint:
-            :any:`Constraint` that was violated to result in this
-        :param domains:
-            :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
-        :param score:
-            total "score" of this violation, typically something like an excess energy over a
-            threshold, squared, multiplied by the :data:`Constraint.weight`
-        """
-        object.__setattr__(self, 'constraint', constraint)
-        domains_frozen = frozenset(domains)
-        object.__setattr__(self, 'domains', domains_frozen)
-        object.__setattr__(self, '_unweighted_score', score)
-
-    @property
-    def score(self) -> float:
-        return self.constraint.weight * self._unweighted_score
-
-    def __repr__(self) -> str:
-        return f'Violation({self.constraint.short_description}, score={self._unweighted_score:.2f})'
-
-    def __str__(self) -> str:
-        return repr(self)
-
-    # _Violation equality based on identity; different Violations in memory are considered different,
-    # even if all data between them matches. Don't create the same Violation twice!
-    def __hash__(self):
-        return super().__hash__()
-
-    def __eq__(self, other):
-        return self is other
-
-
-@dataclass
-class _ViolationSet:
-    """
-    Represents violations of :any:`Constraint`'s in a :any:`Design`.
-
-    It is designed to be efficiently updateable when a single :any:`Domain` changes, to efficiently update
-    only those violations of :any:`Constraint`'s that could have been affected by the changed :any:`Domain`.
-    """
-
-    all_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
-    """Set of all :any:`Violation`'s."""
-
-    domain_to_violations: Dict[Domain, OrderedSet[_Violation]] = field(
-        default_factory=lambda: defaultdict(OrderedSet))
-    """Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is 
-    blamed."""
-
-    non_fixed_violations: OrderedSet[_Violation] = field(default_factory=OrderedSet)
-    """Set of all :any:`Violations` that are associated to non-fixed :any:`constraint.Domain`'s."""
-
-    def __repr__(self):
-        lines = "\n  ".join(map(str, self.all_violations))
-        return f'ViolationSet(\n  {lines})'
-
-    def __str__(self):
-        return repr(self)
-
-    def update(self, new_violations: Dict[Domain, OrderedSet[_Violation]]) -> None:
-        """
-        Update this :any:`ViolationSet` by merging in new violations from `new_violations`.
-
-        :param new_violations: dict mapping each :any:`Domain` to the set of :any:`Violation`'s
-                               for which it is blamed
-        """
-        for domain, domain_violations in new_violations.items():
-            self.all_violations.update(domain_violations)
-            self.domain_to_violations[domain].update(domain_violations)
-            if not domain.fixed:
-                self.non_fixed_violations.update(domain_violations)
-
-    def clone(self) -> '_ViolationSet':
-        """
-        Returns a deep-ish copy of this :any:`ViolationSet`.
-        :py:data:`ViolationSet.all_violations` is a new list,
-        but containing the same :any:`Violation`'s.
-        :py:data:`ViolationSet.domain_to_violations` is a new dict,
-        and each of its values is a new set, but each of the :any:`Domain`'s and :any:`Violation`'s
-        is the same object as in the original :any:`ViolationSet`.
-
-        This is required for efficiently processing :any:`Violation`'s from one search iteration to the next.
-
-        :return: A deep-ish copy of this :any:`ViolationSet`.
-        """
-        domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
-        for domain, violations in domain_to_violations_deep_copy.items():
-            domain_to_violations_deep_copy[domain] = OrderedSet(violations)
-        return _ViolationSet(OrderedSet(self.all_violations), domain_to_violations_deep_copy,
-                             OrderedSet(self.non_fixed_violations))
-
-    def remove_violations_of_domain(self, domain: Domain) -> None:
-        """
-        Removes any :any:`Violation`'s blamed on `domain`.
-        :param domain: the :any:`Domain` whose :any:`Violation`'s should be removed
-        """
-        # XXX: need to make a copy of this set, since we are modifying the sets in place
-        # (values in self.domain_to_violations)
-        violations_of_domain = set(self.domain_to_violations[domain])
-        self.all_violations -= violations_of_domain
-        self.non_fixed_violations -= violations_of_domain
-        for violations_of_other_domain in self.domain_to_violations.values():
-            violations_of_other_domain -= violations_of_domain
-        assert len(self.domain_to_violations[domain]) == 0
-
-    def total_score(self) -> float:
-        """
-        :return: Total score of all violations.
-        """
-        return sum(violation.score for violation in self.all_violations)
-
-    def total_nonfixed_score(self) -> float:
-        """
-        :return:
-            Total score of all violations attributed to :any:`constraint.Domain`'s with
-            :any:`constraint.Domain.fixed` = False.
-        """
-        return sum(violation.score for violation in self.non_fixed_violations)
-
-    def score_of_constraint(self, constraint: Constraint) -> float:
-        """
-        :param constraint:
-            constraint to filter scores on
-        :return:
-            Total score of all violations due to `constraint`.
-        """
-        return sum(violation.score for violation in self.all_violations if violation.constraint == constraint)
-
-    def nonfixed_score_of_constraint(self, constraint: Constraint) -> float:
-        """
-        :param constraint:
-            constraint to filter scores on
-        :return:
-            Total score of all nonfixed violations due to `constraint`.
-        """
-        return sum(
-            violation.score for violation in self.non_fixed_violations if violation.constraint == constraint)
-
-    def num_violations(self) -> float:
-        """
-        :return: Total number of violations.
-        """
-        return len(self.all_violations)
-
-    def num_nonfixed_violations(self) -> float:
-        """
-        :return: Total number of nonfixed violations.
-        """
-        return len(self.non_fixed_violations)
-
-
 def _violations_of_constraints(design: Design,
                                never_increase_score: bool,
                                domains_changed: Optional[Iterable[Domain]],
-                               violation_set_old: Optional[_ViolationSet],
+                               violation_set_old: Optional[dc.ViolationSet],
                                iteration: int,
-                               ) -> _ViolationSet:
+                               ) -> dc.ViolationSet:
     """
     :param design:
         The :any:`Design` for which to find DNA sequences.
@@ -317,9 +148,9 @@ def _violations_of_constraints(design: Design,
                          f'domains_changed = {domains_changed}'
                          f'violation_set_old = {violation_set_old}')
 
-    violation_set: _ViolationSet
+    violation_set: dc.ViolationSet
     if domains_changed is None:
-        violation_set = _ViolationSet()
+        violation_set = dc.ViolationSet()
     else:
         assert violation_set_old is not None
         violation_set = violation_set_old.clone()  # Keep old in case no improvement
@@ -503,8 +334,8 @@ def _is_significantly_greater(x: float, y: float) -> bool:
 
 
 def _quit_early(never_increase_score: bool,
-                violation_set: _ViolationSet,
-                violation_set_old: Optional[_ViolationSet]) -> bool:
+                violation_set: dc.ViolationSet,
+                violation_set_old: Optional[dc.ViolationSet]) -> bool:
     return (never_increase_score and violation_set_old is not None
             and _is_significantly_greater(violation_set.total_score(), violation_set_old.total_score()))
 
@@ -659,10 +490,10 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 
 def _convert_sets_of_violating_domains_to_violations(
         constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]]) \
-        -> Dict[Domain, OrderedSet[_Violation]]:
-    domains_violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+        -> Dict[Domain, OrderedSet[dc.Violation]]:
+    domains_violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     for domain_set, score in sets_of_violating_domains:
-        violation = _Violation(constraint, domain_set, score)
+        violation = dc.Violation(constraint, domain_set, score)
         for domain in domain_set:
             domain_violations = domains_violations[domain]
             domain_violations.add(violation)
@@ -678,8 +509,8 @@ _empty_frozen_set: FrozenSet = frozenset()
 def _violations_of_domain_constraint(domains: Iterable[Domain],
                                      constraint: DomainConstraint,
                                      current_score_gap: Optional[float],
-                                     ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+                                     ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
+    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     unfixed_domains = [domain for domain in domains if not domain.fixed]
     violating_domains_scores: List[Optional[Tuple[Domain, float]]] = []
 
@@ -737,7 +568,7 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
     for violating_domain_score in violating_domains_scores:
         if violating_domain_score is not None:
             violating_domain, score = violating_domain_score
-            violation = _Violation(constraint, [violating_domain], score)
+            violation = dc.Violation(constraint, [violating_domain], score)
             violations[violating_domain].add(violation)
 
     return violations, quit_early
@@ -746,7 +577,7 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
 def _violations_of_strand_constraint(strands: Iterable[Strand],
                                      constraint: StrandConstraint,
                                      current_score_gap: Optional[float],
-                                     ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+                                     ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     """
     :param strands:
         Strands to check for violations
@@ -814,10 +645,10 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
                     quit_early = True
                     break
 
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     for strand, score in violating_strands_scores:
         unfixed_domains_set = OrderedSet(strand.unfixed_domains())
-        violation = _Violation(constraint, unfixed_domains_set, score)
+        violation = dc.Violation(constraint, unfixed_domains_set, score)
         for domain in unfixed_domains_set:
             violations[domain].add(violation)
 
@@ -835,7 +666,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                                           constraint: DomainPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
                                           current_score_gap: Optional[float],
-                                          ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+                                          ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     # If specified, current_score_gap is the current difference between the score of violated constraints
     # that have been found so far in the current iteration, compared to the total score of violated
     # constraints in the optimal solution so far. It is positive
@@ -905,7 +736,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                     quit_early = True
                     break
 
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     violating_domain_pair_score: Optional[Tuple[Domain, Domain, float]]
     for violating_domain_pair_score in violating_domain_pairs_scores:
         if violating_domain_pair_score is not None:
@@ -915,7 +746,7 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
                 unfixed_domains_set.add(domain1)
             if not domain2.fixed:
                 unfixed_domains_set.add(domain2)
-            violation = _Violation(constraint, frozenset(unfixed_domains_set), score)
+            violation = dc.Violation(constraint, frozenset(unfixed_domains_set), score)
             if not domain1.fixed:
                 violations[domain1].add(violation)
             if not domain2.fixed:
@@ -928,7 +759,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                                           constraint: StrandPairConstraint,
                                           domains_changed: Optional[Iterable[Domain]],
                                           current_score_gap: Optional[float],
-                                          ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+                                          ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = \
         _determine_strand_pairs_to_check(strands, domains_changed, constraint)
 
@@ -993,10 +824,10 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
                     quit_early = True
                     break
 
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     for strand1, strand2, score in violating_strand_pairs_scores:
         unfixed_domains_set = OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains())
-        violation = _Violation(constraint, unfixed_domains_set, score)
+        violation = dc.Violation(constraint, unfixed_domains_set, score)
         for domain in unfixed_domains_set:
             violations[domain].add(violation)
 
@@ -1006,7 +837,7 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
 def _violations_of_complex_constraint(constraint: ComplexConstraint,
                                       domains_changed: Optional[Iterable[Domain]],
                                       current_score_gap: Optional[float],
-                                      ) -> Tuple[Dict[Domain, OrderedSet[_Violation]], bool]:
+                                      ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     complexes_to_check: Tuple[Complex] = \
         _determine_complexes_to_check(domains_changed, constraint)
 
@@ -1071,7 +902,7 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
                     quit_early = True
                     break
 
-    violations: Dict[Domain, OrderedSet[_Violation]] = defaultdict(OrderedSet)
+    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     violating_complex_score: Optional[Tuple[Complex, float]]
     for violating_complex_score in violating_complexes_scores:
         if violating_complex_score is not None:
@@ -1081,7 +912,7 @@ def _violations_of_complex_constraint(constraint: ComplexConstraint,
             for strand in strand_complex:
                 unfixed_domains_set_builder.update(strand.unfixed_domains())
             unfixed_domains_set = frozenset(unfixed_domains_set_builder)
-            violation = _Violation(constraint, unfixed_domains_set, score)
+            violation = dc.Violation(constraint, unfixed_domains_set, score)
             for domain in unfixed_domains_set:
                 violations[domain].add(violation)
 
@@ -1160,8 +991,8 @@ def _write_text_intermediate_and_final_files(directory_final: Optional[str], dir
 
 def _write_report(design: Design, directory_intermediate: str, directory_final: str,
                   filename_with_iteration: str, filename_final: str,
-                  report_only_violations: bool) -> None:
-    report_str = design.summary_of_constraints(report_only_violations)
+                  report_only_violations: bool, violation_set: dc.ViolationSet) -> None:
+    report_str = design.summary_of_constraints(report_only_violations, violation_set=violation_set)
     report = f'''\
 Report on constraints
 =====================
@@ -1518,7 +1349,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
             _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
                                       write_report=True, directories=directories,
                                       report_only_violations=params.report_only_violations,
-                                      num_digits_update=params.num_digits_update)
+                                      num_digits_update=params.num_digits_update,
+                                      violation_set=violation_set_opt)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
@@ -1578,7 +1410,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                     _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
                                               write_report=write_report, directories=directories,
                                               report_only_violations=params.report_only_violations,
-                                              num_digits_update=params.num_digits_update)
+                                              num_digits_update=params.num_digits_update,
+                                              violation_set=violation_set_opt)
 
             iteration += 1
 
@@ -1665,7 +1498,8 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
 def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_score: bool,
-                                          violation_set_new: _ViolationSet, violation_set_opt: _ViolationSet):
+                                          violation_set_new: dc.ViolationSet,
+                                          violation_set_opt: dc.ViolationSet):
     violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
         design=design, never_increase_score=never_increase_score, iteration=iteration)
     # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
@@ -1812,7 +1646,8 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
 def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
                               num_new_optimal: int, write_report: bool,
                               directories: _Directories, report_only_violations: bool,
-                              num_digits_update: Optional[int]) -> None:
+                              num_digits_update: Optional[int],
+                              violation_set: dc.ViolationSet) -> None:
     num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
         else f'{num_new_optimal:0{num_digits_update}d}'
 
@@ -1836,7 +1671,8 @@ def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
                       filename_with_iteration=f'{directories.report_filename_no_ext}'
                                               f'-{num_new_optimal_padded}.txt',
                       filename_final=f'current-best-{directories.report_filename_no_ext}.txt',
-                      report_only_violations=report_only_violations)
+                      report_only_violations=report_only_violations,
+                      violation_set=violation_set)
 
 
 def _pfunc_killall() -> None:
@@ -1885,10 +1721,10 @@ def _log_time(stopwatch: Stopwatch) -> None:
 
 def _find_violations_and_score(design: Design,
                                domains_changed: Optional[Iterable[Domain]] = None,
-                               violation_set_old: Optional[_ViolationSet] = None,
+                               violation_set_old: Optional[dc.ViolationSet] = None,
                                never_increase_score: bool = False,
                                iteration: int = -1) \
-        -> Tuple[_ViolationSet, List[Domain], List[float]]:
+        -> Tuple[dc.ViolationSet, List[Domain], List[float]]:
     """
     :param design:
         :any:`Design` to evaluate
@@ -1911,7 +1747,7 @@ def _find_violations_and_score(design: Design,
     """
     stopwatch = Stopwatch()
 
-    violation_set: _ViolationSet = _violations_of_constraints(
+    violation_set: dc.ViolationSet = _violations_of_constraints(
         design, never_increase_score, domains_changed, violation_set_old, iteration)
 
     domain_to_score: Dict[Domain, float] = {
@@ -1936,8 +1772,8 @@ def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> Iterable[Any]:
 
 
 def _log_constraint_summary(*, design: Design,
-                            violation_set_opt: _ViolationSet,
-                            violation_set_new: _ViolationSet,
+                            violation_set_opt: dc.ViolationSet,
+                            violation_set_new: dc.ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
     all_constraints = design.all_constraints()
