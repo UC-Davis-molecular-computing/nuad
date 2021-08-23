@@ -1105,13 +1105,13 @@ def _write_sequences(design: Design, directory_intermediate: str, directory_fina
                                              sequences_content, '.txt')
 
 
-def _write_dsd_design_json(design: Design, directories: _Directories,
-                           num_new_optimal_padded: str) -> None:
+def _write_dsd_design_json(design: Design, directories: _Directories, directory_final: str,
+                           filename_final_no_ext: str, num_new_optimal_padded: str) -> None:
     directory_intermediate = directories.dsd_design
     filename_with_iteration_no_ext = f'{directories.dsd_design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
-    _write_text_intermediate_and_final_files(None, directory_intermediate,
-                                             None, filename_with_iteration_no_ext,
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
@@ -1816,7 +1816,9 @@ def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
     num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
         else f'{num_new_optimal:0{num_digits_update}d}'
 
-    _write_dsd_design_json(design, directories, num_new_optimal_padded)
+    _write_dsd_design_json(design, directories=directories, num_new_optimal_padded=num_new_optimal_padded,
+                           directory_final=directories.out,
+                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
     _write_rng_state(rng, directories, num_new_optimal_padded)
     _write_domain_pools(design.domain_pools_to_domain_map.keys(), directories)
 

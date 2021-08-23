@@ -58,8 +58,8 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    num_strands = 2
-    # num_strands = 5
+    # num_strands = 2
+    num_strands = 5
     # num_strands = 10
     # num_strands = 50
     # num_strands = 100
@@ -73,7 +73,6 @@ def main() -> None:
     for domain in strands[0].domains:
         domain.set_fixed_sequence('ACGTACGTAC')
     strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
-
 
     threaded = False
     # threaded = True
@@ -101,7 +100,7 @@ def main() -> None:
                        constraints=[
                            # strand_individual_ss_constraint,
                            # strand_pair_nupack_constraint,
-                           domain_pair_nupack_constraint,
+                           # domain_pair_nupack_constraint,
                            # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                            # strand_pairs_rna_duplex_constraint,
@@ -133,21 +132,27 @@ def main() -> None:
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
     domain_pool_10 = dc.DomainPool(f'length-{10}_domains', 10,
-                                numpy_constraints=numpy_constraints,
-                                replace_with_close_sequences=replace_with_close_sequences,
-                                )
+                                   numpy_constraints=numpy_constraints,
+                                   replace_with_close_sequences=replace_with_close_sequences,
+                                   )
     domain_pool_11 = dc.DomainPool(f'length-{11}_domains', 11,
-                                numpy_constraints=numpy_constraints,
-                                replace_with_close_sequences=replace_with_close_sequences,
-                                )
+                                   numpy_constraints=numpy_constraints,
+                                   replace_with_close_sequences=replace_with_close_sequences,
+                                   )
 
-
-    for strand in strands[1:]: # skip all domains on strand 0 since all its domains are fixed
+    for strand in strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
         for domain in strand.domains[:2]:
-            if domain.name != 's1': # skip for s1 since that domain is fixed
+            if domain.name != 's1':  # skip for s1 since that domain is fixed
                 domain.pool = domain_pool_10
         for domain in strand.domains[2:]:
             domain.pool = domain_pool_11
+
+    # have to set nupack_complex_secondary_structure_constraint after DomainPools are set
+    strand_complexes = [(strand,) for i,strand in enumerate(strands[2:])]
+    strand_base_pair_prob_constraint = dc.nupack_complex_secondary_structure_constraint(
+        strand_complexes=strand_complexes)
+
+    design.add_constraints([strand_base_pair_prob_constraint])
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,
