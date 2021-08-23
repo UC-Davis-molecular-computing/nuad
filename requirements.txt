@@ -3,3 +3,4 @@ psutil
 ordered_set
 pathos
 scadnano
+xlwt
