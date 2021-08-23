@@ -98,9 +98,9 @@ def main() -> None:
 
     design = dc.Design(strands,
                        constraints=[
-                           # strand_individual_ss_constraint,
+                           strand_individual_ss_constraint,
                            # strand_pair_nupack_constraint,
-                           # domain_pair_nupack_constraint,
+                           domain_pair_nupack_constraint,
                            # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                            # strand_pairs_rna_duplex_constraint,
