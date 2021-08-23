@@ -2039,6 +2039,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     def append_domain(self, domain: Domain, starred: bool = False) -> None:
         """
         Appends `domain` to 3' end of this :any:`Strand`.
+
         :param domain:
             :any:`Domain` to append
         :param starred:
@@ -2049,6 +2050,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel]):
     def prepend_domain(self, domain: Domain, starred: bool = False) -> None:
         """
         Prepends `domain` to 5' end of this :any:`Strand` (i.e., the beginning of the :any:`Strand`).
+
         :param domain:
             :any:`Domain` to prepend
         :param starred:
@@ -2468,14 +2470,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             is the symbol to delimit the four IDT fields name,sequence,scale,purification.
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :data:`IDTFields.name` and the same :any:`Strand.dna_sequence`. An :any:`IllegalDesignError`
+            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
         :param only_strands_with_idt:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.idt` is missing.
-            (though scaffold is included if `export_scaffold` is True).
             If True, then strands lacking the field :data:`Strand.idt` will not be exported.
         :param strands:
             strands to export; if not specified, all strands in design are exported.
@@ -2522,26 +2523,26 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         :param key:
             `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
             order in which to output strand sequences. Some useful defaults are provided by
-            :py:meth:`strand_order_key_function`
+            :meth:`strand_order_key_function`
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :py:attr:`IDTFields.name` and the same :any:`Strand.dna_sequence`. An :any:`IllegalDesignError` is
+            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError is
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
         :param only_strands_with_idt:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
-            chosen if the field :py:data:`Strand.idt` is missing.
+            chosen if the field :data:`Strand.idt` is missing.
             (though scaffold is included if `export_scaffold` is True).
-            If True, then strands lacking the field :any:`Strand.idt` will not be exported.
+            If True, then strands lacking the field :data:`Strand.idt` will not be exported.
             If False, then `use_default_plates` must be True.
         :param use_default_plates:
             Use default values for plate and well (ignoring those in idt fields, which may be None).
-            If False, each Strand to export must have the field :py:data:`Strand.idt`, so in particular
+            If False, each Strand to export must have the field :data:`Strand.idt`, so in particular
             the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
-            :py:data:`Strand.idt` has the fields :py:data:`IDTFields.plate` and :py:data:`IDTFields.well`,
+            :data:`Strand.idt` has the fields :py:data:`IDTFields.plate` and :py:data:`IDTFields.well`,
             since `use_default_plates` directs these fields to be ignored.
         :param plate_type:
             a :any:`PlateType` specifying whether to use a 96-well plate or a 384-well plate
