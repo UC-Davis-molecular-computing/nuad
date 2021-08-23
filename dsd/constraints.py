@@ -2556,14 +2556,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         if strands is None:
             strands = self.strands
-
-        import time
-        before = time.perf_counter_ns()
         sc_design = _export_dummy_scadnano_design_for_idt_export(strands)
-        after = time.perf_counter_ns()
-        print(f'time spent exporting dsd to scadnano: {(after - before) / 1e6:.1f} ms')
-
-        before = time.perf_counter_ns()
         sc_design.write_idt_plate_excel_file(directory=directory,
                                              filename=filename,
                                              key=key,
@@ -2572,8 +2565,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                              use_default_plates=use_default_plates,
                                              warn_using_default_plates=warn_using_default_plates,
                                              plate_type=plate_type)
-        after = time.perf_counter_ns()
-        print(f'time spent exporting scadnano to Excel: {(after - before) / 1e6:.1f} ms')
 
     def store_domain_pools(self) -> None:
         self.domain_pools_to_domain_map = defaultdict(list)
