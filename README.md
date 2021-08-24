@@ -41,7 +41,7 @@ To install dsd:
 3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/dsd/blob/main/requirements.txt) by typing 
 
     ```
-    pip install numpy ordered_set psutil pathos scadnano
+    pip install numpy ordered_set psutil pathos scadnano xlwt xlrd
     ``` 
     
     at the command line.
