@@ -528,7 +528,8 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
             or len(unfixed_domains) == 1):
         logger.debug(f'NOT using threading for domain constraint {constraint.description}')
         for domain in unfixed_domains:
-            score: float = constraint(domain.sequence, domain)
+            # score: float = constraint(domain.sequence, domain)
+            score, _ = constraint.evaluate((domain.sequence(),), domain)
             if score > 0.0:
                 violating_domains_scores.append((domain, score))
                 if current_score_gap is not None:
@@ -542,7 +543,9 @@ def _violations_of_domain_constraint(domains: Iterable[Domain],
         domains_to_check = unfixed_domains
 
         def sequence_to_score(sequence: str) -> float:
-            return constraint(sequence, None)
+            # return constraint(sequence, None)
+            score_, _ = constraint.evaluate((sequence,), None)
+            return score_
 
         if current_score_gap is None:
             sequences_to_check = (domain.sequence for domain in domains_to_check)
@@ -609,7 +612,8 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
             or (current_score_gap is not None and chunk_size == 1)):
         logger.debug(f'NOT using threading for strand constraint {constraint.description}')
         for strand in strands_to_check:
-            score: float = constraint(strand.sequence(), strand)
+            # score: float = constraint(strand.sequence(), strand)
+            score, _ = constraint.evaluate((strand.sequence(),), strand)
             if score > 0.0:
                 violating_strands_scores.append((strand, score))
                 if current_score_gap is not None:
@@ -622,7 +626,9 @@ def _violations_of_strand_constraint(strands: Iterable[Strand],
         assert constraint.sequence_only  # should have been checked in constraint post_init
 
         def sequence_to_score(sequence: str) -> float:
-            return constraint(sequence, None)
+            # return constraint(sequence, None)
+            score_, _ = constraint.evaluate((sequence,), None)
+            return score_
 
         if current_score_gap is None:
             sequences_to_check = (strand.sequence() for strand in strands_to_check)
@@ -697,7 +703,8 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
         logger.debug(f'NOT using threading for domain pair constraint {constraint.description}')
         for domain1, domain2 in domain_pairs_to_check:
             assert not domain1.fixed or not domain2.fixed
-            score: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
+            # score: float = constraint(domain1.sequence(), domain2.sequence(), domain1, domain2)
+            score, _ = constraint.evaluate((domain1.sequence(), domain2.sequence()), (domain1, domain2))
             if score > 0.0:
                 violating_domain_pairs_scores.append((domain1, domain2, score))
                 if current_score_gap is not None:
@@ -709,11 +716,13 @@ def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
         logger.debug(f'using threading for domain pair constraint {constraint.description}')
 
         def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
-            seq1, seq2 = seq_pair
-            return constraint(seq1, seq2, None, None)
+            # seq1, seq2 = seq_pair
+            # return constraint(seq1, seq2, None, None)
+            score_, _ = constraint.evaluate(seq_pair, None)
+            return score_
 
         if current_score_gap is None:
-            sequence_pairs_to_check = [(domain1.sequence, domain2.sequence)
+            sequence_pairs_to_check = [(domain1.sequence(), domain2.sequence())
                                        for domain1, domain2 in domain_pairs_to_check]
             scores = list(_process_pool.map(sequence_pair_to_score, sequence_pairs_to_check))
             violating_domain_pairs_scores = [(domain1, domain2, score) for (domain1, domain2), score in
@@ -780,10 +789,11 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
         for strand1, strand2 in strand_pairs_to_check:
             assert not strand1.fixed or not strand2.fixed
-            if constraint.sequence_only:
-                score = constraint(strand1.sequence(), strand2.sequence(), None, None)
-            else:
-                score = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
+            # if constraint.sequence_only:
+            #     score = constraint(strand1.sequence(), strand2.sequence(), None, None)
+            # else:
+            #     score = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
+            score, _ = constraint.evaluate((strand1.sequence(), strand2.sequence()), (strand1, strand2))
             if score > 0.0:
                 violating_strand_pairs_scores.append((strand1, strand2, score))
                 if current_score_gap is not None:
@@ -797,8 +807,10 @@ def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
         assert constraint.sequence_only  # should have been checked in StrandPairConstraint post_init
 
         def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
-            seq1, seq2 = seq_pair
-            return constraint(seq1, seq2, None, None)
+            # seq1, seq2 = seq_pair
+            # return constraint(seq1, seq2, None, None)
+            score_, _ = constraint.evaluate(seq_pair, None)
+            return score_
 
         if current_score_gap is None:
             sequence_pairs_to_check = [(strand1.sequence(), strand2.sequence())
@@ -1478,20 +1490,21 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
     for domain in independent_domains:
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
-        previous_sequence = domain.sequence
+        previous_sequence = domain.sequence()
         original_sequences[domain] = previous_sequence
-        domain.sequence = domain.pool.generate_sequence(rng, previous_sequence)
+        new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
+        domain.set_sequence(new_sequence)
 
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
     for domain in dependent_domains:
-        original_sequences[domain] = domain.sequence
+        original_sequences[domain] = domain.sequence()
 
     return domains_changed, original_sequences
 
 
 def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dict[Domain, str]) -> None:
     for domain_changed in domains_changed:
-        domain_changed.sequence = original_sequences[domain_changed]
+        domain_changed.set_sequence(original_sequences[domain_changed])
 
 
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
@@ -1842,8 +1855,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True
-                domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
-                assert len(domain.sequence) == domain.pool.length
+                new_sequence = domain.pool.generate_sequence(rng, domain.sequence())
+                domain.set_sequence(new_sequence)
+                assert len(domain.sequence()) == domain.pool.length
             else:
                 logger.info(skip_nonfixed_msg)
         else:
@@ -1852,8 +1866,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
                 # domain is not fixed so that we know it is eligible to be overwritten during the search
                 at_least_one_domain_unfixed = True
             if not domain.fixed and not domain.has_sequence():
-                domain.sequence = domain.pool.generate_sequence(rng)
-                assert len(domain.sequence) == domain.pool.length
+                new_sequence = domain.pool.generate_sequence(rng)
+                domain.set_sequence(new_sequence)
+                assert len(domain.sequence()) == domain.pool.length
             elif warn_fixed_sequences:
                 if domain.fixed:
                     logger.info(skip_fixed_msg)

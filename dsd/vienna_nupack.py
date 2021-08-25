@@ -408,8 +408,7 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
     for line in lines[:-1]:
         dg_list.append(-float(line.split(':')[1].split('(')[1].split(')')[0]))
     if len(lines) - 1 != len(seq_pairs):
-        raise AssertionError(
-            'lengths do not match: #lines:{} #seqpairs:{}'.format(len(lines) - 1, len(seq_pairs)))
+        raise AssertionError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}')
 
     return dg_list
 
@@ -422,7 +421,7 @@ def wc(seq: str) -> str:
     return seq.translate(_wctable)[::-1]
 
 
-def secondary_structure_single_strand(
+def complex_free_energy_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
         magnesium: float = default_magnesium) -> float:
     """Computes the complex free energy of a single strand.
@@ -435,7 +434,7 @@ def secondary_structure_single_strand(
 
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
                        magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
-    """Computes the complex free energy of a strand with its perfect WC complement.
+    """Computes the complex free energy of a strand with its perfect Watson-Crick complement.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -571,7 +570,7 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
         wc_seq = wc(seq)
         wc_altseq = wc(altseq)
         if threaded:
-            results = [global_thread_pool.apply_async(secondary_structure_single_strand,
+            results = [global_thread_pool.apply_async(complex_free_energy_single_strand,
                                                       args=(seq1 + seq2, temperature, sodium, magnesium)) for
                        (seq1, seq2) in
                        [(seq, altseq),
@@ -589,29 +588,29 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
                 return False
             energy_sum += sum(energies)
         else:
-            seq_alt = secondary_structure_single_strand(seq + altseq, temperature, sodium, magnesium)
+            seq_alt = complex_free_energy_single_strand(seq + altseq, temperature, sodium, magnesium)
             if seq_alt > concat:
                 return False
-            seq_wcalt = secondary_structure_single_strand(seq + wc_altseq, temperature, sodium, magnesium)
+            seq_wcalt = complex_free_energy_single_strand(seq + wc_altseq, temperature, sodium, magnesium)
             if seq_wcalt > concat:
                 return False
-            wcseq_alt = secondary_structure_single_strand(wc_seq + altseq, temperature, sodium, magnesium)
+            wcseq_alt = complex_free_energy_single_strand(wc_seq + altseq, temperature, sodium, magnesium)
             if wcseq_alt > concat:
                 return False
-            wcseq_wcalt = secondary_structure_single_strand(wc_seq + wc_altseq, temperature, sodium,
+            wcseq_wcalt = complex_free_energy_single_strand(wc_seq + wc_altseq, temperature, sodium,
                                                             magnesium)
             if wcseq_wcalt > concat:
                 return False
-            alt_seq = secondary_structure_single_strand(altseq + seq, temperature, sodium, magnesium)
+            alt_seq = complex_free_energy_single_strand(altseq + seq, temperature, sodium, magnesium)
             if alt_seq > concat:
                 return False
-            alt_wcseq = secondary_structure_single_strand(altseq + wc_seq, temperature, sodium, magnesium)
+            alt_wcseq = complex_free_energy_single_strand(altseq + wc_seq, temperature, sodium, magnesium)
             if alt_wcseq > concat:
                 return False
-            wcalt_seq = secondary_structure_single_strand(wc_altseq + seq, temperature, sodium, magnesium)
+            wcalt_seq = complex_free_energy_single_strand(wc_altseq + seq, temperature, sodium, magnesium)
             if wcalt_seq > concat:
                 return False
-            wcalt_wcseq = secondary_structure_single_strand(wc_altseq + wc_seq, temperature, sodium,
+            wcalt_wcseq = complex_free_energy_single_strand(wc_altseq + wc_seq, temperature, sodium,
                                                             magnesium)
             if wcalt_wcseq > concat:
                 return False

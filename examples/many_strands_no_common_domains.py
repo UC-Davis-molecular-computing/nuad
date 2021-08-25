@@ -77,6 +77,9 @@ def main() -> None:
     threaded = False
     # threaded = True
 
+    domain_nupack_ss_constraint = dc.nupack_domain_complex_free_energy_constraint(
+        threshold=-0.0, temperature=52, short_description='DomainSS')
+
     domain_pairs_rna_duplex_constraint = dc.rna_duplex_domain_pairs_constraint(
         threshold=-2.0, temperature=52, short_description='DomainPairNoCompl')
 
@@ -90,7 +93,7 @@ def main() -> None:
     # strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
     #     threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
 
-    strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
+    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', threaded=threaded)
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
@@ -98,10 +101,11 @@ def main() -> None:
 
     design = dc.Design(strands,
                        constraints=[
-                           # strand_individual_ss_constraint,
-                           # strand_pair_nupack_constraint,
-                           # domain_pair_nupack_constraint,
-                           domain_pairs_rna_duplex_constraint,
+                           domain_nupack_ss_constraint,
+                           strand_individual_ss_constraint,
+                           strand_pair_nupack_constraint,
+                           domain_pair_nupack_constraint,
+                           # domain_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
                            # strand_pairs_rna_duplex_constraint,
                        ])
@@ -147,12 +151,13 @@ def main() -> None:
         for domain in strand.domains[2:]:
             domain.pool = domain_pool_11
 
-    # have to set nupack_complex_secondary_structure_constraint after DomainPools are set
+    # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
+    # so that we know the domain lengths
     strand_complexes = [(strand,) for i,strand in enumerate(strands[2:])]
     strand_base_pair_prob_constraint = dc.nupack_complex_secondary_structure_constraint(
         strand_complexes=strand_complexes)
 
-    design.add_constraints([strand_base_pair_prob_constraint])
+    # design.add_constraints([strand_base_pair_prob_constraint])
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,
