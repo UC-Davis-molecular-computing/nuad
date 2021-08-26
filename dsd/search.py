@@ -1339,7 +1339,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal, rng, design = _restart_from_directory(directories, design)
+            num_new_optimal, rng = _restart_from_directory(directories, design)
 
         violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
             design=design, never_increase_score=params.never_increase_score, iteration=-1)
@@ -1543,7 +1543,7 @@ def timestamp() -> str:
 
 
 def _restart_from_directory(directories: _Directories, design: dc.Design) \
-        -> Tuple[int, np.random.Generator, dc.Design]:
+        -> Tuple[int, np.random.Generator]:
     # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
     # which are ignored. This applies to both the design and the RNG state
 
@@ -1572,7 +1572,8 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
     # to avoid writing the entire DomainPool (with its 100,000 sequences) every time we write a Design.
-    design_stored.copy_constraints_from(design)
+    # design_stored.copy_constraints_from(design)
+    design.copy_sequences_from(design_stored)
 
     design_json = json.loads(design_json_str)
     stored_pool_idxs = design_json[dc.domain_pools_num_sampled_key]
@@ -1580,7 +1581,7 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
         idx = stored_pool_idxs[pool.name]
         pool.num_sampled = idx
 
-    return highest_idx_design, rng, design_stored
+    return highest_idx_design, rng
 
 
 def read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
