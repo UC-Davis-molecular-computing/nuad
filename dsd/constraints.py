@@ -3356,6 +3356,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         Assuming every :any:`Domain` in this :any:`Design` is has a matching (same name) :any:`Domain` in
         `other`, copies sequences from `other` into this :any:`Design`.
+
         :param other:
             other :any:`Design` from which to copy sequences
         """
