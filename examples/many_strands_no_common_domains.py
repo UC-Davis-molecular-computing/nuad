@@ -154,10 +154,10 @@ def main() -> None:
     # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
     # so that we know the domain lengths
     strand_complexes = [(strand,) for i,strand in enumerate(strands[2:])]
-    strand_base_pair_prob_constraint = dc.nupack_complex_secondary_structure_constraint(
+    strand_base_pair_prob_constraint = dc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
-    # design.add_constraints([strand_base_pair_prob_constraint])
+    design.add_constraints([strand_base_pair_prob_constraint])
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,

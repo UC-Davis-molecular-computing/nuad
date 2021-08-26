@@ -1511,7 +1511,7 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
 
     # def evaluate(s1: str, s2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
     def evaluate(seqs: Tuple[str, ...],
-                 domains: Optional[Tuple[Domain, Domain]]) -> Tuple[float, str]: # noqa
+                 domains: Optional[Tuple[Domain, Domain]]) -> Tuple[float, str]:  # noqa
         s1, s2 = seqs
         if len(s1) > len(s2):
             s1, s2 = s2, s1
@@ -1619,7 +1619,7 @@ class IDTFields(JSONSerializable):
         return NoIndent(dct)
 
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> IDTFields:
+    def from_json_serializable(json_map: Dict[str, Any]) -> IDTFields:
         scale = mandatory_field(IDTFields, json_map, idt_scale_key)
         purification = mandatory_field(IDTFields, json_map, idt_purification_key)
         plate = json_map.get(idt_plate_key)
@@ -2593,7 +2593,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                   pool_with_name: Optional[Dict[str, DomainPool]] = None,
                   strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
                   domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                  ) -> 'Design[StrandLabel, DomainLabel]':
+                  ) -> Design[StrandLabel, DomainLabel]:
         """
         :param json_str:
             The string representing the :any:`Design` as a JSON object.
@@ -2973,7 +2973,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         for strand1, strand2 in pairs:
             num_checks += 1
             # excess = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
-            excess, summary = constraint.evaluate((strand1.sequence(), strand2.sequence()), (strand1, strand2))
+            excess, summary = constraint.evaluate((strand1.sequence(), strand2.sequence()),
+                                                  (strand1, strand2))
             passed = excess <= 0.0
             if not passed:
                 num_violations += 1
@@ -3004,12 +3005,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         lines_and_excesses: List[Tuple[str, float]] = []
         for strand_complex in constraint.complexes:
             num_checks += 1
-            excess = constraint(strand_complex)
+            # excess = constraint(strand_complex)
+            seqs = tuple(strand.sequence() for strand in strand_complex)
+            excess, summary = constraint.evaluate(seqs, strand_complex)
             passed = excess <= 0.0
             if not passed:
                 num_violations += 1
             if not report_only_violations or (report_only_violations and not passed):
-                summary = constraint.generate_summary(strand_complex, False)
+                # summary = constraint.generate_summary(strand_complex, False)
                 strand_names = ', '.join([f'{strand.name}' for strand in strand_complex])
                 line = (f'strand complex: '
                         f'{strand_names}'
@@ -3643,7 +3646,8 @@ class Constraint(ABC, Generic[DesignPart]):
         if excess < 0.0:
             excess = 0.0
         score = self.score_transfer_function(excess)
-        return score, summary
+        weighted_score = score * self.weight
+        return weighted_score, summary
 
     def _check_sequence_only(self, part: DesignPart) -> None:
         if not self.sequence_only and part is None:
@@ -3869,21 +3873,6 @@ class DesignConstraint(Constraint[Design]):
     :py:data:`Constraint.weight` is 1.0, the the return value is ``[{d1, d2}, {d2, d3}]``, then
     ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
-
-    evaluate: Callable[[Design, Optional[Domain]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _, __: []
-
-    summary: Callable[[Design, bool],
-                      ConstraintReport] = lambda _: _no_summary_string
-
-    def __call__(self, design: Design, domains_changed: Optional[Iterable[Domain]]) \
-            -> List[Tuple[OrderedSet[Domain], float]]:
-        sets_excesses = (self.evaluate)(design, domains_changed)  # noqa
-        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
-        return sets_scores
-
-    def generate_summary(self, design: Design, report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(design, report_only_violations)  # noqa
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:
@@ -4811,9 +4800,6 @@ class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
     List of complexes (tuples of :any:`Strand`'s) to check.
     """
 
-    def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> str:
-        raise NotImplementedError('subclasses of ConstraintWithStrandPairs must implement generate_summary')
-
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class ComplexConstraint(ConstraintWithComplexes[Complex]):
@@ -4822,27 +4808,6 @@ class ComplexConstraint(ConstraintWithComplexes[Complex]):
     Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
     there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
     :any:`Complex`'s must be specified manually in the constructor."""
-
-    evaluate: Callable[[Complex],
-                       float] = lambda _, __: 0.0
-    """
-    Evaluation to perform on complex (tuple of :any:`Strand`'s).
-    Returns float indicating how much the constraint is violated,
-    or 0.0 if the constraint is satisfied.
-    """
-
-    summary: Callable[[Complex],
-                      str] = lambda _, __: _no_summary_string
-
-    def __call__(self, strand_complex: Complex) -> float:
-        excess = (self.evaluate)(strand_complex)  # noqa
-        if excess < 0:
-            return 0.0
-        score = (self.score_transfer_function)(excess)  # noqa
-        return score
-
-    def generate_summary(self, strand_complex: Complex, report_only_violations: bool) -> str:
-        return (self.summary)(strand_complex)  # noqa
 
 
 def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
@@ -6468,7 +6433,7 @@ def __get_base_pair_domain_endpoints_to_check(
     return base_pair_domain_endpoints_to_check
 
 
-def nupack_complex_secondary_structure_constraint(
+def nupack_complex_base_pair_probability_constraint(
         strand_complexes: List[Complex],
         nonimplicit_base_pairs: Optional[Iterable[BoundDomains]] = None,
         all_base_pairs: Optional[Iterable[BoundDomains]] = None,
@@ -6688,31 +6653,47 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
     if description is None:
         description = 'Base pair probability of complex'
 
-    def evaluate(strand_complex_: Complex) -> float:
+    def evaluate(seqs: Tuple[str, ...], strand_complex_: Complex) -> Tuple[float, str]:
+        assert len(seqs) == len(strand_complex)
         bps = _violation_base_pairs(strand_complex_)
         err_sq = 0.0
+        # eval
         for bp in bps:
             e = base_type_probability_threshold[bp.base_pair_type] - bp.base_pairing_probability
             assert e > 0
             err_sq += e ** 2
-        return err_sq
+        # summary
+        if len(bps) == 0:
+            summary = "\tAll base pairs satisfy thresholds."
+        else:
+            summary_list = []
+            for bp in bps:
+                i = bp.base_index1
+                j = bp.base_index2
+                p = bp.base_pairing_probability
+                t = bp.base_pair_type
+                summary_list.append(
+                    f'\t{i},{j}: {math.floor(100 * p)}% '
+                    f'(<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+            summary = '\n'.join(summary_list)
+        return err_sq, summary
 
     # summary would print all the base pairs
     # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
     # * maybe consider puting second and after base pairs on new line with indent
-    def summary(strand_complex_: Complex) -> str:
-        bps = _violation_base_pairs(strand_complex_)
-        if len(bps) == 0:
-            return "\tAll base pairs satisfy thresholds."
-        summary_list = []
-        for bp in bps:
-            i = bp.base_index1
-            j = bp.base_index2
-            p = bp.base_pairing_probability
-            t = bp.base_pair_type
-            summary_list.append(
-                f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
-        return '\n'.join(summary_list)
+    # def summary(strand_complex_: Complex) -> str:
+    #     bps = _violation_base_pairs(strand_complex_)
+    #     if len(bps) == 0:
+    #         return "\tAll base pairs satisfy thresholds."
+    #     summary_list = []
+    #     for bp in bps:
+    #         i = bp.base_index1
+    #         j = bp.base_index2
+    #         p = bp.base_pairing_probability
+    #         t = bp.base_pair_type
+    #         summary_list.append(
+    #             f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
+    #     return '\n'.join(summary_list)
 
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
         nupack_complex_result = dv.nupack_complex_base_pair_probabilities(strand_complex_,
@@ -6815,5 +6796,4 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
                              score_transfer_function=score_transfer_function,
                              threaded=threaded,
                              complexes=tuple(strand_complexes),
-                             evaluate=evaluate,
-                             summary=summary)
+                             _evaluate=evaluate)
