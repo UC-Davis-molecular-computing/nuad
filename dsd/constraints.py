@@ -3360,6 +3360,32 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False,
                              check_length=True)
 
+    def copy_sequences_from(self, other: Design) -> None:
+        """
+        Assuming every :any:`Domain` in this :any:`Design` is has a matching (same name) :any:`Domain` in
+        `other`, copies sequences from `other` into this :any:`Design`.
+
+        :param other:
+            other :any:`Design` from which to copy sequences
+        """
+        # see if self.domains needs to be initialized
+        computed_derived_fields = False
+        if self.domains is None:
+            self.compute_derived_fields()
+            computed_derived_fields = True
+
+        # copy sequences
+        for domain in self.domains:
+            other_domain = other.domains_by_name[domain.name]
+            if other_domain.fixed:
+                domain.set_fixed_sequence(other_domain.sequence)
+            elif other_domain.has_sequence():
+                domain.sequence = other_domain.sequence
+
+        # no need to compute_derived_fields if we already called it above,
+        # since new sequences won't change derived fields
+        if not computed_derived_fields:
+            self.compute_derived_fields()
 
 def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet) -> str:
     score = violation_set.score_of_constraint(report.constraint)
@@ -3901,7 +3927,7 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                              f'{strand1.name} and {strand2.name}')
         if (strand1.group is not None
                 and strand2.group is not None
-                and strand1.group.name != strand2.group.name):  # noqa
+                and strand1.group != strand2.group):  # noqa
             raise ValueError(f'strand {strand2.name} group name does not match:'
                              f'design1 strand {strand1.name} group = {strand1.group},\n'
                              f'design2 strand {strand2.name} group = {strand2.group}')
