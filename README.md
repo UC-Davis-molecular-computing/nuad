@@ -41,7 +41,7 @@ To install dsd:
 3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/dsd/blob/main/requirements.txt) by typing 
 
     ```
-    pip install numpy ordered_set psutil pathos scadnano
+    pip install numpy ordered_set psutil pathos scadnano xlwt xlrd
     ``` 
     
     at the command line.
@@ -50,8 +50,6 @@ To install dsd:
 
     To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
     To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
-
-    On Windows, you should also test that they can be called through the normal Windows command line (or Powershell) by typing `wsl -e pfunc` and `wsl -e RNAduplex`, since this is how the dsd library will call them if you run your Python programs from a Windows command line.
 
 5. Test it works by typing `python` at the command line, then typing `import dsd`. It should import without errors:
 
