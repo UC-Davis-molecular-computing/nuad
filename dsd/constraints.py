@@ -3378,9 +3378,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         for domain in self.domains:
             other_domain = other.domains_by_name[domain.name]
             if other_domain.fixed:
-                domain.set_fixed_sequence(other_domain.sequence)
+                domain.set_fixed_sequence(other_domain.sequence())
             elif other_domain.has_sequence():
-                domain.sequence = other_domain.sequence
+                domain.set_sequence(other_domain.sequence())
 
         # no need to compute_derived_fields if we already called it above,
         # since new sequences won't change derived fields
