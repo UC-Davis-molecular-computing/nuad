@@ -91,7 +91,8 @@ import pathos
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
     logger, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
-    ComplexConstraint, ConstraintWithComplexes, Complex
+    ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
+    DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -172,7 +173,8 @@ def _violations_of_constraints(design: Design,
             if never_increase_score and violation_set_old is not None else None
 
         violations, quit_early_in_func = _violations_of_constraint(
-            parts=parts_to_check, constraint=constraint, current_score_gap=current_score_gap)
+            parts=parts_to_check, constraint=constraint, current_score_gap=current_score_gap,
+            domains_changed=domains_changed, design=design)
         violation_set.update(violations)
 
         quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
@@ -259,7 +261,7 @@ def _violations_of_constraints(design: Design,
     # constraints that processes whole design at once (for anything not captured by the above, e.g.,
     # processing all triples of strands)
     for design_constraint in design.design_constraints:
-        sets_of_violating_domains_weights = design_constraint(design, domains_changed)
+        sets_of_violating_domains_weights = design_constraint.evaluate_design(design, domains_changed)
         domains_violations = _convert_sets_of_violating_domains_to_violations(
             design_constraint, sets_of_violating_domains_weights)
         violation_set.update(domains_violations)
@@ -470,9 +472,11 @@ def _convert_sets_of_violating_domains_to_violations(
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-def _violations_of_constraint(parts: Sequence[dc.DesignPart],
+def _violations_of_constraint(parts: Sequence[DesignPart],
                               constraint: Constraint,
                               current_score_gap: Optional[float],
+                              domains_changed: Optional[Iterable[Domain]] = None,
+                              design: Optional[Design] = None,  # only used with DesignConstraint
                               ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
     violating_parts_scores: List[Tuple[dc.DesignPart, float]] = []
@@ -481,18 +485,42 @@ def _violations_of_constraint(parts: Sequence[dc.DesignPart],
     quit_early = False
     num_threads = dc.cpu_count()
 
-    if not constraint.threaded or num_threads == 1 or len(parts) == 1:
-        for part in parts:
-            score, _ = _evaluate_constraint(constraint, part)
-            if score > 0.0:
-                violating_parts_scores.append((part, score))
-                if current_score_gap is not None:
-                    score_discovered_here += score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
+    if not constraint.parallel or num_threads == 1 or len(parts) == 1:
+        if isinstance(constraint,
+                      (DomainConstraint, StrandConstraint,
+                       DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+            for part in parts:
+                score, _ = _evaluate_individual_part_constraint(constraint, part)
+                if score > 0.0:
+                    violating_parts_scores.append((part, score))
+                    if current_score_gap is not None:
+                        score_discovered_here += score
+                        if _is_significantly_greater(score_discovered_here, current_score_gap):
+                            quit_early = True
+                            break
+
+        elif isinstance(constraint,
+                        (DomainsConstraint, StrandsConstraint,
+                         DomainPairsConstraint, StrandPairsConstraint,
+                         ComplexesConstraint, DesignConstraint)):
+            if isinstance(constraint, DesignConstraint):
+                violating_parts_scores_summaries = constraint.evaluate_design(design, domains_changed)
+            else:
+                violating_parts_scores_summaries = constraint.evaluate_bulk(parts)
+            part: DesignPart
+            for part, score, _ in violating_parts_scores_summaries:
+                if score > 0.0:
+                    violating_parts_scores.append((part, score))
+                    if current_score_gap is not None:
+                        score_discovered_here += score
+                        if _is_significantly_greater(score_discovered_here, current_score_gap):
+                            quit_early = True
+                            break
+        else:
+            raise AssertionError(f'constraint {constraint} of unrecognized type {type(constraint)}')
+
     else:
-        raise NotImplementedError()
+        raise NotImplementedError('TODO: implement parallelization')
 
     for violating_part, score in violating_parts_scores:
         domains = _domains_in_part(violating_part, exclude_fixed=True)
@@ -503,11 +531,11 @@ def _violations_of_constraint(parts: Sequence[dc.DesignPart],
     return violations, quit_early
 
 
-def _evaluate_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tuple[float, str]:
-    if isinstance(constraint, DomainConstraint) or isinstance(constraint, StrandConstraint):
-        assert isinstance(part, Domain) or isinstance(part, Strand)
+def _evaluate_individual_part_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tuple[float, str]:
+    if isinstance(constraint, (DomainConstraint, StrandConstraint)):
+        assert isinstance(part, (Domain, Strand))
         score, summary = constraint.evaluate((part.sequence(),), part)
-    elif isinstance(constraint, DomainPairConstraint) or isinstance(constraint, StrandPairConstraint):
+    elif isinstance(constraint, (DomainPairConstraint, StrandPairConstraint)):
         assert isinstance(part, tuple) and len(part) == 2
         part1, part2 = part
         score, summary = constraint.evaluate((part1.sequence(), part2.sequence()), (part1, part2))
@@ -515,13 +543,8 @@ def _evaluate_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tupl
         assert isinstance(part, tuple)
         seqs = tuple(strand.sequence() for strand in part)
         score, summary = constraint.evaluate(seqs, part)
-    elif isinstance(constraint, dc.DesignConstraint):
-        assert isinstance(part, tuple) or isinstance(part, list) and len(part) == 1
-        score, summary = constraint.evaluate((), part[0])
-    elif isinstance(constraint, dc.DomainsConstraint) or isinstance(constraint, dc.StrandsConstraint):
-        raise NotImplementedError()
     else:
-        raise NotImplementedError()
+        raise AssertionError()
     return score, summary
 
 

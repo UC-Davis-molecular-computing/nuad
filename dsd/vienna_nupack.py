@@ -488,19 +488,19 @@ global_thread_pool = ThreadPool()
 
 def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium: float,
                       magnesium: float, orthogonality: float,
-                      orthogonality_ave: float = -1, threaded: bool = False) -> bool:
+                      orthogonality_ave: float = -1, parallel: bool = False) -> bool:
     """test orthogonality of domain with all others and their wc complements
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
-    if threaded:
+    if parallel:
         raise NotImplementedError()
 
     def binding_callback(s1: str, s2: str) -> float:
         return binding(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
 
-    if threaded:
+    if parallel:
         results = [
             global_thread_pool.apply_async(binding_callback, args=(s, s))
             for s in (seq, wc(seq))]
@@ -518,7 +518,7 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
             return False
     energy_sum = 0.0
     for altseq in seqs:
-        if threaded:
+        if parallel:
             results = [
                 global_thread_pool.apply_async(binding_callback,
                                                args=(seq1, seq2, temperature, sodium, magnesium))
@@ -555,21 +555,21 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
 def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], temperature: float,
                                                sodium: float, magnesium: float,
                                                concat: float, concat_ave: float = -1,
-                                               threaded: bool = False) -> bool:
+                                               parallel: bool = False) -> bool:
     """test lack of secondary structure in concatenated domains
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
 
-    if threaded:
+    if parallel:
         raise NotImplementedError()
 
     energy_sum = 0.0
     for altseq in seqs:
         wc_seq = wc(seq)
         wc_altseq = wc(altseq)
-        if threaded:
+        if parallel:
             results = [global_thread_pool.apply_async(complex_free_energy_single_strand,
                                                       args=(seq1 + seq2, temperature, sodium, magnesium)) for
                        (seq1, seq2) in

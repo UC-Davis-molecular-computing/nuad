@@ -28,7 +28,7 @@ def main():
     params.force_overwrite = True  # directly deletes output folder contents w/o user input
     # params.report_delay = 0.0
     design = dc.Design(strands, constraints=[dc.nupack_strand_complex_free_energy_constraint(
-        threshold=-1.5, temperature=52, short_description='StrandSS', threaded=False)])
+        threshold=-1.5, temperature=52, short_description='StrandSS', parallel=False)])
     ds.search_for_dna_sequences(design, params)
 
 

@@ -3387,6 +3387,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         if not computed_derived_fields:
             self.compute_derived_fields()
 
+
 def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet) -> str:
     score = violation_set.score_of_constraint(report.constraint)
     score_unfixed = violation_set.nonfixed_score_of_constraint(report.constraint)
@@ -3416,11 +3417,11 @@ DesignPart = TypeVar('DesignPart',
                      Tuple[Domain, Domain],
                      Tuple[Strand, Strand],
                      Complex,
-                     Iterable[Domain],
-                     Iterable[Strand],
-                     Iterable[Tuple[Domain, Domain]],
-                     Iterable[Tuple[Strand, Strand]],
-                     Iterable[Complex],
+                     # Iterable[Domain],
+                     # Iterable[Strand],
+                     # Iterable[Tuple[Domain, Domain]],
+                     # Iterable[Tuple[Strand, Strand]],
+                     # Iterable[Complex],
                      Design)
 
 
@@ -3577,7 +3578,9 @@ class ViolationSet:
 @dataclass(frozen=True, eq=False)
 class Constraint(ABC, Generic[DesignPart]):
     description: str
-    """Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol'."""
+    """
+    Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol'.
+    """
 
     short_description: str = ''
     """
@@ -3604,7 +3607,7 @@ class Constraint(ABC, Generic[DesignPart]):
     threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
     """
 
-    threaded: bool = False
+    parallel: bool = False
     """
     Whether or not to use parallelization across multiple processes to take advantage of multiple
     processors/cores. (Not applicable to some types of constraints. 
@@ -3612,14 +3615,31 @@ class Constraint(ABC, Generic[DesignPart]):
 
     sequence_only: bool = True
     """
-    If :py:data:`Constraint.threaded` is True, then this should be set to True so that only the 
+    If :py:data:`Constraint.parallel` is True, then this should be set to True so that only the 
     sequence is serialized when passing data to other processes for parallel computation.
     Otherwise, significant time is spent serializing objects such as :any:`Strand` or :any:`Domain`,
     which is slower than not using parallelization in the first place.
     """
 
     _evaluate: Callable[[Tuple[str, ...], Optional[DesignPart]],
-                        Tuple[float, str]] = lambda _: (0.0, 'no summary')
+                        Tuple[float, str]] = lambda _, __: (0.0, 'no summary')
+    """
+    Function that evaluates the :any:`Constraint`. It takes as input a tuple of DNA sequences 
+    (Python strings) and an optional :any:`DesignPart`, where :any:`DesignPart` is one of 
+    :any:`Domain`, :any:`Strand`, pair of :any:`Domain`'s, or pair of :any:`Strand`'s, or :any:`Complex`
+    (the latter being an alias for arbitrary-length tuple of :any:`Strand`'s).
+    
+    The second argument will be None if :data:`Constraint.parallel` is True (since it's more expensive
+    to serialize the :any:`Domain` and :any:`Strand` objects than strings for passing data to processes
+    executing in parallel). Thus, if the :any:`Constraint` needs to use more data about the :any:`DesignPart`
+    than just its DNA sequence, by accessing the second argument, :data:`Constraint.parallel` should be set
+    to False.    
+    
+    Exactly one of _evaluate and _evaluate_bulk should be specified.
+    """
+
+    _evaluate_bulk: Callable[[Iterable[DesignPart]],
+                             List[Tuple[DesignPart, float, str]]] = lambda _: []
 
     def __post_init__(self) -> None:
         if len(self.short_description) == 0:
@@ -3629,15 +3649,24 @@ class Constraint(ABC, Generic[DesignPart]):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-        if self.threaded and not self.sequence_only:
-            raise ValueError('cannot have both threaded=True and sequence_only=False;\n'
+        if self.parallel and not self.sequence_only:
+            raise ValueError('cannot have both parallel=True and sequence_only=False;\n'
                              'if you want to use threading, the constraint must be sequence_only '
                              'for efficiency, since the pathos library is used for parallel processing, '
                              'and it is too inefficient to serialize anything more than the DNA sequence')
 
+        if not isinstance(self, DesignConstraint):
+            if self._evaluate is None and self._evaluate_bulk is None:
+                raise ValueError('Exactly one of _evaluate or _evaluate_bulk must be specified, '
+                                 'but both are None.')
+
+            if self._evaluate is not None and self._evaluate_bulk is not None:
+                raise ValueError('Exactly one of _evaluate or _evaluate_bulk must be specified, '
+                                 'but both have been specified.')
+
     def evaluate(self, seqs: Tuple[str, ...], part: Optional[DesignPart]) -> Tuple[float, str]:
         """
-        Evaluates this :any:`Constraint` using function `evaluate` supplied in constructor.
+        Evaluates this :any:`Constraint` using function `_evaluate` supplied in constructor.
 
         :param seqs:
             sequence(s) of relevant :any:`DesignPart`, e.g., if `part` is a pair of :any:`Strand`'s,
@@ -3654,57 +3683,35 @@ class Constraint(ABC, Generic[DesignPart]):
             `excess` might be the difference 1.5 between the energy and the threshold,
             and `summary` might be the string "-2.5 kcal/mol".
         """
-        self._check_sequence_only(part)
-        # excess = summary = None
-        # try:
-        excess, summary = (self._evaluate)(seqs, part)  # noqa
-        # except ValueError as err:
-        #     msg = str(err)
-        #     if 'too many values to unpack' in msg or 'not enough values to unpack' in msg:
-        #         regex = re.compile(r'.*expected (\d+).*')
-        #         match = regex.match(msg)
-        #         num_expected_str = match.group(1)
-        #         num_expected = int(num_expected_str)
-        #         raise AssertionError(f'error: should have passed {num_expected} sequences to evaluate\n'
-        #                              f'but instead passed {len(seqs)}.\n'
-        #                              f'This is for constraint with description\n{self.description}')
-        # assert excess is not None and summary is not None
-        if excess < 0.0:
-            excess = 0.0
-        score = self.score_transfer_function(excess)
-        weighted_score = score * self.weight
-        return weighted_score, summary
-
-    def _check_sequence_only(self, part: DesignPart) -> None:
+        if self._evaluate is None:
+            raise ValueError('Cannot call evaluate on a Constraint unless _evaluate is specified')
         if not self.sequence_only and part is None:
             raise AssertionError('if sequence_only is False, '
                                  'then the design part cannot be None, but it is')
 
-    # @abstractmethod
-    # def generate_summary(self, design_part: DesignPart, report_only_violations: bool) -> ConstraintReport:
-    #     """
-    #     Method that helps to give a summary of how well parts of the :any:`Design` are performing in
-    #     satisfying this constraint. For example, useful for generating a report after assigning sequences
-    #     to a :any:`Design`.
-    #
-    #     :param design_part:
-    #         part of :any:`Design` that this :any:`Constraint` references
-    #     :param report_only_violations:
-    #         Whether to report only violations of constraints, or all evaluations of constraints, including
-    #         those that passed.
-    #     :return:
-    #         :any:`ConstraintReport` summarizing of how well `design_part` "performs" for :any:`Constraint`.
-    #         For example, a :any:`StrandConstraint` checking the complex free energy of a single
-    #         :any:`Strand` may return a string such as "strand complex free energy: -2.3 kcal/mol".
-    #         A :any:`StrandPairsConstraint` checking all pairs of :any:`Strand`'s may return a longer
-    #         string reporting on every pair.
-    #     """
-    #     raise NotImplementedError('subclasses of Constraint must implement generate_summary')
+        excess, summary = (self._evaluate)(seqs, part)  # noqa
+        if excess < 0.0:
+            excess = 0.0
+        score = self.weight * self.score_transfer_function(excess)
+        return score, summary
+
+    def evaluate_bulk(self, part: Iterable[DesignPart]) -> List[Tuple[DesignPart, float, str]]:
+        if self._evaluate_bulk is None:
+            raise ValueError('Cannot call evaluate_bulk on a Constraint unless _evaluate_bulk is specified')
+
+        results = (self._evaluate_bulk)(part)  # noqa
+        results_with_scores_transferred_and_weighted = []
+        for part, excess, summary in results:
+            if excess < 0.0:
+                excess = 0.0
+            score = self.weight * self.score_transfer_function(excess)
+            results_with_scores_transferred_and_weighted.append((part, score, summary))
+        return results_with_scores_transferred_and_weighted
 
 
-_no_summary_string = f"No summary for this constraint. " \
-                     f"To generate one, pass a function as the parameter named " \
-                     f'"summary" when creating the Constraint.'
+_no_summary_string = "No summary for this constraint. " \
+                     "To generate one, pass a function as the parameter named " \
+                     '"summary" when creating the Constraint.'
 
 
 @dataclass(frozen=True, eq=False)
@@ -3725,12 +3732,26 @@ class ConstraintWithStrands(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainConstraint(ConstraintWithDomains[Domain]):
-    """Constraint that applies to a single :any:`Domain`."""
+    """Constraint that applies to a single :any:`Domain`.
+
+    Specify :data:`Constraint._evaluate` in the constructor."""
+
+    def __post_init__(self) -> None:
+        if self._evaluate is None:
+            raise ValueError('_evaluate must be specified for a DomainConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class StrandConstraint(ConstraintWithStrands[Strand]):
-    """Constraint that applies to a single :any:`Strand`."""
+    """Constraint that applies to a single :any:`Strand`.
+
+    Specify :data:`Constraint._evaluate` in the constructor."""
+
+    def __post_init__(self) -> None:
+        if self._evaluate is None:
+            raise ValueError('_evaluate must be specified for a StrandConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)
@@ -3751,72 +3772,36 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
-    """Constraint that applies to a pair of :any:`Domain`'s."""
+    """Constraint that applies to a pair of :any:`Domain`'s.
+
+    Specify :data:`Constraint._evaluate` in the constructor."""
+
+    def __post_init__(self) -> None:
+        if self._evaluate is None:
+            raise ValueError('_evaluate must be specified for a DomainPairConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class StrandPairConstraint(ConstraintWithStrandPairs[Tuple[Strand, Strand]]):
-    """Constraint that applies to a pair of :any:`Strand`'s."""
+    """Constraint that applies to a pair of :any:`Strand`'s.
 
+    Specify :data:`Constraint._evaluate` in the constructor."""
 
-@dataclass(frozen=True, eq=False)  # type: ignore
-class DomainPairsConstraint(ConstraintWithDomainPairs[Iterable[Tuple[Domain, Domain]]]):
-    """
-    Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
-    """
-
-    evaluate: Callable[[Iterable[Tuple[Domain, Domain]]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
-    """
-    Pairwise check to perform on :any:`Domain`'s.
-    Returns True if and only if the all pairs in the input iterable satisfy the constraint.
-    """
-
-    summary: Callable[[Iterable[Tuple[Domain, Domain]], bool],
-                      ConstraintReport] = lambda _: _no_summary_string
-
-    def __call__(self, domain_pairs: Iterable[Tuple[Domain, Domain]]) \
-            -> List[Tuple[OrderedSet[Domain], float]]:
-        sets_excesses = (self.evaluate)(domain_pairs)  # noqa
-        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
-        return sets_scores
-
-    def generate_summary(self, domain_pairs: Iterable[Tuple[Domain, Domain]],
-                         report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(domain_pairs, report_only_violations)  # noqa
-
-
-@dataclass(frozen=True, eq=False)  # type: ignore
-class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Strand]]]):
-    """
-    Similar to :any:`StrandsConstraint` but operates on a specified list of pairs of :any:`Strand`'s.
-    """
-
-    evaluate: Callable[[Iterable[Tuple[Strand, Strand]]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
-    """
-    Pairwise check to perform on :any:`Strand`'s.
-    Returns True if and only if the all pairs in the input iterable satisfy the constraint.
-    """
-
-    summary: Callable[[Iterable[Tuple[Strand, Strand]], bool],
-                      ConstraintReport] = lambda _: _no_summary_string
-
-    def __call__(self, strand_pairs: Iterable[Tuple[Strand, Strand]]) \
-            -> List[Tuple[OrderedSet[Domain], float]]:
-        sets_excesses = (self.evaluate)(strand_pairs)  # noqa
-        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
-        return sets_scores
-
-    def generate_summary(self, strand_pairs: Iterable[Tuple[Strand, Strand]],
-                         report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(strand_pairs, report_only_violations)  # noqa
+    def __post_init__(self) -> None:
+        if self._evaluate is None:
+            raise ValueError('_evaluate must be specified for a StrandPairConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainsConstraint(ConstraintWithDomains[Iterable[Domain]]):
     """
-    Constraint that applies to a several :any:`Domain`'s. The difference with :any:`DomainConstraint` is that
+    Constraint that applies to a several :any:`Domain`'s.
+
+    Specify :data:`Constraint._evaluate_bulk` in the constructor.
+
+    The difference with :any:`DomainConstraint` is that
     the caller may want to process all :any:`Domain`'s at once, e.g., by giving many of them to a third-party
     program such as ViennaRNA, which may be more efficient than repeatedly calling a Python function.
 
@@ -3824,33 +3809,22 @@ class DomainsConstraint(ConstraintWithDomains[Iterable[Domain]]):
     initial violations of constraints, subsequent calls to this constraint only give the domain that was
     mutated, not the entire of :any:`Domain`'s in the whole :any:`Design`.
     Use :any:`DesignConstraint` for constraints that require every :any:`Domain` in the :any:`Design`.
-
-    Return value is a list of sets of :any:`Domain`'s. Each element of the list corresponds to one violation
-    of the :any:`DomainsConstraint`. The search will assign to a :any:`Domain` `d` a weight of
-    :py:data:`Constraint.weight` once for each set in this list that contains `d`. For example, if
-    :py:data:`Constraint.weight` is 1.0, the the return value is ``[{d1, d2}, {d2, d3}]``, then
-    ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
 
-    evaluate: Callable[[Iterable[Domain]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
-
-    summary: Callable[[Iterable[Domain], bool],
-                      ConstraintReport] = lambda _: _no_summary_string
-
-    def __call__(self, domains: Iterable[Domain]) -> List[Tuple[OrderedSet[Domain], float]]:
-        sets_excesses = (self.evaluate)(domains)  # noqa
-        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
-        return sets_scores
-
-    def generate_summary(self, domains: Iterable[Domain], report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(domains, report_only_violations)  # noqa
+    def __post_init__(self) -> None:
+        if self._evaluate_bulk is None:
+            raise ValueError('_evaluate_bulk must be specified for a DomainsConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class StrandsConstraint(ConstraintWithStrands[Iterable[Strand]]):
     """
-    Constraint that applies to a several :any:`Strand`'s. The difference with :any:`StrandConstraint` is that
+    Constraint that applies to a several :any:`Strand`'s.
+
+    Specify :data:`Constraint._evaluate_bulk` in the constructor.
+
+    The difference with :any:`StrandConstraint` is that
     the caller may want to process all :any:`Strand`'s at once, e.g., by giving many of them to a third-party
     program such as ViennaRNA.
 
@@ -3858,27 +3832,40 @@ class StrandsConstraint(ConstraintWithStrands[Iterable[Strand]]):
     initial violations of constraints, subsequent calls to this constraint only give strands containing
     the domain that was mutated, not the entire of :any:`Strand`'s in the whole :any:`Design`.
     Use :any:`DesignConstraint` for constraints that require every :any:`Strand` in the :any:`Design`.
-
-    Return value is a list of sets of :any:`Domain`'s. Each element of the list corresponds to one violation
-    of the :any:`StrandsConstraint`. The search will assign to a :any:`Domain` `d` a weight of
-    :py:data:`Constraint.weight` once for each set in this list that contains `d`. For example, if
-    :py:data:`Constraint.weight` is 1.0, the the return value is ``[{d1, d2}, {d2, d3}]``, then
-    ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
     """
 
-    evaluate: Callable[[Iterable[Strand]],
-                       List[Tuple[OrderedSet[Domain], float]]] = lambda _: []
+    def __post_init__(self) -> None:
+        if self._evaluate_bulk is None:
+            raise ValueError('_evaluate_bulk must be specified for a StrandsConstraint')
+        super().__post_init__()
 
-    summary: Callable[[Iterable[Strand], bool],
-                      ConstraintReport] = lambda _: _no_summary_string
 
-    def __call__(self, strands: Iterable[Strand]) -> List[Tuple[OrderedSet[Domain], float]]:
-        sets_excesses = (self.evaluate)(strands)  # noqa
-        sets_scores = _alter_scores_by_transfer(sets_excesses, self.score_transfer_function)
-        return sets_scores
+@dataclass(frozen=True, eq=False)  # type: ignore
+class DomainPairsConstraint(ConstraintWithDomainPairs[Tuple[Domain, Domain]]):
+    """
+    Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
 
-    def generate_summary(self, strands: Iterable[Strand], report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(strands, report_only_violations)  # noqa
+    Specify :data:`Constraint._evaluate_bulk` in the constructor.
+    """
+
+    def __post_init__(self) -> None:
+        if self._evaluate_bulk is None:
+            raise ValueError('_evaluate_bulk must be specified for a DomainPairsConstraint')
+        super().__post_init__()
+
+
+@dataclass(frozen=True, eq=False)  # type: ignore
+class StrandPairsConstraint(ConstraintWithStrandPairs[Iterable[Tuple[Strand, Strand]]]):
+    """
+    Similar to :any:`StrandsConstraint` but operates on a specified list of pairs of :any:`Strand`'s.
+
+    Specify :data:`Constraint._evaluate_bulk` in the constructor.
+    """
+
+    def __post_init__(self) -> None:
+        if self._evaluate_bulk is None:
+            raise ValueError('_evaluate_bulk must be specified for a StrandPairsConstraint')
+        super().__post_init__()
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
@@ -3887,18 +3874,49 @@ class DesignConstraint(Constraint[Design]):
     Constraint that applies to the entire :any:`Design`. This is used for any :any:`Constraint` that
     does not naturally fit the structure of the other types of constraints.
 
-    There is an optional parameter `domain_changed`, defaulting to None; if specified, the constraint
-    can restrict its check on the assumption that only `domain_changed` has changed since the last
-    time the violations were collected. In other words, it need only return sets of :any:`Domain`'s involving
-    violations of this :any:`DesignConstraint` that involve `domain_changed`. For example, if it checks
-    all triples of :any:`Domain`'s, there is no need to check any triple not containing `domain_changed`.
-
-    Return value is a list of sets of :any:`Domain`'s. Each element of the list corresponds to one violation
-    of the :any:`DomainsConstraint`. The search will assign to a :any:`Domain` `d` a weight of
-    :py:data:`Constraint.weight` once for each set in this list that contains `d`. For example, if
-    :py:data:`Constraint.weight` is 1.0, the the return value is ``[{d1, d2}, {d2, d3}]``, then
-    ``d1`` and ``d3`` are assigned weight 1.0, and ``d2`` is assigned weight 2.0.
+    Unlike other constraints, which specify either :data:`Constraint._evaluate` or
+    :data:`Constraint._evaluate_bulk`, a :any:`DesignConstraint` leaves both of these unspecified and
+    specifies :data:`DesignConstraint._evaluate_design` instead.
     """
+
+    _evaluate_design: Callable[[Design, Iterable[Domain]],
+                               List[Tuple[DesignPart, float, str]]] = lambda _: []
+    """
+    Evaluates the :any:`Design` (first argument), possibly taking into account which :any:`Domain`(s) have
+    changed in the last iteration (second argument).
+    
+    Returns a list of tuples (`part`, `score`, `summary`), 
+    one tuple per violation of the :any:`DesignConstraint`.
+    
+    `part` is the part of the :any:`Design` that caused the violation.
+    It must be one of :any:`Domain`, :any:`Strand`, pair of `Domain`'s, or tuple of :any:`Strand`'s.
+    
+    `score` is the score of the violation.
+    
+    `summary` is a 1-line summary of the violation to put into the generated reports.
+    """
+
+    def __post_init__(self) -> None:
+        if self._evaluate is not None:
+            raise ValueError('_evaluate should be None in a DesignConstraint')
+        if self._evaluate_bulk is not None:
+            raise ValueError('_evaluate_bulk should be None in a DesignConstraint')
+        if self._evaluate_design is None:
+            raise ValueError('_evaluate_design should be specified in a DesignConstraint')
+
+    def evaluate_design(self, design: Design, domains_changed: Iterable[Domain]) \
+            -> List[Tuple[DesignPart, float, str]]:
+        if self._evaluate_bulk is None:
+            raise ValueError('Cannot call evaluate_bulk on a Constraint unless _evaluate_bulk is specified')
+
+        results = (self._evaluate_bulk)(design, domains_changed)  # noqa
+        results_with_scores_transferred_and_weighted = []
+        for part, excess, summary in results:
+            if excess < 0.0:
+                excess = 0.0
+            weighted_score = self.weight * self.score_transfer_function(excess)
+            results_with_scores_transferred_and_weighted.append((part, weighted_score, summary))
+        return results_with_scores_transferred_and_weighted
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:
@@ -3971,7 +3989,7 @@ def nupack_domain_complex_free_energy_constraint(
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
-        threaded: bool = False,
+        parallel: bool = False,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
         domains: Optional[Iterable[Domain]] = None) -> DomainConstraint:
@@ -3995,7 +4013,7 @@ def nupack_domain_complex_free_energy_constraint(
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
-    :param threaded:
+    :param parallel:
         Whether to use threadds to parallelize.
     :param domains:
         :any:`Domain`'s to check; if not specified, all domains are checked.
@@ -4029,7 +4047,7 @@ def nupack_domain_complex_free_energy_constraint(
                             weight=weight,
                             score_transfer_function=score_transfer_function,
                             _evaluate=evaluate,
-                            threaded=threaded,
+                            parallel=parallel,
                             domains=domains)
 
 
@@ -4040,7 +4058,7 @@ def nupack_strand_complex_free_energy_constraint(
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
-        threaded: bool = False,
+        parallel: bool = False,
         description: Optional[str] = None,
         short_description: str = 'strand_ss_nupack',
         strands: Optional[Iterable[Strand]] = None) -> StrandConstraint:
@@ -4064,7 +4082,7 @@ def nupack_strand_complex_free_energy_constraint(
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
-    :param threaded:
+    :param parallel:
         Whether to use threadds to parallelize.
     :param strands:
         Strands to check; if not specified, all strands are checked.
@@ -4103,14 +4121,14 @@ def nupack_strand_complex_free_energy_constraint(
                             weight=weight,
                             score_transfer_function=score_transfer_function,
                             _evaluate=evaluate,
-                            threaded=threaded,
+                            parallel=parallel,
                             strands=strands)
 
 
 def nupack_domain_pair_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
-        threaded: bool = False,
+        parallel: bool = False,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
@@ -4126,9 +4144,9 @@ def nupack_domain_pair_constraint(
         Energy threshold in kcal/mol.
     :param temperature:
         Temperature in Celsius
-    :param threaded:
+    :param parallel:
         Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
-        :py:data:`Constraint.threaded`)
+        :py:data:`Constraint.parallel`)
     :param weight:
         How much to weigh this :any:`Constraint`.
     :param score_transfer_function:
@@ -4230,7 +4248,7 @@ def nupack_domain_pair_constraint(
                                 score_transfer_function=score_transfer_function,
                                 _evaluate=evaluate,
                                 # summary=summary,
-                                threaded=threaded,
+                                parallel=parallel,
                                 pairs=pairs)
 
 
@@ -4243,7 +4261,7 @@ def nupack_strand_pair_constraint(
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'strand_pair_nupack',
-        threaded: bool = False,
+        parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
 ) -> StrandPairConstraint:
     """
@@ -4265,7 +4283,7 @@ def nupack_strand_pair_constraint(
         How much to weigh this :any:`Constraint`.
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
-    :param threaded:
+    :param parallel:
         Whether to use threading to parallelize evaluating this constraint.
     :param description:
         Detailed description of constraint suitable for report.
@@ -4308,7 +4326,7 @@ def nupack_strand_pair_constraint(
                                 short_description=short_description,
                                 weight=weight,
                                 score_transfer_function=score_transfer_function,
-                                threaded=threaded,
+                                parallel=parallel,
                                 pairs=pairs,
                                 _evaluate=evaluate,
                                 # summary=summary
@@ -4388,7 +4406,7 @@ def rna_duplex_strand_pairs_constraint(
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
-        threaded: bool = False,
+        parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
         parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
         -> StrandPairsConstraint:
@@ -4408,7 +4426,7 @@ def rna_duplex_strand_pairs_constraint(
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
-    :param threaded:
+    :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
@@ -4429,16 +4447,16 @@ def rna_duplex_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
         return dv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if threaded and len(sequence_pairs) > 1:
+        if parallel and len(sequence_pairs) > 1:
             lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
+            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
             energies = _flatten(lists_of_energies)
         else:
-            energies = calculate_energies_unthreaded(sequence_pairs)
+            energies = calculate_energies_unparallel(sequence_pairs)
         return energies
 
     def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
@@ -4563,7 +4581,7 @@ def rna_cofold_strand_pairs_constraint(
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'rna_dup_strand_pairs',
-        threaded: bool = False,
+        parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
         parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
         -> StrandPairsConstraint:
@@ -4583,7 +4601,7 @@ def rna_cofold_strand_pairs_constraint(
         Long description of constraint suitable for putting into constraint report.
     :param short_description:
         Short description of constraint suitable for logging to stdout.
-    :param threaded:
+    :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
@@ -4602,16 +4620,16 @@ def rna_cofold_strand_pairs_constraint(
     num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unthreaded(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
         return dv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if threaded and len(sequence_pairs) > 1:
+        if parallel and len(sequence_pairs) > 1:
             lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unthreaded, lists_of_sequence_pairs)
+            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
             energies = _flatten(lists_of_energies)
         else:
-            energies = calculate_energies_unthreaded(sequence_pairs)
+            energies = calculate_energies_unparallel(sequence_pairs)
         return energies
 
     def evaluate(strand_pairs: Iterable[Tuple[Strand, Strand]]) -> List[Tuple[OrderedSet[Domain], float]]:
@@ -4829,11 +4847,15 @@ class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):
 
 @dataclass(frozen=True, eq=False)  # type: ignore
 class ComplexConstraint(ConstraintWithComplexes[Complex]):
-    """Constraint that applies to a complex (tuple of :any:`Strand`'s).
+    """
+    Constraint that applies to a complex (tuple of :any:`Strand`'s).
+
+    Specify :data:`Constraint._evaluate` in the constructor.
 
     Unlike other types of :any:`Constraint`'s such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
     there is no default list of :any:`Complex`'s that a :any:`ComplexConstraint` is applied to. The list of
-    :any:`Complex`'s must be specified manually in the constructor."""
+    :any:`Complex`'s must be specified manually in the constructor.
+    """
 
 
 def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], float]],
@@ -4874,7 +4896,7 @@ class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
 
     def generate_summary(self, complexes: Iterable[Complex],
                          report_only_violations: bool) -> ConstraintReport:
-        return (self.summary)(strands, report_only_violations)  # noqa
+        return (self.summary)(complexes, report_only_violations)  # noqa
 
 
 class _AdjacentDuplexType(Enum):
@@ -6476,7 +6498,7 @@ def nupack_complex_base_pair_probability_constraint(
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
         short_description: str = 'complex_secondary_structure_nupack',
-        threaded: bool = False,
+        parallel: bool = False,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
 
@@ -6577,9 +6599,9 @@ def nupack_complex_base_pair_probability_constraint(
         See :py:data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
     :type short_description:
         str, optional
-    :param threaded:
+    :param parallel:
         **TODO**: Implement this
-    :type threaded:
+    :type parallel:
         bool, optional
     :raises ImportError:
         If NUPACK 4 is not installed.
@@ -6820,6 +6842,6 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
                              short_description=short_description,
                              weight=weight,
                              score_transfer_function=score_transfer_function,
-                             threaded=threaded,
+                             parallel=parallel,
                              complexes=tuple(strand_complexes),
                              _evaluate=evaluate)

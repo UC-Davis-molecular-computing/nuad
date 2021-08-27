@@ -74,8 +74,8 @@ def main() -> None:
         domain.set_fixed_sequence('ACGTACGTAC')
     strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
 
-    threaded = False
-    # threaded = True
+    parallel = False
+    # parallel = True
 
     domain_nupack_ss_constraint = dc.nupack_domain_complex_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='DomainSS')
@@ -85,19 +85,19 @@ def main() -> None:
 
     domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
         threshold=-0.5, temperature=52, short_description='DomainPairNoCompl',
-        threaded=threaded)
+        parallel=parallel)
 
     strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', threaded=threaded)
+        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', parallel=parallel)
 
     # strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
-    #     threshold=-1.5, temperature=52, short_description='StrandSS', threaded=threaded)
+    #     threshold=-1.5, temperature=52, short_description='StrandSS', parallel=parallel)
 
     strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandSS', threaded=threaded)
+        threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
 
     strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
-        threshold=-3.5, temperature=52, short_description='StrandPairNoCompl', threaded=threaded, weight=0.1)
+        threshold=-3.5, temperature=52, short_description='StrandPairNoCompl', parallel=parallel, weight=0.1)
 
     design = dc.Design(strands,
                        constraints=[
