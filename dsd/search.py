@@ -320,7 +320,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
     """
     # either all pairs, or just constraint.pairs if specified
     if constraint.pairs is not None:
-        strand_pairs_to_check_if_domain_changed_none = \
+        strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
             [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
         pairs = all_pairs(all_strands, where=_at_least_one_strand_unfixed)
