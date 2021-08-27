@@ -4126,20 +4126,6 @@ def nupack_domain_pair_constraint(
 
         return max(0.0, max_excess), msg
 
-    # def summary(domain1: Domain, domain2: Domain) -> str:
-    #     seq_pairs, domain_name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
-    #         [(domain1, domain2)])
-    #     energies = []
-    #     for seq1, seq2 in seq_pairs:
-    #         energy = dv.binding(seq1, seq2, temperature=temperature)
-    #         energies.append(energy)
-    #     max_name_length = max(len(name) for name in _flatten(domain_name_pairs))
-    #     lines = [f'{name1:{max_name_length}}, '
-    #              f'{name2:{max_name_length}}: '
-    #              f' {energy:6.2f} kcal/mol'
-    #              for (name1, name2), energy in zip(domain_name_pairs, energies)]
-    #     return '\n  ' + '\n  '.join(lines)
-
     if pairs is not None:
         pairs = tuple(pairs)
 
@@ -4148,7 +4134,6 @@ def nupack_domain_pair_constraint(
                                 weight=weight,
                                 score_transfer_function=score_transfer_function,
                                 _evaluate=evaluate,
-                                # summary=summary,
                                 parallel=parallel,
                                 pairs=pairs)
 
