@@ -23,6 +23,8 @@ from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
 
 import numpy as np
 
+import dsd.constraints as dc
+
 os_is_windows = sys.platform == 'win32'
 
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
@@ -129,10 +131,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     return dg
 
 
-Complex = Tuple['Strand', ...]
-
-
-def nupack_complex_base_pair_probabilities(strand_complex: Complex,
+def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex',
                                            temperature: float = default_temperature,
                                            sodium: float = default_sodium,
                                            magnesium: float = default_magnesium) -> np.ndarray:

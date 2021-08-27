@@ -7,7 +7,7 @@ from typing import List
 import dsd.constraints as dc  # type: ignore
 import dsd.vienna_nupack as dv  # type: ignore
 import dsd.search as ds  # type: ignore
-from dsd.constraints import NumpyConstraint, SequenceConstraint
+from dsd.constraints import NumpyConstraint
 
 
 # command-line arguments
@@ -69,10 +69,12 @@ def main() -> None:
     # strand i is    [----------|----------|----------|---------->
     strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
 
-    # fix all domains of strand 0 and one domain of strand 1
-    for domain in strands[0].domains:
-        domain.set_fixed_sequence('ACGTACGTAC')
-    strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
+    some_fixed = False
+    if some_fixed:
+        # fix all domains of strand 0 and one domain of strand 1
+        for domain in strands[0].domains:
+            domain.set_fixed_sequence('ACGTACGTAC')
+        strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
 
     parallel = False
     # parallel = True
@@ -90,9 +92,6 @@ def main() -> None:
     strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0, temperature=52, short_description='StrandPairNoCompl', parallel=parallel)
 
-    # strand_individual_ss_constraint = dc.nupack_strand_secondary_structure_constraint(
-    #     threshold=-1.5, temperature=52, short_description='StrandSS', parallel=parallel)
-
     strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
 
@@ -105,9 +104,9 @@ def main() -> None:
                            strand_individual_ss_constraint,
                            strand_pair_nupack_constraint,
                            domain_pair_nupack_constraint,
-                           # domain_pairs_rna_duplex_constraint,
+                           domain_pairs_rna_duplex_constraint,
+                           strand_pairs_rna_duplex_constraint,
                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                           # strand_pairs_rna_duplex_constraint,
                        ])
 
     numpy_constraints: List[NumpyConstraint] = [
@@ -144,20 +143,27 @@ def main() -> None:
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
 
-    for strand in strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
-        for domain in strand.domains[:2]:
-            if domain.name != 's1':  # skip for s1 since that domain is fixed
+    if some_fixed:
+        for strand in strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
+            for domain in strand.domains[:2]:
+                if domain.name != 's1':  # skip for s1 since that domain is fixed
+                    domain.pool = domain_pool_10
+            for domain in strand.domains[2:]:
+                domain.pool = domain_pool_11
+    else:
+        for strand in strands:
+            for domain in strand.domains[:2]:
                 domain.pool = domain_pool_10
-        for domain in strand.domains[2:]:
-            domain.pool = domain_pool_11
+            for domain in strand.domains[2:]:
+                domain.pool = domain_pool_11
 
     # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
     # so that we know the domain lengths
-    strand_complexes = [(strand,) for i,strand in enumerate(strands[2:])]
+    strand_complexes = [dc.Complex((strand,)) for i, strand in enumerate(strands[2:])]
     strand_base_pair_prob_constraint = dc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
-    design.add_constraints([strand_base_pair_prob_constraint])
+    # design.add_constraints([strand_base_pair_prob_constraint])
 
     params = ds.SearchParameters(out_directory=args.directory,
                                  restart=args.restart,
