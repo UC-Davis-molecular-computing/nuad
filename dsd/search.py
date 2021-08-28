@@ -61,7 +61,6 @@ from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callab
     Deque, TypeVar, cast
 import statistics
 import textwrap
-import time
 import re
 import datetime
 
@@ -502,37 +501,53 @@ def _sequences_fragile_format_output_to_file(design: Design,
         f'{strand.sequence(delimiter="-")}' for strand in design.strands)
 
 
-def _write_sequences(design: Design, directory_intermediate: str, directory_final: str,
-                     filename_with_iteration_no_ext: str, filename_final_no_ext: str,
+def _write_sequences(design: Design, params: SearchParameters, directory_intermediate: str,
+                     directory_final: str, filename_with_iteration_no_ext: str, filename_final_no_ext: str,
                      include_group: bool = True) -> None:
     sequences_content = _sequences_fragile_format_output_to_file(design, include_group)
+    if not params.save_sequences_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
                                              sequences_content, '.txt')
 
 
-def _write_dsd_design_json(design: Design, directories: _Directories, directory_final: str,
-                           filename_final_no_ext: str, num_new_optimal_padded: str) -> None:
+def _write_dsd_design_json(design: Design, params: SearchParameters, directories: _Directories,
+                           directory_final: str, filename_final_no_ext: str,
+                           num_new_optimal_padded: str) -> None:
     directory_intermediate = directories.dsd_design
     filename_with_iteration_no_ext = f'{directories.dsd_design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_rng_state(rng: numpy.random.Generator, directories: _Directories,
+def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, directories: _Directories,
                      num_new_optimal_padded: str) -> None:
+    if not params.save_designs_for_all_updates:
+        #TODO: write to top-level file
+        return
+
     directory_intermediate = directories.rng_state
     filename_with_iteration_no_ext = f'{directories.rng_state_filename_no_ext}-{num_new_optimal_padded}'
     state = rng.bit_generator.state
     json_str = json.dumps(state, indent=2)
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(None, directory_intermediate,
                                              None, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], directories: _Directories) -> None:
+def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], params: SearchParameters,
+                        directories: _Directories) -> None:
+    if not params.save_designs_for_all_updates:
+        #TODO: write to top-level file
+        return
+
     directory_intermediate = directories.domain_pools
 
     for pool in domain_pools:
@@ -551,6 +566,21 @@ def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], directories: _Dir
                                                      domain_pools_json_str, '.json')
 
 
+def _write_report(design: Design, params: SearchParameters, directory_intermediate: str, directory_final: str,
+                  filename_with_iteration_no_ext: str, filename_final_no_ext: str,
+                  violation_set: dc.ViolationSet) -> None:
+    report = f'''\
+Report on constraints
+=====================
+''' + design.summary_of_constraints(params.report_only_violations, violation_set=violation_set)
+
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
+                                             report, '.txt')
+
+
 def _write_text_intermediate_and_final_files(directory_final: Optional[str], directory_intermediate: str,
                                              filename_final_no_ext: Optional[str],
                                              filename_with_iteration_no_ext: str,
@@ -562,24 +592,6 @@ def _write_text_intermediate_and_final_files(directory_final: Optional[str], dir
         full_filename = os.path.join(directory, filename + ext)
         with open(full_filename, 'w') as file:
             file.write(content)
-
-
-def _write_report(design: Design, directory_intermediate: str, directory_final: str,
-                  filename_with_iteration: str, filename_final: str,
-                  report_only_violations: bool, violation_set: dc.ViolationSet) -> None:
-    report_str = design.summary_of_constraints(report_only_violations, violation_set=violation_set)
-    report = f'''\
-Report on constraints
-=====================
-{report_str}
-'''
-
-    for directory, filename in zip([directory_intermediate, directory_final],
-                                   [filename_with_iteration, filename_final]):
-        path = os.path.join(directory, filename)
-        with open(path, 'w') as file:
-            # file.write(sequences_content)
-            file.write(report)
 
 
 def _clear_directory(directory: str, force_overwrite: bool) -> None:
@@ -650,8 +662,15 @@ class _Directories:
     debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
     info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
 
-    def all_subdirectories(self) -> List[str]:
-        return [self.dsd_design, self.rng_state, self.domain_pools, self.report, self.sequence]
+    def all_subdirectories(self, params: SearchParameters) -> List[str]:
+        result = []
+        if params.save_designs_for_all_updates:
+            result.extend([self.dsd_design, self.rng_state, self.domain_pools])
+        if params.save_sequences_for_all_updates:
+            result.append(self.report)
+        if params.save_reports_for_all_updates:
+            result.append(self.sequence)
+        return result
 
     def __init__(self, out: str, debug: bool, info: bool) -> None:
         self.out = out
@@ -732,25 +751,6 @@ class SearchParameters:
     whenever a new optimal sequence assignment is found.
     """
 
-    report_delay: float = 0.0
-    """
-    Every time the design improves, a report on the constraints is written, as long as it has been as
-    `report_delay` seconds since the last report was written. 
-    
-    UPDATE: the following is no longer true, since dsd has been re-written to not re-do the work of
-    re-evaluating constraints when writing reports, so it is now quite fast to write reports.
-    The default has been changed to 0.0, i.e., reports will be written on every design update,
-    but the below explaination is left here to understand why this was ever an option. It may be
-    removed in the future.
-    
-    Since writing a report requires evaluating
-    all constraints, it requires more time than a single iteration, which requires evaluating only those
-    constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
-    Thus the default value of 60 seconds avoids spending too much time writing reports, since the
-    search finds many new improved designs frequently at the start of the search.
-    By setting this to 0, a new report will be written every time the design improves.
-    """
-
     on_improved_design: Callable[[int], None] = lambda _: None
     """
     Function to call whenever the design improves. Takes an integer as input indicating the number
@@ -825,6 +825,26 @@ class SearchParameters:
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
     """
 
+    save_reports_for_all_updates: bool = True
+    """
+    A report on the most recently updated :any:`Design` is always written to a file 
+    `current-best-report.txt`. If this is True, then in the folder `reports`, a file unique to that update
+    is also written. Set to False to use less space on disk. 
+    """
+
+    save_designs_for_all_updates: bool = True
+    """
+    A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
+    a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
+    that update is also written. Set to False to use less space on disk. 
+    """
+
+    save_sequences_for_all_updates: bool = True
+    """
+    A list of sequences for each :any:`Strand` of most recently updated :any:`Design` is always written to 
+    a file `current-best-sequences.txt`. If this is True, then in the folder `sequences`, a file unique to 
+    that update is also written. Set to False to use less space on disk. 
+    """
 
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
@@ -891,9 +911,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     design.compute_derived_fields()
     _check_design(design)
 
-    directories = _setup_directories(
-        debug=params.debug_log_file, info=params.info_log_file, force_overwrite=params.force_overwrite,
-        restart=params.restart, out_directory=params.out_directory)
+    directories = _setup_directories(params)
 
     if params.random_seed is not None:
         rng = np.random.default_rng(params.random_seed)
@@ -933,17 +951,13 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         if not params.restart:
             # write initial sequences and report
-            _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
-                                      write_report=True, directories=directories,
-                                      report_only_violations=params.report_only_violations,
-                                      num_digits_update=params.num_digits_update,
-                                      violation_set=violation_set_opt)
+            _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
+                                      directories=directories, violation_set=violation_set_opt)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
 
         iteration = 0
-        time_of_last_improvement: float = -1.0
 
         while len(violation_set_opt.violations_nonfixed) > 0 and \
                 (params.max_iterations is None or iteration < params.max_iterations):
@@ -981,23 +995,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
-
-                    current_time: float = time.time()
-                    write_report = False
-                    # don't write report unless it is
-                    if (time_of_last_improvement < 0  # first iteration
-                            or len(violation_set_opt.violations_all) == 0  # last iteration (search is over)
-                            or current_time - time_of_last_improvement >= params.report_delay):  # > report_delay seconds since last report
-                        time_of_last_improvement = current_time
-                        write_report = True
-                        logger.debug('writing report')
-                    else:
-                        logger.debug('skipping report')
-
-                    _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
-                                              write_report=write_report, directories=directories,
-                                              report_only_violations=params.report_only_violations,
-                                              num_digits_update=params.num_digits_update,
+                    _write_intermediate_files(design=design, params=params, rng=rng,
+                                              num_new_optimal=num_new_optimal, directories=directories,
                                               violation_set=violation_set_opt)
 
             iteration += 1
@@ -1031,17 +1030,17 @@ def _check_cpu_count(cpu_count: int) -> None:
         _process_pool.terminate()
         _process_pool = new_process_pool(cpu_count)
 
-
-def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
-                       out_directory: str) -> _Directories:
+def _setup_directories(params: SearchParameters) -> _Directories:
+    out_directory = params.out_directory
     if out_directory is None:
         out_directory = default_output_directory()
-    directories = _Directories(out=out_directory, debug=debug, info=info)
+    directories = _Directories(out=out_directory, debug=params.debug_log_file,
+                               info=params.info_log_file)
     if not os.path.exists(directories.out):
         os.makedirs(directories.out)
-    if not restart:
-        _clear_directory(directories.out, force_overwrite)
-    for subdir in directories.all_subdirectories():
+    if not params.restart:
+        _clear_directory(directories.out, params.force_overwrite)
+    for subdir in directories.all_subdirectories(params):
         if not os.path.exists(subdir):
             os.makedirs(subdir)
     return directories
@@ -1208,9 +1207,18 @@ def _read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
     # return highest index of filename (name matches "<filename_start>-<index>.<ext>"
-    filenames = [filename
-                 for filename in os.listdir(directory)
-                 if os.path.isfile(os.path.join(directory, filename))]
+    # raises ValueError if none exists
+    try:
+        list_dir = os.listdir(directory)
+    except FileNotFoundError:
+        list_dir = None
+    if list_dir is not None and len(list_dir) > 0:
+        filenames = [filename
+                     for filename in list_dir
+                     if os.path.isfile(os.path.join(directory, filename))]
+    else:
+        raise ValueError(f'no files in directory "{directory}" '
+                         f'match the pattern "{filename_start}-<index>.{ext}";\n')
 
     pattern = re.compile(filename_start + r'-(\d+)\.' + ext)
     filenames_matching = [filename for filename in filenames if pattern.search(filename)]
@@ -1232,36 +1240,38 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
     return max_index
 
 
-def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
-                              num_new_optimal: int, write_report: bool,
-                              directories: _Directories, report_only_violations: bool,
-                              num_digits_update: Optional[int],
+def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rng: numpy.random.Generator,
+                              num_new_optimal: int, directories: _Directories,
                               violation_set: dc.ViolationSet) -> None:
-    num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
-        else f'{num_new_optimal:0{num_digits_update}d}'
+    num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
+        else f'{num_new_optimal:0{params.num_digits_update}d}'
 
-    _write_dsd_design_json(design, directories=directories, num_new_optimal_padded=num_new_optimal_padded,
+    _write_dsd_design_json(design, params=params, directories=directories,
+                           num_new_optimal_padded=num_new_optimal_padded,
                            directory_final=directories.out,
                            filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
-    _write_rng_state(rng, directories, num_new_optimal_padded)
-    _write_domain_pools(design.domain_pools_to_domain_map.keys(), directories)
+
+    _write_rng_state(rng, params=params, directories=directories,
+                     num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_domain_pools(design.domain_pools_to_domain_map.keys(), params=params, directories=directories)
 
     _write_sequences(design,
+                     params=params,
                      directory_intermediate=directories.sequence,
                      directory_final=directories.out,
                      filename_with_iteration_no_ext=f'{directories.sequences_filename_no_ext}'
                                                     f'-{num_new_optimal_padded}',
                      filename_final_no_ext=f'current-best-{directories.sequences_filename_no_ext}')
 
-    if write_report:
-        _write_report(design,
-                      directory_intermediate=directories.report,
-                      directory_final=directories.out,
-                      filename_with_iteration=f'{directories.report_filename_no_ext}'
-                                              f'-{num_new_optimal_padded}.txt',
-                      filename_final=f'current-best-{directories.report_filename_no_ext}.txt',
-                      report_only_violations=report_only_violations,
-                      violation_set=violation_set)
+    _write_report(design,
+                  params=params,
+                  directory_intermediate=directories.report,
+                  directory_final=directories.out,
+                  filename_with_iteration_no_ext=f'{directories.report_filename_no_ext}'
+                                                 f'-{num_new_optimal_padded}',
+                  filename_final_no_ext=f'current-best-{directories.report_filename_no_ext}',
+                  violation_set=violation_set)
 
 
 def _pfunc_killall() -> None:

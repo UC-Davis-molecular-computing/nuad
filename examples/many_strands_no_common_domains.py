@@ -170,10 +170,11 @@ def main() -> None:
                                  report_only_violations=True,
                                  random_seed=random_seed,
                                  max_iterations=None,
-                                 # force_overwrite=True,
-                                 # report_delay=0.0,
+                                 save_sequences_for_all_updates=False,
+                                 save_reports_for_all_updates=False,
+                                 save_designs_for_all_updates=False,
+                                 force_overwrite=True,
                                  )
-    params.force_overwrite = True
     ds.search_for_dna_sequences(design, params)
 
 
