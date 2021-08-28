@@ -784,6 +784,9 @@ class SearchParameters:
 
     report_only_violations: bool = True
     """
+    NOTE: due to a recent change in how the search is conducted, setting this parameter to False is not
+    currently supported. 
+    
     If True, does not give report on each constraint that was satisfied; only reports violations
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     """
@@ -808,7 +811,7 @@ class SearchParameters:
     (for example, for sequences)
     sequences-0.txt, sequences-1.txt, ...,
     sequences-9.txt, sequences-10.txt, ...
-    If -nd 3 is specified, for instance, they will be written
+    If num_digits_update=3 is specified, for instance, they will be written
     sequences-000.txt, sequences-001.txt, ...,
     sequences-009.txt, sequences-010.txt, ...,
     sequences-099.txt, sequences-100.txt, ...,
@@ -821,6 +824,7 @@ class SearchParameters:
     """
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
     """
+
 
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:

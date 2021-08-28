@@ -1931,7 +1931,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
     def from_json_serializable(json_map: Dict[str, Any],
                                domain_with_name: Dict[str, Domain[DomainLabel]],
                                label_decoder: Callable[[Any], StrandLabel] = (lambda label: label),
-                               ) -> 'Strand[StrandLabel, DomainLabel]':
+                               ) -> Strand[StrandLabel, DomainLabel]:
         """
         :return:
             :any:`Strand` represented by dict `json_map`, assuming it was created by
