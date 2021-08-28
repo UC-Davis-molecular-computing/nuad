@@ -732,10 +732,18 @@ class SearchParameters:
     whenever a new optimal sequence assignment is found.
     """
 
-    report_delay: float = 60.0
+    report_delay: float = 0.0
     """
     Every time the design improves, a report on the constraints is written, as long as it has been as
-    `report_delay` seconds since the last report was written. Since writing a report requires evaluating
+    `report_delay` seconds since the last report was written. 
+    
+    UPDATE: the following is no longer true, since dsd has been re-written to not re-do the work of
+    re-evaluating constraints when writing reports, so it is now quite fast to write reports.
+    The default has been changed to 0.0, i.e., reports will be written on every design update,
+    but the below explaination is left here to understand why this was ever an option. It may be
+    removed in the future.
+    
+    Since writing a report requires evaluating
     all constraints, it requires more time than a single iteration, which requires evaluating only those
     constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
     Thus the default value of 60 seconds avoids spending too much time writing reports, since the
