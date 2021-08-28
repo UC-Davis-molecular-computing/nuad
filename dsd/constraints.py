@@ -3481,13 +3481,13 @@ class Constraint(ABC, Generic[DesignPart]):
                                  Tuple[float, str]]] = None
     """
     Function that evaluates the :any:`Constraint`. It takes as input a tuple of DNA sequences 
-    (Python strings) and an optional :any:`DesignPart`, where :any:`DesignPart` is one of 
-    :any:`Domain`, :any:`Strand`, pair of :any:`Domain`'s, or pair of :any:`Strand`'s, or :any:`Complex`
+    (Python strings) and an optional :any:`Part`, where :any:`Part` is one of 
+    :any:`Domain`, :any:`Strand`, :any:`DomainPair`, :any:`StrandPair`, or :any:`Complex`
     (the latter being an alias for arbitrary-length tuple of :any:`Strand`'s).
     
     The second argument will be None if :data:`Constraint.parallel` is True (since it's more expensive
     to serialize the :any:`Domain` and :any:`Strand` objects than strings for passing data to processes
-    executing in parallel). Thus, if the :any:`Constraint` needs to use more data about the :any:`DesignPart`
+    executing in parallel). Thus, if the :any:`Constraint` needs to use more data about the :any:`Part`
     than just its DNA sequence, by accessing the second argument, :data:`Constraint.parallel` should be set
     to False.    
     
@@ -3525,11 +3525,11 @@ class Constraint(ABC, Generic[DesignPart]):
         Evaluates this :any:`Constraint` using function `_evaluate` supplied in constructor.
 
         :param seqs:
-            sequence(s) of relevant :any:`DesignPart`, e.g., if `part` is a pair of :any:`Strand`'s,
+            sequence(s) of relevant :any:`Part`, e.g., if `part` is a pair of :any:`Strand`'s,
             then `seqs` is a pair of strings
         :param part:
-            the :any:`DesignPart` to be evaluated. Might be None if parallelization is being used,
-            since it is cheaper to serialize only the sequence(s) than the entire :any:`DesignPart`
+            the :any:`Part` to be evaluated. Might be None if parallelization is being used,
+            since it is cheaper to serialize only the sequence(s) than the entire :any:`Part`
             for passing to other processes to evaluate in parallel.
         :return:
             pair (`excess`, `summary`), where `excess` is a float indicating how much the constraint
@@ -3569,7 +3569,7 @@ class Constraint(ABC, Generic[DesignPart]):
     def part_name() -> str:
         """
         :return:
-            name of the :any:`DesignPart` that this :any:`Constraint` tests
+            name of the :any:`Part` that this :any:`Constraint` tests
             (e.g., "domain", "strand pair")
         """
         raise NotImplementedError()
