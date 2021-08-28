@@ -223,7 +223,7 @@ g_5_s_5_6_complex = (signal_5_6_strand, gate_5_base_strand)
 g_5_s_5_7_complex = (signal_5_7_strand, gate_5_base_strand)
 
 g_5_s_5_6_nonimplicit_base_pairs = [(signal_5_6_toehold_addr, gate_5_bound_toehold_3p_addr)]
-g_5_s_5_6_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+g_5_s_5_6_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[g_5_s_5_6_complex, g_5_s_5_7_complex],
     nonimplicit_base_pairs=g_5_s_5_6_nonimplicit_base_pairs,
     # base_pair_probs={
@@ -257,7 +257,7 @@ g_5_s_5_6_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
 #                      T*         S5*      s5*   T*
 g_5_s_2_5_complex = (signal_2_5_strand, gate_5_base_strand)
 g_5_s_2_5_nonimplicit_base_pairs = [(signal_2_5_toehold_addr, gate_5_bound_toehold_5p_addr)]
-g_5_s_2_5_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+g_5_s_2_5_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[g_5_s_2_5_complex],
     nonimplicit_base_pairs=g_5_s_2_5_nonimplicit_base_pairs,
     # base_pair_probs={
@@ -293,7 +293,7 @@ waste_5_strand = waste_strand(5)
 #        INTERIOR_TO_STRAND   BLUNT_END
 #  s2*   T*        S5*       s5*
 t_2_5_w_5_complex = (waste_5_strand, threshold_2_5_base_strand)
-t_2_5_w_5_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+t_2_5_w_5_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[t_2_5_w_5_complex])
 
 #
@@ -324,7 +324,7 @@ t_2_5_w_5_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
 #                s2*   T*        S5*       s5*
 
 waste_2_5_complex = (signal_2_5_strand, threshold_2_5_base_strand)
-waste_2_5_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+waste_2_5_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[waste_2_5_complex])
 
 #               S6       s6
@@ -350,7 +350,7 @@ waste_2_5_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
 #    INTERIOR_TO_STRAND   BLUNT_END
 #    T*        S6*       s6*
 reporter_6_complex = (waste_6_strand, reporter_6_base_strand)
-reporter_6_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+reporter_6_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[reporter_6_complex])
 
 #       S5        s5    T          S6       s6
@@ -377,7 +377,7 @@ reporter_6_complex_constraint = dc.nupack_complex_secondary_structure_constraint
 #                        INTERIOR_TO_STRAND  BLUNT_END
 #                       T*        S6*       s6*
 f_waste_6_complex = (signal_5_6_strand, reporter_6_base_strand)
-f_waste_6_complex_constraint = dc.nupack_complex_secondary_structure_constraint(
+f_waste_6_complex_constraint = dc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[f_waste_6_complex])
 
 
