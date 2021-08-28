@@ -501,9 +501,35 @@ def _sequences_fragile_format_output_to_file(design: Design,
         f'{strand.sequence(delimiter="-")}' for strand in design.strands)
 
 
-def _write_sequences(design: Design, params: SearchParameters, directory_intermediate: str,
-                     directory_final: str, filename_with_iteration_no_ext: str, filename_final_no_ext: str,
+def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rng: numpy.random.Generator,
+                              num_new_optimal: int, directories: _Directories,
+                              violation_set: dc.ViolationSet) -> None:
+    num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
+        else f'{num_new_optimal:0{params.num_digits_update}d}'
+
+    _write_dsd_design_json(design, params=params, directories=directories,
+                           num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_rng_state(rng, params=params, directories=directories,
+                     num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_domain_pools(design.domain_pools_to_domain_map.keys(), params=params, directories=directories)
+
+    _write_sequences(design, params=params, directories=directories,
+                     num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_report(design, params=params, directories=directories,
+                  num_new_optimal_padded=num_new_optimal_padded, violation_set=violation_set)
+
+
+def _write_sequences(design: Design, params: SearchParameters, directories: _Directories,
+                     num_new_optimal_padded: str,
                      include_group: bool = True) -> None:
+    directory_intermediate = directories.sequence
+    directory_final = directories.out
+    filename_with_iteration_no_ext = f'{directories.sequences_filename_no_ext}' + \
+                                     f'-{num_new_optimal_padded}'
+    filename_final_no_ext = f'current-best-{directories.sequences_filename_no_ext}'
     sequences_content = _sequences_fragile_format_output_to_file(design, include_group)
     if not params.save_sequences_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
@@ -513,14 +539,14 @@ def _write_sequences(design: Design, params: SearchParameters, directory_interme
 
 
 def _write_dsd_design_json(design: Design, params: SearchParameters, directories: _Directories,
-                           directory_final: str, filename_final_no_ext: str,
                            num_new_optimal_padded: str) -> None:
+    filename_final_no_ext = f'current-best-{directories.dsd_design_filename_no_ext}'
     directory_intermediate = directories.dsd_design
     filename_with_iteration_no_ext = f'{directories.dsd_design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
     if not params.save_designs_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+    _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
@@ -528,7 +554,7 @@ def _write_dsd_design_json(design: Design, params: SearchParameters, directories
 def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, directories: _Directories,
                      num_new_optimal_padded: str) -> None:
     if not params.save_designs_for_all_updates:
-        #TODO: write to top-level file
+        # TODO: write to top-level file
         return
 
     directory_intermediate = directories.rng_state
@@ -545,7 +571,7 @@ def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, dire
 def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], params: SearchParameters,
                         directories: _Directories) -> None:
     if not params.save_designs_for_all_updates:
-        #TODO: write to top-level file
+        # TODO: write to top-level file
         return
 
     directory_intermediate = directories.domain_pools
@@ -566,9 +592,14 @@ def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], params: SearchPar
                                                      domain_pools_json_str, '.json')
 
 
-def _write_report(design: Design, params: SearchParameters, directory_intermediate: str, directory_final: str,
-                  filename_with_iteration_no_ext: str, filename_final_no_ext: str,
-                  violation_set: dc.ViolationSet) -> None:
+def _write_report(design: Design, params: SearchParameters, directories: _Directories,
+                  num_new_optimal_padded: str, violation_set: dc.ViolationSet) -> None:
+    directory_intermediate = directories.report
+    directory_final = directories.out
+    filename_with_iteration_no_ext = f'{directories.report_filename_no_ext}' + \
+                                     f'-{num_new_optimal_padded}'
+    filename_final_no_ext = f'current-best-{directories.report_filename_no_ext}'
+
     report = f'''\
 Report on constraints
 =====================
@@ -1030,6 +1061,7 @@ def _check_cpu_count(cpu_count: int) -> None:
         _process_pool.terminate()
         _process_pool = new_process_pool(cpu_count)
 
+
 def _setup_directories(params: SearchParameters) -> _Directories:
     out_directory = params.out_directory
     if out_directory is None:
@@ -1238,40 +1270,6 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
             max_index = index
 
     return max_index
-
-
-def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rng: numpy.random.Generator,
-                              num_new_optimal: int, directories: _Directories,
-                              violation_set: dc.ViolationSet) -> None:
-    num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
-        else f'{num_new_optimal:0{params.num_digits_update}d}'
-
-    _write_dsd_design_json(design, params=params, directories=directories,
-                           num_new_optimal_padded=num_new_optimal_padded,
-                           directory_final=directories.out,
-                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
-
-    _write_rng_state(rng, params=params, directories=directories,
-                     num_new_optimal_padded=num_new_optimal_padded)
-
-    _write_domain_pools(design.domain_pools_to_domain_map.keys(), params=params, directories=directories)
-
-    _write_sequences(design,
-                     params=params,
-                     directory_intermediate=directories.sequence,
-                     directory_final=directories.out,
-                     filename_with_iteration_no_ext=f'{directories.sequences_filename_no_ext}'
-                                                    f'-{num_new_optimal_padded}',
-                     filename_final_no_ext=f'current-best-{directories.sequences_filename_no_ext}')
-
-    _write_report(design,
-                  params=params,
-                  directory_intermediate=directories.report,
-                  directory_final=directories.out,
-                  filename_with_iteration_no_ext=f'{directories.report_filename_no_ext}'
-                                                 f'-{num_new_optimal_padded}',
-                  filename_final_no_ext=f'current-best-{directories.report_filename_no_ext}',
-                  violation_set=violation_set)
 
 
 def _pfunc_killall() -> None:
