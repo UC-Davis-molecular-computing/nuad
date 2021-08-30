@@ -335,6 +335,11 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
     length = len(seq)
 
+    if dist < 1:
+        raise ValueError(f'dist must be positive, but dist = {dist}')
+    if dist > length:
+        raise ValueError(f'should have dist <= len("{seq}") = {length}, but dist = {dist}')
+
     num_different_bases = len(bases) - 1
     # print(f'{num_different_bases=}')
 
@@ -345,7 +350,6 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
     # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
     # then map these back to the correct subset of 0,1,2,3 when we are done
-    offsets = range(1, num_different_bases + 1)
     subseq_offsets = rng.integers(low=1, high=num_different_bases + 1, size=(num_seqs, dist))
     # print(f'{subseq_offsets=}')
     assert len(subseq_offsets) == num_seqs
