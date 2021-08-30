@@ -314,7 +314,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     where each row represents a DNA sequence, and that row has one byte per base.
 
     :param num_seqs:
-        number of rows
+        number of rows in return array
     :param dist:
         Hamming distance to be from `seq`
     :param seq:
@@ -341,7 +341,6 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
         raise ValueError(f'should have dist <= len("{seq}") = {length}, but dist = {dist}')
 
     num_different_bases = len(bases) - 1
-    # print(f'{num_different_bases=}')
 
     # map subset of bases used to *prefix* of 0,1,2,3
     base2bits_local = {base: digit for base, digit in zip(bases, range(4))}
@@ -351,20 +350,14 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
     # then map these back to the correct subset of 0,1,2,3 when we are done
     subseq_offsets = rng.integers(low=1, high=num_different_bases + 1, size=(num_seqs, dist))
-    # print(f'{subseq_offsets=}')
     assert len(subseq_offsets) == num_seqs
 
-    # print(f'{new_arr=}')
     # all (length choose dist) indices where we could change the bases
     idxs = random_choice_noreplace(np.arange(length), dist, num_seqs, rng)
-    # print(f'{idxs=}')
     assert len(idxs) == num_seqs
     changes = rng.integers(1, num_different_bases + 1, size=idxs.shape, dtype=np.uint8)
-    # print(f'{changes=}')
     new_arr[np.arange(num_seqs)[:, None], idxs] += changes
-    # print(f'{new_arr=}')
     new_arr = np.mod(new_arr, num_different_bases + 1)
-    # print(f'{new_arr=}')
 
     # now map back to correct subset of 0,1,2,3 to represent bases
     for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
