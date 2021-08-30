@@ -231,6 +231,7 @@ def comb(n: int, k: int) -> int:
     return numer // denom
 
 
+
 def make_array_with_all_dna_seqs_hamming_distance(
         dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """
@@ -313,8 +314,10 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     Uses the encoding described in the documentation for DNASeqList. The result is a 2D array,
     where each row represents a DNA sequence, and that row has one byte per base.
 
+    Sampled *with* replacement, so the same row may appear twice in the returned array
+
     :param num_seqs:
-        number of rows in return array
+        number of sequences to generate
     :param dist:
         Hamming distance to be from `seq`
     :param seq:
@@ -345,7 +348,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     # map subset of bases used to *prefix* of 0,1,2,3
     base2bits_local = {base: digit for base, digit in zip(bases, range(4))}
     seq_as_arr = seq2arr(seq, base2bits_local=base2bits_local)
-    new_arr = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
+    seqs = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
 
     # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
     # then map these back to the correct subset of 0,1,2,3 when we are done
@@ -356,16 +359,20 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     idxs = random_choice_noreplace(np.arange(length), dist, num_seqs, rng)
     assert len(idxs) == num_seqs
     changes = rng.integers(1, num_different_bases + 1, size=idxs.shape, dtype=np.uint8)
-    new_arr[np.arange(num_seqs)[:, None], idxs] += changes
-    new_arr = np.mod(new_arr, num_different_bases + 1)
+    seqs[np.arange(num_seqs)[:, None], idxs] += changes
+    seqs = np.mod(seqs, num_different_bases + 1)
 
     # now map back to correct subset of 0,1,2,3 to represent bases
     for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
         if base not in bases:
-            idxs_to_inc = new_arr >= digit
-            new_arr[idxs_to_inc] += 1
+            idxs_to_inc = seqs >= digit
+            seqs[idxs_to_inc] += 1
 
-    return new_arr
+    # use the next two lines to return only unique rows
+    # seqs = np.unique(seqs, axis=0)
+    # rng.shuffle(seqs)
+
+    return seqs
 
 
 # def random_hamming(sequence: Union[List[int], np.ndarray], distance: int, number: int,
@@ -692,10 +699,11 @@ class DNASeqList:
         :param hamming_distance_from_sequence:
             if specified and equal to `(dist, seq)`,
             then only sequences at Hamming distance `dist` from `seq` will be generated.
-            Raises error if `length`, `seqs`, `seqarr`, or `filename` is specified
+            Raises error if `length`, `seqs`, `seqarr`, or `filename` is specified.
         :param num_random_seqs:
             number of sequences to generate; if not specified, then all sequences
-            of length `length` using bases from `alphabet` are generated
+            of length `length` using bases from `alphabet` are generated.
+            Sequences are sampled *with* replacement, so the same sequence may appear twice.
         :param shuffle:
             whether to shuffle sequences
         :param alphabet:

@@ -990,7 +990,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         iteration = 0
 
-        while len(violation_set_opt.violations_nonfixed) > 0 and \
+        while violation_set_opt.has_nonfixed_violations() and \
                 (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 

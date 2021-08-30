@@ -691,7 +691,6 @@ class DomainPool:
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
         num_sequences_to_generate_upper_limit = json_map[num_sequences_to_generate_upper_limit_key]
         num_sequences_to_generate = json_map[num_sequences_to_generate_key]
-        sequences_list = json_map[sequences_key]
         return DomainPool(name=name, length=length,
                           replace_with_close_sequences=replace_with_close_sequences,
                           hamming_probability=hamming_probability,
@@ -715,34 +714,6 @@ class DomainPool:
         :return: whether `sequence` satisfies all constraints in :py:data:`DomainPool.sequence_constraints`
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
-
-    def find_hamming_distances(self, previous_sequence: str) -> Dict[int, dn.DNASeqList]:
-        """
-        Makes a dictionary mapping a Hamming distance to a :any:`DNASeqList`, corresponding to how many bases
-        different the sequence is from `previous_sequence` (i.e., the Hamming distance).
-
-        :param previous_sequence:
-            DNA sequence to be find Hamming distances from
-        :return:
-            dictionary mapping Hamming distances to sequences (represented as :any:`DNASeqList`)
-            that are that Hamming distance from `previous_sequence`
-        """
-        return self.sequences.hamming_map(previous_sequence)
-
-    def sequences_at_hamming_distance(self, previous_sequence: str,
-                                      distance: int) -> dn.DNASeqList:
-        """
-        Returns a :any:`DNASeqList`, which are `distance` bases
-        different from `previous_sequence` (i.e., the Hamming distance).
-
-        :param previous_sequence:
-            DNA sequence to be find Hamming distances from
-        :param distance:
-            target Hamming distance
-        :return:
-            :any:`DNASeqList` of sequences that are that Hamming distance from `previous_sequence`
-        """
-        return self.sequences.sequences_at_hamming_distance(previous_sequence, distance)
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: Optional[str] = None) -> str:
         """
@@ -769,69 +740,84 @@ class DomainPool:
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
         """
+        # import time
+        # b = time.perf_counter_ns()
         if not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
             sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng)
+        # a = time.perf_counter_ns()
+        # ms = (a-b)/10e6
+        # print(f'sample one seq time: {ms} ms')
 
         return sequence
 
     def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator) -> str:
         # all possible distances from 1 to len(previous_sequence) are calculated.
-        # if pick_distance_first is true, we save some time by not gathering sequences at all distances
-        # into a dict. Instead we first sample a distance and then look up only those sequences at that
-        # distance to sample. The tradeoff is that if there are no sequences at that distance, we have
-        # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
-        # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
 
         hamming_probabilities = np.array(list(self.hamming_probability.values()))
 
         # pick a distance at random, then re-pick if no sequences are at that distance
-        sequence = None
-        previous_sequence_1d_array = dn.seq2arr(previous_sequence)
         available_distances_list = list(range(1, len(previous_sequence) + 1))
-
         num_to_generate = 1000
         seqs: Optional[dn.DNASeqList] = None
-
         sequence: Optional[str] = None
 
         while sequence is None:
             if len(available_distances_list) == 0:
-                raise ValueError('out of Hamming sitances to try, quitting')
+                raise ValueError('out of Hamming distances to try, quitting')
 
             # sample a Hamming distance that we haven't tried yet
             available_distances_arr = np.array(available_distances_list)
             existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
             prob_sum = existing_hamming_probabilities.sum()
             existing_hamming_probabilities /= prob_sum
-            sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+            sampled_distance: int = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
 
             while seqs is None or len(seqs) == 0:
-
                 bases = self._bases_to_use()
                 length = self.length
-                _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
 
-                # TODO: make new constructor logic for generating sequences at fixed hamming distance from prev
-                all_seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
-                                         num_random_seqs=num_to_generate, rng=rng)
+                num_ways_to_choose_subsequence_indices = dn.comb(length, sampled_distance)
+                num_different_bases = len(bases) - 1
+                num_subsequences = num_different_bases ** sampled_distance
+                num_sequences_at_sampled_distance = num_ways_to_choose_subsequence_indices * num_subsequences
 
+                if num_to_generate > num_sequences_at_sampled_distance:
+                    num_to_generate = num_sequences_at_sampled_distance
+
+                if num_to_generate >= num_sequences_at_sampled_distance // 4:
+                    # if we want sufficiently many random sequences, just generate all and sample a subset
+                    all_seqs = dn.DNASeqList(
+                        hamming_distance_from_sequence=(sampled_distance, previous_sequence), alphabet=bases,
+                        shuffle=True, rng=rng)
+                    generated_all_seqs = True
+                else:
+                    # otherwise sample num_to_generate with replacement
+                    all_seqs = dn.DNASeqList(
+                        hamming_distance_from_sequence=(sampled_distance, previous_sequence), alphabet=bases,
+                        shuffle=True, num_random_seqs=num_to_generate, rng=rng)
+                    generated_all_seqs = False
 
                 seqs = self._filter_numpy_constraints(all_seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs))
                 self._filter_sequence_constraints(seqs)
 
-                if num_to_generate >= 10 ** 6 and len(seqs) == 0:
+                if num_to_generate >= 10 ** 9 and len(seqs) == 0:
                     logger.info("We've generated over 1 million random DNA sequences and not "
                                 "found one that passed your NumpyConstraints and "
                                 f"SequenceConstraints at Hamming distance {sampled_distance} from "
                                 f"the previous sequence {previous_sequence}. Trying another distance")
                     available_distances_list.remove(sampled_distance)
                 num_to_generate *= 2
+
+                if len(seqs) == 0 and generated_all_seqs:
+                    # found no sequences passing constraints at distance `sampled_distance`,
+                    # need to try a new Hamming distance
+                    break
+
             if len(seqs) > 0:
                 sequence = seqs[0]
-
 
         return sequence
 
@@ -3397,6 +3383,10 @@ class ViolationSet:
     def num_violations_fixed(self) -> float:
         # :return: Total number of fixed violations.
         return sum(len(violations) for violations in self.violations_fixed.values())
+
+    def has_nonfixed_violations(self) -> bool:
+        # :return: whether there are any nonfixed Violations in this ViolationSet
+        return self.num_violations_nonfixed() > 0
 
 
 @dataclass(frozen=True, eq=False)
