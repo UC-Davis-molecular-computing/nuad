@@ -36,9 +36,11 @@ def idx2seq(idx: int, length: int) -> str:
     return ''.join(seq)
 
 
-def seq2arr(seq: str) -> np.ndarray:
+def seq2arr(seq: str, base2bits_local: Optional[Dict[str, int]] = None) -> np.ndarray:
     """Convert seq (string with DNA alphabet) to numpy array with integers 0,1,2,3."""
-    return np.array([base2bits[base] for base in seq], dtype=np.ubyte)
+    if base2bits_local is None:
+        base2bits_local = base2bits
+    return np.array([base2bits_local[base] for base in seq], dtype=np.ubyte)
 
 
 def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
@@ -60,6 +62,17 @@ def arr2seq(arr: np.ndarray) -> str:
     bases_ch = [bits2base[base] for base in arr]
     return ''.join(bases_ch)
 
+def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndarray:
+    num_digits = len(digits)
+    num_seqs = num_digits ** length
+    powers_num_digits = [num_digits ** k for k in range(length)]
+    digits = np.array(digits, dtype=np.ubyte)
+
+    arr = np.zeros((num_seqs, length), dtype=np.ubyte)
+    for i, j, c in zip(reversed(powers_num_digits), powers_num_digits, list(range(length))):
+        arr[:, c] = np.tile(np.repeat(digits, i), j)
+
+    return arr
 
 def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """Return 2D numpy array with all DNA sequences of given length in
@@ -70,50 +83,152 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C'
     is a 2D array, where each row represents a DNA sequence, and that row
     has one byte per base."""
 
-    if not set(bases) <= {'A', 'C', 'G', 'T'}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
     if len(bases) == 0:
         raise ValueError('bases cannot be empty')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+
+    base_bits = [base2bits[base] for base in bases]
+    digits = np.array(base_bits, dtype=np.ubyte)
+
+    return make_array_with_all_sequences(length, digits)
+    # num_bases = len(bases)
+    # num_seqs = num_bases ** length
+    #
+    # # the former code took up too much memory (using int32 or int64)
+    # # the following code makes sure it's 1 byte per base
+    # powers_num_bases = [num_bases ** k for k in range(length)]
+    #
+    # list_of_arrays = False
+    # if list_of_arrays:
+    #     # this one seems to be faster but takes more memory, probably because just before the last command
+    #     # there are two copies of the array in memory at once
+    #     columns = []
+    #     for i, j, c in zip(reversed(powers_num_bases), powers_num_bases, list(range(length))):
+    #         columns.append(np.tile(np.repeat(bases, i), j))
+    #     arr = np.vstack(columns).transpose()
+    # else:
+    #     # this seems to be slightly slower but takes less memory, since it
+    #     # allocates only the final array, plus one extra column of that
+    #     # array at a time
+    #     arr = np.empty((num_seqs, length), dtype=np.ubyte)
+    #     for i, j, c in zip(reversed(powers_num_bases), powers_num_bases, list(range(length))):
+    #         arr[:, c] = np.tile(np.repeat(bases, i), j)
+    #
+    # return arr
+
+
+def random_choice_noreplace2(l, n_sample, num_draw):
+    '''
+    l: 1-D array or list
+    n_sample: sample size for each draw
+    num_draw: number of draws
+
+    Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
+    '''
+    l = np.array(l)
+    return l[np.argpartition(np.random.rand(num_draw, len(l)), n_sample - 1, axis=-1)[:, :n_sample]]
+
+
+def random_hamming(sequence: Union[List[int], np.ndarray], distance: int, number: int) -> np.ndarray:
+    length = len(sequence)
+    seqrepeats = np.tile(sequence, number).reshape((number, length))
+    places = random_choice_noreplace2(np.arange(0, length), distance, number)
+    changes = np.random.randint(1, 4, size=places.shape)
+    seqrepeats[np.arange(0, number)[:, None], places] += changes
+    seqrepeats = np.mod(seqrepeats, 4)
+    return seqrepeats
+
+
+# https://stackoverflow.com/questions/4941753/is-there-a-math-ncr-function-in-python
+# In Python 3.8 there's math.comb, but this is about 3x faster somehow.
+import operator as op
+from functools import reduce
+
+
+def comb(n: int, k: int) -> int:
+    # n choose k = n! / (k! * (n-k)!)
+    k = min(k, n - k)
+    numer = reduce(op.mul, range(n, n - k, -1), 1)
+    denom = reduce(op.mul, range(1, k + 1), 1)
+    return numer // denom
+
+
+def make_array_with_all_dna_seqs_hamming_distance(
+        dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
+    """
+    Return 2D numpy array with all DNA sequences of given length in lexicographic order. Bases contains
+    bases to be used: ('A','C','G','T') by default, but can be set to a subset of these.
+
+    Uses the encoding described in the documentation for DNASeqList. The result is a 2D array, where each
+    row represents a DNA sequence, and that row has one byte per base.
+    """
+    length = len(seq)
+    assert 1 <= dist <= length
 
     num_bases = len(bases)
-    num_seqs = num_bases ** length
 
-    #     shift = np.arange(2*(length-1), -1, -2)
-    #     nums = np.repeat(np.arange(numseqs), length)
-    #     nums2D = nums.reshape([numseqs, length])
-    #     shifts = np.tile(0b11 << shift, numseqs)
-    #     shifts2D = shifts.reshape([numseqs, length])
-    #     arr = (shifts2D & nums2D) >> shift
+    if num_bases == 0:
+        raise ValueError('bases cannot be empty')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
 
-    # the former code took up too much memory (using int32 or int64)
-    # the following code makes sure it's 1 byte per base
-    powers_num_bases = [num_bases ** k for k in range(length)]
-    #         bases = np.array([_base2bits['A'], _base2bits['C'], _base2bits['G'], _base2bits['T']], dtype=np.ubyte)
-    base_bits = [base2bits[base] for base in bases]
-    bases = np.array(base_bits, dtype=np.ubyte)
+    num_ways_to_choose_subsequence_indices = comb(length, dist)
+    num_different_bases = len(bases) - 1
+    num_subsequences = num_different_bases ** dist
+    num_seqs = num_ways_to_choose_subsequence_indices * num_subsequences
 
-    list_of_arrays = False
-    if list_of_arrays:
-        # this one seems to be faster but takes more memory, probably because just before the last command
-        # there are two copies of the array in memory at once
-        columns = []
-        for i, j, c in zip(reversed(powers_num_bases), powers_num_bases, list(range(length))):
-            columns.append(np.tile(np.repeat(bases, i), j))
-        arr = np.vstack(columns).transpose()
-    else:
-        # this seems to be slightly slower but takes less memory, since it
-        # allocates only the final array, plus one extra column of that
-        # array at a time
-        arr = np.empty((num_seqs, length), dtype=np.ubyte)
-        for i, j, c in zip(reversed(powers_num_bases), powers_num_bases, list(range(length))):
-            arr[:, c] = np.tile(np.repeat(bases, i), j)
+    # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
+    # then map these back to the correct subset of 0,1,2,3 when we are done
+    offsets = range(1, num_different_bases + 1)
+    subseq_offsets = make_array_with_all_sequences(length=dist, digits=offsets)
+    assert len(subseq_offsets) == num_subsequences
+    subseq_offsets_repeats = \
+        np.tile(subseq_offsets.flatten(), num_ways_to_choose_subsequence_indices).reshape(num_seqs, dist)
 
-    return arr
+    # all (length choose dist) indices where we could change the bases
+    idxs = combnr_idxs(length, dist)
+    assert len(idxs) == num_ways_to_choose_subsequence_indices
+    idxs_repeat = np.tile(idxs, num_subsequences).reshape(num_seqs, length)
+    assert len(idxs_repeat) == num_seqs
+
+    # map subset of bases used to *prefix* of 0,1,2,3
+    base2bits_local = {base:digit for base,digit in zip(bases, range(4))}
+    seq_as_arr = seq2arr(seq, base2bits_local=base2bits_local)
+    new_arr = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
+
+    new_arr[idxs_repeat] += subseq_offsets_repeats.flatten()
+    new_arr %= num_bases
+
+    # now map back to correct subset of 0,1,2,3 to represent bases
+    for base,digit in zip(['A', 'C', 'G', 'T'], range(4)):
+        if base not in bases:
+            idxs_to_inc = new_arr >= digit
+            new_arr[idxs_to_inc] += 1
+
+    return new_arr
 
 
-def make_array_with_random_subset_of_dna_seqs(length: int, num_seqs: int,
-                                              rng: np.random.Generator,
-                                              bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
+def combnr_idxs(length: int, number: int) -> np.ndarray:
+    # Gives 2D Boolean numpy array, with `length` columns and (`length` choose `number`) rows,
+    # representing all ways to set exactly `number` elements of the row True and the others to False.
+    # Useful for indexing into a same-shape numpy array, changing exactly `number` elements in each row.
+    #
+    # :param length:
+    #     number of columns
+    # :param number:
+    #     number of True values in each row
+    # :return:
+    #     numpy array, with `length` columns and (`length` choose `number`) rows,
+    #     representing all ways to set exactly `number` elements of the row True and the others to False.
+    x = np.array(np.meshgrid(*([np.arange(0, length)] * number))).T.reshape(-1, number)
+    z = np.sum(np.identity(length)[x], 1, dtype=bool).astype(int)
+    return np.unique(z[np.sum(z, axis=1) == number], axis=0).astype(bool)
+
+
+def make_array_with_random_subset_of_dna_seqs(
+        length: int, num_seqs: int, rng: np.random.Generator = default_rng,
+        bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """
     Return 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length.
     Bases contains bases to be used: ('A','C','G','T') by default, but can be set to a subset of these.
@@ -121,11 +236,113 @@ def make_array_with_random_subset_of_dna_seqs(length: int, num_seqs: int,
     Uses the encoding described in the documentation for DNASeqList. The result is a 2D array,
     where each row represents a DNA sequence, and that row has one byte per base.
 
-    :param length: length of each row
-    :param num_seqs: number of rows
-    :param bases: DNA bases to use
-    :param rng: numpy random number generator (type returned by numpy.random.default_rng())
-    :return: 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
+    Sequences returned will be unique (i.e., sampled without replacement) and in a random order
+
+    :param length:
+        length of each row
+    :param num_seqs:
+        number of rows
+    :param bases:
+        DNA bases to use
+    :param rng:
+        numpy random number generator (type returned by numpy.random.default_rng())
+    :return:
+        2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
+    """
+    if length < 0:
+        raise ValueError(f'length = {num_seqs} must be nonnegative')
+    elif length == 0:
+        return np.array([[]], dtype=np.ubyte)
+    if num_seqs <= 0:
+        raise ValueError(f'num_seqs = {num_seqs} must be positive')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+    if len(bases) == 0:
+        raise ValueError('bases cannot be empty')
+    elif len(bases) == 1:
+        raise ValueError('bases must have at least two elements')
+
+    max_possible = len(bases) ** length
+    if num_seqs > max_possible:
+        raise ValueError(f'num_seqs = {num_seqs} is greater than the total number {max_possible} '
+                         f'of sequences of length {length} using alphabet {bases}, so we cannot guarantee '
+                         f'that many unique sequences. Please set num_seqs <= {max_possible}.')
+
+    # If we want sufficiently many sequences, then it's simpler to just generate all sequences
+    # of that length and choose a random subset of size num_seqs.
+    if num_seqs >= max_possible / 4:
+        all_seqs = make_array_with_all_dna_seqs(length=length, bases=bases)
+        # https://stackoverflow.com/a/27815343/5339430
+        idxs = rng.choice(all_seqs.shape[0], num_seqs, replace=False)
+        sampled_seqs = all_seqs[idxs]
+        return sampled_seqs
+
+    # This comment justifies why we sample 2*num_seqs sequences randomly (with replacement) in order
+    # to get our goal of at least num_seqs *unique* sequences. Define
+    #
+    #   m = number of sequences we sample with replacement
+    #   n = len(bases)^length = total number of sequences of that length
+    #   k = num_seqs = desired number of unique sequences
+    #
+    # If we sample m sequences with replacement, out of n total, this is tossing m balls into n bins.
+    # We want m sufficiently large that at least k bins are non-empty.
+    # We use the Poisson approximation to balls-in-bins
+    #   (Probability and Computing, Mitzenbacher and Upfal, 2nd edition, Section 5.4),
+    # where each bin is modeled as getting P(m/n) balls, where P(m/n) is a Poisson r.v. with rate m/n.
+    # The sum of Poisson r.v.'s is Poisson, so the number of non-empty bins is Poisson with rate m.
+    # We use this bound:
+    #   https://doi.org/10.1109/TIT.2006.890791, Appendix II
+    # for Poisson r.v.'s P(y)  with rate m to be less than a constant k, if k < m:
+    #
+    #   Pr[P(m) <= k] <= e^{-m} * (e*m / k)^k
+    #
+    # They state only the bound for the upper tail, but the proof works for the lower tail as well.
+    #
+    # Setting m = c*k for c > 1, we have
+    #   Pr[P(m) <= k]
+    #     <= e^{-c*k} * (e*c*k / k)^k
+    #      = (e^{-c})^k * (e*c)^k
+    #      = (e^{1-c}*c)^k
+    # Setting c = 2 gives e^{1-c}*c ~ 0.736, so  Pr[P(m) <= k] <= 0.75^k.
+
+    base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
+    num_seqs_to_sample = 2 * num_seqs
+    unique_sorted_arr = None
+
+    # odds are low to have a collision, so for simplicity we just repeat the whole process if needed
+    while unique_sorted_arr is None or len(unique_sorted_arr) < num_seqs:
+        arr = rng.choice(a=base_bits, size=(num_seqs_to_sample, length))
+        unique_sorted_arr = np.unique(arr, axis=0)
+        if len(unique_sorted_arr) < num_seqs:
+            print(f'WARNING: did not find {num_seqs} unique sequences. If you are seeing this warning '
+                  f'repeatedly, check the parameters to make_array_with_random_subset_of_dna_seqs.')
+
+    # we probably have too many, so pick a random subset of sequences to return
+    idxs = rng.choice(unique_sorted_arr.shape[0], num_seqs, replace=False)
+    sampled_seqs = unique_sorted_arr[idxs]
+    return sampled_seqs
+
+
+def make_array_with_random_subset_of_dna_seqs_hamming_distance(
+        num_seqs: int, dist: int, seq: str, rng: np.random.Generator = default_rng,
+        bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
+    """
+    Return 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length.
+    Bases contains bases to be used: ('A','C','G','T') by default, but can be set to a subset of these.
+
+    Uses the encoding described in the documentation for DNASeqList. The result is a 2D array,
+    where each row represents a DNA sequence, and that row has one byte per base.
+
+    :param num_seqs:
+        number of rows
+    :param hamming_distance_from_sequence:
+        pair `(dist, seq)`, where `dist` is a desired Hamming distance to be from `seq`
+    :param bases:
+        DNA bases to use
+    :param rng:
+        numpy random number generator (type returned by numpy.random.default_rng())
+    :return:
+        2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
     """
     if not set(bases) <= {'A', 'C', 'G', 'T'}:
         raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
@@ -135,11 +352,9 @@ def make_array_with_random_subset_of_dna_seqs(length: int, num_seqs: int,
         raise ValueError('bases must have at least two elements')
 
     base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
+    length = len(seq)
 
-    arr = rng.choice(a=base_bits, size=(num_seqs, length))
-    unique_sorted_arr = np.unique(arr, axis=0)
-
-    return unique_sorted_arr
+    raise NotImplementedError()
 
 
 # @lru_cache(maxsize=10000000)
@@ -413,7 +628,8 @@ class DNASeqList:
                  seqs: Optional[Sequence[str]] = None,
                  seqarr: np.ndarray = None,
                  filename: Optional[str] = None,
-                 rng: np.random.Generator = default_rng):
+                 rng: np.random.Generator = default_rng,
+                 hamming_distance_from_sequence: Optional[Tuple[int, str]] = None):
         """
         Creates a set of DNA sequences, all of the same length.
 
@@ -431,25 +647,41 @@ class DNASeqList:
 
         - `filename`
 
-        :param length: length of sequences; `num_seqs` and `alphabet` can also be specified along with it
-        :param num_random_seqs: number of sequences to generate; if not specified, then all sequences
-                                of length `length` using bases from `alphabet` are generated
-        :param shuffle: whether to shuffle sequences
-        :param alphabet: alphabet; must be a subset of {'A', 'C', 'G', 'T'}
-        :param seqs: sequence (e.g., list or tuple) of strings, all of the same length
-        :param seqarr: 2D NumPy array, with axis 0 moving between sequences,
-                       and axis 1 moving between consecutive DNA bases in a sequence
-        :param filename: name of file containing a :any:`DNASeqList`
-                         as written by :py:meth:`DNASeqList.write_to_file`
-        :param rng: numpy random number generator (type returned by numpy.random.default_rng())
+        - `hamming_distance_from_sequence`
+
+        :param length:
+            length of sequences; `num_seqs` and `alphabet` can also be specified along with it
+        :param hamming_distance_from_sequence:
+            if specified and equal to `(dist, seq)`,
+            then only sequences at Hamming distance `dist` from `seq` will be generated.
+            Raises error if `length`, `seqs`, `seqarr`, or `filename` is specified
+        :param num_random_seqs:
+            number of sequences to generate; if not specified, then all sequences
+            of length `length` using bases from `alphabet` are generated
+        :param shuffle:
+            whether to shuffle sequences
+        :param alphabet:
+            a subset of {'A', 'C', 'G', 'T'}
+        :param seqs:
+            sequence (e.g., list or tuple) of strings, all of the same length
+        :param seqarr:
+            2D NumPy array, with axis 0 moving between sequences,
+            and axis 1 moving between consecutive DNA bases in a sequence
+        :param filename:
+            name of file containing a :any:`DNASeqList`
+            as written by :py:meth:`DNASeqList.write_to_file`
+        :param rng:
+            numpy random number generator (type returned by numpy.random.default_rng())
         """
-        for v1, v2 in it.combinations([length, seqs, seqarr, filename], 2):
+        for v1, v2 in it.combinations([length, seqs, seqarr, filename, hamming_distance_from_sequence], 2):
             if v1 is not None and v2 is not None:
-                raise ValueError('exactly one of length, seqs, seqarra, or filename can be non-None')
+                raise ValueError('exactly one of length, seqs, seqarr, filename, or '
+                                 'hamming_distance_from_sequence must be non-None')
         self.rng = rng
         if seqarr is not None:
             self.seqarr = seqarr
             self._update_size()
+
         elif seqs is not None:
             if len(seqs) == 0:
                 raise ValueError('seqs must have positive length')
@@ -459,18 +691,33 @@ class DNASeqList:
                     raise ValueError('All sequences in seqs must be equal length')
             self.numseqs = len(seqs)
             self.seqarr = seqs2arr(seqs)
+
         elif filename is not None:
             self._read_from_file(filename)
+
         elif length is not None:
-            self.seqlen = length
             if num_random_seqs is None:
-                self.seqarr = make_array_with_all_dna_seqs(self.seqlen, alphabet)
+                self.seqarr = make_array_with_all_dna_seqs(length=length, bases=alphabet)
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs(
-                    self.seqlen, num_random_seqs, self.rng, alphabet)
-            self.numseqs = len(self.seqarr) if length > 0 else 0
+                    length=length, num_seqs=num_random_seqs, rng=self.rng, bases=alphabet)
+            self.seqlen = length
+            self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
+
+        elif hamming_distance_from_sequence is not None:
+            dist, seq = hamming_distance_from_sequence
+            if num_random_seqs is None:
+                self.seqarr = make_array_with_all_dna_seqs_hamming_distance(dist=dist, seq=seq,
+                                                                            bases=alphabet)
+            else:
+                self.seqarr = make_array_with_random_subset_of_dna_seqs_hamming_distance(
+                    num_seqs=num_random_seqs, dist=dist, seq=seq, rng=self.rng, bases=alphabet)
+            self.seqlen = len(seq)
+            self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
+
         else:
-            raise ValueError('at least one of length, seqs, seqarr, or filename must be specified')
+            raise ValueError('at least one of length, seqs, seqarr, filename, or '
+                             'hamming_distance_from_sequence must be specified')
 
         self.shift = np.arange(2 * (self.seqlen - 1), -1, -2)
 
@@ -528,7 +775,7 @@ class DNASeqList:
         return 'DNASeqSet(seqs={})'.format(str([self[i] for i in range(self.numseqs)]))
 
     def __str__(self) -> str:
-        if self.numseqs <= 64:
+        if self.numseqs <= 256:
             ret = [self.get_seq_str(i) for i in range(self.numseqs)]
             return ','.join(ret)
         else:

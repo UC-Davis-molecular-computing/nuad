@@ -63,9 +63,6 @@ domain_pool_name_key = 'pool_name'
 length_key = 'length'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
-num_sampled_key = 'num_sampled'
-max_samples_key = 'max_samples'
-num_times_sequences_reset_key = 'num_times_sequences_reset'
 replace_with_close_sequences_key = 'replace_with_close_sequences'
 hamming_probability_key = 'hamming_probability'
 num_sequences_to_generate_upper_limit_key = 'num_sequences_to_generate_upper_limit'
@@ -544,6 +541,11 @@ class RunsOfBasesConstraint(NumpyConstraint):
         return constraint.remove_violating_sequences(seqs)
 
 
+log_numpy_generation = True
+
+
+# log_numpy_generation = False
+
 @dataclass
 class DomainPool:
     """
@@ -592,20 +594,6 @@ class DomainPool:
     Optional; default is empty.
     """
 
-    sequences: dn.DNASeqList = field(compare=False, hash=False,
-                                     default_factory=lambda: dn.DNASeqList(length=0), repr=False)
-    # list of available sequences.
-    # We sample with replacement (uniform if :data:`DomainPool.replace_with_close_sequences` = False,
-    # according to :data:`DomainPool.hamming_probability` otherwise)
-    # This is represented as a DNASeqList for efficiency when calculating Hamming distances
-    # when the option `replace_with_close_sequences` is True.
-
-    num_sampled: int = 0
-
-    max_samples: Optional[int] = None
-
-    num_times_sequences_reset: int = 0
-
     replace_with_close_sequences: bool = False
     """
     If True, instead of picking a sequence uniformly at random from all those satisfying the constraints
@@ -636,10 +624,20 @@ class DomainPool:
 
     def __post_init__(self) -> None:
         if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
+            # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
+            # for i in range(self.length):
+            #     self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
+            # self.hamming_probability[self.length] *= 2
+
+            # linearly decreasing probability of making i+1 (since i starts at 0) base changes
+            total = 0.0
             for i in range(self.length):
-                # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
-                self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
-            self.hamming_probability[self.length] *= 2
+                prob = 1 / (i + 1)
+                self.hamming_probability[i + 1] = prob
+                total += prob
+            # normalize to be a probability measure
+            for length in self.hamming_probability:
+                self.hamming_probability[length] /= total
 
         idx = 0
         for numpy_constraint in self.numpy_constraints:
@@ -660,76 +658,6 @@ class DomainPool:
                                  f'but the element at index {idx} is of type {type(seq_constraint)}')
             idx += 1
 
-    def to_json(self, include_sequences: bool) -> str:
-        json_map = self.to_json_serializable(include_sequences)
-        json_str = json.dumps(json_map, indent=2)
-        return json_str
-
-    def to_json_serializable(self, include_sequences: bool) -> Dict[str, Any]:
-        dct = {
-            name_key: self.name,
-            length_key: self.length,
-            num_sampled_key: self.num_sampled,
-            max_samples_key: self.max_samples,
-            num_times_sequences_reset_key: self.num_times_sequences_reset,
-            replace_with_close_sequences_key: self.replace_with_close_sequences,
-            hamming_probability_key: self.hamming_probability,
-            num_sequences_to_generate_upper_limit_key: self.num_sequences_to_generate_upper_limit,
-            num_sequences_to_generate_key: self.num_sequences_to_generate
-        }
-        if include_sequences:
-            dct[sequences_key] = self.sequences.to_list()
-        return dct
-
-    @staticmethod
-    def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
-        name = json_map[name_key]
-        length = json_map[length_key]
-        num_sampled = json_map[num_sampled_key]
-        max_samples = json_map[max_samples_key]
-        num_times_sequences_reset = json_map[num_times_sequences_reset_key]
-        replace_with_close_sequences = json_map[replace_with_close_sequences_key]
-        hamming_probability_str_keys = json_map[hamming_probability_key]
-        hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
-        num_sequences_to_generate_upper_limit = json_map[num_sequences_to_generate_upper_limit_key]
-        num_sequences_to_generate = json_map[num_sequences_to_generate_key]
-        sequences_list = json_map[sequences_key]
-        sequences = dn.DNASeqList(seqs=sequences_list)
-        return DomainPool(name=name, length=length, sequences=sequences,
-                          num_sampled=num_sampled, max_samples=max_samples,
-                          num_times_sequences_reset=num_times_sequences_reset,
-                          replace_with_close_sequences=replace_with_close_sequences,
-                          hamming_probability=hamming_probability,
-                          num_sequences_to_generate_upper_limit=num_sequences_to_generate_upper_limit,
-                          num_sequences_to_generate=num_sequences_to_generate
-                          )
-
-    def _reset_precomputed_sequences(self, rng: np.random.Generator) -> None:
-        # precomputes a new list of sequences satisfying numpy constraints and sequence constraints
-        self.sequences, use_random_subset = self._generate_sequences_satisfying_numpy_constraints(rng)
-        self._filter_sequence_constraints()
-        self.num_sampled = 0
-        self.num_times_sequences_reset += 1
-
-        if use_random_subset:
-            # sampling 2 * self.sequences.numseqs uniformly at random will leave 1/e^2 fraction unsampled
-            # in expectation: https://www.cs.purdue.edu/homes/hmaji/teaching/Spring%202017/lectures/03.pdf
-            self.max_samples = 2 * self.sequences.numseqs
-        else:
-            # if we didn't pick a random subset, we have all the sequences of this length satisfying
-            # the constraints, so never reset and just keep sampling them with replacement forever
-            self.max_samples = None
-
-    def _filter_sequence_constraints(self) -> None:
-        if len(self.sequence_constraints) == 0:
-            return
-        idxs_to_keep = []
-        for idx in range(self.sequences.numseqs):
-            seq = self.sequences.get_seq_str(idx)
-            if self.satisfies_sequence_constraints(seq):
-                idxs_to_keep.append(idx)
-        self.sequences.keep_seqs_at_indices(idxs_to_keep)
-
     def __hash__(self) -> int:
         return hash((self.name, self.length))
 
@@ -737,6 +665,49 @@ class DomainPool:
         if not isinstance(other, DomainPool):
             return False
         return self.name == other.name and self.length == other.length
+
+    def to_json(self) -> str:
+        json_map = self.to_json_serializable()
+        json_str = json.dumps(json_map, indent=2)
+        return json_str
+
+    def to_json_serializable(self) -> Dict[str, Any]:
+        dct = {
+            name_key: self.name,
+            length_key: self.length,
+            replace_with_close_sequences_key: self.replace_with_close_sequences,
+            hamming_probability_key: self.hamming_probability,
+            num_sequences_to_generate_upper_limit_key: self.num_sequences_to_generate_upper_limit,
+            num_sequences_to_generate_key: self.num_sequences_to_generate
+        }
+        return dct
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
+        name = json_map[name_key]
+        length = json_map[length_key]
+        replace_with_close_sequences = json_map[replace_with_close_sequences_key]
+        hamming_probability_str_keys = json_map[hamming_probability_key]
+        hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
+        num_sequences_to_generate_upper_limit = json_map[num_sequences_to_generate_upper_limit_key]
+        num_sequences_to_generate = json_map[num_sequences_to_generate_key]
+        sequences_list = json_map[sequences_key]
+        return DomainPool(name=name, length=length,
+                          replace_with_close_sequences=replace_with_close_sequences,
+                          hamming_probability=hamming_probability,
+                          num_sequences_to_generate_upper_limit=num_sequences_to_generate_upper_limit,
+                          num_sequences_to_generate=num_sequences_to_generate
+                          )
+
+    def _filter_sequence_constraints(self, seqs: dn.DNASeqList) -> None:
+        if len(self.sequence_constraints) == 0:
+            return
+        idxs_to_keep = []
+        for idx in range(seqs.numseqs):
+            seq = seqs.get_seq_str(idx)
+            if self.satisfies_sequence_constraints(seq):
+                idxs_to_keep.append(idx)
+        seqs.keep_seqs_at_indices(idxs_to_keep)
 
     def satisfies_sequence_constraints(self, sequence: str) -> bool:
         """
@@ -799,21 +770,13 @@ class DomainPool:
             :py:data:`DomainPool.sequence_constraints`
         """
         if not self.replace_with_close_sequences or previous_sequence is None:
-            # takes a completely random sequence from domain pool
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            # import time
-            # before = time.perf_counter_ns()
-            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng, True)
-            # after = time.perf_counter_ns()
-            # print(f'time spent sampling Hamming neighbors: {(after - before) / 1e6:.1f} ms')
-
-        self.num_sampled += 1
+            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng)
 
         return sequence
 
-    def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator,
-                                               pick_distance_first: bool) -> str:
+    def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator) -> str:
         # all possible distances from 1 to len(previous_sequence) are calculated.
         # if pick_distance_first is true, we save some time by not gathering sequences at all distances
         # into a dict. Instead we first sample a distance and then look up only those sequences at that
@@ -821,112 +784,118 @@ class DomainPool:
         # to re-sample. Given that we now keep every sequence in the DomainPool available (i.e.,
         # sampling with replacement) until we regenerate them all, hopefully this is fairly efficient.
 
-        if self.sequences.numseqs == 0 or (
-                self.max_samples is not None and self.num_sampled >= self.max_samples):
-            if self.sequences.numseqs > 0:
-                logger.info('Twice as many pool sequences have been sampled with replacement from a '
-                            'randomly chosen subset. Regenerating fresh sequences.')
-            self._reset_precomputed_sequences(rng)
-        # takes neighbor to previous sequence; difference in bases randomly chosen
         hamming_probabilities = np.array(list(self.hamming_probability.values()))
 
-        if pick_distance_first:
-            # pick a distance at random, then re-pick if no sequences are at that distance
-            sequence = None
-            previous_sequence_1d_array = dn.seq2arr(previous_sequence)
-            available_distances_list = list(range(1, len(previous_sequence) + 1))
+        # pick a distance at random, then re-pick if no sequences are at that distance
+        sequence = None
+        previous_sequence_1d_array = dn.seq2arr(previous_sequence)
+        available_distances_list = list(range(1, len(previous_sequence) + 1))
 
-            # For efficiency we inline the logic of self.sequences_at_hamming_distance()
-            # The next line is the most expensive part of the calculation, so we only do it once,
-            # rather than calling self.sequences_at_hamming_distance() repeatedly, which would recalculate
-            # the next line for each sampled distance even though it doesn't change.
-            computed_distances = np.sum(
-                np.bitwise_xor(self.sequences.seqarr, previous_sequence_1d_array) != 0, axis=1)
+        num_to_generate = 1000
+        seqs: Optional[dn.DNASeqList] = None
 
-            while sequence is None:
-                available_distances_arr = np.array(available_distances_list)
-                existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
-                prob_sum = existing_hamming_probabilities.sum()
-                existing_hamming_probabilities /= prob_sum
-                sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+        sequence: Optional[str] = None
 
-                # sequences = self.sequences_at_hamming_distance(previous_sequence, distance)
-                indices_at_distance = computed_distances == sampled_distance
-                arr = self.sequences.seqarr[indices_at_distance]
-                sequences = dn.DNASeqList(seqarr=arr)
+        while sequence is None:
+            if len(available_distances_list) == 0:
+                raise ValueError('out of Hamming sitances to try, quitting')
 
-                if sequences.numseqs == 0:
-                    logger.debug(f'found no sequences Hamming distance {sampled_distance} '
-                                 f'from {previous_sequence}; sampling a new distance')
-                    available_distances_list.remove(sampled_distance)
-                else:
-                    sequence = rng.choice(sequences)
-
-        else:
-            # first determine all sequences at all distances, then pick distance at random from list of
-            # distances that have at least one sequence at that distance (takes more time usually)
-            neighbors = self.find_hamming_distances(previous_sequence)
-
-            # Some distances may not exist, so scale the probabilities of the remaining so they sum to one
-            available_distances_arr = np.array(list(neighbors.keys()))
+            # sample a Hamming distance that we haven't tried yet
+            available_distances_arr = np.array(available_distances_list)
             existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
             prob_sum = existing_hamming_probabilities.sum()
             existing_hamming_probabilities /= prob_sum
-
-            # randomly chooses a Hamming distance to change previous_sequence by
             sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
-            assert len(neighbors[sampled_distance]) > 0
-            sequence = rng.choice(neighbors[sampled_distance])
+
+            while seqs is None or len(seqs) == 0:
+
+                bases = self._bases_to_use()
+                length = self.length
+                _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
+
+                # TODO: make new constructor logic for generating sequences at fixed hamming distance from prev
+                all_seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
+                                         num_random_seqs=num_to_generate, rng=rng)
+
+
+                seqs = self._filter_numpy_constraints(all_seqs)
+                self._log_numpy_generation(length, num_to_generate, len(seqs))
+                self._filter_sequence_constraints(seqs)
+
+                if num_to_generate >= 10 ** 6 and len(seqs) == 0:
+                    logger.info("We've generated over 1 million random DNA sequences and not "
+                                "found one that passed your NumpyConstraints and "
+                                f"SequenceConstraints at Hamming distance {sampled_distance} from "
+                                f"the previous sequence {previous_sequence}. Trying another distance")
+                    available_distances_list.remove(sampled_distance)
+                num_to_generate *= 2
+            if len(seqs) > 0:
+                sequence = seqs[0]
+
 
         return sequence
+
+        # For efficiency we inline the logic of self.sequences_at_hamming_distance()
+        # The next line is the most expensive part of the calculation, so we only do it once,
+        # rather than calling self.sequences_at_hamming_distance() repeatedly, which would recalculate
+        # the next line for each sampled distance even though it doesn't change.
+        # computed_distances = np.sum(
+        #     np.bitwise_xor(self.sequences.seqarr, previous_sequence_1d_array) != 0, axis=1)
+
+        # while sequence is None:
+        #     available_distances_arr = np.array(available_distances_list)
+        #     existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
+        #     prob_sum = existing_hamming_probabilities.sum()
+        #     existing_hamming_probabilities /= prob_sum
+        #     sampled_distance = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+        #
+        #     indices_at_distance = computed_distances == sampled_distance
+        #     arr = self.sequences.seqarr[indices_at_distance]
+        #     sequences = dn.DNASeqList(seqarr=arr)
+        #
+        #     if sequences.numseqs == 0:
+        #         logger.debug(f'found no sequences Hamming distance {sampled_distance} '
+        #                      f'from {previous_sequence}; sampling a new distance')
+        #         available_distances_list.remove(sampled_distance)
+        #     else:
+        #         sequence = rng.choice(sequences)
+        #
+        # return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
-        if self.sequences.numseqs == 0 or self.num_sampled >= len(self.sequences):
-            self._reset_precomputed_sequences(rng)
-        idx = int(rng.integers(self.sequences.numseqs))
-        sequence = self.sequences[idx]
-        self.num_sampled += 1
-        return sequence
+        num_to_generate = 1000
+        seqs: Optional[dn.DNASeqList] = None
 
-    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator) \
-            -> Tuple[dn.DNASeqList, bool]:
+        while seqs is None or seqs.numseqs == 0:
+            seqs = self._generate_sequences_satisfying_numpy_constraints(rng, num_to_generate)
+            self._filter_sequence_constraints(seqs)
+            if num_to_generate > 10 ** 10:
+                raise NotImplementedError("We've generated over 10 billion random DNA sequences and not "
+                                          "found one that passed your NumpyConstraints and "
+                                          "SequenceConstraints. Try relaxing the constraints so that it's "
+                                          "more likely a random sequence satisfies the constraints.")
+            num_to_generate *= 2
+
+        return seqs[0]
+
+    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator,
+                                                         num_to_generate: int) -> dn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
-        # For lengths at most _length_threshold_numpy, we generate all DNA sequences in advance.
-        # Above this value, a random subset of DNA sequences will be generated.
-        _length_threshold_numpy = math.floor(math.log(self.num_sequences_to_generate, 4))
-        # _length_threshold_numpy = 10
-        use_random_subset = length > _length_threshold_numpy
-        if not use_random_subset:
-            seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True, rng=rng)
-            num_starting_seqs = seqs.numseqs
-        else:
-            num_starting_seqs = self.num_sequences_to_generate
-            seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
-                                 num_random_seqs=num_starting_seqs, rng=rng)
+        _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
+        seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
+                             num_random_seqs=num_to_generate, rng=rng)
         seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
-        while seqs_satisfying_numpy_constraints.numseqs == 0 and \
-                self.num_sequences_to_generate < self.num_sequences_to_generate_upper_limit:
-            # 4 ** 13 sequences or more takes over a minute to generate and an excessive amount of memory
-            print(f'No valid sequences found in {self.num_sequences_to_generate} sequences examined. '
-                  f'Increasing number of sequences generated by a factor of 10.')
-            self.num_sequences_to_generate *= 10
-            num_starting_seqs = self.num_sequences_to_generate
-            seqs = dn.DNASeqList(length=length, alphabet=bases, shuffle=True,
-                                 num_random_seqs=num_starting_seqs, rng=rng)
-            seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
-        else:
-            if self.num_sequences_to_generate >= self.num_sequences_to_generate_upper_limit:
-                raise ValueError("Too many sequences need to be generated to find a satisfactory sequence. "
-                                 "Please adjust constraints. ")
-        num_decimals = len(str(self.num_sequences_to_generate))
+        self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_constraints))
+        return seqs_satisfying_numpy_constraints
 
-        logger.info(f'generated {num_starting_seqs:{num_decimals}} sequences '
-                    f'of length {length:2}, '
-                    f'of which {len(seqs_satisfying_numpy_constraints):{num_decimals}} '
-                    f'passed the numpy sequence constraints'
-                    f'{" (generated at random)" if use_random_subset else ""}')
-        return seqs_satisfying_numpy_constraints, use_random_subset
+    def _log_numpy_generation(self, length: int, num_to_generate: int, num_passed: int):
+        if log_numpy_generation:
+            num_decimals = len(str(self.num_sequences_to_generate))
+            logger.debug(f'generated {num_to_generate:{num_decimals}} sequences '
+                         f'of length {length:2}, '
+                         f'of which {num_passed:{num_decimals}} '
+                         f'passed the numpy sequence constraints')
 
     def _bases_to_use(self) -> Collection[str]:
         # checks explicitly for NumpyRestrictBasesConstraint
@@ -2690,7 +2659,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
             domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
-            domain_pools_num_sampled_key: {pool.name: pool.num_sampled for pool in self.domain_pools()}
+            # domain_pools_num_sampled_key: {pool.name: pool.num_sampled for pool in self.domain_pools()}
         }
 
     @staticmethod
@@ -3305,7 +3274,6 @@ class ViolationSet:
                 else:
                     self.violations_fixed[violation.constraint].add(violation)
             self.domain_to_violations[domain].update(domain_violations)
-
 
     def clone(self) -> ViolationSet:
         # Returns a deep-ish copy of this :any:`ViolationSet`.

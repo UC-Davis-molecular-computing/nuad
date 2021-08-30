@@ -110,10 +110,10 @@ def main() -> None:
                        ])
 
     numpy_constraints: List[NumpyConstraint] = [
-        # dc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
-        # dc.BaseCountConstraint(base='G', high_count=1),
+        dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
+        dc.BaseCountConstraint(base='G', high_count=1),
         # dc.BaseEndConstraint(bases=('C', 'G')),
-        # dc.RunsOfBasesConstraint(['C', 'G'], 4),
+        dc.RunsOfBasesConstraint(['C', 'G'], 4),
         # dc.RunsOfBasesConstraint(['A', 'T'], 4),
         # dc.BaseEndConstraint(bases=('A', 'T')),
         # dc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
@@ -132,13 +132,13 @@ def main() -> None:
     #     # nupack_binding_energy_in_bounds,
     # ]
 
-    replace_with_close_sequences = True
-    # replace_with_close_sequences = False
-    domain_pool_10 = dc.DomainPool(f'length-{10}_domains', 10,
+    # replace_with_close_sequences = True
+    replace_with_close_sequences = False
+    domain_pool_10 = dc.DomainPool(f'length-10_domains', 10,
                                    numpy_constraints=numpy_constraints,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
-    domain_pool_11 = dc.DomainPool(f'length-{11}_domains', 11,
+    domain_pool_11 = dc.DomainPool(f'length-11_domains', 11,
                                    numpy_constraints=numpy_constraints,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
