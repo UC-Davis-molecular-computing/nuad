@@ -62,6 +62,7 @@ def arr2seq(arr: np.ndarray) -> str:
     bases_ch = [bits2base[base] for base in arr]
     return ''.join(bases_ch)
 
+
 def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndarray:
     num_digits = len(digits)
     num_seqs = num_digits ** length
@@ -73,6 +74,7 @@ def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndar
         arr[:, c] = np.tile(np.repeat(digits, i), j)
 
     return arr
+
 
 def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """Return 2D numpy array with all DNA sequences of given length in
@@ -116,114 +118,6 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C'
     #         arr[:, c] = np.tile(np.repeat(bases, i), j)
     #
     # return arr
-
-
-def random_choice_noreplace2(l, n_sample, num_draw):
-    '''
-    l: 1-D array or list
-    n_sample: sample size for each draw
-    num_draw: number of draws
-
-    Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
-    '''
-    l = np.array(l)
-    return l[np.argpartition(np.random.rand(num_draw, len(l)), n_sample - 1, axis=-1)[:, :n_sample]]
-
-
-def random_hamming(sequence: Union[List[int], np.ndarray], distance: int, number: int) -> np.ndarray:
-    length = len(sequence)
-    seqrepeats = np.tile(sequence, number).reshape((number, length))
-    places = random_choice_noreplace2(np.arange(0, length), distance, number)
-    changes = np.random.randint(1, 4, size=places.shape)
-    seqrepeats[np.arange(0, number)[:, None], places] += changes
-    seqrepeats = np.mod(seqrepeats, 4)
-    return seqrepeats
-
-
-# https://stackoverflow.com/questions/4941753/is-there-a-math-ncr-function-in-python
-# In Python 3.8 there's math.comb, but this is about 3x faster somehow.
-import operator as op
-from functools import reduce
-
-
-def comb(n: int, k: int) -> int:
-    # n choose k = n! / (k! * (n-k)!)
-    k = min(k, n - k)
-    numer = reduce(op.mul, range(n, n - k, -1), 1)
-    denom = reduce(op.mul, range(1, k + 1), 1)
-    return numer // denom
-
-
-def make_array_with_all_dna_seqs_hamming_distance(
-        dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
-    """
-    Return 2D numpy array with all DNA sequences of given length in lexicographic order. Bases contains
-    bases to be used: ('A','C','G','T') by default, but can be set to a subset of these.
-
-    Uses the encoding described in the documentation for DNASeqList. The result is a 2D array, where each
-    row represents a DNA sequence, and that row has one byte per base.
-    """
-    length = len(seq)
-    assert 1 <= dist <= length
-
-    num_bases = len(bases)
-
-    if num_bases == 0:
-        raise ValueError('bases cannot be empty')
-    if not set(bases) <= {'A', 'C', 'G', 'T'}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
-
-    num_ways_to_choose_subsequence_indices = comb(length, dist)
-    num_different_bases = len(bases) - 1
-    num_subsequences = num_different_bases ** dist
-    num_seqs = num_ways_to_choose_subsequence_indices * num_subsequences
-
-    # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
-    # then map these back to the correct subset of 0,1,2,3 when we are done
-    offsets = range(1, num_different_bases + 1)
-    subseq_offsets = make_array_with_all_sequences(length=dist, digits=offsets)
-    assert len(subseq_offsets) == num_subsequences
-    subseq_offsets_repeats = \
-        np.tile(subseq_offsets.flatten(), num_ways_to_choose_subsequence_indices).reshape(num_seqs, dist)
-
-    # all (length choose dist) indices where we could change the bases
-    idxs = combnr_idxs(length, dist)
-    assert len(idxs) == num_ways_to_choose_subsequence_indices
-    idxs_repeat = np.tile(idxs, num_subsequences).reshape(num_seqs, length)
-    assert len(idxs_repeat) == num_seqs
-
-    # map subset of bases used to *prefix* of 0,1,2,3
-    base2bits_local = {base:digit for base,digit in zip(bases, range(4))}
-    seq_as_arr = seq2arr(seq, base2bits_local=base2bits_local)
-    new_arr = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
-
-    new_arr[idxs_repeat] += subseq_offsets_repeats.flatten()
-    new_arr %= num_bases
-
-    # now map back to correct subset of 0,1,2,3 to represent bases
-    for base,digit in zip(['A', 'C', 'G', 'T'], range(4)):
-        if base not in bases:
-            idxs_to_inc = new_arr >= digit
-            new_arr[idxs_to_inc] += 1
-
-    return new_arr
-
-
-def combnr_idxs(length: int, number: int) -> np.ndarray:
-    # Gives 2D Boolean numpy array, with `length` columns and (`length` choose `number`) rows,
-    # representing all ways to set exactly `number` elements of the row True and the others to False.
-    # Useful for indexing into a same-shape numpy array, changing exactly `number` elements in each row.
-    #
-    # :param length:
-    #     number of columns
-    # :param number:
-    #     number of True values in each row
-    # :return:
-    #     numpy array, with `length` columns and (`length` choose `number`) rows,
-    #     representing all ways to set exactly `number` elements of the row True and the others to False.
-    x = np.array(np.meshgrid(*([np.arange(0, length)] * number))).T.reshape(-1, number)
-    z = np.sum(np.identity(length)[x], 1, dtype=bool).astype(int)
-    return np.unique(z[np.sum(z, axis=1) == number], axis=0).astype(bool)
 
 
 def make_array_with_random_subset_of_dna_seqs(
@@ -323,6 +217,92 @@ def make_array_with_random_subset_of_dna_seqs(
     return sampled_seqs
 
 
+# https://stackoverflow.com/questions/4941753/is-there-a-math-ncr-function-in-python
+# In Python 3.8 there's math.comb, but this is about 3x faster somehow.
+import operator as op
+from functools import reduce
+
+
+def comb(n: int, k: int) -> int:
+    # n choose k = n! / (k! * (n-k)!)
+    k = min(k, n - k)
+    numer = reduce(op.mul, range(n, n - k, -1), 1)
+    denom = reduce(op.mul, range(1, k + 1), 1)
+    return numer // denom
+
+
+def make_array_with_all_dna_seqs_hamming_distance(
+        dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
+    """
+    Return 2D numpy array with all DNA sequences of given length in lexicographic order. Bases contains
+    bases to be used: ('A','C','G','T') by default, but can be set to a subset of these.
+
+    Uses the encoding described in the documentation for DNASeqList. The result is a 2D array, where each
+    row represents a DNA sequence, and that row has one byte per base.
+    """
+    length = len(seq)
+    assert 1 <= dist <= length
+
+    num_bases = len(bases)
+
+    if num_bases == 0:
+        raise ValueError('bases cannot be empty')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+
+    num_ways_to_choose_subsequence_indices = comb(length, dist)
+    num_different_bases = len(bases) - 1
+    num_subsequences = num_different_bases ** dist
+    num_seqs = num_ways_to_choose_subsequence_indices * num_subsequences
+
+    # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
+    # then map these back to the correct subset of 0,1,2,3 when we are done
+    offsets = range(1, num_different_bases + 1)
+    subseq_offsets = make_array_with_all_sequences(length=dist, digits=offsets)
+    assert len(subseq_offsets) == num_subsequences
+    subseq_offsets_repeats = \
+        np.tile(subseq_offsets.flatten(), num_ways_to_choose_subsequence_indices).reshape(num_seqs, dist)
+
+    # all (length choose dist) indices where we could change the bases
+    idxs = combnr_idxs(length, dist)
+    assert len(idxs) == num_ways_to_choose_subsequence_indices
+    idxs_repeat = np.tile(idxs, num_subsequences).reshape(num_seqs, length)
+    assert len(idxs_repeat) == num_seqs
+
+    # map subset of bases used to *prefix* of 0,1,2,3
+    base2bits_local = {base: digit for base, digit in zip(bases, range(4))}
+    seq_as_arr = seq2arr(seq, base2bits_local=base2bits_local)
+    new_arr = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
+
+    new_arr[idxs_repeat] += subseq_offsets_repeats.flatten()
+    new_arr %= num_bases
+
+    # now map back to correct subset of 0,1,2,3 to represent bases
+    for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
+        if base not in bases:
+            idxs_to_inc = new_arr >= digit
+            new_arr[idxs_to_inc] += 1
+
+    return new_arr
+
+
+def combnr_idxs(length: int, number: int) -> np.ndarray:
+    # Gives 2D Boolean numpy array, with `length` columns and (`length` choose `number`) rows,
+    # representing all ways to set exactly `number` elements of the row True and the others to False.
+    # Useful for indexing into a same-shape numpy array, changing exactly `number` elements in each row.
+    #
+    # :param length:
+    #     number of columns
+    # :param number:
+    #     number of True values in each row
+    # :return:
+    #     numpy array, with `length` columns and (`length` choose `number`) rows,
+    #     representing all ways to set exactly `number` elements of the row True and the others to False.
+    x = np.array(np.meshgrid(*([np.arange(0, length)] * number))).T.reshape(-1, number)
+    z = np.sum(np.identity(length)[x], 1, dtype=bool).astype(int)
+    return np.unique(z[np.sum(z, axis=1) == number], axis=0).astype(bool)
+
+
 def make_array_with_random_subset_of_dna_seqs_hamming_distance(
         num_seqs: int, dist: int, seq: str, rng: np.random.Generator = default_rng,
         bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
@@ -335,8 +315,10 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
     :param num_seqs:
         number of rows
-    :param hamming_distance_from_sequence:
-        pair `(dist, seq)`, where `dist` is a desired Hamming distance to be from `seq`
+    :param dist:
+        Hamming distance to be from `seq`
+    :param seq:
+        sequence to generate other sequences close to
     :param bases:
         DNA bases to use
     :param rng:
@@ -351,10 +333,69 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     elif len(bases) == 1:
         raise ValueError('bases must have at least two elements')
 
-    base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
     length = len(seq)
 
-    raise NotImplementedError()
+    num_different_bases = len(bases) - 1
+    # print(f'{num_different_bases=}')
+
+    # map subset of bases used to *prefix* of 0,1,2,3
+    base2bits_local = {base: digit for base, digit in zip(bases, range(4))}
+    seq_as_arr = seq2arr(seq, base2bits_local=base2bits_local)
+    new_arr = np.tile(seq_as_arr, num_seqs).reshape(num_seqs, length)
+
+    # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
+    # then map these back to the correct subset of 0,1,2,3 when we are done
+    offsets = range(1, num_different_bases + 1)
+    subseq_offsets = rng.integers(low=1, high=num_different_bases + 1, size=(num_seqs, dist))
+    # print(f'{subseq_offsets=}')
+    assert len(subseq_offsets) == num_seqs
+
+    # print(f'{new_arr=}')
+    # all (length choose dist) indices where we could change the bases
+    idxs = random_choice_noreplace(np.arange(length), dist, num_seqs, rng)
+    # print(f'{idxs=}')
+    assert len(idxs) == num_seqs
+    changes = rng.integers(1, num_different_bases + 1, size=idxs.shape, dtype=np.uint8)
+    # print(f'{changes=}')
+    new_arr[np.arange(num_seqs)[:, None], idxs] += changes
+    # print(f'{new_arr=}')
+    new_arr = np.mod(new_arr, num_different_bases + 1)
+    # print(f'{new_arr=}')
+
+    # now map back to correct subset of 0,1,2,3 to represent bases
+    for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
+        if base not in bases:
+            idxs_to_inc = new_arr >= digit
+            new_arr[idxs_to_inc] += 1
+
+    return new_arr
+
+
+# def random_hamming(sequence: Union[List[int], np.ndarray], distance: int, number: int,
+#                    rng: np.random.Generator) -> np.ndarray:
+#     sequence = np.array(sequence, dtype=np.uint8)
+#     length = len(sequence)
+#     seqrepeats = np.tile(sequence, number).reshape((number, length))
+#     places = random_choice_noreplace(np.arange(length), distance, number, rng)
+#     changes = rng.integers(1, 4, size=places.shape, dtype=np.uint8)
+#     seqrepeats[np.arange(number)[:, None], places] += changes
+#     seqrepeats = np.mod(seqrepeats, 4)
+#     return seqrepeats
+
+
+# https://stackoverflow.com/a/59328647/5339430
+def random_choice_noreplace(l: np.ndarray, n_sample: int, num_draw: int,
+                            rng: np.random.Generator) -> np.ndarray:
+    '''
+    l: 1-D array or list
+    n_sample: sample size for each draw
+    num_draw: number of draws
+
+    Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
+    '''
+    l = np.array(l)
+    random_array_floats = rng.random((num_draw, len(l)))
+    return l[np.argpartition(random_array_floats, n_sample - 1, axis=-1)[:, :n_sample]]
 
 
 # @lru_cache(maxsize=10000000)
