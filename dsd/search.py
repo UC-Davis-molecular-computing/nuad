@@ -854,21 +854,21 @@ class SearchParameters:
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
     """
 
-    save_reports_for_all_updates: bool = True
+    save_reports_for_all_updates: bool = False
     """
     A report on the most recently updated :any:`Design` is always written to a file 
     `current-best-report.txt`. If this is True, then in the folder `reports`, a file unique to that update
     is also written. Set to False to use less space on disk. 
     """
 
-    save_designs_for_all_updates: bool = True
+    save_designs_for_all_updates: bool = False
     """
     A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
     a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
     that update is also written. Set to False to use less space on disk. 
     """
 
-    save_sequences_for_all_updates: bool = True
+    save_sequences_for_all_updates: bool = False
     """
     A list of sequences for each :any:`Strand` of most recently updated :any:`Design` is always written to 
     a file `current-best-sequences.txt`. If this is True, then in the folder `sequences`, a file unique to 
