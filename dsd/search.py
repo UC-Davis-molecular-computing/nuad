@@ -579,7 +579,7 @@ def _write_report(design: Design, params: SearchParameters, directories: _Direct
     report = f'''\
 Report on constraints
 =====================
-''' + design.summary_of_constraints(params.report_only_violations, violation_set=violation_set)
+''' + dc.summary_of_constraints(constraints, params.report_only_violations, violation_set=violation_set)
 
     if not params.save_designs_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
@@ -1308,7 +1308,6 @@ def _find_violations_and_score(design: Design,
             `scores`:    list of scores for each :any:`Domain`, in same order the domains appear, giving
                           the total score of :any:`Constraint`'s violated by the corresponding :any:`Domain`
     """
-    stopwatch = Stopwatch()
 
     violation_set: dc.ViolationSet = _violations_of_constraints(
         design, never_increase_score, domains_changed, violation_set_old, iteration)
@@ -1322,12 +1321,6 @@ def _find_violations_and_score(design: Design,
     }
     domains = list(domain_to_score.keys())
     scores = list(domain_to_score.values())
-
-    stopwatch.stop()
-
-    log_time = False
-    if log_time:
-        _log_time(stopwatch)
 
     return violation_set, domains, scores
 

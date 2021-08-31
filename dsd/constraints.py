@@ -39,6 +39,8 @@ import dsd.vienna_nupack as dv
 import dsd.np as dn
 from dsd.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
+from dsd.stopwatch import Stopwatch
+
 try:
     from scadnano import Design as scDesign  # type: ignore
     from scadnano import Strand as scStrand  # type: ignore
@@ -724,15 +726,10 @@ class DomainPool:
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
             :py:data:`DomainPool.sequence_constraints`
         """
-        # import time
-        # b = time.perf_counter_ns()
         if not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
             sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng)
-        # a = time.perf_counter_ns()
-        # ms = (a-b)/10e6
-        # print(f'sample one seq time: {ms} ms')
 
         return sequence
 
@@ -743,7 +740,7 @@ class DomainPool:
 
         # pick a distance at random, then re-pick if no sequences are at that distance
         available_distances_list = list(range(1, len(previous_sequence) + 1))
-        num_to_generate = 1000
+        num_to_generate = 100
         seqs: Optional[dn.DNASeqList] = None
         sequence: Optional[str] = None
 
@@ -783,12 +780,16 @@ class DomainPool:
                         shuffle=True, num_random_seqs=num_to_generate, rng=rng)
                     generated_all_seqs = False
 
+                len_all_seqs_before_filtering = len(all_seqs)
+
                 seqs = self._filter_numpy_constraints(all_seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs))
                 self._filter_sequence_constraints(seqs)
 
+                print(f'{len(seqs)}/{len_all_seqs_before_filtering} seqs passed constraints')
+
                 if num_to_generate >= 10 ** 9 and len(seqs) == 0:
-                    logger.info("We've generated over 1 million random DNA sequences and not "
+                    logger.info("We've generated over 1 billion random DNA sequences and not "
                                 "found one that passed your NumpyConstraints and "
                                 f"SequenceConstraints at Hamming distance {sampled_distance} from "
                                 f"the previous sequence {previous_sequence}. Trying another distance")
@@ -801,12 +802,12 @@ class DomainPool:
                     break
 
             if len(seqs) > 0:
-                sequence = seqs[0]
+                sequence = seqs.random_sequence(rng=rng)
 
         return sequence
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
-        num_to_generate = 1000
+        num_to_generate = 100
         seqs: Optional[dn.DNASeqList] = None
         num_sequences_total = len(self._bases_to_use()) ** self.length
 

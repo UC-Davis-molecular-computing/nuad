@@ -770,6 +770,32 @@ class DNASeqList:
         if shuffle:
             self.shuffle()
 
+    def random_choice(self, num: int, rng: np.random.Generator = default_rng,
+                      replace: bool = False) -> List[str]:
+        """
+        Returns random choice of `num` DNA sequence(s) (represented as list of Python strings).
+
+        :param num:
+            number of sequences to sample
+        :param replace:
+            whether to sample with replacement
+        :return:
+            sampled sequences
+        """
+        idxs = rng.choice(np.arange(self.numseqs), num, replace=replace)
+        seqs = [self[int(idx)] for idx in idxs]
+        return seqs
+
+    def random_sequence(self, rng: np.random.Generator = default_rng) -> str:
+        """
+        Returns random DNA sequence (represented as Python string).
+
+        :return:
+            sampled sequence
+        """
+        idx = int(rng.integers(0, self.numseqs))
+        return self[idx]
+
     def _update_size(self) -> None:
         # updates numseqs and seqlen based on shape of seqarr
         self.numseqs, self.seqlen = self.seqarr.shape
