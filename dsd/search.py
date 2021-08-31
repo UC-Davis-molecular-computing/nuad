@@ -179,7 +179,6 @@ def _violations_of_constraints(design: Design,
             domains_changed=domains_changed, design=design)
         violation_set.update(violations)
 
-        # TODO: wasteful; get this info as a second return from the first call
         parts_to_check_total = find_parts_to_check(constraint, design, None)
         violation_set.num_checked[constraint] = len(parts_to_check_total)
 
@@ -439,7 +438,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         raise NotImplementedError('TODO: implement parallelization')
 
     for part, score, summary in violating_parts_scores_summaries:
-        domains = _domains_in_part(part, exclude_fixed=True)
+        domains = _domains_in_part(part, exclude_fixed=False)
         violation = dc.Violation(constraint=constraint, part=part, domains=domains,
                                  score=score, summary=summary)
         for domain in domains:
@@ -478,7 +477,7 @@ def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:
     elif isinstance(part, DomainPair):
         return list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
     elif isinstance(part, (StrandPair, Complex)):
-        domains_per_strand = [strand.domains if exclude_fixed else strand.unfixed_domains()
+        domains_per_strand = [strand.domains if not exclude_fixed else strand.unfixed_domains()
                               for strand in part.individual_parts()]
         domain_iterable: Iterable[Domain] = _flatten(domains_per_strand)
         return list(domain_iterable)
@@ -1310,9 +1309,12 @@ def _find_violations_and_score(design: Design,
     violation_set: dc.ViolationSet = _violations_of_constraints(
         design, never_increase_score, domains_changed, violation_set_old, iteration)
 
+    # NOTE: this filters out the fixed domains,
+    # but we keep them in violation_set for the sake of reports
     domain_to_score: Dict[Domain, float] = {
         domain: sum(violation.score for violation in domain_violations)
         for domain, domain_violations in violation_set.domain_to_violations.items()
+        if not domain.fixed
     }
     domains = list(domain_to_score.keys())
     scores = list(domain_to_score.values())

@@ -110,3 +110,22 @@ class Stopwatch:
         if time_ >= 1:
             return "{:.2f}ms".format(time_)
         return "{:.2f}μs".format(time_ * 1000)
+
+    def log(self, msg: str) -> None:
+        """
+        Useful for timing statements/blocks of statements via the following:
+
+        .. code-block:: python
+
+            sw = Stopwatch()
+            # statement(s) to time
+            sw.log('my statements')
+
+        Which will print something like this to the screen:
+
+          time for my statements: 47.80μs
+
+        :param msg:
+            message to indicate what is being timed ("my statements" in the example above)
+        """
+        print(f'time for {msg}: {self}')
