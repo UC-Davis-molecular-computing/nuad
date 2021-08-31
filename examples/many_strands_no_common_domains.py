@@ -53,15 +53,15 @@ def main() -> None:
     # dc.logger.setLevel(logging.DEBUG)
     dc.logger.setLevel(logging.INFO)
 
-    random_seed = 0
+    random_seed = 1
 
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
     # num_strands = 2
-    num_strands = 5
+    # num_strands = 5
     # num_strands = 10
-    # num_strands = 50
+    num_strands = 50
     # num_strands = 100
     # num_strands = 355
 

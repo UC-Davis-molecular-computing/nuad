@@ -693,8 +693,10 @@ class DomainPool:
 
     def satisfies_sequence_constraints(self, sequence: str) -> bool:
         """
-        :param sequence: DNA sequence to check
-        :return: whether `sequence` satisfies all constraints in :py:data:`DomainPool.sequence_constraints`
+        :param sequence:
+            DNA sequence to check
+        :return:
+            whether `sequence` satisfies all constraints in :data:`DomainPool.sequence_constraints`
         """
         return all(constraint(sequence) for constraint in self.sequence_constraints)
 
@@ -2721,8 +2723,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         score = violation_set.total_score()
         score_unfixed = violation_set.total_score_nonfixed()
-        score_total_summary = f'total score of constraint violations: {score:.1f}'
-        score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.1f}'
+        score_total_summary = f'total score of constraint violations: {score:.2f}'
+        score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
         summary = (score_total_summary + '\n'
                    + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
