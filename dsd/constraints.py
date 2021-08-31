@@ -39,7 +39,7 @@ import dsd.vienna_nupack as dv
 import dsd.np as dn
 from dsd.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
-from dsd.stopwatch import Stopwatch
+# from dsd.stopwatch import Stopwatch
 
 try:
     from scadnano import Design as scDesign  # type: ignore
@@ -780,13 +780,9 @@ class DomainPool:
                         shuffle=True, num_random_seqs=num_to_generate, rng=rng)
                     generated_all_seqs = False
 
-                len_all_seqs_before_filtering = len(all_seqs)
-
                 seqs = self._filter_numpy_constraints(all_seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs))
                 self._filter_sequence_constraints(seqs)
-
-                print(f'{len(seqs)}/{len_all_seqs_before_filtering} seqs passed constraints')
 
                 if num_to_generate >= 10 ** 9 and len(seqs) == 0:
                     logger.info("We've generated over 1 billion random DNA sequences and not "
@@ -4061,16 +4057,18 @@ def nupack_domain_pair_constraint(
                 logger.debug(
                     f'domain pair threshold: {threshold:6.2f} '
                     f'binding({name1}, {name2}, {temperature}) = {energy:6.2f} ')
-            excess = threshold - energy
+            excess = max(0.0, (threshold - energy))
             excesses.append(excess)
 
         max_excess = max(excesses)
 
         max_name_length = max(len(name) for name in _flatten(name_pairs))
-        lines = [f'{name1:{max_name_length}}, '
+        lines_and_energies = [(f'{name1:{max_name_length}}, '
                  f'{name2:{max_name_length}}: '
-                 f' {energy:6.2f} kcal/mol'
+                 f' {energy:6.2f} kcal/mol', energy)
                  for (name1, name2), energy in zip(name_pairs, energies)]
+        lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
+        lines = [line for line, _ in lines_and_energies]
         msg = '\n  ' + '\n  '.join(lines)
 
         return max(0.0, max_excess), msg
