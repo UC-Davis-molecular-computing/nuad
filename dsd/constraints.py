@@ -2718,73 +2718,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         constraints.extend(self.design_constraints)
         return constraints
 
-    def summary_of_constraints(self, report_only_violations: bool, violation_set: ViolationSet) -> str:
-        summaries: List[str] = []
-
-        # other constraints
-        for constraint in self.all_constraints():
-            summary = self.summary_of_constraint(constraint, report_only_violations, violation_set)
-            summaries.append(summary)
-
-        score = violation_set.total_score()
-        score_unfixed = violation_set.total_score_nonfixed()
-        score_total_summary = f'total score of constraint violations: {score:.2f}'
-        score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
-
-        summary = (score_total_summary + '\n'
-                   + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
-                   + '\n'.join(summaries))
-
-        return summary
-
-    def summary_of_constraint(self, constraint: Constraint, report_only_violations: bool,
-                              violation_set: ViolationSet) -> str:
-        if isinstance(constraint, (DomainConstraint, StrandConstraint,
-                                   DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
-                                   DomainsConstraint, StrandsConstraint,
-                                   DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
-            summaries = []
-            num_violations = 0
-            num_checks = violation_set.num_checked[constraint]
-            part_type_name = constraint.part_name()
-
-            violations_nonfixed = violation_set.violations_nonfixed[constraint]
-            violations_fixed = violation_set.violations_fixed[constraint]
-            for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}"),
-                                            (violations_fixed, f"fixed {part_type_name}")]:
-                if len(violations) == 0:
-                    continue
-
-                max_part_name_length = max(len(violation.part.name) for violation in violations)
-                num_violations += len(violations)
-
-                lines_and_scores: List[Tuple[str, float]] = []
-                for violation in violations:
-                    line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
-                           f'{violation.summary} '
-                    lines_and_scores.append((line, violation.score))
-
-                lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
-
-                lines = (line for line, _ in lines_and_scores)
-                content = '\n'.join(lines)
-                summary = _small_header(header_name, "=") + f'\n{content}\n'
-                summaries.append(summary)
-
-            content = ''.join(summaries)
-            report = ConstraintReport(constraint=constraint, content=content,
-                                      num_violations=num_violations, num_checks=num_checks)
-
-        elif isinstance(constraint, DesignConstraint):
-            raise NotImplementedError()
-        else:
-            content = f'skipping summary of constraint {constraint.description}; ' \
-                      f'unrecognized type {type(constraint)}'
-            report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
-
-        summary = add_header_to_content_of_summary(report, violation_set)
-        return summary
-
     @staticmethod
     def from_scadnano_file(sc_filename: str,
                            fix_assigned_sequences: bool = True,
@@ -3105,7 +3038,78 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             self.compute_derived_fields()
 
 
-def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet) -> str:
+def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
+                           violation_set: ViolationSet) -> str:
+    summaries: List[str] = []
+
+    # other constraints
+    for constraint in constraints:
+        summary = summary_of_constraint(constraint, report_only_violations, violation_set)
+        summaries.append(summary)
+
+    score = violation_set.total_score()
+    score_unfixed = violation_set.total_score_nonfixed()
+    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
+
+    summary = (score_total_summary + '\n'
+               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+               + '\n'.join(summaries))
+
+    return summary
+
+
+def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
+                          violation_set: ViolationSet) -> str:
+    if isinstance(constraint, (DomainConstraint, StrandConstraint,
+                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
+                               DomainsConstraint, StrandsConstraint,
+                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
+        summaries = []
+        num_violations = 0
+        num_checks = violation_set.num_checked[constraint]
+        part_type_name = constraint.part_name()
+
+        violations_nonfixed = violation_set.violations_nonfixed[constraint]
+        violations_fixed = violation_set.violations_fixed[constraint]
+        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}"),
+                                        (violations_fixed, f"fixed {part_type_name}")]:
+            if len(violations) == 0:
+                continue
+
+            max_part_name_length = max(len(violation.part.name) for violation in violations)
+            num_violations += len(violations)
+
+            lines_and_scores: List[Tuple[str, float]] = []
+            for violation in violations:
+                line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
+                       f'{violation.summary} '
+                lines_and_scores.append((line, violation.score))
+
+            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+
+            lines = (line for line, _ in lines_and_scores)
+            content = '\n'.join(lines)
+            summary = _small_header(header_name, "=") + f'\n{content}\n'
+            summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+
+    elif isinstance(constraint, DesignConstraint):
+        raise NotImplementedError()
+    else:
+        content = f'skipping summary of constraint {constraint.description}; ' \
+                  f'unrecognized type {type(constraint)}'
+        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
+
+    summary = add_header_to_content_of_summary(report, violation_set, report_only_violations)
+    return summary
+
+
+def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet,
+                                     report_only_violations: bool) -> str:
     score = violation_set.score_of_constraint(report.constraint)
     score_unfixed = violation_set.score_of_constraint_nonfixed(report.constraint)
 
@@ -3122,7 +3126,8 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: Vi
 * checks:     {report.num_checks}
 * violations: {report.num_violations}
 * score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
-{indented_content}'''
+{indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
+                         'when set to False\n' if not report_only_violations else '')
     return summary
 
 

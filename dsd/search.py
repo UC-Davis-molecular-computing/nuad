@@ -574,6 +574,8 @@ def _write_report(design: Design, params: SearchParameters, directories: _Direct
                                      f'-{num_new_optimal_padded}'
     filename_final_no_ext = f'current-best-{directories.report_filename_no_ext}'
 
+    constraints = design.all_constraints()
+
     report = f'''\
 Report on constraints
 =====================
