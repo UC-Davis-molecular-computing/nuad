@@ -2592,7 +2592,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             JSON string representing this :any:`Design`.
         """
         self.store_domain_pools()
-        return json_encode(self, suppress_indent=True)
+        # XXX: disabling the indent suppression because it takes a LONG time for a large Design to
+        # convert the NoIndent instances. Since people tend not to read design.json files that much
+        # (unlike with scadnano scripting, for instance), hopefully this doesn't matter.
+        # return json_encode(self, suppress_indent=True)
+        return json_encode(self, suppress_indent=False)
 
     @staticmethod
     def from_json(json_str: str,

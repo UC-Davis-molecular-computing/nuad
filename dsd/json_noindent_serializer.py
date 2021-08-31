@@ -19,8 +19,13 @@ class JSONSerializable(ABC):
 
 def json_encode(obj: JSONSerializable, suppress_indent: bool = True) -> str:
     encoder = SuppressableIndentEncoder if suppress_indent else json.JSONEncoder
+    # from dsd.stopwatch import Stopwatch
+    # sw = Stopwatch()
     serializable = obj.to_json_serializable(suppress_indent=suppress_indent)
-    return json.dumps(serializable, cls=encoder, indent=2)
+    # sw.log(f'{obj.__class__.__name__}.to_json_serializable', units='s')
+    json_str = json.dumps(serializable, cls=encoder, indent=2)
+    # sw.log(f'json.dumps                 ', units='s')
+    return json_str
 
 
 class SuppressableIndentEncoder(json.JSONEncoder):

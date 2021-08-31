@@ -506,8 +506,8 @@ def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rn
     num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
         else f'{num_new_optimal:0{params.num_digits_update}d}'
 
-    _write_design_json(design, params=params, directories=directories,
-                       num_new_optimal_padded=num_new_optimal_padded)
+    _write_design(design, params=params, directories=directories,
+                  num_new_optimal_padded=num_new_optimal_padded)
 
     _write_rng_state(rng, params=params, directories=directories,
                      num_new_optimal_padded=num_new_optimal_padded)
@@ -537,8 +537,8 @@ def _write_sequences(design: Design, params: SearchParameters, directories: _Dir
                                              sequences_content, '.txt')
 
 
-def _write_design_json(design: Design, params: SearchParameters, directories: _Directories,
-                       num_new_optimal_padded: str) -> None:
+def _write_design(design: Design, params: SearchParameters, directories: _Directories,
+                  num_new_optimal_padded: str) -> None:
     filename_final_no_ext = f'current-best-{directories.design_filename_no_ext}'
     directory_intermediate = directories.design
     filename_with_iteration_no_ext = f'{directories.design_filename_no_ext}-{num_new_optimal_padded}'

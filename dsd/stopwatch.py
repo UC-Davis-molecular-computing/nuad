@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import time
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, Literal
 
 
 def _current_nanoseconds() -> int:
@@ -106,12 +106,29 @@ class Stopwatch:
     def __str__(self) -> str:
         time_ = self.milliseconds()
         if time_ >= 1000:
-            return "{:.2f}s".format(time_ / 1000)
+            return "{:.2f} s".format(time_ / 1000)
         if time_ >= 1:
-            return "{:.2f}ms".format(time_)
-        return "{:.2f}μs".format(time_ * 1000)
+            return "{:.2f} ms".format(time_)
+        if time_ >= 0.001:
+            return "{:.2f} μs".format(time_ * 1000)
+        return "{:.2f} ns".format(time_ * 1_000_000)
 
-    def log(self, msg: str) -> None:
+    def time_in_units(self, units: Literal['s', 'ms', 'us', 'ns']) -> str:
+        ns = self.nanoseconds()
+        if units == 's':
+            return f'{ns / 10 ** 9:.2f} s'
+        elif units == 'ms':
+            return f'{ns / 10 ** 6:.2f} ms'
+        elif units == 'us':
+            return f'{ns / 10 ** 3:.2f} μs'
+        elif units == 'ns':
+            return f'{ns:.2f} ns'
+        else:
+            raise ValueError(f"units = {units} is not a legal unit, please choose one of "
+                             f"'s', 'ms', 'us', 'ns'")
+
+    def log(self, msg: str, units: Optional[Literal['s', 'ms', 'us', 'ns']] = None,
+            restart: bool = True) -> None:
         """
         Useful for timing statements/blocks of statements via the following:
 
@@ -127,5 +144,16 @@ class Stopwatch:
 
         :param msg:
             message to indicate what is being timed ("my statements" in the example above)
+        :param units:
+            units ('s', 'ms', 'us', 'ns') to use. If not specified then a reasonable default is chosen
+        :param restart:
+            whether to restart this Stopwatch instance after logging
+            (useful for timing several statements in a row)
         """
-        print(f'time for {msg}: {self}')
+        if units is None:
+            print(f'time for {msg}: {self}')
+        else:
+            print(f'time for {msg}: {self.time_in_units(units)}')
+
+        if restart:
+            self.restart()
