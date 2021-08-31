@@ -930,14 +930,14 @@ class TestSubdomains(unittest.TestCase):
         domains = self.sample_nested_domains()
         sequence = 'CATAGCTTTCTTGTTCTGATCGGAAC'
         a = domains['a']
-        a.sequence = sequence
-        self.assertEqual(sequence, a.sequence)
-        self.assertEqual(sequence[0: 11], domains['b'].sequence)
-        self.assertEqual(sequence[11:], domains['C'].sequence)
-        self.assertEqual(sequence[0:5], domains['E'].sequence)
-        self.assertEqual(sequence[5:11], domains['F'].sequence)
-        self.assertEqual(sequence[11:18], domains['g'].sequence)
-        self.assertEqual(sequence[18:], domains['h'].sequence)
+        a.set_sequence(sequence)
+        self.assertEqual(sequence, a.sequence())
+        self.assertEqual(sequence[0: 11], domains['b'].sequence())
+        self.assertEqual(sequence[11:], domains['C'].sequence())
+        self.assertEqual(sequence[0:5], domains['E'].sequence())
+        self.assertEqual(sequence[5:11], domains['F'].sequence())
+        self.assertEqual(sequence[11:18], domains['g'].sequence())
+        self.assertEqual(sequence[18:], domains['h'].sequence())
 
     def test_assign_dna_sequence_to_leaf(self):
         """
@@ -954,11 +954,11 @@ class TestSubdomains(unittest.TestCase):
         domains = self.sample_nested_domains()
         E = domains['E']
         F = domains['F']
-        E.sequence = 'CATAG'
-        F.sequence = 'CTTTCC'
-        self.assertEqual('CATAG', E.sequence)
-        self.assertEqual('CTTTCC', F.sequence)
-        self.assertEqual('CATAGCTTTCC', domains['b'].sequence)
+        E.set_sequence('CATAG')
+        F.set_sequence('CTTTCC')
+        self.assertEqual('CATAG', E.sequence())
+        self.assertEqual('CTTTCC', F.sequence())
+        self.assertEqual('CATAGCTTTCC', domains['b'].sequence())
 
     def test_assign_dna_sequence_mixed(self):
         """
@@ -976,38 +976,38 @@ class TestSubdomains(unittest.TestCase):
         E = domains['E']
         F = domains['F']
         C = domains['C']
-        E.sequence = 'CATAG'
-        F.sequence = 'CTTTCT'
-        C.sequence = 'TGTTCTGATCGGAAC'
+        E.set_sequence('CATAG')
+        F.set_sequence('CTTTCT')
+        C.set_sequence('TGTTCTGATCGGAAC')
 
         # Assert initial assignment is correct
-        self.assertEqual('CATAG''CTTTCT''TGTTCTGATCGGAAC', domains['a'].sequence)
-        self.assertEqual('CATAG''CTTTCT', domains['b'].sequence)
-        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence)
-        self.assertEqual('CATAG', domains['E'].sequence)
-        self.assertEqual('CTTTCT', domains['F'].sequence)
-        self.assertEqual('TGTTCTG', domains['g'].sequence)
-        self.assertEqual('ATCGGAAC', domains['h'].sequence)
+        self.assertEqual('CATAG''CTTTCT''TGTTCTGATCGGAAC', domains['a'].sequence())
+        self.assertEqual('CATAG''CTTTCT', domains['b'].sequence())
+        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence())
+        self.assertEqual('CATAG', domains['E'].sequence())
+        self.assertEqual('CTTTCT', domains['F'].sequence())
+        self.assertEqual('TGTTCTG', domains['g'].sequence())
+        self.assertEqual('ATCGGAAC', domains['h'].sequence())
 
         # Assert subsequent reassignment to leaf is correct
-        F.sequence = 'ATGTTT'
-        self.assertEqual('CATAG''ATGTTT''TGTTCTGATCGGAAC', domains['a'].sequence)
-        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence)
-        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence)
-        self.assertEqual('CATAG', domains['E'].sequence)
-        self.assertEqual('ATGTTT', domains['F'].sequence)
-        self.assertEqual('TGTTCTG', domains['g'].sequence)
-        self.assertEqual('ATCGGAAC', domains['h'].sequence)
+        F.set_sequence('ATGTTT')
+        self.assertEqual('CATAG''ATGTTT''TGTTCTGATCGGAAC', domains['a'].sequence())
+        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence())
+        self.assertEqual('TGTTCTGATCGGAAC', domains['C'].sequence())
+        self.assertEqual('CATAG', domains['E'].sequence())
+        self.assertEqual('ATGTTT', domains['F'].sequence())
+        self.assertEqual('TGTTCTG', domains['g'].sequence())
+        self.assertEqual('ATCGGAAC', domains['h'].sequence())
 
         # Assert subsequent reassignment to internal node is correct
-        C.sequence = 'GGGGGGGGGGGGGGG'
-        self.assertEqual('CATAG''ATGTTT''GGGGGGGGGGGGGGG', domains['a'].sequence)
-        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence)
-        self.assertEqual('GGGGGGGGGGGGGGG', domains['C'].sequence)
-        self.assertEqual('CATAG', domains['E'].sequence)
-        self.assertEqual('ATGTTT', domains['F'].sequence)
-        self.assertEqual('GGGGGGG', domains['g'].sequence)
-        self.assertEqual('GGGGGGGG', domains['h'].sequence)
+        C.set_sequence('GGGGGGGGGGGGGGG')
+        self.assertEqual('CATAG''ATGTTT''GGGGGGGGGGGGGGG', domains['a'].sequence())
+        self.assertEqual('CATAG''ATGTTT', domains['b'].sequence())
+        self.assertEqual('GGGGGGGGGGGGGGG', domains['C'].sequence())
+        self.assertEqual('CATAG', domains['E'].sequence())
+        self.assertEqual('ATGTTT', domains['F'].sequence())
+        self.assertEqual('GGGGGGG', domains['g'].sequence())
+        self.assertEqual('GGGGGGGG', domains['h'].sequence())
 
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
         """
@@ -1025,7 +1025,7 @@ class TestSubdomains(unittest.TestCase):
 
         a: Domain = Domain('a', assign_domain_pool_of_size(15), dependent=True, subdomains=[B, C])
         with self.assertRaises(ValueError):
-            a.sequence = 'A' * 15
+            a.set_sequence('A' * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
         """Test constructing a strand using a dependent subdomain (not parent)

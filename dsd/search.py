@@ -54,18 +54,15 @@ import os
 import shutil
 import sys
 import logging
-import pprint
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, Sequence, Set, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
-    Deque, TypeVar
+from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
+    Deque, TypeVar, cast
 import statistics
 import textwrap
-import time
 import re
 import datetime
-from pprint import pprint
 
 import numpy.random
 from ordered_set import OrderedSet
@@ -90,8 +87,10 @@ import pathos
 
 from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
-    logger, all_pairs, all_pairs_iterator, ConstraintWithDomains, ConstraintWithStrands, \
-    ComplexConstraint, ConstraintWithComplexes, Complex
+    logger, all_pairs, ConstraintWithDomains, ConstraintWithStrands, \
+    ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
+    DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint, \
+    DomainPair, StrandPair
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -109,7 +108,7 @@ pprint_indent = 4
 
 
 def default_output_directory() -> str:
-    return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
+    return os.path.join('out', f'{script_name_no_ext()}--{timestamp()}')
 
 
 def _violations_of_constraints(design: Design,
@@ -158,169 +157,58 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
-    # individual domain constraints across all domains in Design
-    for domain_constraint in design.domain_constraints:
-        domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domain_constraint)
+    constraints: List[Constraint] = cast(List[Constraint], design.domain_constraints) + \
+                                    design.strand_constraints + \
+                                    design.domain_pair_constraints + \
+                                    design.strand_pair_constraints + \
+                                    design.domains_constraints + \
+                                    design.strands_constraints + \
+                                    design.domain_pairs_constraints + \
+                                    design.strand_pairs_constraints + \
+                                    design.design_constraints + \
+                                    design.complex_constraints  # noqa
+
+    for constraint in constraints:
+        parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
         current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
             if never_increase_score and violation_set_old is not None else None
 
-        domain_violations, quit_early_in_func = _violations_of_domain_constraint(
-            domains=domains_to_check, constraint=domain_constraint, current_score_gap=current_score_gap)
-        violation_set.update(domain_violations)
+        violations, quit_early_in_func = _violations_of_constraint(
+            parts=parts_to_check, constraint=constraint, current_score_gap=current_score_gap,
+            domains_changed=domains_changed, design=design)
+        violation_set.update(violations)
+
+        # TODO: wasteful; get this info as a second return from the first call
+        parts_to_check_total = find_parts_to_check(constraint, design, None)
+        violation_set.num_checked[constraint] = len(parts_to_check_total)
 
         quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    # individual strand constraints across all strands in Design
-    for strand_constraint in design.strand_constraints:
-        strands_to_check = _determine_strands_to_check(design.strands, domains_changed, strand_constraint)
-
-        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
-            if never_increase_score and violation_set_old is not None else None
-
-        strand_violations, quit_early_in_func = _violations_of_strand_constraint(
-            strands=strands_to_check, constraint=strand_constraint, current_score_gap=current_score_gap)
-        violation_set.update(strand_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    # pairs of domains
-    for domain_pair_constraint in design.domain_pair_constraints:
-        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
-            if never_increase_score and violation_set_old is not None else None
-        domain_pair_violations, quit_early_in_func = _violations_of_domain_pair_constraint(
-            domains=design.domains, constraint=domain_pair_constraint, domains_changed=domains_changed,
-            current_score_gap=current_score_gap)
-        violation_set.update(domain_pair_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    # pairs of strands
-    for strand_pair_constraint in design.strand_pair_constraints:
-        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
-            if never_increase_score and violation_set_old is not None else None
-        strand_pair_violations, quit_early_in_func = _violations_of_strand_pair_constraint(
-            strands=design.strands, constraint=strand_pair_constraint, domains_changed=domains_changed,
-            current_score_gap=current_score_gap)
-        violation_set.update(strand_pair_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    # complexes
-    for complex_constraint in design.complex_constraints:
-        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
-            if never_increase_score and violation_set_old is not None else None
-        complex_violations, quit_early_in_func = _violations_of_complex_constraint(
-            constraint=complex_constraint, domains_changed=domains_changed,
-            current_score_gap=current_score_gap)
-        violation_set.update(complex_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    # constraints that process each domain, but all at once (e.g., to hand off in batch to RNAduplex)
-    for domains_constraint in design.domains_constraints:
-        domains_to_check = _determine_domains_to_check(design.domains, domains_changed, domains_constraint)
-
-        if log_names_of_domains_and_strands_checked:
-            logger.debug(f'$ for domains constraint {domains_constraint.description}, '
-                         f'checking these domains:\n'
-                         f'${pprint.pformat(domains_to_check, indent=pprint_indent)}')
-
-        sets_of_violating_domains_weights = domains_constraint(domains_to_check)
-        domains_violations = _convert_sets_of_violating_domains_to_violations(
-            domains_constraint, sets_of_violating_domains_weights)
-        violation_set.update(domains_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        if quit_early:
-            return violation_set
-
-    # constraints that process each strand, but all at once (e.g., to hand off in batch to RNAduplex)
-    for strands_constraint in design.strands_constraints:
-        strands_to_check = _determine_strands_to_check(design.strands, domains_changed, strands_constraint)
-
-        if log_names_of_domains_and_strands_checked:
-            logger.debug(f'$ for strands constraint {strands_constraint.description}, '
-                         f'checking these strands:\n'
-                         f'${pprint.pformat(strands_to_check, indent=pprint_indent)}')
-
-        if len(strands_to_check) > 0:
-            sets_of_violating_domains_weights = strands_constraint(strands_to_check)
-            domains_violations = _convert_sets_of_violating_domains_to_violations(
-                strands_constraint, sets_of_violating_domains_weights)
-            violation_set.update(domains_violations)
-
-            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-            if quit_early:
-                return violation_set
-
-    # constraints that process all pairs of domains at once (e.g., to hand off in batch to RNAduplex)
-    for domain_pairs_constraint in design.domain_pairs_constraints:
-        domain_pairs_to_check = _determine_domain_pairs_to_check(design.domains, domains_changed,
-                                                                 domain_pairs_constraint)
-
-        if log_names_of_domains_and_strands_checked:
-            logger.debug(f'$ for domain pairs constraint {domain_pairs_constraint.description}, '
-                         f'checking these strand pairs:\n'
-                         f'${pprint.pformat(domain_pairs_to_check, indent=pprint_indent)}')
-
-        if len(domain_pairs_to_check) > 0:
-            sets_of_violating_domains_weights = domain_pairs_constraint(domain_pairs_to_check)
-            domains_violations = _convert_sets_of_violating_domains_to_violations(
-                domain_pairs_constraint, sets_of_violating_domains_weights)
-            violation_set.update(domains_violations)
-
-            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-            if quit_early:
-                return violation_set
-
-    # constraints that process all pairs of strands at once (e.g., to hand off in batch to RNAduplex)
-    for strand_pairs_constraint in design.strand_pairs_constraints:
-        strand_pairs_to_check = _determine_strand_pairs_to_check(design.strands, domains_changed,
-                                                                 strand_pairs_constraint)
-        if log_names_of_domains_and_strands_checked:
-            logger.debug(f'$ for strand pairs constraint {strand_pairs_constraint.description}, '
-                         f'checking these strand pairs:\n'
-                         f'${pprint.pformat(strand_pairs_to_check, indent=pprint_indent)}')
-
-        if len(strand_pairs_to_check) > 0:
-            sets_of_violating_domains_weights = strand_pairs_constraint(strand_pairs_to_check)
-            domains_violations = _convert_sets_of_violating_domains_to_violations(
-                strand_pairs_constraint, sets_of_violating_domains_weights)
-            violation_set.update(domains_violations)
-
-            quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-            if quit_early:
-                return violation_set
-
-    # constraints that processes whole design at once (for anything not captured by the above, e.g.,
-    # processing all triples of strands)
-    for design_constraint in design.design_constraints:
-        sets_of_violating_domains_weights = design_constraint(design, domains_changed)
-        domains_violations = _convert_sets_of_violating_domains_to_violations(
-            design_constraint, sets_of_violating_domains_weights)
-        violation_set.update(domains_violations)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
         if quit_early:
             return violation_set
 
     return violation_set
+
+
+def find_parts_to_check(constraint: dc.Constraint, design: dc.Design,
+                        domains_changed: Optional[Iterable[Domain]]) -> Sequence[dc.DesignPart]:
+    parts_to_check: Sequence[dc.DesignPart]
+    if isinstance(constraint, ConstraintWithDomains):
+        parts_to_check = _determine_domains_to_check(design.domains, domains_changed, constraint)
+    elif isinstance(constraint, ConstraintWithStrands):
+        parts_to_check = _determine_strands_to_check(design.strands, domains_changed, constraint)
+    elif isinstance(constraint, ConstraintWithDomainPairs):
+        parts_to_check = _determine_domain_pairs_to_check(design.domains, domains_changed, constraint)
+    elif isinstance(constraint, ConstraintWithStrandPairs):
+        parts_to_check = _determine_strand_pairs_to_check(design.strands, domains_changed, constraint)
+    elif isinstance(constraint, ConstraintWithComplexes):
+        parts_to_check = _determine_complexes_to_check(domains_changed, constraint)
+    elif isinstance(constraint, dc.DesignConstraint):
+        parts_to_check = []  # not used when checking DesignConstraint
+    else:
+        raise NotImplementedError()
+    return parts_to_check
 
 
 def _is_significantly_greater(x: float, y: float) -> bool:
@@ -342,29 +230,6 @@ def _quit_early(never_increase_score: bool,
 
 def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
     return not (pair[0].fixed and pair[1].fixed)
-
-
-def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
-                                     domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithDomainPairs) \
-        -> Sequence[Tuple[Domain, Domain]]:
-    """
-    Determines domain pairs to check between domains in `all_domains`.
-    If `domain_changed` is None, then this is all pairs where they are not both fixed if constraint.pairs
-    is None, otherwise it is constraint.pairs.
-    If `domain_changed` is not None, then among those pairs specified above,
-    it is all pairs where one of the two is `domain_changed`.
-    """
-    # either all pairs, or just constraint.pairs if specified
-    domain_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-        else all_pairs_iterator(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
-
-    # filter out those not containing domain_change if specified
-    domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
-        else [(domain1, domain2) for domain1, domain2 in domain_pairs_to_check_if_domain_changed_none
-              if domain1 in domains_changed or domain2 in domains_changed]
-
-    return domain_pairs_to_check
 
 
 def _determine_domains_to_check(all_domains: Iterable[Domain],
@@ -389,6 +254,58 @@ def _determine_domains_to_check(all_domains: Iterable[Domain],
     return domains_to_check
 
 
+def _determine_strands_to_check(all_strands: Iterable[Strand],
+                                domains_changed: Optional[Iterable[Domain]],
+                                constraint: ConstraintWithStrands) -> Sequence[Strand]:
+    """
+    Similar to _determine_domains_to_check but for strands.
+    """
+    # either all pairs, or just constraint.pairs if specified
+    strands_to_check_if_domain_changed_none = constraint.strands if constraint.strands is not None \
+        else [strand for strand in all_strands if not strand.fixed]
+
+    # filter out those not containing domain_change if specified
+    strands_to_check: List[Strand] = []
+    if domains_changed is None:
+        strands_to_check = strands_to_check_if_domain_changed_none
+    else:
+        for strand in strands_to_check_if_domain_changed_none:
+            for domain_changed in domains_changed:
+                if domain_changed in strand.domains:
+                    strands_to_check.append(strand)
+                    break
+
+    return strands_to_check
+
+
+def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
+                                     domains_changed: Optional[Iterable[Domain]],
+                                     constraint: ConstraintWithDomainPairs) \
+        -> Sequence[DomainPair]:
+    """
+    Determines domain pairs to check between domains in `all_domains`.
+    If `domain_changed` is None, then this is all pairs where they are not both fixed if constraint.pairs
+    is None, otherwise it is constraint.pairs.
+    If `domain_changed` is not None, then among those pairs specified above,
+    it is all pairs where one of the two is `domain_changed`.
+    """
+    # either all pairs, or just constraint.pairs if specified
+    if constraint.pairs is not None:
+        domain_pairs_to_check_if_domain_changed_none: List[DomainPair] = \
+            [DomainPair(pair[0], pair[1]) for pair in constraint.pairs]
+    else:
+        pairs = all_pairs(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
+        domain_pairs_to_check_if_domain_changed_none = [DomainPair(pair[0], pair[1]) for pair in pairs]
+
+    # filter out those not containing domain_change if specified
+    domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
+        else [domain_pair for domain_pair in
+              domain_pairs_to_check_if_domain_changed_none
+              if domain_pair.domain1 in domains_changed or domain_pair.domain2 in domains_changed]
+
+    return domain_pairs_to_check
+
+
 def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
     return not (pair[0].fixed and pair[1].fixed)
 
@@ -396,31 +313,35 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
 def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
                                      domains_changed: Optional[Iterable[Domain]],
                                      constraint: ConstraintWithStrandPairs) -> \
-        Sequence[Tuple[Strand, Strand]]:
+        Sequence[StrandPair]:
     """
     Similar to _determine_domain_pairs_to_check but for strands.
     """
     # either all pairs, or just constraint.pairs if specified
-    strand_pairs_to_check_if_domain_changed_none = constraint.pairs if constraint.pairs is not None \
-        else all_pairs(all_strands, where=_at_least_one_strand_unfixed)
+    if constraint.pairs is not None:
+        strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
+            [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
+    else:
+        pairs = all_pairs(all_strands, where=_at_least_one_strand_unfixed)
+        strand_pairs_to_check_if_domain_changed_none = [StrandPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
-    strand_pairs_to_check: List[Tuple[Strand, Strand]] = []
+    strand_pairs_to_check: List[StrandPair] = []
     if domains_changed is None:
         strand_pairs_to_check = strand_pairs_to_check_if_domain_changed_none
     else:
-        for strand1, strand2 in strand_pairs_to_check_if_domain_changed_none:
+        for strand_pair in strand_pairs_to_check_if_domain_changed_none:
             for domain_changed in domains_changed:
-                if domain_changed in strand1.domains or domain_changed in strand2.domains:
-                    strand_pairs_to_check.append((strand1, strand2))
+                if domain_changed in strand_pair.strand1.domains or \
+                        domain_changed in strand_pair.strand2.domains:
+                    strand_pairs_to_check.append(strand_pair)
                     break
 
     return strand_pairs_to_check
 
 
 def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
-                                  constraint: ConstraintWithComplexes) -> \
-        Tuple[Complex]:
+                                  constraint: ConstraintWithComplexes) -> Tuple[Complex]:
     """
     Similar to _determine_domain_pairs_to_check but for complexes.
     """
@@ -445,30 +366,6 @@ def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
         return tuple(complexes_to_check)
 
 
-def _determine_strands_to_check(all_strands: Iterable[Strand],
-                                domains_changed: Optional[Iterable[Domain]],
-                                constraint: ConstraintWithStrands) -> Sequence[Strand]:
-    """
-    Similar to _determine_domain_pairs_to_check but for strands.
-    """
-    # either all pairs, or just constraint.pairs if specified
-    strands_to_check_if_domain_changed_none = constraint.strands if constraint.strands is not None \
-        else [strand for strand in all_strands if not strand.fixed]
-
-    # filter out those not containing domain_change if specified
-    strands_to_check: List[Strand] = []
-    if domains_changed is None:
-        strands_to_check = strands_to_check_if_domain_changed_none
-    else:
-        for strand in strands_to_check_if_domain_changed_none:
-            for domain_changed in domains_changed:
-                if domain_changed in strand.domains:
-                    strands_to_check.append(strand)
-                    break
-
-    return strands_to_check
-
-
 def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: List[Strand]) -> List[Strand]:
     """
     :param domains:
@@ -488,171 +385,105 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
         return list(strands_set)
 
 
-def _convert_sets_of_violating_domains_to_violations(
-        constraint: Constraint, sets_of_violating_domains: Iterable[Tuple[OrderedSet[Domain], float]]) \
-        -> Dict[Domain, OrderedSet[dc.Violation]]:
-    domains_violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    for domain_set, score in sets_of_violating_domains:
-        violation = dc.Violation(constraint, domain_set, score)
-        for domain in domain_set:
-            domain_violations = domains_violations[domain]
-            domain_violations.add(violation)
-    return domains_violations
-
-
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-# XXX: Although this is written very generally for multiple domains; for most iterationg only one domain
-# changes and we are only checking that one domain in domains. So there's no optimization here for
-# quitting early since we are usually only checking a single constraint.
-def _violations_of_domain_constraint(domains: Iterable[Domain],
-                                     constraint: DomainConstraint,
-                                     current_score_gap: Optional[float],
-                                     ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
+def _violations_of_constraint(parts: Sequence[DesignPart],
+                              constraint: Constraint[DesignPart],
+                              current_score_gap: Optional[float],
+                              domains_changed: Optional[Iterable[Domain]] = None,
+                              design: Optional[Design] = None,  # only used with DesignConstraint
+                              ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
     violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    unfixed_domains = [domain for domain in domains if not domain.fixed]
-    violating_domains_scores: List[Optional[Tuple[Domain, float]]] = []
+    violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
 
     score_discovered_here: float = 0.0
     quit_early = False
     num_threads = dc.cpu_count()
-    chunk_size = num_threads
 
-    if log_names_of_domains_and_strands_checked:
-        logger.debug(f'$ for domain constraint {constraint.description}, checking these domains:')
-        logger.debug(f'{pprint.pformat(unfixed_domains, indent=pprint_indent)}')
+    if not constraint.parallel or num_threads == 1 or len(parts) == 1:
+        if isinstance(constraint,
+                      (DomainConstraint, StrandConstraint,
+                       DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+            for part in parts:
+                score, summary = _evaluate_individual_part_constraint(constraint, part)
+                if score > 0.0:
+                    violating_parts_scores_summaries.append((part, score, summary))
+                    if current_score_gap is not None:
+                        score_discovered_here += score
+                        if _is_significantly_greater(score_discovered_here, current_score_gap):
+                            quit_early = True
+                            break
 
-    if (not constraint.threaded
-            or num_threads == 1
-            or len(unfixed_domains) == 1):
-        logger.debug(f'NOT using threading for domain constraint {constraint.description}')
-        for domain in unfixed_domains:
-            score: float = constraint(domain.sequence, domain)
-            if score > 0.0:
-                violating_domains_scores.append((domain, score))
-                if current_score_gap is not None:
-                    score_discovered_here += constraint.weight * score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
-    else:
-        logger.debug(f'using threading for domain constraint {constraint.description}')
+        elif isinstance(constraint,
+                        (DomainsConstraint, StrandsConstraint,
+                         DomainPairsConstraint, StrandPairsConstraint,
+                         ComplexesConstraint, DesignConstraint)):
+            if isinstance(constraint, DesignConstraint):
+                violating_parts_scores_summaries = constraint.evaluate_design(design, domains_changed)
+            else:
+                # XXX: I don't understand the mypy error on the next line
+                violating_parts_scores_summaries = constraint.evaluate_bulk(parts)
 
-        domains_to_check = unfixed_domains
-
-        def sequence_to_score(sequence: str) -> float:
-            return constraint(sequence, None)
-
-        if current_score_gap is None:
-            sequences_to_check = (domain.sequence for domain in domains_to_check)
-            scores = list(_process_pool.map(sequence_to_score, sequences_to_check))
-            violating_domains_scores = [(domain, score) for domain, score in zip(domains_to_check, scores)
-                                        if score > 0]
-        else:
-            chunks = dc.chunker(domains_to_check, chunk_size)
-            for domain_chunk in chunks:
-                sequence_chunk = [domain.sequence for domain in domain_chunk]
-                scores = list(_process_pool.map(sequence_to_score, sequence_chunk))
-                violating_domains_chunk = [(strand, score) for strand, score in zip(domain_chunk, scores)
-                                           if score > 0]
-                violating_domains_scores.extend(violating_domains_chunk)
-
-                # quit early if possible
-                total_score_chunk = sum(score for _, score in violating_domains_chunk)
-                score_discovered_here += constraint.weight * total_score_chunk
+            # we can't quite this function early,
+            # but we can let the caller know to stop evaluating constraints
+            total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
+            if current_score_gap is not None:
+                score_discovered_here += total_score
                 if _is_significantly_greater(score_discovered_here, current_score_gap):
                     quit_early = True
-                    break
-
-    for violating_domain_score in violating_domains_scores:
-        if violating_domain_score is not None:
-            violating_domain, score = violating_domain_score
-            violation = dc.Violation(constraint, [violating_domain], score)
-            violations[violating_domain].add(violation)
-
-    return violations, quit_early
-
-
-def _violations_of_strand_constraint(strands: Iterable[Strand],
-                                     constraint: StrandConstraint,
-                                     current_score_gap: Optional[float],
-                                     ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
-    """
-    :param strands:
-        Strands to check for violations
-    :param constraint:
-        Constraint to check.
-    :param current_score_gap:
-        Current gap between total score of constraint violations found so far and total score of
-        optimal design. Used for quitting early.
-    :return:
-        1. dict mapping each domain to the set of violations that blame it
-        2. bool indicating whether we quit early
-    """
-    strands_to_check = [strand for strand in strands if not strand.fixed]
-
-    violating_strands_scores: List[Tuple[Strand, float]] = []
-
-    score_discovered_here: float = 0.0
-    quit_early = False
-    num_threads = dc.cpu_count()
-    chunk_size = num_threads
-
-    if log_names_of_domains_and_strands_checked:
-        logger.debug(f'$ for strand constraint {constraint.description}, checking these strands:')
-        logger.debug(f'$ {pprint.pformat(strands_to_check, indent=pprint_indent)}')
-
-    if (not constraint.threaded
-            or num_threads == 1
-            or len(strands_to_check) == 1
-            or (current_score_gap is not None and chunk_size == 1)):
-        logger.debug(f'NOT using threading for strand constraint {constraint.description}')
-        for strand in strands_to_check:
-            score: float = constraint(strand.sequence(), strand)
-            if score > 0.0:
-                violating_strands_scores.append((strand, score))
-                if current_score_gap is not None:
-                    score_discovered_here += constraint.weight * score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
-    else:
-        logger.debug(f'using threading for strand constraint {constraint.description}')
-        assert constraint.sequence_only  # should have been checked in constraint post_init
-
-        def sequence_to_score(sequence: str) -> float:
-            return constraint(sequence, None)
-
-        if current_score_gap is None:
-            sequences_to_check = (strand.sequence() for strand in strands_to_check)
-            scores = list(_process_pool.map(sequence_to_score, sequences_to_check))
-            violating_strands_scores = [(strand, score) for strand, score in zip(strands_to_check, scores)
-                                        if score > 0]
         else:
-            chunks = dc.chunker(strands_to_check, chunk_size)
-            for strand_chunk in chunks:
-                sequence_chunk = [strand.sequence() for strand in strand_chunk]
-                scores = list(_process_pool.map(sequence_to_score, sequence_chunk))
-                violating_strands_chunk = [(strand, score) for strand, score in zip(strand_chunk, scores)
-                                           if score > 0]
-                violating_strands_scores.extend(violating_strands_chunk)
+            raise AssertionError(f'constraint {constraint} of unrecognized type {type(constraint)}')
 
-                # quit early if possible
-                total_score_chunk = sum(score for _, score in violating_strands_chunk)
-                score_discovered_here += constraint.weight * total_score_chunk
-                if _is_significantly_greater(score_discovered_here, current_score_gap):
-                    quit_early = True
-                    break
+    else:
+        raise NotImplementedError('TODO: implement parallelization')
 
-    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    for strand, score in violating_strands_scores:
-        unfixed_domains_set = OrderedSet(strand.unfixed_domains())
-        violation = dc.Violation(constraint, unfixed_domains_set, score)
-        for domain in unfixed_domains_set:
+    for part, score, summary in violating_parts_scores_summaries:
+        domains = _domains_in_part(part, exclude_fixed=True)
+        violation = dc.Violation(constraint=constraint, part=part, domains=domains,
+                                 score=score, summary=summary)
+        for domain in domains:
             violations[domain].add(violation)
 
     return violations, quit_early
+
+
+def _evaluate_individual_part_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tuple[float, str]:
+    if isinstance(constraint, (DomainConstraint, StrandConstraint)):
+        assert isinstance(part, (Domain, Strand))
+        score, summary = constraint.evaluate((part.sequence(),), part)
+    elif isinstance(constraint, (DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+        assert isinstance(part, (DomainPair, StrandPair, Complex))
+        seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
+        # XXX: not sure why mypy error on the next line
+        score, summary = constraint.evaluate(seqs, part)
+    else:
+        raise AssertionError()
+    return score, summary
+
+
+def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:
+    """
+    :param part:
+        :any:`DesignPart` (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
+    :param exclude_fixed:
+        whether to exclude :any:`Domain`'s with :data:`Domain.fixed` == True
+    :return:
+        domains associated with part (e.g., all domains in :any:`Strand`)
+    """
+    if isinstance(part, Domain):
+        return [part] if not (exclude_fixed and part.fixed) else []
+    elif isinstance(part, Strand):
+        return part.domains if not exclude_fixed else part.unfixed_domains()
+    elif isinstance(part, DomainPair):
+        return list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
+    elif isinstance(part, (StrandPair, Complex)):
+        domains_per_strand = [strand.domains if exclude_fixed else strand.unfixed_domains()
+                              for strand in part.individual_parts()]
+        domain_iterable: Iterable[Domain] = _flatten(domains_per_strand)
+        return list(domain_iterable)
+    else:
+        raise NotImplementedError()
 
 
 T = TypeVar('T')
@@ -660,263 +491,6 @@ T = TypeVar('T')
 
 def remove_none_from_list(lst: Iterable[Optional[T]]) -> List[T]:
     return [elt for elt in lst if elt is not None]
-
-
-def _violations_of_domain_pair_constraint(domains: Iterable[Domain],
-                                          constraint: DomainPairConstraint,
-                                          domains_changed: Optional[Iterable[Domain]],
-                                          current_score_gap: Optional[float],
-                                          ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
-    # If specified, current_score_gap is the current difference between the score of violated constraints
-    # that have been found so far in the current iteration, compared to the total score of violated
-    # constraints in the optimal solution so far. It is positive
-    # (i.e., total_score_opt - total_score_cur_so_far)
-    # If specified and it is discovered while looping in this function that total_score_cur_so_far plus
-    # the score of violated constraints discovered in this function exceeds total_score_opt, quit early.
-    domain_pairs_to_check: Sequence[Tuple[Domain, Domain]] = \
-        _determine_domain_pairs_to_check(domains, domains_changed, constraint)
-
-    if log_names_of_domains_and_strands_checked:
-        logger.debug(f'$ for domain pair constraint {constraint.description}, checking these domain pairs:')
-        logger.debug(f'$ {pprint.pformat(domain_pairs_to_check, indent=pprint_indent)}')
-
-    violating_domain_pairs_scores: List[Optional[Tuple[Domain, Domain, float]]] = []
-
-    score_discovered_here: float = 0.0
-    quit_early = False
-
-    cpu_count = dc.cpu_count()
-
-    # since each domain pair check is already parallelized for the four domain pairs
-    # (d1,d2), (d1,w2), (w1,d2), (w1,w2), we take smaller chunks
-    chunk_size = cpu_count // 4
-
-    if (not constraint.threaded
-            or cpu_count == 1
-            or (current_score_gap is not None and chunk_size == 1)):
-        logger.debug(f'NOT using threading for domain pair constraint {constraint.description}')
-        for domain1, domain2 in domain_pairs_to_check:
-            assert not domain1.fixed or not domain2.fixed
-            score: float = constraint(domain1.sequence, domain2.sequence, domain1, domain2)
-            if score > 0.0:
-                violating_domain_pairs_scores.append((domain1, domain2, score))
-                if current_score_gap is not None:
-                    score_discovered_here += constraint.weight * score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
-    else:
-        logger.debug(f'using threading for domain pair constraint {constraint.description}')
-
-        def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
-            seq1, seq2 = seq_pair
-            return constraint(seq1, seq2, None, None)
-
-        if current_score_gap is None:
-            sequence_pairs_to_check = [(domain1.sequence, domain2.sequence)
-                                       for domain1, domain2 in domain_pairs_to_check]
-            scores = list(_process_pool.map(sequence_pair_to_score, sequence_pairs_to_check))
-            violating_domain_pairs_scores = [(domain1, domain2, score) for (domain1, domain2), score in
-                                             zip(domain_pairs_to_check, scores) if score > 0]
-
-        else:
-            chunks = dc.chunker(domain_pairs_to_check, chunk_size)
-            for domain_pair_chunk in chunks:
-                sequence_chunk = [(domain1.sequence, domain2.sequence)
-                                  for domain1, domain2 in domain_pair_chunk]
-                scores = list(_process_pool.map(sequence_pair_to_score, sequence_chunk))
-                violating_domain_pairs_chunk = [(domain1, domain2, score) for (domain1, domain2), score in
-                                                zip(domain_pair_chunk, scores) if score > 0]
-                violating_domain_pairs_scores.extend(violating_domain_pairs_chunk)
-
-                # quit early if possible
-                total_score_chunk = sum(score for _, _, score in violating_domain_pairs_chunk)
-                score_discovered_here += constraint.weight * total_score_chunk
-                if _is_significantly_greater(score_discovered_here, current_score_gap):
-                    quit_early = True
-                    break
-
-    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    violating_domain_pair_score: Optional[Tuple[Domain, Domain, float]]
-    for violating_domain_pair_score in violating_domain_pairs_scores:
-        if violating_domain_pair_score is not None:
-            domain1, domain2, score = violating_domain_pair_score
-            unfixed_domains_set: Set[Domain] = set()
-            if not domain1.fixed:
-                unfixed_domains_set.add(domain1)
-            if not domain2.fixed:
-                unfixed_domains_set.add(domain2)
-            violation = dc.Violation(constraint, frozenset(unfixed_domains_set), score)
-            if not domain1.fixed:
-                violations[domain1].add(violation)
-            if not domain2.fixed:
-                violations[domain2].add(violation)
-
-    return violations, quit_early
-
-
-def _violations_of_strand_pair_constraint(strands: Iterable[Strand],
-                                          constraint: StrandPairConstraint,
-                                          domains_changed: Optional[Iterable[Domain]],
-                                          current_score_gap: Optional[float],
-                                          ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
-    strand_pairs_to_check: Sequence[Tuple[Strand, Strand]] = \
-        _determine_strand_pairs_to_check(strands, domains_changed, constraint)
-
-    if log_names_of_domains_and_strands_checked:
-        logger.debug(f'$ for strand pair constraint {constraint.description}, checking these strand pairs:')
-        logger.debug(f'$ {pprint.pformat(strand_pairs_to_check, indent=pprint_indent)}')
-
-    violating_strand_pairs_scores: List[Tuple[Strand, Strand, float]] = []
-
-    score_discovered_here: float = 0.0
-    quit_early = False
-    cpu_count = dc.cpu_count()
-    chunk_size = cpu_count
-
-    if (not constraint.threaded
-            or cpu_count == 1
-            or (current_score_gap is not None and chunk_size == 1)):
-        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
-        for strand1, strand2 in strand_pairs_to_check:
-            assert not strand1.fixed or not strand2.fixed
-            if constraint.sequence_only:
-                score = constraint(strand1.sequence(), strand2.sequence(), None, None)
-            else:
-                score = constraint(strand1.sequence(), strand2.sequence(), strand1, strand2)
-            if score > 0.0:
-                violating_strand_pairs_scores.append((strand1, strand2, score))
-                if current_score_gap is not None:
-                    score_discovered_here += constraint.weight * score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
-    else:
-        logger.debug(f'using threading for strand pair constraint {constraint.description}')
-
-        assert constraint.sequence_only  # should have been checked in StrandPairConstraint post_init
-
-        def sequence_pair_to_score(seq_pair: Tuple[str, str]) -> float:
-            seq1, seq2 = seq_pair
-            return constraint(seq1, seq2, None, None)
-
-        if current_score_gap is None:
-            sequence_pairs_to_check = [(strand1.sequence(), strand2.sequence())
-                                       for strand1, strand2 in strand_pairs_to_check]
-            scores = list(_process_pool.map(sequence_pair_to_score, sequence_pairs_to_check))
-            violating_strand_pairs_scores = [(strand1, strand2, score) for (strand1, strand2), score in
-                                             zip(strand_pairs_to_check, scores) if score > 0]
-
-        else:
-            chunks = dc.chunker(strand_pairs_to_check, chunk_size)
-            for strand_pair_chunk in chunks:
-                sequence_chunk = [(strand1.sequence(), strand2.sequence())
-                                  for strand1, strand2 in strand_pair_chunk]
-                scores = list(_process_pool.map(sequence_pair_to_score, sequence_chunk))
-                violating_strand_pairs_chunk = [(strand1, strand2, score) for (strand1, strand2), score in
-                                                zip(strand_pair_chunk, scores) if score > 0]
-                violating_strand_pairs_scores.extend(violating_strand_pairs_chunk)
-
-                # quit early if possible
-                total_score_chunk = sum(score for _, _, score in violating_strand_pairs_chunk)
-                score_discovered_here += constraint.weight * total_score_chunk
-                if _is_significantly_greater(score_discovered_here, current_score_gap):
-                    quit_early = True
-                    break
-
-    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    for strand1, strand2, score in violating_strand_pairs_scores:
-        unfixed_domains_set = OrderedSet(strand1.unfixed_domains() + strand2.unfixed_domains())
-        violation = dc.Violation(constraint, unfixed_domains_set, score)
-        for domain in unfixed_domains_set:
-            violations[domain].add(violation)
-
-    return violations, quit_early
-
-
-def _violations_of_complex_constraint(constraint: ComplexConstraint,
-                                      domains_changed: Optional[Iterable[Domain]],
-                                      current_score_gap: Optional[float],
-                                      ) -> Tuple[Dict[Domain, OrderedSet[dc.Violation]], bool]:
-    complexes_to_check: Tuple[Complex] = \
-        _determine_complexes_to_check(domains_changed, constraint)
-
-    if log_names_of_domains_and_strands_checked:
-        logger.debug(f'$ for complex constraint {constraint.description}, checking these complexes:')
-        logger.debug(f'$ {pprint.pformat(complexes_to_check, indent=pprint_indent)}')
-
-    violating_complexes_scores: List[Optional[Tuple[Complex, float]]] = []
-
-    score_discovered_here: float = 0.0
-    quit_early = False
-    cpu_count = dc.cpu_count()
-    chunk_size = cpu_count
-
-    if (not constraint.threaded
-            or cpu_count == 1
-            or (current_score_gap is not None and chunk_size == 1)):
-        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
-        for strand_complex in complexes_to_check:
-            score = constraint(strand_complex)
-            if score > 0.0:
-                violating_complexes_scores.append((strand_complex, score))
-                if current_score_gap is not None:
-                    score_discovered_here += constraint.weight * score
-                    if _is_significantly_greater(score_discovered_here, current_score_gap):
-                        quit_early = True
-                        break
-            if quit_early:
-                # Need to break out of checking each strand in complex since we added complex already
-                break
-    else:
-        logger.debug(f'NOT using threading for strand pair constraint {constraint.description}')
-
-        def complex_score_if_violates(strand_complex_: Complex) \
-                -> Optional[Tuple[Complex, float]]:
-            # return strand pair if it violates the constraint, else None
-            score_ = constraint(strand_complex_)
-            if score_ > 0.0:
-                return strand_complex_, score_
-            else:
-                return None
-
-        if current_score_gap is None:
-            violating_complexes_scores = list(
-                _process_pool.map(complex_score_if_violates, complexes_to_check))
-        else:
-            chunks = dc.chunker(complexes_to_check, chunk_size)
-            for complex_chunk in chunks:
-                violating_complexes_chunk_with_none: List[Optional[Tuple[Complex, float]]] = \
-                    _process_pool.map(complex_score_if_violates, complex_chunk)
-                violating_complexes_chunk: List[Tuple[Complex, float]] = \
-                    remove_none_from_list(violating_complexes_chunk_with_none)
-                violating_complexes_scores.extend(violating_complexes_chunk)
-
-                # quit early if possible
-                total_score_chunk = sum(
-                    complex_pair_score[1]
-                    for complex_pair_score in violating_complexes_chunk
-                    if complex_pair_score is not None)
-                score_discovered_here += constraint.weight * total_score_chunk
-                if _is_significantly_greater(score_discovered_here, current_score_gap):
-                    quit_early = True
-                    break
-
-    violations: Dict[Domain, OrderedSet[dc.Violation]] = defaultdict(OrderedSet)
-    violating_complex_score: Optional[Tuple[Complex, float]]
-    for violating_complex_score in violating_complexes_scores:
-        if violating_complex_score is not None:
-            strand_complex, score = violating_complex_score
-            unfixed_domains_set_builder = set()
-            strand: Strand
-            for strand in strand_complex:
-                unfixed_domains_set_builder.update(strand.unfixed_domains())
-            unfixed_domains_set = frozenset(unfixed_domains_set_builder)
-            violation = dc.Violation(constraint, unfixed_domains_set, score)
-            for domain in unfixed_domains_set:
-                violations[domain].add(violation)
-
-    return violations, quit_early
 
 
 def _sequences_fragile_format_output_to_file(design: Design,
@@ -927,53 +501,88 @@ def _sequences_fragile_format_output_to_file(design: Design,
         f'{strand.sequence(delimiter="-")}' for strand in design.strands)
 
 
-def _write_sequences(design: Design, directory_intermediate: str, directory_final: str,
-                     filename_with_iteration_no_ext: str, filename_final_no_ext: str,
+def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rng: numpy.random.Generator,
+                              num_new_optimal: int, directories: _Directories,
+                              violation_set: dc.ViolationSet) -> None:
+    num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
+        else f'{num_new_optimal:0{params.num_digits_update}d}'
+
+    _write_design_json(design, params=params, directories=directories,
+                       num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_rng_state(rng, params=params, directories=directories,
+                     num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_sequences(design, params=params, directories=directories,
+                     num_new_optimal_padded=num_new_optimal_padded)
+
+    _write_report(design, params=params, directories=directories,
+                  num_new_optimal_padded=num_new_optimal_padded, violation_set=violation_set)
+
+
+def _write_sequences(design: Design, params: SearchParameters, directories: _Directories,
+                     num_new_optimal_padded: str,
                      include_group: bool = True) -> None:
+    directory_intermediate = directories.sequence
+    directory_final = directories.out
+    # filename_with_iteration_no_ext = directories.indexed_sequences_full_filename_noext(num_new_optimal_padded)
+    # filename_final_no_ext = directories.best_sequences_full_filename_noext()
+    filename_with_iteration_no_ext = f'{directories.sequences_filename_no_ext}' + \
+                                     f'-{num_new_optimal_padded}'
+    filename_final_no_ext = f'current-best-{directories.sequences_filename_no_ext}'
     sequences_content = _sequences_fragile_format_output_to_file(design, include_group)
+    if not params.save_sequences_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
                                              sequences_content, '.txt')
 
 
-def _write_dsd_design_json(design: Design, directories: _Directories, directory_final: str,
-                           filename_final_no_ext: str, num_new_optimal_padded: str) -> None:
-    directory_intermediate = directories.dsd_design
-    filename_with_iteration_no_ext = f'{directories.dsd_design_filename_no_ext}-{num_new_optimal_padded}'
+def _write_design_json(design: Design, params: SearchParameters, directories: _Directories,
+                       num_new_optimal_padded: str) -> None:
+    filename_final_no_ext = f'current-best-{directories.design_filename_no_ext}'
+    directory_intermediate = directories.design
+    filename_with_iteration_no_ext = f'{directories.design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
+    _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_rng_state(rng: numpy.random.Generator, directories: _Directories,
+def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, directories: _Directories,
                      num_new_optimal_padded: str) -> None:
+    filename_final_no_ext = f'current-best-{directories.rng_state_filename_no_ext}'
     directory_intermediate = directories.rng_state
     filename_with_iteration_no_ext = f'{directories.rng_state_filename_no_ext}-{num_new_optimal_padded}'
     state = rng.bit_generator.state
     json_str = json.dumps(state, indent=2)
-    _write_text_intermediate_and_final_files(None, directory_intermediate,
-                                             None, filename_with_iteration_no_ext,
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
+    _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
                                              json_str, '.json')
 
 
-def _write_domain_pools(domain_pools: Iterable[dc.DomainPool], directories: _Directories) -> None:
-    directory_intermediate = directories.domain_pools
+def _write_report(design: Design, params: SearchParameters, directories: _Directories,
+                  num_new_optimal_padded: str, violation_set: dc.ViolationSet) -> None:
+    directory_intermediate = directories.report
+    directory_final = directories.out
+    filename_with_iteration_no_ext = f'{directories.report_filename_no_ext}' + \
+                                     f'-{num_new_optimal_padded}'
+    filename_final_no_ext = f'current-best-{directories.report_filename_no_ext}'
 
-    for pool in domain_pools:
-        # to avoid filling drive with large files of sequences, only write domain pool when it resets
-        try:
-            highest_idx = _find_highest_index_in_directory(directories.domain_pools, pool.name, 'json')
-        except ValueError:
-            highest_idx = -1
+    report = f'''\
+Report on constraints
+=====================
+''' + design.summary_of_constraints(params.report_only_violations, violation_set=violation_set)
 
-        if highest_idx < pool.num_times_sequences_reset:
-            filename_no_ext = f'{pool.name}-{pool.num_times_sequences_reset}'
-            domain_pools_json_map = pool.to_json_serializable(include_sequences=True)
-            domain_pools_json_str = json.dumps(domain_pools_json_map, indent=2)
-            _write_text_intermediate_and_final_files(None, directory_intermediate,
-                                                     None, filename_no_ext,
-                                                     domain_pools_json_str, '.json')
+    if not params.save_designs_for_all_updates:
+        directory_intermediate = filename_with_iteration_no_ext = None
+    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
+                                             filename_final_no_ext, filename_with_iteration_no_ext,
+                                             report, '.txt')
 
 
 def _write_text_intermediate_and_final_files(directory_final: Optional[str], directory_intermediate: str,
@@ -987,24 +596,6 @@ def _write_text_intermediate_and_final_files(directory_final: Optional[str], dir
         full_filename = os.path.join(directory, filename + ext)
         with open(full_filename, 'w') as file:
             file.write(content)
-
-
-def _write_report(design: Design, directory_intermediate: str, directory_final: str,
-                  filename_with_iteration: str, filename_final: str,
-                  report_only_violations: bool, violation_set: dc.ViolationSet) -> None:
-    report_str = design.summary_of_constraints(report_only_violations, violation_set=violation_set)
-    report = f'''\
-Report on constraints
-=====================
-{report_str}
-'''
-
-    for directory, filename in zip([directory_intermediate, directory_final],
-                                   [filename_with_iteration, filename_final]):
-        path = os.path.join(directory, filename)
-        with open(path, 'w') as file:
-            # file.write(sequences_content)
-            file.write(report)
 
 
 def _clear_directory(directory: str, force_overwrite: bool) -> None:
@@ -1053,21 +644,19 @@ class _Directories:
     out: str
 
     # directories "fully qualified relative to project root": out joined with "subdirectory" strings below
-    dsd_design: str = field(init=False)
+    design: str = field(init=False)
     rng_state: str = field(init=False)
-    domain_pools: str = field(init=False)
     report: str = field(init=False)
     sequence: str = field(init=False)
 
     # relative to out directory
-    dsd_design_subdirectory: str = field(init=False, default='dsd_designs')
+    dsd_design_subdirectory: str = field(init=False, default='designs')
     rng_state_subdirectory: str = field(init=False, default='rng_state')
-    domain_pools_subdirectory: str = field(init=False, default='domain_pools')
     report_subdirectory: str = field(init=False, default='reports')
     sequence_subdirectory: str = field(init=False, default='sequences')
 
     # names of files to write (in subdirectories, and also "current-best" versions in out
-    dsd_design_filename_no_ext: str = field(init=False, default='dsd-design')
+    design_filename_no_ext: str = field(init=False, default='design')
     rng_state_filename_no_ext: str = field(init=False, default='rng-state')
     sequences_filename_no_ext: str = field(init=False, default='sequences')
     report_filename_no_ext: str = field(init=False, default='report')
@@ -1075,14 +664,20 @@ class _Directories:
     debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
     info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
 
-    def all_subdirectories(self) -> List[str]:
-        return [self.dsd_design, self.rng_state, self.domain_pools, self.report, self.sequence]
+    def all_subdirectories(self, params: SearchParameters) -> List[str]:
+        result = []
+        if params.save_designs_for_all_updates:
+            result.extend([self.design, self.rng_state])
+        if params.save_sequences_for_all_updates:
+            result.append(self.report)
+        if params.save_reports_for_all_updates:
+            result.append(self.sequence)
+        return result
 
     def __init__(self, out: str, debug: bool, info: bool) -> None:
         self.out = out
-        self.dsd_design = os.path.join(self.out, self.dsd_design_subdirectory)
+        self.design = os.path.join(self.out, self.dsd_design_subdirectory)
         self.rng_state = os.path.join(self.out, self.rng_state_subdirectory)
-        self.domain_pools = os.path.join(self.out, self.domain_pools_subdirectory)
         self.report = os.path.join(self.out, self.report_subdirectory)
         self.sequence = os.path.join(self.out, self.sequence_subdirectory)
 
@@ -1095,6 +690,35 @@ class _Directories:
             self.info_file_handler = logging.FileHandler(os.path.join(self.out, 'log_info.log'))
             self.info_file_handler.setLevel(logging.INFO)
             dc.logger.addHandler(self.info_file_handler)
+
+    @staticmethod
+    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int) -> str:
+        relative_filename = f'{filename_no_ext}-{idx}.json'
+        full_filename = os.path.join(directory, relative_filename)
+        return full_filename
+
+    def best_full_filename_noext(self, filename_no_ext: str) -> str:
+        relative_filename = f'current-best-{filename_no_ext}.json'
+        full_filename = os.path.join(self.out, relative_filename)
+        return full_filename
+
+    def indexed_design_full_filename_noext(self, idx: int) -> str:
+        return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx)
+
+    def indexed_rng_full_filename_noext(self, idx: int) -> str:
+        return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx)
+
+    def indexed_sequences_full_filename_noext(self, idx: int) -> str:
+        return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx)
+
+    def best_design_full_filename_noext(self) -> str:
+        return self.best_full_filename_noext(self.design_filename_no_ext)
+
+    def best_rng_full_filename_noext(self) -> str:
+        return self.best_full_filename_noext(self.rng_state_filename_no_ext)
+
+    def best_sequences_full_filename_noext(self) -> str:
+        return self.best_full_filename_noext(self.sequences_filename_no_ext)
 
 
 def _check_design(design: dc.Design) -> None:
@@ -1157,17 +781,6 @@ class SearchParameters:
     whenever a new optimal sequence assignment is found.
     """
 
-    report_delay: float = 60.0
-    """
-    Every time the design improves, a report on the constraints is written, as long as it has been as
-    `report_delay` seconds since the last report was written. Since writing a report requires evaluating
-    all constraints, it requires more time than a single iteration, which requires evaluating only those
-    constraints involving the :any:`constraints.Domain` whose DNA sequence was changed.
-    Thus the default value of 60 seconds avoids spending too much time writing reports, since the
-    search finds many new improved designs frequently at the start of the search.
-    By setting this to 0, a new report will be written every time the design improves.
-    """
-
     on_improved_design: Callable[[int], None] = lambda _: None
     """
     Function to call whenever the design improves. Takes an integer as input indicating the number
@@ -1201,6 +814,9 @@ class SearchParameters:
 
     report_only_violations: bool = True
     """
+    NOTE: due to a recent change in how the search is conducted, setting this parameter to False is not
+    currently supported. 
+    
     If True, does not give report on each constraint that was satisfied; only reports violations
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     """
@@ -1225,7 +841,7 @@ class SearchParameters:
     (for example, for sequences)
     sequences-0.txt, sequences-1.txt, ...,
     sequences-9.txt, sequences-10.txt, ...
-    If -nd 3 is specified, for instance, they will be written
+    If num_digits_update=3 is specified, for instance, they will be written
     sequences-000.txt, sequences-001.txt, ...,
     sequences-009.txt, sequences-010.txt, ...,
     sequences-099.txt, sequences-100.txt, ...,
@@ -1237,6 +853,27 @@ class SearchParameters:
     warn_fixed_sequences: bool = True
     """
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
+    """
+
+    save_reports_for_all_updates: bool = True
+    """
+    A report on the most recently updated :any:`Design` is always written to a file 
+    `current-best-report.txt`. If this is True, then in the folder `reports`, a file unique to that update
+    is also written. Set to False to use less space on disk. 
+    """
+
+    save_designs_for_all_updates: bool = True
+    """
+    A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
+    a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
+    that update is also written. Set to False to use less space on disk. 
+    """
+
+    save_sequences_for_all_updates: bool = True
+    """
+    A list of sequences for each :any:`Strand` of most recently updated :any:`Design` is always written to 
+    a file `current-best-sequences.txt`. If this is True, then in the folder `sequences`, a file unique to 
+    that update is also written. Set to False to use less space on disk. 
     """
 
 
@@ -1304,9 +941,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     design.compute_derived_fields()
     _check_design(design)
 
-    directories = _setup_directories(
-        debug=params.debug_log_file, info=params.info_log_file, force_overwrite=params.force_overwrite,
-        restart=params.restart, out_directory=params.out_directory)
+    directories = _setup_directories(params)
 
     if params.random_seed is not None:
         rng = np.random.default_rng(params.random_seed)
@@ -1346,19 +981,15 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         if not params.restart:
             # write initial sequences and report
-            _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
-                                      write_report=True, directories=directories,
-                                      report_only_violations=params.report_only_violations,
-                                      num_digits_update=params.num_digits_update,
-                                      violation_set=violation_set_opt)
+            _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
+                                      directories=directories, violation_set=violation_set_opt)
 
         # this helps with logging if we execute no iterations
         violation_set_new = violation_set_opt
 
         iteration = 0
-        time_of_last_improvement: float = -1.0
 
-        while len(violation_set_opt.non_fixed_violations) > 0 and \
+        while violation_set_opt.has_nonfixed_violations() and \
                 (params.max_iterations is None or iteration < params.max_iterations):
             _check_cpu_count(cpu_count)
 
@@ -1380,7 +1011,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
             # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
             # score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
-            score_delta = violation_set_new.total_nonfixed_score() - violation_set_opt.total_nonfixed_score()
+            score_delta = violation_set_new.total_score_nonfixed() - violation_set_opt.total_score_nonfixed()
             prob_keep_change = params.probability_of_keeping_change(score_delta)
             keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
 
@@ -1394,23 +1025,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
-
-                    current_time: float = time.time()
-                    write_report = False
-                    # don't write report unless it is
-                    if (time_of_last_improvement < 0  # first iteration
-                            or len(violation_set_opt.all_violations) == 0  # last iteration (search is over)
-                            or current_time - time_of_last_improvement >= params.report_delay):  # > report_delay seconds since last report
-                        time_of_last_improvement = current_time
-                        write_report = True
-                        logger.debug('writing report')
-                    else:
-                        logger.debug('skipping report')
-
-                    _write_intermediate_files(design=design, rng=rng, num_new_optimal=num_new_optimal,
-                                              write_report=write_report, directories=directories,
-                                              report_only_violations=params.report_only_violations,
-                                              num_digits_update=params.num_digits_update,
+                    _write_intermediate_files(design=design, params=params, rng=rng,
+                                              num_new_optimal=num_new_optimal, directories=directories,
                                               violation_set=violation_set_opt)
 
             iteration += 1
@@ -1445,16 +1061,17 @@ def _check_cpu_count(cpu_count: int) -> None:
         _process_pool = new_process_pool(cpu_count)
 
 
-def _setup_directories(*, debug: bool, info: bool, force_overwrite: bool, restart: bool,
-                       out_directory: str) -> _Directories:
+def _setup_directories(params: SearchParameters) -> _Directories:
+    out_directory = params.out_directory
     if out_directory is None:
         out_directory = default_output_directory()
-    directories = _Directories(out=out_directory, debug=debug, info=info)
+    directories = _Directories(out=out_directory, debug=params.debug_log_file,
+                               info=params.info_log_file)
     if not os.path.exists(directories.out):
         os.makedirs(directories.out)
-    if not restart:
-        _clear_directory(directories.out, force_overwrite)
-    for subdir in directories.all_subdirectories():
+    if not params.restart:
+        _clear_directory(directories.out, params.force_overwrite)
+    for subdir in directories.all_subdirectories(params):
         if not os.path.exists(subdir):
             os.makedirs(subdir)
     return directories
@@ -1478,20 +1095,21 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
     for domain in independent_domains:
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
-        previous_sequence = domain.sequence
+        previous_sequence = domain.sequence()
         original_sequences[domain] = previous_sequence
-        domain.sequence = domain.pool.generate_sequence(rng, previous_sequence)
+        new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
+        domain.set_sequence(new_sequence)
 
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
     for domain in dependent_domains:
-        original_sequences[domain] = domain.sequence
+        original_sequences[domain] = domain.sequence()
 
     return domains_changed, original_sequences
 
 
 def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dict[Domain, str]) -> None:
     for domain_changed in domains_changed:
-        domain_changed.sequence = original_sequences[domain_changed]
+        domain_changed.set_sequence(original_sequences[domain_changed])
 
 
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
@@ -1547,22 +1165,26 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
     # which are ignored. This applies to both the design and the RNG state
 
-    # get DomainPools
-    pool_with_name = read_domain_pools(directories)
+    highest_idx_design = 0
 
-    # returns highest index found, as well as name of corresponding design file
-    highest_idx_design = _find_highest_index_in_directory(directories.dsd_design,
-                                                          directories.dsd_design_filename_no_ext, 'json')
-    design_filename = os.path.join(directories.dsd_design,
-                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx_design}.json')
+    if os.path.isdir(directories.design):
+        # returns highest index found in design subdirectory
+        highest_idx_design = _find_highest_index_in_directory(directories.design,
+                                                              directories.design_filename_no_ext, 'json')
+        design_filename = directories.indexed_design_full_filename_noext(highest_idx_design)
+        rng_filename = directories.indexed_rng_full_filename_noext(highest_idx_design)
+    else:
+        # otherwise we go with contents of "current-best-*.json"
+        design_filename = directories.best_design_full_filename_noext()
+        rng_filename = directories.best_rng_full_filename_noext()
+
+    # read design
     with open(design_filename, 'r') as file:
         design_json_str = file.read()
-    design_stored = dc.Design.from_json(design_json_str, pool_with_name=pool_with_name)
+    design_stored = dc.Design.from_json(design_json_str)
     dc.verify_designs_match(design_stored, design, check_fixed=False)
 
-    # get RNG state
-    rng_filename = os.path.join(directories.rng_state,
-                                f'{directories.rng_state_filename_no_ext}-{highest_idx_design}.json')
+    # read RNG state
     with open(rng_filename, 'r') as file:
         rng_state_json = file.read()
     rng_state = json.loads(rng_state_json)
@@ -1575,54 +1197,23 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # design_stored.copy_constraints_from(design)
     design.copy_sequences_from(design_stored)
 
-    design_json = json.loads(design_json_str)
-    stored_pool_idxs = design_json[dc.domain_pools_num_sampled_key]
-    for pool in design_stored.domain_pools():
-        idx = stored_pool_idxs[pool.name]
-        pool.num_sampled = idx
-
     return highest_idx_design, rng
-
-
-def read_domain_pools(directories: _Directories) -> Dict[str, dc.DomainPool]:
-    # return dict mapping name of DomainPool to DomainPool, read from highest index of file with certain
-    # name in directories.domain_pool subdirectory
-
-    # first find pool names from dsd_design files
-    highest_idx_design = _find_highest_index_in_directory(directories.dsd_design,
-                                                          directories.dsd_design_filename_no_ext, 'json')
-    design_filename = os.path.join(directories.dsd_design,
-                                   f'{directories.dsd_design_filename_no_ext}-{highest_idx_design}.json')
-    with open(design_filename, 'r') as file:
-        design_json_str = file.read()
-    design_json = json.loads(design_json_str)
-    domains_json = design_json[dc.domains_key]
-    pool_names: Set[str] = set()
-    for domain_json in domains_json:
-        if dc.domain_pool_name_key in domain_json:
-            pool_name = domain_json[dc.domain_pool_name_key]
-            pool_names.add(pool_name)
-
-    pool_with_name = {}
-    for pool_name in pool_names:
-        highest_idx_pool = _find_highest_index_in_directory(directories.domain_pools,
-                                                            pool_name, 'json')
-        pool_filename = os.path.join(directories.domain_pools, f'{pool_name}-{highest_idx_pool}.json')
-        with open(pool_filename, 'r') as file:
-            pool_json_str = file.read()
-        pool_json = json.loads(pool_json_str)
-        pool = dc.DomainPool.from_json_serializable(pool_json)
-        assert pool.name == pool_name
-        pool_with_name[pool_name] = pool
-
-    return pool_with_name
 
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
     # return highest index of filename (name matches "<filename_start>-<index>.<ext>"
-    filenames = [filename
-                 for filename in os.listdir(directory)
-                 if os.path.isfile(os.path.join(directory, filename))]
+    # raises ValueError if none exists
+    try:
+        list_dir = os.listdir(directory)
+    except FileNotFoundError:
+        list_dir = None
+    if list_dir is not None and len(list_dir) > 0:
+        filenames = [filename
+                     for filename in list_dir
+                     if os.path.isfile(os.path.join(directory, filename))]
+    else:
+        raise ValueError(f'no files in directory "{directory}" '
+                         f'match the pattern "{filename_start}-<index>.{ext}";\n')
 
     pattern = re.compile(filename_start + r'-(\d+)\.' + ext)
     filenames_matching = [filename for filename in filenames if pattern.search(filename)]
@@ -1642,38 +1233,6 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
             max_index = index
 
     return max_index
-
-
-def _write_intermediate_files(*, design: dc.Design, rng: numpy.random.Generator,
-                              num_new_optimal: int, write_report: bool,
-                              directories: _Directories, report_only_violations: bool,
-                              num_digits_update: Optional[int],
-                              violation_set: dc.ViolationSet) -> None:
-    num_new_optimal_padded = f'{num_new_optimal}' if num_digits_update is None \
-        else f'{num_new_optimal:0{num_digits_update}d}'
-
-    _write_dsd_design_json(design, directories=directories, num_new_optimal_padded=num_new_optimal_padded,
-                           directory_final=directories.out,
-                           filename_final_no_ext=f'current-best-{directories.dsd_design_filename_no_ext}')
-    _write_rng_state(rng, directories, num_new_optimal_padded)
-    _write_domain_pools(design.domain_pools_to_domain_map.keys(), directories)
-
-    _write_sequences(design,
-                     directory_intermediate=directories.sequence,
-                     directory_final=directories.out,
-                     filename_with_iteration_no_ext=f'{directories.sequences_filename_no_ext}'
-                                                    f'-{num_new_optimal_padded}',
-                     filename_final_no_ext=f'current-best-{directories.sequences_filename_no_ext}')
-
-    if write_report:
-        _write_report(design,
-                      directory_intermediate=directories.report,
-                      directory_final=directories.out,
-                      filename_with_iteration=f'{directories.report_filename_no_ext}'
-                                              f'-{num_new_optimal_padded}.txt',
-                      filename_final=f'current-best-{directories.report_filename_no_ext}.txt',
-                      report_only_violations=report_only_violations,
-                      violation_set=violation_set)
 
 
 def _pfunc_killall() -> None:
@@ -1843,8 +1402,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True
-                domain.sequence = domain.pool.generate_sequence(rng, domain.sequence)
-                assert len(domain.sequence) == domain.pool.length
+                new_sequence = domain.pool.generate_sequence(rng, domain.sequence())
+                domain.set_sequence(new_sequence)
+                assert len(domain.sequence()) == domain.pool.length
             else:
                 logger.info(skip_nonfixed_msg)
         else:
@@ -1853,8 +1413,9 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
                 # domain is not fixed so that we know it is eligible to be overwritten during the search
                 at_least_one_domain_unfixed = True
             if not domain.fixed and not domain.has_sequence():
-                domain.sequence = domain.pool.generate_sequence(rng)
-                assert len(domain.sequence) == domain.pool.length
+                new_sequence = domain.pool.generate_sequence(rng)
+                domain.set_sequence(new_sequence)
+                assert len(domain.sequence()) == domain.pool.length
             elif warn_fixed_sequences:
                 if domain.fixed:
                     logger.info(skip_fixed_msg)
