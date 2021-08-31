@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import time
-from typing import Optional, Callable, Any, Literal
+from typing import Optional, Callable, Any
 
 
 def _current_nanoseconds() -> int:
@@ -113,7 +113,9 @@ class Stopwatch:
             return "{:.2f} μs".format(time_ * 1000)
         return "{:.2f} ns".format(time_ * 1_000_000)
 
-    def time_in_units(self, units: Literal['s', 'ms', 'us', 'ns']) -> str:
+    def time_in_units(self,
+                      # units: Literal['s', 'ms', 'us', 'ns']) -> str: # Literal not supported in Python 3.7
+                      units: str) -> str:
         ns = self.nanoseconds()
         if units == 's':
             return f'{ns / 10 ** 9:.2f} s'
@@ -127,7 +129,9 @@ class Stopwatch:
             raise ValueError(f"units = {units} is not a legal unit, please choose one of "
                              f"'s', 'ms', 'us', 'ns'")
 
-    def log(self, msg: str, units: Optional[Literal['s', 'ms', 'us', 'ns']] = None,
+    def log(self, msg: str,
+            # units: Optional[Literal['s', 'ms', 'us', 'ns']] = None, # Literal not supported in Python 3.7
+            units: Optional[str] = None,
             restart: bool = True) -> None:
         """
         Useful for timing statements/blocks of statements via the following:
@@ -145,7 +149,7 @@ class Stopwatch:
         :param msg:
             message to indicate what is being timed ("my statements" in the example above)
         :param units:
-            units ('s', 'ms', 'us', 'ns') to use. If not specified then a reasonable default is chosen
+            units ('s', 'ms', 'us', 'ns') to use. If not specified then a reasonable default is chosen.
         :param restart:
             whether to restart this Stopwatch instance after logging
             (useful for timing several statements in a row)

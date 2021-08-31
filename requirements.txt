@@ -5,4 +5,3 @@ pathos
 scadnano
 xlwt
 xlrd
-typing-extensions
