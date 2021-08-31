@@ -59,9 +59,9 @@ def main() -> None:
     # just for testing parallel processing
 
     # num_strands = 2
-    # num_strands = 5
+    num_strands = 5
     # num_strands = 10
-    num_strands = 50
+    # num_strands = 50
     # num_strands = 100
     # num_strands = 355
 
@@ -69,7 +69,8 @@ def main() -> None:
     # strand i is    [----------|----------|----------|---------->
     strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
 
-    some_fixed = False
+    # some_fixed = False
+    some_fixed = True
     if some_fixed:
         # fix all domains of strand 0 and one domain of strand 1
         for domain in strands[0].domains:

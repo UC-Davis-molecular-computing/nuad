@@ -422,7 +422,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
                 violating_parts_scores_summaries = constraint.evaluate_design(design, domains_changed)
             else:
                 # XXX: I don't understand the mypy error on the next line
-                violating_parts_scores_summaries = constraint.evaluate_bulk(parts)
+                violating_parts_scores_summaries = constraint.evaluate_bulk(parts)  # type: ignore
 
             # we can't quite this function early,
             # but we can let the caller know to stop evaluating constraints
@@ -454,8 +454,10 @@ def _evaluate_individual_part_constraint(constraint: dc.Constraint, part: dc.Des
     elif isinstance(constraint, (DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
         assert isinstance(part, (DomainPair, StrandPair, Complex))
         seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-        # XXX: not sure why mypy error on the next line
-        score, summary = constraint.evaluate(seqs, part)
+        # mypy doesn't like the next line because of the duck typing,
+        # i.e., DomainPair, StrandPair, Complex all have an individual_parts method, which returns
+        # what we want here, but not sure how to encode it in Python typing Generics logic
+        score, summary = constraint.evaluate(seqs, part)  # type: ignore
     else:
         raise AssertionError()
     return score, summary
@@ -854,21 +856,21 @@ class SearchParameters:
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
     """
 
-    save_reports_for_all_updates: bool = True
+    save_reports_for_all_updates: bool = False
     """
     A report on the most recently updated :any:`Design` is always written to a file 
     `current-best-report.txt`. If this is True, then in the folder `reports`, a file unique to that update
     is also written. Set to False to use less space on disk. 
     """
 
-    save_designs_for_all_updates: bool = True
+    save_designs_for_all_updates: bool = False
     """
     A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
     a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
     that update is also written. Set to False to use less space on disk. 
     """
 
-    save_sequences_for_all_updates: bool = True
+    save_sequences_for_all_updates: bool = False
     """
     A list of sequences for each :any:`Strand` of most recently updated :any:`Design` is always written to 
     a file `current-best-sequences.txt`. If this is True, then in the folder `sequences`, a file unique to 

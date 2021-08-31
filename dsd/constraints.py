@@ -578,8 +578,6 @@ class DomainPool:
     number of bases different from the previous sequence (Hamming distance). 
     """
 
-
-
     numpy_constraints: List[NumpyConstraint] = field(
         compare=False, hash=False, default_factory=list, repr=False)
     """
@@ -656,7 +654,7 @@ class DomainPool:
         return self.name == other.name and self.length == other.length
 
     def to_json(self) -> str:
-        json_map = self.to_json_serializable()
+        json_map = self.to_json_serializable(suppress_indent=False)
         json_str = json.dumps(json_map, indent=2)
         return json_str
 
@@ -667,6 +665,7 @@ class DomainPool:
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
         }
+        # return NoIndent(dct) if suppress_indent else dct
         return dct
 
     @staticmethod
@@ -860,7 +859,8 @@ class DomainPool:
         self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_constraints))
         return seqs_satisfying_numpy_constraints
 
-    def _log_numpy_generation(self, length: int, num_to_generate: int, num_passed: int):
+    @staticmethod
+    def _log_numpy_generation(length: int, num_to_generate: int, num_passed: int):
         if log_numpy_generation:
             num_decimals = len(str(num_to_generate))
             logger.debug(f'generated {num_to_generate:{num_decimals}} sequences '
@@ -913,6 +913,11 @@ class Part(ABC):
     def name_of_part_type(self) -> str:
         pass
 
+    @property
+    @abstractmethod
+    def fixed(self) -> bool:
+        pass
+
 
 DomainLabel = TypeVar('DomainLabel')
 
@@ -931,6 +936,10 @@ class DomainPair(Part, Generic[DomainLabel]):
 
     def individual_parts(self) -> Tuple[Domain, Domain]:
         return self.domain1, self.domain2
+
+    @property
+    def fixed(self) -> bool:
+        return self.domain1.fixed and self.domain2.fixed
 
 
 @dataclass
@@ -1625,6 +1634,10 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
     def individual_parts(self) -> Tuple[Strand, Strand]:
         return self.strand1, self.strand2
 
+    @property
+    def fixed(self) -> bool:
+        return self.strand1.fixed and self.strand2.fixed
+
 
 @dataclass
 class Complex(Part, Generic[StrandLabel, DomainLabel]):
@@ -1648,6 +1661,10 @@ class Complex(Part, Generic[StrandLabel, DomainLabel]):
 
     def __getitem__(self, i: int) -> Strand:
         return self.strands[i]
+
+    @property
+    def fixed(self) -> bool:
+        return all(strand.fixed for strand in self.strands)
 
 
 @dataclass
@@ -3237,13 +3254,13 @@ class ViolationSet:
         # :param new_violations: dict mapping each :any:`Domain` to the set of :any:`Violation`'s
         #                        for which it is blamed
         for domain, domain_violations in new_violations.items():
+            self.domain_to_violations[domain].update(domain_violations)
             for violation in domain_violations:
                 self.violations_all[violation.constraint].add(violation)
-                if not domain.fixed:
+                if not violation.part.fixed:
                     self.violations_nonfixed[violation.constraint].add(violation)
                 else:
                     self.violations_fixed[violation.constraint].add(violation)
-            self.domain_to_violations[domain].update(domain_violations)
 
     def clone(self) -> ViolationSet:
         # Returns a deep-ish copy of this :any:`ViolationSet`.
