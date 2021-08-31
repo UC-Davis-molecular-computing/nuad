@@ -108,7 +108,7 @@ pprint_indent = 4
 
 
 def default_output_directory() -> str:
-    return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
+    return os.path.join('out', f'{script_name_no_ext()}--{timestamp()}')
 
 
 def _violations_of_constraints(design: Design,
