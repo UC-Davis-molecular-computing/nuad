@@ -95,10 +95,10 @@ Set of all DNA bases.
 
 def default_score_transfer_function(x: float) -> float:
     """
-    A cubic transfer function.
-    :return: max(0.0, x^3)
+    A quadratic transfer function.
+    :return: max(0.0, x^2)
     """
-    return max(0.0, x ** 3)
+    return max(0.0, x ** 2)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
@@ -3081,7 +3081,7 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
             lines_and_scores: List[Tuple[str, float]] = []
             for violation in violations:
                 line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
-                       f'{violation.summary};  score: {violation.score}'
+                       f'{violation.summary};  score: {violation.score:.2f}'
                 lines_and_scores.append((line, violation.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)

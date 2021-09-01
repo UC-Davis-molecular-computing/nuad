@@ -1337,7 +1337,7 @@ def _log_constraint_summary(*, design: Design,
                             num_new_optimal: int) -> None:
     all_constraints = design.all_constraints()
 
-    score_header = 'iteration|updates|opt score|new score||'
+    score_header = 'iteration|updates|opt score||new score|'
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in all_constraints)
     header = score_header + all_constraints_header
@@ -1349,7 +1349,7 @@ def _log_constraint_summary(*, design: Design,
     dec_opt = max(1, math.ceil(math.log(1 / score_opt, 10)) + 2) if score_opt > 0 else 1
     dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
     score_str = f'{iteration:9}|{num_new_optimal:7}|' \
-                f'{score_opt :9.{dec_opt}f}|' \
+                f'{score_opt :9.{dec_opt}f}||' \
                 f'{score_new :9.{dec_new}f}|'  # \
 
     all_constraints_strs = []
@@ -1361,7 +1361,7 @@ def _log_constraint_summary(*, design: Design,
         all_constraints_strs.append(constraint_str)
     all_constraints_str = '|'.join(all_constraints_strs)
 
-    logger.info(score_str + '|' + all_constraints_str)
+    logger.info(score_str + all_constraints_str)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
