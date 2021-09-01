@@ -545,7 +545,7 @@ def _write_design(design: Design, params: SearchParameters, directories: _Direct
     directory_intermediate = directories.design
     filename_with_iteration_no_ext = f'{directories.design_filename_no_ext}-{num_new_optimal_padded}'
     json_str = design.to_json()
-    if not params.save_designs_for_all_updates:
+    if not params.save_design_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
@@ -559,7 +559,7 @@ def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, dire
     filename_with_iteration_no_ext = f'{directories.rng_state_filename_no_ext}-{num_new_optimal_padded}'
     state = rng.bit_generator.state
     json_str = json.dumps(state, indent=2)
-    if not params.save_designs_for_all_updates:
+    if not params.save_design_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
@@ -581,7 +581,7 @@ Report on constraints
 =====================
 ''' + dc.summary_of_constraints(constraints, params.report_only_violations, violation_set=violation_set)
 
-    if not params.save_designs_for_all_updates:
+    if not params.save_design_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
@@ -669,11 +669,11 @@ class _Directories:
 
     def all_subdirectories(self, params: SearchParameters) -> List[str]:
         result = []
-        if params.save_designs_for_all_updates:
+        if params.save_design_for_all_updates:
             result.extend([self.design, self.rng_state])
         if params.save_sequences_for_all_updates:
             result.append(self.report)
-        if params.save_reports_for_all_updates:
+        if params.save_report_for_all_updates:
             result.append(self.sequence)
         return result
 
@@ -858,14 +858,14 @@ class SearchParameters:
     Log warning about sequences that are fixed, indicating they will not be re-assigned during the search.
     """
 
-    save_reports_for_all_updates: bool = False
+    save_report_for_all_updates: bool = False
     """
     A report on the most recently updated :any:`Design` is always written to a file 
     `current-best-report.txt`. If this is True, then in the folder `reports`, a file unique to that update
     is also written. Set to False to use less space on disk. 
     """
 
-    save_designs_for_all_updates: bool = False
+    save_design_for_all_updates: bool = False
     """
     A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
     a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
