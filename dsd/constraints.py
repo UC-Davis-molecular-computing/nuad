@@ -95,9 +95,10 @@ Set of all DNA bases.
 
 def default_score_transfer_function(x: float) -> float:
     """
-    :return: max(0.0, x**2)
+    A cubic transfer function.
+    :return: max(0.0, x^3)
     """
-    return max(0.0, x ** 2)
+    return max(0.0, x ** 3)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
@@ -3069,8 +3070,8 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
 
         violations_nonfixed = violation_set.violations_nonfixed[constraint]
         violations_fixed = violation_set.violations_fixed[constraint]
-        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}"),
-                                        (violations_fixed, f"fixed {part_type_name}")]:
+        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
+                                        (violations_fixed, f"fixed {part_type_name}s")]:
             if len(violations) == 0:
                 continue
 
@@ -3080,7 +3081,7 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
             lines_and_scores: List[Tuple[str, float]] = []
             for violation in violations:
                 line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
-                       f'{violation.summary} '
+                       f'{violation.summary};  score: {violation.score}'
                 lines_and_scores.append((line, violation.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
@@ -4064,9 +4065,9 @@ def nupack_domain_pair_constraint(
 
         max_name_length = max(len(name) for name in _flatten(name_pairs))
         lines_and_energies = [(f'{name1:{max_name_length}}, '
-                 f'{name2:{max_name_length}}: '
-                 f' {energy:6.2f} kcal/mol', energy)
-                 for (name1, name2), energy in zip(name_pairs, energies)]
+                               f'{name2:{max_name_length}}: '
+                               f' {energy:6.2f} kcal/mol', energy)
+                              for (name1, name2), energy in zip(name_pairs, energies)]
         lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
         lines = [line for line, _ in lines_and_energies]
         msg = '\n  ' + '\n  '.join(lines)
