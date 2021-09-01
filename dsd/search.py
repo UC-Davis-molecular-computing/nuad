@@ -581,7 +581,7 @@ Report on constraints
 =====================
 ''' + dc.summary_of_constraints(constraints, params.report_only_violations, violation_set=violation_set)
 
-    if not params.save_design_for_all_updates:
+    if not params.save_report_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
     _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
                                              filename_final_no_ext, filename_with_iteration_no_ext,
@@ -672,9 +672,9 @@ class _Directories:
         if params.save_design_for_all_updates:
             result.extend([self.design, self.rng_state])
         if params.save_sequences_for_all_updates:
-            result.append(self.report)
-        if params.save_report_for_all_updates:
             result.append(self.sequence)
+        if params.save_report_for_all_updates:
+            result.append(self.report)
         return result
 
     def __init__(self, out: str, debug: bool, info: bool) -> None:
