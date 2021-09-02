@@ -444,6 +444,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         for domain in domains:
             violations[domain].add(violation)
 
+    sw.log(f'{constraint.short_description} end of _violations_of_constraint')
     return violations, quit_early
 
 
@@ -971,7 +972,6 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
 
-
     # need to assign to local function variable so it doesn't look like a method call
     on_improved_design: Callable[[int], None] = params.on_improved_design
 
@@ -1174,18 +1174,27 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
     # which are ignored. This applies to both the design and the RNG state
 
-    highest_idx_design = 0
-
     if os.path.isdir(directories.design):
         # returns highest index found in design subdirectory
-        highest_idx_design = _find_highest_index_in_directory(directories.design,
-                                                              directories.design_filename_no_ext, 'json')
-        design_filename = directories.indexed_design_full_filename_noext(highest_idx_design)
-        rng_filename = directories.indexed_rng_full_filename_noext(highest_idx_design)
+        highest_idx = _find_highest_index_in_directory(directories.design,
+                                                       directories.design_filename_no_ext, 'json')
+        design_filename = directories.indexed_design_full_filename_noext(highest_idx)
+        rng_filename = directories.indexed_rng_full_filename_noext(highest_idx)
     else:
         # otherwise we go with contents of "current-best-*.json"
         design_filename = directories.best_design_full_filename_noext()
         rng_filename = directories.best_rng_full_filename_noext()
+
+        # try to find number of updates from other directories
+        # so that future written files will have the correct number
+        if os.path.isdir(directories.report):
+            highest_idx = _find_highest_index_in_directory(directories.report,
+                                                           directories.report_filename_no_ext, 'txt')
+        elif os.path.isdir(directories.sequence):
+            highest_idx = _find_highest_index_in_directory(directories.sequence,
+                                                           directories.sequences_filename_no_ext, 'txt')
+        else:
+            highest_idx = 0
 
     # read design
     with open(design_filename, 'r') as file:
@@ -1206,7 +1215,7 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # design_stored.copy_constraints_from(design)
     design.copy_sequences_from(design_stored)
 
-    return highest_idx_design, rng
+    return highest_idx, rng
 
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
