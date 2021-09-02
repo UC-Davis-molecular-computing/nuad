@@ -937,6 +937,14 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
+    if params.random_seed is not None:
+        if params.restart:
+            logger.warning(f"Since you selected the restart option, I'm ignoring your random seed of "
+                           f"{params.random_seed}, and instead we'll use the stored random seed from the "
+                           f"previous run that is being restarted.")
+        else:
+            logger.info(f'using random seed of {params.random_seed}; '
+                        f'use this same seed to reproduce this run')
 
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
@@ -963,8 +971,6 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
 
-    if params.random_seed is not None and not params.restart:
-        logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
     # need to assign to local function variable so it doesn't look like a method call
     on_improved_design: Callable[[int], None] = params.on_improved_design
