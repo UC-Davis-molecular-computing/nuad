@@ -3233,6 +3233,8 @@ class Constraint(ABC, Generic[DesignPart]):
     @abstractmethod
     def part_name() -> str:
         """
+        Returns name of the :any:`Part` that this :any:`Constraint` tests.
+
         :return:
             name of the :any:`Part` that this :any:`Constraint` tests
             (e.g., "domain", "strand pair")

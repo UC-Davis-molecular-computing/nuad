@@ -722,7 +722,7 @@ class SearchParameters:
 
     constraints: List[Constraint] = field(default_factory=list)
     """
-    List of :any:`constraints.Constraints` to apply to the :any:`Design`.
+    List of :any:`constraints.Constraint`'s to apply to the :any:`Design`.
     """
 
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
@@ -1458,7 +1458,7 @@ def default_probability_of_keeping_change_function(params: SearchParameters) -> 
     assignment if and only if it is no worse than the previous.
 
     :param params: :any:`SearchParameters` to apply this rule for; `params` is required because the score of
-                   :any:`Constraint`'s in the :any:`SearchParameter`'s are used to calculate an appropriate
+                   :any:`Constraint`'s in the :any:`SearchParameters` are used to calculate an appropriate
                    epsilon value for determining when a score change is too small to be significant
                    (i.e., is due to rounding error)
     :return: the "keep change" function `f`: :math:`\\mathbb{R} \\to [0,1]`,
