@@ -80,35 +80,7 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    domain_nupack_ss_constraint = dc.nupack_domain_complex_free_energy_constraint(
-        threshold=-0.0, temperature=52, short_description='DomainSS')
-
-    domain_pairs_rna_duplex_constraint = dc.rna_duplex_domain_pairs_constraint(
-        threshold=-2.0, temperature=52, short_description='DomainPairRNA')
-
-    domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
-        threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
-        parallel=parallel)
-
-    strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandPairRNA', parallel=parallel)
-
-    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
-
-    strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
-        threshold=-3.5, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
-
-    design = dc.Design(strands,
-                       constraints=[
-                           # domain_nupack_ss_constraint,
-                           strand_individual_ss_constraint,
-                           # strand_pair_nupack_constraint,
-                           # domain_pair_nupack_constraint,
-                           # domain_pairs_rna_duplex_constraint,
-                           # strand_pairs_rna_duplex_constraint,
-                           # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                       ])
+    design = dc.Design(strands)
 
     numpy_constraints: List[NumpyConstraint] = [
         dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
@@ -164,17 +136,44 @@ def main() -> None:
     strand_base_pair_prob_constraint = dc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
-    # design.add_constraints([strand_base_pair_prob_constraint])
+    domain_nupack_ss_constraint = dc.nupack_domain_complex_free_energy_constraint(
+        threshold=-0.0, temperature=52, short_description='DomainSS')
 
-    params = ds.SearchParameters(out_directory=args.directory,
-                                 restart=args.restart,
-                                 random_seed=random_seed,
-                                 max_iterations=None,
-                                 save_sequences_for_all_updates=False,
-                                 save_reports_for_all_updates=False,
-                                 save_designs_for_all_updates=False,
-                                 force_overwrite=True,
-                                 )
+    domain_pairs_rna_duplex_constraint = dc.rna_duplex_domain_pairs_constraint(
+        threshold=-2.0, temperature=52, short_description='DomainPairRNA')
+
+    domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
+        threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
+        parallel=parallel)
+
+    strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
+        threshold=-1.0, temperature=52, short_description='StrandPairRNA', parallel=parallel)
+
+    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
+        threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
+
+    strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
+        threshold=-3.5, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
+
+    params = ds.SearchParameters(constraints=[
+        # domain_nupack_ss_constraint,
+        strand_individual_ss_constraint,
+        # strand_pair_nupack_constraint,
+        # domain_pair_nupack_constraint,
+        # domain_pairs_rna_duplex_constraint,
+        # strand_pairs_rna_duplex_constraint,
+        # strand_base_pair_prob_constraint,
+        # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
+    ],
+        out_directory=args.directory,
+        restart=args.restart,
+        random_seed=random_seed,
+        max_iterations=None,
+        save_sequences_for_all_updates=True,
+        save_report_for_all_updates=True,
+        save_design_for_all_updates=True,
+        force_overwrite=True,
+    )
     ds.search_for_dna_sequences(design, params)
 
 

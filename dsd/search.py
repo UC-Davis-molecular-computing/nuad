@@ -58,7 +58,7 @@ from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
 from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
-    Deque, TypeVar, cast
+    Deque, TypeVar, Union
 import statistics
 import textwrap
 import re
@@ -96,12 +96,11 @@ import dsd.constraints as dc
 from dsd.stopwatch import Stopwatch
 
 
-def new_process_pool(cpu_count: int):
+def new_process_pool(cpu_count: int) -> pathos.multiprocessing.Pool:
     return pathos.multiprocessing.Pool(processes=cpu_count)
-    # return ThreadPool(processes=cpu_count)
 
 
-_process_pool = new_process_pool(dc.cpu_count())
+_process_pool: pathos.multiprocessing.Pool = new_process_pool(dc.cpu_count())
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
@@ -112,6 +111,7 @@ def default_output_directory() -> str:
 
 
 def _violations_of_constraints(design: Design,
+                               params: SearchParameters,
                                never_increase_score: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[dc.ViolationSet],
@@ -120,6 +120,8 @@ def _violations_of_constraints(design: Design,
     """
     :param design:
         The :any:`Design` for which to find DNA sequences.
+    :param params:
+        The :any:`SearchParameters` to apply to `design`.
     :param domains_changed:
         The :any:`Domain`'s that just changed; if None, then recalculate all constraints, otherwise assume no
         constraints changed that do not involve a :any:`Domain` in `domains_changed`.
@@ -157,18 +159,7 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
-    constraints: List[Constraint] = cast(List[Constraint], design.domain_constraints) + \
-                                    design.strand_constraints + \
-                                    design.domain_pair_constraints + \
-                                    design.strand_pair_constraints + \
-                                    design.domains_constraints + \
-                                    design.strands_constraints + \
-                                    design.domain_pairs_constraints + \
-                                    design.strand_pairs_constraints + \
-                                    design.design_constraints + \
-                                    design.complex_constraints  # noqa
-
-    for constraint in constraints:
+    for constraint in params.constraints:
         parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
         current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
@@ -517,87 +508,61 @@ def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rn
     _write_sequences(design, params=params, directories=directories,
                      num_new_optimal_padded=num_new_optimal_padded)
 
-    _write_report(design, params=params, directories=directories,
+    _write_report(params=params, directories=directories,
                   num_new_optimal_padded=num_new_optimal_padded, violation_set=violation_set)
-
-
-def _write_sequences(design: Design, params: SearchParameters, directories: _Directories,
-                     num_new_optimal_padded: str,
-                     include_group: bool = True) -> None:
-    directory_intermediate = directories.sequence
-    directory_final = directories.out
-    # filename_with_iteration_no_ext = directories.indexed_sequences_full_filename_noext(num_new_optimal_padded)
-    # filename_final_no_ext = directories.best_sequences_full_filename_noext()
-    filename_with_iteration_no_ext = f'{directories.sequences_filename_no_ext}' + \
-                                     f'-{num_new_optimal_padded}'
-    filename_final_no_ext = f'current-best-{directories.sequences_filename_no_ext}'
-    sequences_content = _sequences_fragile_format_output_to_file(design, include_group)
-    if not params.save_sequences_for_all_updates:
-        directory_intermediate = filename_with_iteration_no_ext = None
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
-                                             sequences_content, '.txt')
 
 
 def _write_design(design: Design, params: SearchParameters, directories: _Directories,
                   num_new_optimal_padded: str) -> None:
-    filename_final_no_ext = f'current-best-{directories.design_filename_no_ext}'
-    directory_intermediate = directories.design
-    filename_with_iteration_no_ext = f'{directories.design_filename_no_ext}-{num_new_optimal_padded}'
-    json_str = design.to_json()
-    if not params.save_design_for_all_updates:
-        directory_intermediate = filename_with_iteration_no_ext = None
-    _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
-                                             json_str, '.json')
+    content = design.to_json()
+
+    best_filename = directories.best_design_full_filename_noext()
+    idx_filename = directories.indexed_design_full_filename_noext(num_new_optimal_padded) \
+        if params.save_design_for_all_updates else None
+    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
 
 
 def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, directories: _Directories,
                      num_new_optimal_padded: str) -> None:
-    filename_final_no_ext = f'current-best-{directories.rng_state_filename_no_ext}'
-    directory_intermediate = directories.rng_state
-    filename_with_iteration_no_ext = f'{directories.rng_state_filename_no_ext}-{num_new_optimal_padded}'
     state = rng.bit_generator.state
-    json_str = json.dumps(state, indent=2)
-    if not params.save_design_for_all_updates:
-        directory_intermediate = filename_with_iteration_no_ext = None
-    _write_text_intermediate_and_final_files(directories.out, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
-                                             json_str, '.json')
+    content = json.dumps(state, indent=2)
+
+    best_filename = directories.best_rng_full_filename_noext()
+    idx_filename = directories.indexed_rng_full_filename_noext(num_new_optimal_padded) \
+        if params.save_design_for_all_updates else None
+    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
 
 
-def _write_report(design: Design, params: SearchParameters, directories: _Directories,
+def _write_sequences(design: Design, params: SearchParameters, directories: _Directories,
+                     num_new_optimal_padded: str, include_group: bool = True) -> None:
+    content = _sequences_fragile_format_output_to_file(design, include_group)
+
+    best_filename = directories.best_sequences_full_filename_noext()
+    idx_filename = directories.indexed_sequences_full_filename_noext(num_new_optimal_padded) \
+        if params.save_sequences_for_all_updates else None
+    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+
+
+def _write_report(params: SearchParameters, directories: _Directories,
                   num_new_optimal_padded: str, violation_set: dc.ViolationSet) -> None:
-    directory_intermediate = directories.report
-    directory_final = directories.out
-    filename_with_iteration_no_ext = f'{directories.report_filename_no_ext}' + \
-                                     f'-{num_new_optimal_padded}'
-    filename_final_no_ext = f'current-best-{directories.report_filename_no_ext}'
-
-    constraints = design.all_constraints()
-
-    report = f'''\
+    content = f'''\
 Report on constraints
 =====================
-''' + dc.summary_of_constraints(constraints, params.report_only_violations, violation_set=violation_set)
+''' + summary_of_constraints(params.constraints, params.report_only_violations,
+                             violation_set=violation_set)
 
-    if not params.save_report_for_all_updates:
-        directory_intermediate = filename_with_iteration_no_ext = None
-    _write_text_intermediate_and_final_files(directory_final, directory_intermediate,
-                                             filename_final_no_ext, filename_with_iteration_no_ext,
-                                             report, '.txt')
+    best_filename = directories.best_report_full_filename_noext()
+    idx_filename = directories.indexed_report_full_filename_noext(num_new_optimal_padded) \
+        if params.save_report_for_all_updates else None
+    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
 
 
-def _write_text_intermediate_and_final_files(directory_final: Optional[str], directory_intermediate: str,
-                                             filename_final_no_ext: Optional[str],
-                                             filename_with_iteration_no_ext: str,
-                                             content: str, ext: str) -> None:
-    for directory, filename in zip([directory_intermediate, directory_final],
-                                   [filename_with_iteration_no_ext, filename_final_no_ext]):
-        if directory is None or filename is None:
-            continue
-        full_filename = os.path.join(directory, filename + ext)
-        with open(full_filename, 'w') as file:
+def _write_text_intermediate_and_final_files(content: str, best_filename: str,
+                                             idx_filename: Optional[str]) -> None:
+    with open(best_filename, 'w') as file:
+        file.write(content)
+    if idx_filename is not None:
+        with open(idx_filename, 'w') as file:
             file.write(content)
 
 
@@ -653,14 +618,14 @@ class _Directories:
     sequence: str = field(init=False)
 
     # relative to out directory
-    dsd_design_subdirectory: str = field(init=False, default='designs')
-    rng_state_subdirectory: str = field(init=False, default='rng_state')
+    design_subdirectory: str = field(init=False, default='designs')
+    rng_state_subdirectory: str = field(init=False, default='rng')
     report_subdirectory: str = field(init=False, default='reports')
     sequence_subdirectory: str = field(init=False, default='sequences')
 
     # names of files to write (in subdirectories, and also "current-best" versions in out
     design_filename_no_ext: str = field(init=False, default='design')
-    rng_state_filename_no_ext: str = field(init=False, default='rng-state')
+    rng_state_filename_no_ext: str = field(init=False, default='rng')
     sequences_filename_no_ext: str = field(init=False, default='sequences')
     report_filename_no_ext: str = field(init=False, default='report')
 
@@ -679,7 +644,7 @@ class _Directories:
 
     def __init__(self, out: str, debug: bool, info: bool) -> None:
         self.out = out
-        self.design = os.path.join(self.out, self.dsd_design_subdirectory)
+        self.design = os.path.join(self.out, self.design_subdirectory)
         self.rng_state = os.path.join(self.out, self.rng_state_subdirectory)
         self.report = os.path.join(self.out, self.report_subdirectory)
         self.sequence = os.path.join(self.out, self.sequence_subdirectory)
@@ -695,33 +660,40 @@ class _Directories:
             dc.logger.addHandler(self.info_file_handler)
 
     @staticmethod
-    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int) -> str:
-        relative_filename = f'{filename_no_ext}-{idx}.json'
+    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: Union[int, str],
+                                    ext: str) -> str:
+        relative_filename = f'{filename_no_ext}-{idx}.{ext}'
         full_filename = os.path.join(directory, relative_filename)
         return full_filename
 
-    def best_full_filename_noext(self, filename_no_ext: str) -> str:
-        relative_filename = f'current-best-{filename_no_ext}.json'
+    def best_full_filename_noext(self, filename_no_ext: str, ext: str) -> str:
+        relative_filename = f'{filename_no_ext}_best.{ext}'
         full_filename = os.path.join(self.out, relative_filename)
         return full_filename
 
-    def indexed_design_full_filename_noext(self, idx: int) -> str:
-        return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx)
+    def indexed_design_full_filename_noext(self, idx: Union[int, str]) -> str:
+        return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx, 'json')
 
-    def indexed_rng_full_filename_noext(self, idx: int) -> str:
-        return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx)
+    def indexed_rng_full_filename_noext(self, idx: Union[int, str]) -> str:
+        return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx, 'json')
 
-    def indexed_sequences_full_filename_noext(self, idx: int) -> str:
-        return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx)
+    def indexed_sequences_full_filename_noext(self, idx: Union[int, str]) -> str:
+        return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx, 'txt')
+
+    def indexed_report_full_filename_noext(self, idx: Union[int, str]) -> str:
+        return self.indexed_full_filename_noext(self.report_filename_no_ext, self.report, idx, 'txt')
 
     def best_design_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.design_filename_no_ext)
+        return self.best_full_filename_noext(self.design_filename_no_ext, 'json')
 
     def best_rng_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.rng_state_filename_no_ext)
+        return self.best_full_filename_noext(self.rng_state_filename_no_ext, 'json')
 
     def best_sequences_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.sequences_filename_no_ext)
+        return self.best_full_filename_noext(self.sequences_filename_no_ext, 'txt')
+
+    def best_report_full_filename_noext(self) -> str:
+        return self.best_full_filename_noext(self.report_filename_no_ext, 'txt')
 
 
 def _check_design(design: dc.Design) -> None:
@@ -746,6 +718,11 @@ class SearchParameters:
     """
     This class describes various parameters to give to the search algorithm
     :meth:`search_for_dna_sequences`.
+    """
+
+    constraints: List[Constraint] = field(default_factory=list)
+    """
+    List of :any:`constraints.Constraint`'s to apply to the :any:`Design`.
     """
 
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
@@ -879,6 +856,17 @@ class SearchParameters:
     that update is also written. Set to False to use less space on disk. 
     """
 
+    def __post_init__(self):
+        self._check_constraint_types()
+
+    def _check_constraint_types(self) -> None:
+        idx = 0
+        for constraint in self.constraints:
+            if not isinstance(constraint, Constraint):
+                raise ValueError('each element of constraints must be an instance of Constraint, '
+                                 f'but the element at index {idx} is of type {type(constraint)}')
+            idx += 1
+
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
@@ -937,6 +925,14 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
+    if params.random_seed is not None:
+        if params.restart:
+            logger.warning(f"Since you selected the restart option, I'm ignoring your random seed of "
+                           f"{params.random_seed}, and instead we'll use the stored random seed from the "
+                           f"previous run that is being restarted.")
+        else:
+            logger.info(f'using random seed of {params.random_seed}; '
+                        f'use this same seed to reproduce this run')
 
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
@@ -952,7 +948,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         rng = dn.default_rng
 
     if params.probability_of_keeping_change is None:
-        params.probability_of_keeping_change = default_probability_of_keeping_change_function(design)
+        params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
         if params.never_increase_score is None:
             params.never_increase_score = True
     elif params.never_increase_score is None:
@@ -962,9 +958,6 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     cpu_count = dc.cpu_count()
     logger.info(f'number of processes in system: {cpu_count}')
-
-    if params.random_seed is not None and not params.restart:
-        logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
     # need to assign to local function variable so it doesn't look like a method call
     on_improved_design: Callable[[int], None] = params.on_improved_design
@@ -980,7 +973,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
             num_new_optimal, rng = _restart_from_directory(directories, design)
 
         violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
-            design=design, never_increase_score=params.never_increase_score, iteration=-1)
+            design=design, params=params, never_increase_score=params.never_increase_score, iteration=-1)
 
         if not params.restart:
             # write initial sequences and report
@@ -1001,13 +994,14 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, scores_new = _find_violations_and_score(
-                design=design, domains_changed=domains_changed, violation_set_old=violation_set_opt,
+                design=design, params=params, domains_changed=domains_changed,
+                violation_set_old=violation_set_opt,
                 never_increase_score=params.never_increase_score, iteration=iteration)
 
             # _double_check_violations_from_scratch(design, iteration, params.never_increase_score,
             #                                       violation_set_new, violation_set_opt)
 
-            _log_constraint_summary(design=design,
+            _log_constraint_summary(params=params,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                     iteration=iteration, num_new_optimal=num_new_optimal)
 
@@ -1034,7 +1028,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             iteration += 1
 
-        _log_constraint_summary(design=design,
+        _log_constraint_summary(params=params,
                                 violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
@@ -1118,11 +1112,12 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
 # to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
-def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_score: bool,
+def _double_check_violations_from_scratch(design: dc.Design, params: SearchParameters, iteration: int,
+                                          never_increase_score: bool,
                                           violation_set_new: dc.ViolationSet,
                                           violation_set_opt: dc.ViolationSet):
     violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
-        design=design, never_increase_score=never_increase_score, iteration=iteration)
+        design=design, params=params, never_increase_score=never_increase_score, iteration=iteration)
     # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
     # the total score found on quitting early will be less than the total score if not.
     # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
@@ -1165,21 +1160,34 @@ def timestamp() -> str:
 
 def _restart_from_directory(directories: _Directories, design: dc.Design) \
         -> Tuple[int, np.random.Generator]:
-    # NOTE: restarts from highest index found in dsd_design subdirectory, NOT from "current-best" files,
-    # which are ignored. This applies to both the design and the RNG state
-
-    highest_idx_design = 0
+    # NOTE: If the subdirectory design/ exists, then this restarts from highest index found in the
+    # subdirectory, NOT from "design_best.json" file, which is ignored in that case.
+    # It is only used if the design/ subdirectory is missing.
+    # This also dictates whether rng/ subdirectory or rng_best.json is used,
+    # so if design/ exists and has a file, e.g., design/design-75.json, then it is assumed that the file
+    # rng/rng-75.json also exists.
 
     if os.path.isdir(directories.design):
         # returns highest index found in design subdirectory
-        highest_idx_design = _find_highest_index_in_directory(directories.design,
-                                                              directories.design_filename_no_ext, 'json')
-        design_filename = directories.indexed_design_full_filename_noext(highest_idx_design)
-        rng_filename = directories.indexed_rng_full_filename_noext(highest_idx_design)
+        highest_idx = _find_highest_index_in_directory(directories.design,
+                                                       directories.design_filename_no_ext, 'json')
+        design_filename = directories.indexed_design_full_filename_noext(highest_idx)
+        rng_filename = directories.indexed_rng_full_filename_noext(highest_idx)
     else:
         # otherwise we go with contents of "current-best-*.json"
         design_filename = directories.best_design_full_filename_noext()
         rng_filename = directories.best_rng_full_filename_noext()
+
+        # try to find number of updates from other directories
+        # so that future written files will have the correct number
+        if os.path.isdir(directories.sequence):
+            highest_idx = _find_highest_index_in_directory(directories.sequence,
+                                                           directories.sequences_filename_no_ext, 'txt')
+        elif os.path.isdir(directories.report):
+            highest_idx = _find_highest_index_in_directory(directories.report,
+                                                           directories.report_filename_no_ext, 'txt')
+        else:
+            highest_idx = 0
 
     # read design
     with open(design_filename, 'r') as file:
@@ -1196,11 +1204,11 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
 
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
-    # to avoid writing the entire DomainPool (with its 100,000 sequences) every time we write a Design.
-    # design_stored.copy_constraints_from(design)
+    # to give the user the expected behavior that the Design they passed into search_for_dna_sequences
+    # is the Design being modified by the search (not the Design that is read in from the stored .json)
     design.copy_sequences_from(design_stored)
 
-    return highest_idx_design, rng
+    return highest_idx, rng
 
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
@@ -1283,6 +1291,7 @@ def _log_time(stopwatch: Stopwatch) -> None:
 
 
 def _find_violations_and_score(design: Design,
+                               params: SearchParameters,
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[dc.ViolationSet] = None,
                                never_increase_score: bool = False,
@@ -1310,7 +1319,7 @@ def _find_violations_and_score(design: Design,
     """
 
     violation_set: dc.ViolationSet = _violations_of_constraints(
-        design, never_increase_score, domains_changed, violation_set_old, iteration)
+        design, params, never_increase_score, domains_changed, violation_set_old, iteration)
 
     # NOTE: this filters out the fixed domains,
     # but we keep them in violation_set for the sake of reports
@@ -1330,16 +1339,14 @@ def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> Iterable[Any]:
     return itertools.chain.from_iterable(list_of_lists)
 
 
-def _log_constraint_summary(*, design: Design,
+def _log_constraint_summary(*, params: SearchParameters,
                             violation_set_opt: dc.ViolationSet,
                             violation_set_new: dc.ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    all_constraints = design.all_constraints()
-
     score_header = 'iteration|updates|opt score||new score|'
     all_constraints_header = '|'.join(
-        f'{constraint.short_description}' for constraint in all_constraints)
+        f'{constraint.short_description}' for constraint in params.constraints)
     header = score_header + all_constraints_header
     # logger.info('-' * len(header) + '\n')
     logger.info(header)
@@ -1353,7 +1360,7 @@ def _log_constraint_summary(*, design: Design,
                 f'{score_new :9.{dec_new}f}|'  # \
 
     all_constraints_strs = []
-    for constraint in all_constraints:
+    for constraint in params.constraints:
         score = violation_set_new.score_of_constraint(constraint)
         length = len(constraint.short_description)
         num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
@@ -1434,7 +1441,7 @@ def _iterable_is_empty(iterable: abc.Iterable) -> bool:
     return next(iterator, _sentinel) is _sentinel
 
 
-def default_probability_of_keeping_change_function(design: dc.Design) -> Callable[[float], float]:
+def default_probability_of_keeping_change_function(params: SearchParameters) -> Callable[[float], float]:
     """
     Returns a function that takes a float input `score_delta` representing a change in score of
     violated constraint, which returns a probability of keeping the change in the DNA sequence assignment.
@@ -1450,8 +1457,8 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
     (e.g., 1.0 or higher), then this should be is equivalent to keeping a change in the DNA sequence
     assignment if and only if it is no worse than the previous.
 
-    :param design: :any:`Design` to apply this rule for; `design` is required because the score of
-                   :any:`Constraint`'s in the :any:`Design` are used to calculate an appropriate
+    :param params: :any:`SearchParameters` to apply this rule for; `params` is required because the score of
+                   :any:`Constraint`'s in the :any:`SearchParameters` are used to calculate an appropriate
                    epsilon value for determining when a score change is too small to be significant
                    (i.e., is due to rounding error)
     :return: the "keep change" function `f`: :math:`\\mathbb{R} \\to [0,1]`,
@@ -1460,7 +1467,7 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
              the smallest :any:`Constraint.weight` for any :any:`Constraint` in `design`),
              and :math:`f(w_\\delta) = 0` otherwise.
     """
-    min_weight = min(constraint.weight for constraint in design.all_constraints())
+    min_weight = min(constraint.weight for constraint in params.constraints)
     epsilon_from_min_weight = min_weight / 1000000.0
 
     def keep_change_only_if_no_worse(score_delta: float) -> float:
@@ -1471,3 +1478,134 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
 
     return keep_change_only_if_no_worse
     # return keep_change_only_if_better
+
+
+####################################################################################
+# report generating functions
+
+def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
+                           violation_set: dc.ViolationSet) -> str:
+    summaries: List[str] = []
+
+    # other constraints
+    for constraint in constraints:
+        summary = summary_of_constraint(constraint, report_only_violations, violation_set)
+        summaries.append(summary)
+
+    score = violation_set.total_score()
+    score_unfixed = violation_set.total_score_nonfixed()
+    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
+
+    summary = (score_total_summary + '\n'
+               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+               + '\n'.join(summaries))
+
+    return summary
+
+
+def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
+                          violation_set: dc.ViolationSet) -> str:
+    if isinstance(constraint, (DomainConstraint, StrandConstraint,
+                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
+                               DomainsConstraint, StrandsConstraint,
+                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
+        summaries = []
+        num_violations = 0
+        num_checks = violation_set.num_checked[constraint]
+        part_type_name = constraint.part_name()
+
+        violations_nonfixed = violation_set.violations_nonfixed[constraint]
+        violations_fixed = violation_set.violations_fixed[constraint]
+        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
+                                        (violations_fixed, f"fixed {part_type_name}s")]:
+            if len(violations) == 0:
+                continue
+
+            max_part_name_length = max(len(violation.part.name) for violation in violations)
+            num_violations += len(violations)
+
+            lines_and_scores: List[Tuple[str, float]] = []
+            for violation in violations:
+                line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
+                       f'{violation.summary};  score: {violation.score:.2f}'
+                lines_and_scores.append((line, violation.score))
+
+            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+
+            lines = (line for line, _ in lines_and_scores)
+            content = '\n'.join(lines)
+            summary = _small_header(header_name, "=") + f'\n{content}\n'
+            summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+
+    elif isinstance(constraint, DesignConstraint):
+        raise NotImplementedError()
+    else:
+        content = f'skipping summary of constraint {constraint.description}; ' \
+                  f'unrecognized type {type(constraint)}'
+        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
+
+    summary = add_header_to_content_of_summary(report, violation_set, report_only_violations)
+    return summary
+
+
+def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc.ViolationSet,
+                                     report_only_violations: bool) -> str:
+    score = violation_set.score_of_constraint(report.constraint)
+    score_unfixed = violation_set.score_of_constraint_nonfixed(report.constraint)
+
+    if score != score_unfixed:
+        summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
+    else:
+        summary_score_unfixed = None
+
+    indented_content = textwrap.indent(report.content, '  ')
+    delim = '*' * 80
+    summary = f'''
+{delim}
+* {report.constraint.description}
+* checks:     {report.num_checks}
+* violations: {report.num_violations}
+* score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
+{indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
+                         'when set to False\n' if not report_only_violations else '')
+    return summary
+
+
+def _small_header(header: str, delim: str) -> str:
+    width = len(header)
+    return f'\n{header}\n{delim * width}'
+
+
+@dataclass
+class ConstraintReport:
+    """
+    Represents a report on how well a design did on a constraint.
+    """
+
+    constraint: Optional['Constraint']
+    """
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
+    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
+    automatically inserted by the report generating code."""
+
+    content: str
+    """
+    Summary of constraint information on the :any:`Design`.
+    """
+
+    num_violations: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    violated the constraint.
+    """
+
+    num_checks: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    were checked against the constraint.
+    """
