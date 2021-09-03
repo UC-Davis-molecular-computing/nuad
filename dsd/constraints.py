@@ -24,7 +24,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 import itertools
 import logging
-import textwrap
 from multiprocessing.pool import ThreadPool
 from numbers import Number
 from enum import Enum, auto
@@ -2113,41 +2112,6 @@ def remove_duplicates(lst: Iterable[T]) -> List[T]:
     return [x for x in lst if not (x in seen or seen_add(x))]
 
 
-@dataclass
-class ConstraintReport:
-    """
-    Represents a report on how well a design did on a constraint.
-    """
-
-    constraint: Optional['Constraint']
-    """
-    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
-    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
-    automatically inserted by the report generating code."""
-
-    content: str
-    """
-    Summary of constraint information on the :any:`Design`.
-    """
-
-    num_violations: int
-    """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
-    violated the constraint.
-    """
-
-    num_checks: int
-    """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
-    were checked against the constraint.
-    """
-
-
-def _small_header(header: str, delim: str) -> str:
-    width = len(header)
-    return f'\n{header}\n{delim * width}'
-
-
 def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> sc.Design:
     """
     Exports a dummy scadnano design from this dsd :any:`Design`.
@@ -2238,60 +2202,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
     #################################################
-    # these fields are calculated from the single constructor parameter constraints
-
-    domain_constraints: List[DomainConstraint] = field(default_factory=list, init=False)
-    """
-    Applied to individual domain constraints across all :any:`Domain`'s in the :any:`Design`.
-    """
-
-    strand_constraints: List[StrandConstraint] = field(default_factory=list, init=False)
-    """
-    Applied to individual strand constraints across all :any:`Strand`'s in the :any:`Design`.
-    """
-
-    domain_pair_constraints: List[DomainPairConstraint] = field(default_factory=list, init=False)
-    """
-    Applied to pairs of :any:`Domain`'s in the :any:`Design`.
-    """
-
-    strand_pair_constraints: List[StrandPairConstraint] = field(default_factory=list, init=False)
-    """
-    Applied to pairs of :any:`Strand`'s in the :any:`Design`.
-    """
-
-    complex_constraints: List[ComplexConstraint] = field(default_factory=list, init=False)
-    """
-    Applied to tuple of :any:`Strand`'s in the :any:`Design`.
-    """
-
-    domains_constraints: List[DomainsConstraint] = field(default_factory=list, init=False)
-    """
-    Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
-    """
-
-    strands_constraints: List[StrandsConstraint] = field(default_factory=list, init=False)
-    """
-    Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
-    """
-
-    domain_pairs_constraints: List[DomainPairsConstraint] = field(default_factory=list, init=False)
-    """
-    Constraints that process all :any:`Domain`'s at once (for example, to hand off in batch to RNAduplex).
-    """
-
-    strand_pairs_constraints: List[StrandPairsConstraint] = field(default_factory=list, init=False)
-    """
-    Constraints that process all :any:`Strand`'s at once (for example, to hand off in batch to RNAduplex).
-    """
-
-    design_constraints: List[DesignConstraint] = field(default_factory=list, init=False)
-    """
-    Constraints that process whole design at once, for anything not expressible as one of the others
-    (for example, in case it needs access to all the :any:`DomainPool`'s at once).
-    """
-
-    #################################################
     # derived fields, so not specified in constructor
 
     domains: List[Domain[DomainLabel]] = field(init=False)
@@ -2301,7 +2211,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    _strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
+    strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
@@ -2322,74 +2232,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    def __init__(self, strands: Iterable[Strand],
-                 constraints: Optional[Iterable['Constraint']] = None) -> None:
+    def __init__(self, strands: Iterable[Strand]) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
-        :param constraints:
-            the :any:`Constraint`'s to apply to this :any:`Design` when running
-            :py:meth:`search.search_for_dna_sequences`
         """
-        if constraints is None:
-            constraints = []
-        self._check_constraint_types(constraints)
         self.strands = strands if isinstance(strands, list) else list(strands)
-        self._partition_constraints(constraints)
         self.compute_derived_fields()
-
-    @staticmethod
-    def _check_constraint_types(constraints: Iterable['Constraint']) -> None:
-        idx = 0
-        for constraint in constraints:
-            if not isinstance(constraint, Constraint):
-                raise ValueError('each element of constraints must be an instance of Constraint, '
-                                 f'but the element at index {idx} is of type {type(constraint)}')
-            idx += 1
-
-    def add_constraints(self, constraints: Iterable[Constraint]) -> None:
-        """
-        :param constraints:
-            :any:`Constraint`'s to add to this :any:`Design`
-        """
-        for constraint in constraints:
-            if isinstance(constraint, DomainConstraint):
-                self.domain_constraints.append(constraint)
-            elif isinstance(constraint, StrandConstraint):
-                self.strand_constraints.append(constraint)
-            elif isinstance(constraint, DomainPairConstraint):
-                self.domain_pair_constraints.append(constraint)
-            elif isinstance(constraint, StrandPairConstraint):
-                self.strand_pair_constraints.append(constraint)
-            elif isinstance(constraint, ComplexConstraint):
-                self.complex_constraints.append(constraint)
-            elif isinstance(constraint, DomainsConstraint):
-                self.domains_constraints.append(constraint)
-            elif isinstance(constraint, StrandsConstraint):
-                self.strands_constraints.append(constraint)
-            elif isinstance(constraint, DomainPairsConstraint):
-                self.domain_pairs_constraints.append(constraint)
-            elif isinstance(constraint, StrandPairsConstraint):
-                self.strand_pairs_constraints.append(constraint)
-            elif isinstance(constraint, DesignConstraint):
-                self.design_constraints.append(constraint)
-            else:
-                raise ValueError(f'{constraint} is not a valid type of Constraint')
-
-    # sort constraints from constructor constraints parameter into the various types
-    def _partition_constraints(self, constraints: Iterable[Constraint]) -> None:
-        self.domain_constraints = []
-        self.strand_constraints = []
-        self.domain_pair_constraints = []
-        self.strand_pair_constraints = []
-        self.complex_constraints = []
-        self.domains_constraints = []
-        self.strands_constraints = []
-        self.domain_pairs_constraints = []
-        self.strand_pairs_constraints = []
-        self.design_constraints = []
-
-        self.add_constraints(constraints)
 
     def compute_derived_fields(self) -> None:
         """
@@ -2414,14 +2263,97 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domains = remove_duplicates(domains)
 
-        self._strands_by_group_name = defaultdict(list)
+        self.strands_by_group_name = defaultdict(list)
         for strand in self.strands:
-            self._strands_by_group_name[strand.group].append(strand)
+            self.strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
 
         for strand in self.strands:
             strand.compute_derived_fields()
+
+    def to_json(self) -> str:
+        """
+        :return:
+            JSON string representing this :any:`Design`.
+        """
+        self.store_domain_pools()
+        # XXX: disabled the indent suppression because it takes a LONG time for a large Design to
+        # convert the NoIndent instances. Since people tend not to look at design.json files that much
+        # (unlike with scadnano scripting, for instance), hopefully this doesn't matter.
+        # return json_encode(self, suppress_indent=True)
+        return json_encode(self, suppress_indent=False)
+
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
+        """
+        :param suppress_indent:
+            Whether to suppress indentation of some objects using the NoIndent object.
+        :return:
+            Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
+            by calling ``json.dumps(d)``.
+        """
+        return {
+            strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
+            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
+            domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()]
+        }
+
+    @staticmethod
+    def from_json(json_str: str,
+                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                  ) -> Design[StrandLabel, DomainLabel]:
+        """
+        :param json_str:
+            The string representing the :any:`Design` as a JSON object.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
+        :return:
+            :any:`Design` described by this JSON string, assuming it was created using
+            :py:meth`Design.to_json`.
+        """
+        json_map = json.loads(json_str)
+        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
+            json_map, domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
+        return design
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any],
+                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                               ) -> 'Design[StrandLabel, DomainLabel]':
+        """
+        :param json_map:
+            JSON serializable object encoding this :any:`Design`, as returned by
+            :py:meth:`Design.to_json_serializable`.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
+        :return:
+            :any:`Design` represented by dict `json_map`, assuming it was created by
+            :py:meth:`Design.to_json_serializable`. No constraints are populated.
+        """
+        pools_json = mandatory_field(Design, json_map, domain_pools_key)
+        pools: List[DomainPool] = [DomainPool.from_json_serializable(pool_json) for pool_json in pools_json]
+        pool_with_name: Dict[str, DomainPool] = {pool.name: pool for pool in pools}
+
+        domains_json = mandatory_field(Design, json_map, domains_key)
+        domains: List[Domain] = [
+            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
+                                          label_decoder=domain_label_decoder)
+            for domain_json in domains_json]
+        domain_with_name = {domain.name: domain for domain in domains}
+
+        strands_json = mandatory_field(Design, json_map, strands_key)
+        strands = [Strand.from_json_serializable(
+            json_map=strand_json, domain_with_name=domain_with_name,
+            label_decoder=strand_label_decoder)
+            for strand_json in strands_json]
+
+        return Design(strands=strands)
 
     def to_idt_bulk_input_format(self,
                                  delimiter: str = ',',
@@ -2585,96 +2517,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         return list(self.domain_pools_to_domain_map.keys())
 
-    def to_json(self) -> str:
-        """
-        :return:
-            JSON string representing this :any:`Design`.
-        """
-        self.store_domain_pools()
-        # XXX: disabling the indent suppression because it takes a LONG time for a large Design to
-        # convert the NoIndent instances. Since people tend not to read design.json files that much
-        # (unlike with scadnano scripting, for instance), hopefully this doesn't matter.
-        # return json_encode(self, suppress_indent=True)
-        return json_encode(self, suppress_indent=False)
-
-    @staticmethod
-    def from_json(json_str: str,
-                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                  ) -> Design[StrandLabel, DomainLabel]:
-        """
-        :param json_str:
-            The string representing the :any:`Design` as a JSON object.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
-        :return:
-            :any:`Design` described by this JSON string, assuming it was created using
-            :py:meth`Design.to_json`.
-        """
-        json_map = json.loads(json_str)
-        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
-            json_map, domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
-        return design
-
-    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
-        """
-        :param suppress_indent:
-            Whether to suppress indentation of some objects using the NoIndent object.
-        :return:
-            Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
-            by calling ``json.dumps(d)``.
-        """
-        return {
-            strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
-            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
-            domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()]
-        }
-
-    @staticmethod
-    def from_json_serializable(json_map: Dict[str, Any],
-                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                               ) -> 'Design[StrandLabel, DomainLabel]':
-        """
-        :param json_map:
-            JSON serializable object encoding this :any:`Design`, as returned by
-            :py:meth:`Design.to_json_serializable`.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
-        :return:
-            :any:`Design` represented by dict `json_map`, assuming it was created by
-            :py:meth:`Design.to_json_serializable`. No constraints are populated.
-        """
-        pools_json = mandatory_field(Design, json_map, domain_pools_key)
-        pools: List[DomainPool] = [DomainPool.from_json_serializable(pool_json) for pool_json in pools_json]
-        pool_with_name: Dict[str, DomainPool] = {pool.name: pool for pool in pools}
-
-        domains_json = mandatory_field(Design, json_map, domains_key)
-        domains: List[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
-                                          label_decoder=domain_label_decoder)
-            for domain_json in domains_json]
-        domain_with_name = {domain.name: domain for domain in domains}
-
-        strands_json = mandatory_field(Design, json_map, strands_key)
-        strands = [Strand.from_json_serializable(
-            json_map=strand_json, domain_with_name=domain_with_name,
-            label_decoder=strand_label_decoder)
-            for strand_json in strands_json]
-
-        return Design(strands=strands)
-
-    def strands_by_group_name(self, group: str) -> List[Strand[StrandLabel, DomainLabel]]:
-        """
-        :param group: name of a group
-        :return: list of :any:`Strand`'s in that group
-        """
-        return self._strands_by_group_name[group]
-
     def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain[DomainLabel]]:
         """
         :param domain_pool_name: name of a :any:`DomainPool`
@@ -2685,36 +2527,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             if domain.pool.name == domain_pool_name:
                 domains_in_pool.append(domain)
         return domains_in_pool
-
-    def copy_constraints_from(self, design: Design) -> None:
-        self.domain_constraints = design.domain_constraints
-        self.strand_constraints = design.strand_constraints
-        self.domain_pair_constraints = design.domain_pair_constraints
-        self.strand_pair_constraints = design.strand_pair_constraints
-        self.domains_constraints = design.domains_constraints
-        self.strands_constraints = design.strands_constraints
-        self.domain_pairs_constraints = design.domain_pairs_constraints
-        self.strand_pairs_constraints = design.strand_pairs_constraints
-        self.complex_constraints = design.complex_constraints
-        self.design_constraints = design.design_constraints
-
-    def all_constraints(self) -> List[Constraint]:
-        # Since list types are covariant, we cannot use + to concatenate them without upsetting mypy:
-        # https://stackoverflow.com/questions/56738485/why-do-i-get-a-warning-when-concatenating-lists-of-mixed-types-in-pycharm
-        # https://github.com/python/mypy/issues/4244
-        # https://mypy.readthedocs.io/en/latest/common_issues.html#invariance-vs-covariance
-        constraints: List[Constraint] = []
-        constraints.extend(self.domain_constraints)
-        constraints.extend(self.strand_constraints)
-        constraints.extend(self.domain_pair_constraints)
-        constraints.extend(self.strand_pair_constraints)
-        constraints.extend(self.domains_constraints)
-        constraints.extend(self.strands_constraints)
-        constraints.extend(self.domain_pairs_constraints)
-        constraints.extend(self.strand_pairs_constraints)
-        constraints.extend(self.complex_constraints)
-        constraints.extend(self.design_constraints)
-        return constraints
 
     @staticmethod
     def from_scadnano_file(sc_filename: str,
@@ -3034,99 +2846,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # since new sequences won't change derived fields
         if not computed_derived_fields:
             self.compute_derived_fields()
-
-
-def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
-                           violation_set: ViolationSet) -> str:
-    summaries: List[str] = []
-
-    # other constraints
-    for constraint in constraints:
-        summary = summary_of_constraint(constraint, report_only_violations, violation_set)
-        summaries.append(summary)
-
-    score = violation_set.total_score()
-    score_unfixed = violation_set.total_score_nonfixed()
-    score_total_summary = f'total score of constraint violations: {score:.2f}'
-    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
-
-    summary = (score_total_summary + '\n'
-               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
-               + '\n'.join(summaries))
-
-    return summary
-
-
-def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
-                          violation_set: ViolationSet) -> str:
-    if isinstance(constraint, (DomainConstraint, StrandConstraint,
-                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
-                               DomainsConstraint, StrandsConstraint,
-                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
-        summaries = []
-        num_violations = 0
-        num_checks = violation_set.num_checked[constraint]
-        part_type_name = constraint.part_name()
-
-        violations_nonfixed = violation_set.violations_nonfixed[constraint]
-        violations_fixed = violation_set.violations_fixed[constraint]
-        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
-                                        (violations_fixed, f"fixed {part_type_name}s")]:
-            if len(violations) == 0:
-                continue
-
-            max_part_name_length = max(len(violation.part.name) for violation in violations)
-            num_violations += len(violations)
-
-            lines_and_scores: List[Tuple[str, float]] = []
-            for violation in violations:
-                line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
-                       f'{violation.summary};  score: {violation.score:.2f}'
-                lines_and_scores.append((line, violation.score))
-
-            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
-
-            lines = (line for line, _ in lines_and_scores)
-            content = '\n'.join(lines)
-            summary = _small_header(header_name, "=") + f'\n{content}\n'
-            summaries.append(summary)
-
-        content = ''.join(summaries)
-        report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
-
-    elif isinstance(constraint, DesignConstraint):
-        raise NotImplementedError()
-    else:
-        content = f'skipping summary of constraint {constraint.description}; ' \
-                  f'unrecognized type {type(constraint)}'
-        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
-
-    summary = add_header_to_content_of_summary(report, violation_set, report_only_violations)
-    return summary
-
-
-def add_header_to_content_of_summary(report: ConstraintReport, violation_set: ViolationSet,
-                                     report_only_violations: bool) -> str:
-    score = violation_set.score_of_constraint(report.constraint)
-    score_unfixed = violation_set.score_of_constraint_nonfixed(report.constraint)
-
-    if score != score_unfixed:
-        summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
-    else:
-        summary_score_unfixed = None
-
-    indented_content = textwrap.indent(report.content, '  ')
-    delim = '*' * 80
-    summary = f'''
-{delim}
-* {report.constraint.description}
-* checks:     {report.num_checks}
-* violations: {report.num_violations}
-* score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
-{indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
-                         'when set to False\n' if not report_only_violations else '')
-    return summary
 
 
 # represents a "Design Part", e.g., Strand, Tuple[Domain, Domain], etc... whatever portion of the Design
@@ -3514,6 +3233,8 @@ class Constraint(ABC, Generic[DesignPart]):
     @abstractmethod
     def part_name() -> str:
         """
+        Returns name of the :any:`Part` that this :any:`Constraint` tests.
+
         :return:
             name of the :any:`Part` that this :any:`Constraint` tests
             (e.g., "domain", "strand pair")
