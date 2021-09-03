@@ -58,7 +58,7 @@ from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
 from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
-    Deque, TypeVar, cast
+    Deque, TypeVar
 import statistics
 import textwrap
 import re
@@ -98,7 +98,6 @@ from dsd.stopwatch import Stopwatch
 
 def new_process_pool(cpu_count: int):
     return pathos.multiprocessing.Pool(processes=cpu_count)
-    # return ThreadPool(processes=cpu_count)
 
 
 _process_pool = new_process_pool(dc.cpu_count())
@@ -112,6 +111,7 @@ def default_output_directory() -> str:
 
 
 def _violations_of_constraints(design: Design,
+                               params: SearchParameters,
                                never_increase_score: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[dc.ViolationSet],
@@ -157,18 +157,7 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
-    constraints: List[Constraint] = cast(List[Constraint], design.domain_constraints) + \
-                                    design.strand_constraints + \
-                                    design.domain_pair_constraints + \
-                                    design.strand_pair_constraints + \
-                                    design.domains_constraints + \
-                                    design.strands_constraints + \
-                                    design.domain_pairs_constraints + \
-                                    design.strand_pairs_constraints + \
-                                    design.design_constraints + \
-                                    design.complex_constraints  # noqa
-
-    for constraint in constraints:
+    for constraint in params.constraints:
         parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
         current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
@@ -444,7 +433,6 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         for domain in domains:
             violations[domain].add(violation)
 
-    sw.log(f'{constraint.short_description} end of _violations_of_constraint')
     return violations, quit_early
 
 
@@ -518,7 +506,7 @@ def _write_intermediate_files(*, design: dc.Design, params: SearchParameters, rn
     _write_sequences(design, params=params, directories=directories,
                      num_new_optimal_padded=num_new_optimal_padded)
 
-    _write_report(design, params=params, directories=directories,
+    _write_report(params=params, directories=directories,
                   num_new_optimal_padded=num_new_optimal_padded, violation_set=violation_set)
 
 
@@ -567,7 +555,7 @@ def _write_rng_state(rng: numpy.random.Generator, params: SearchParameters, dire
                                              json_str, '.json')
 
 
-def _write_report(design: Design, params: SearchParameters, directories: _Directories,
+def _write_report(params: SearchParameters, directories: _Directories,
                   num_new_optimal_padded: str, violation_set: dc.ViolationSet) -> None:
     directory_intermediate = directories.report
     directory_final = directories.out
@@ -575,12 +563,11 @@ def _write_report(design: Design, params: SearchParameters, directories: _Direct
                                      f'-{num_new_optimal_padded}'
     filename_final_no_ext = f'current-best-{directories.report_filename_no_ext}'
 
-    constraints = design.all_constraints()
-
     report = f'''\
 Report on constraints
 =====================
-''' + dc.summary_of_constraints(constraints, params.report_only_violations, violation_set=violation_set)
+''' + summary_of_constraints(params.constraints, params.report_only_violations,
+                             violation_set=violation_set)
 
     if not params.save_report_for_all_updates:
         directory_intermediate = filename_with_iteration_no_ext = None
@@ -749,6 +736,11 @@ class SearchParameters:
     :meth:`search_for_dna_sequences`.
     """
 
+    constraints: List[Constraint] = field(default_factory=list)
+    """
+    List of :any:`constraints.Constraints` to apply to the :any:`Design`.
+    """
+
     probability_of_keeping_change: Optional[Callable[[float], float]] = None
     """
     Function giving the probability of keeping a change in one
@@ -880,6 +872,17 @@ class SearchParameters:
     that update is also written. Set to False to use less space on disk. 
     """
 
+    def __post_init__(self):
+        self._check_constraint_types()
+
+    def _check_constraint_types(self) -> None:
+        idx = 0
+        for constraint in self.constraints:
+            if not isinstance(constraint, Constraint):
+                raise ValueError('each element of constraints must be an instance of Constraint, '
+                                 f'but the element at index {idx} is of type {type(constraint)}')
+            idx += 1
+
 
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
@@ -961,7 +964,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         rng = dn.default_rng
 
     if params.probability_of_keeping_change is None:
-        params.probability_of_keeping_change = default_probability_of_keeping_change_function(design)
+        params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
         if params.never_increase_score is None:
             params.never_increase_score = True
     elif params.never_increase_score is None:
@@ -986,7 +989,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
             num_new_optimal, rng = _restart_from_directory(directories, design)
 
         violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
-            design=design, never_increase_score=params.never_increase_score, iteration=-1)
+            design=design, params=params, never_increase_score=params.never_increase_score, iteration=-1)
 
         if not params.restart:
             # write initial sequences and report
@@ -1007,13 +1010,14 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, scores_new = _find_violations_and_score(
-                design=design, domains_changed=domains_changed, violation_set_old=violation_set_opt,
+                design=design, params=params, domains_changed=domains_changed,
+                violation_set_old=violation_set_opt,
                 never_increase_score=params.never_increase_score, iteration=iteration)
 
             # _double_check_violations_from_scratch(design, iteration, params.never_increase_score,
             #                                       violation_set_new, violation_set_opt)
 
-            _log_constraint_summary(design=design,
+            _log_constraint_summary(params=params,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                     iteration=iteration, num_new_optimal=num_new_optimal)
 
@@ -1040,7 +1044,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
             iteration += 1
 
-        _log_constraint_summary(design=design,
+        _log_constraint_summary(params=params,
                                 violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
@@ -1124,11 +1128,12 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # used for debugging; early on, the algorithm for quitting early had a bug and was causing the search
 # to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
-def _double_check_violations_from_scratch(design: dc.Design, iteration: int, never_increase_score: bool,
+def _double_check_violations_from_scratch(design: dc.Design, params: SearchParameters, iteration: int,
+                                          never_increase_score: bool,
                                           violation_set_new: dc.ViolationSet,
                                           violation_set_opt: dc.ViolationSet):
     violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
-        design=design, never_increase_score=never_increase_score, iteration=iteration)
+        design=design, params=params, never_increase_score=never_increase_score, iteration=iteration)
     # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
     # the total score found on quitting early will be less than the total score if not.
     # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
@@ -1298,6 +1303,7 @@ def _log_time(stopwatch: Stopwatch) -> None:
 
 
 def _find_violations_and_score(design: Design,
+                               params: SearchParameters,
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[dc.ViolationSet] = None,
                                never_increase_score: bool = False,
@@ -1325,7 +1331,7 @@ def _find_violations_and_score(design: Design,
     """
 
     violation_set: dc.ViolationSet = _violations_of_constraints(
-        design, never_increase_score, domains_changed, violation_set_old, iteration)
+        design, params, never_increase_score, domains_changed, violation_set_old, iteration)
 
     # NOTE: this filters out the fixed domains,
     # but we keep them in violation_set for the sake of reports
@@ -1345,16 +1351,14 @@ def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> Iterable[Any]:
     return itertools.chain.from_iterable(list_of_lists)
 
 
-def _log_constraint_summary(*, design: Design,
+def _log_constraint_summary(*, params: SearchParameters,
                             violation_set_opt: dc.ViolationSet,
                             violation_set_new: dc.ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    all_constraints = design.all_constraints()
-
     score_header = 'iteration|updates|opt score||new score|'
     all_constraints_header = '|'.join(
-        f'{constraint.short_description}' for constraint in all_constraints)
+        f'{constraint.short_description}' for constraint in params.constraints)
     header = score_header + all_constraints_header
     # logger.info('-' * len(header) + '\n')
     logger.info(header)
@@ -1368,7 +1372,7 @@ def _log_constraint_summary(*, design: Design,
                 f'{score_new :9.{dec_new}f}|'  # \
 
     all_constraints_strs = []
-    for constraint in all_constraints:
+    for constraint in params.constraints:
         score = violation_set_new.score_of_constraint(constraint)
         length = len(constraint.short_description)
         num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
@@ -1449,7 +1453,7 @@ def _iterable_is_empty(iterable: abc.Iterable) -> bool:
     return next(iterator, _sentinel) is _sentinel
 
 
-def default_probability_of_keeping_change_function(design: dc.Design) -> Callable[[float], float]:
+def default_probability_of_keeping_change_function(params: SearchParameters) -> Callable[[float], float]:
     """
     Returns a function that takes a float input `score_delta` representing a change in score of
     violated constraint, which returns a probability of keeping the change in the DNA sequence assignment.
@@ -1465,8 +1469,8 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
     (e.g., 1.0 or higher), then this should be is equivalent to keeping a change in the DNA sequence
     assignment if and only if it is no worse than the previous.
 
-    :param design: :any:`Design` to apply this rule for; `design` is required because the score of
-                   :any:`Constraint`'s in the :any:`Design` are used to calculate an appropriate
+    :param params: :any:`SearchParameters` to apply this rule for; `params` is required because the score of
+                   :any:`Constraint`'s in the :any:`SearchParameter`'s are used to calculate an appropriate
                    epsilon value for determining when a score change is too small to be significant
                    (i.e., is due to rounding error)
     :return: the "keep change" function `f`: :math:`\\mathbb{R} \\to [0,1]`,
@@ -1475,7 +1479,7 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
              the smallest :any:`Constraint.weight` for any :any:`Constraint` in `design`),
              and :math:`f(w_\\delta) = 0` otherwise.
     """
-    min_weight = min(constraint.weight for constraint in design.all_constraints())
+    min_weight = min(constraint.weight for constraint in params.constraints)
     epsilon_from_min_weight = min_weight / 1000000.0
 
     def keep_change_only_if_no_worse(score_delta: float) -> float:
@@ -1486,3 +1490,134 @@ def default_probability_of_keeping_change_function(design: dc.Design) -> Callabl
 
     return keep_change_only_if_no_worse
     # return keep_change_only_if_better
+
+
+####################################################################################
+# report generating functions
+
+def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
+                           violation_set: dc.ViolationSet) -> str:
+    summaries: List[str] = []
+
+    # other constraints
+    for constraint in constraints:
+        summary = summary_of_constraint(constraint, report_only_violations, violation_set)
+        summaries.append(summary)
+
+    score = violation_set.total_score()
+    score_unfixed = violation_set.total_score_nonfixed()
+    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
+
+    summary = (score_total_summary + '\n'
+               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+               + '\n'.join(summaries))
+
+    return summary
+
+
+def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
+                          violation_set: dc.ViolationSet) -> str:
+    if isinstance(constraint, (DomainConstraint, StrandConstraint,
+                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
+                               DomainsConstraint, StrandsConstraint,
+                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
+        summaries = []
+        num_violations = 0
+        num_checks = violation_set.num_checked[constraint]
+        part_type_name = constraint.part_name()
+
+        violations_nonfixed = violation_set.violations_nonfixed[constraint]
+        violations_fixed = violation_set.violations_fixed[constraint]
+        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
+                                        (violations_fixed, f"fixed {part_type_name}s")]:
+            if len(violations) == 0:
+                continue
+
+            max_part_name_length = max(len(violation.part.name) for violation in violations)
+            num_violations += len(violations)
+
+            lines_and_scores: List[Tuple[str, float]] = []
+            for violation in violations:
+                line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
+                       f'{violation.summary};  score: {violation.score:.2f}'
+                lines_and_scores.append((line, violation.score))
+
+            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+
+            lines = (line for line, _ in lines_and_scores)
+            content = '\n'.join(lines)
+            summary = _small_header(header_name, "=") + f'\n{content}\n'
+            summaries.append(summary)
+
+        content = ''.join(summaries)
+        report = ConstraintReport(constraint=constraint, content=content,
+                                  num_violations=num_violations, num_checks=num_checks)
+
+    elif isinstance(constraint, DesignConstraint):
+        raise NotImplementedError()
+    else:
+        content = f'skipping summary of constraint {constraint.description}; ' \
+                  f'unrecognized type {type(constraint)}'
+        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
+
+    summary = add_header_to_content_of_summary(report, violation_set, report_only_violations)
+    return summary
+
+
+def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc.ViolationSet,
+                                     report_only_violations: bool) -> str:
+    score = violation_set.score_of_constraint(report.constraint)
+    score_unfixed = violation_set.score_of_constraint_nonfixed(report.constraint)
+
+    if score != score_unfixed:
+        summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
+    else:
+        summary_score_unfixed = None
+
+    indented_content = textwrap.indent(report.content, '  ')
+    delim = '*' * 80
+    summary = f'''
+{delim}
+* {report.constraint.description}
+* checks:     {report.num_checks}
+* violations: {report.num_violations}
+* score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
+{indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
+                         'when set to False\n' if not report_only_violations else '')
+    return summary
+
+
+def _small_header(header: str, delim: str) -> str:
+    width = len(header)
+    return f'\n{header}\n{delim * width}'
+
+
+@dataclass
+class ConstraintReport:
+    """
+    Represents a report on how well a design did on a constraint.
+    """
+
+    constraint: Optional['Constraint']
+    """
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
+    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
+    automatically inserted by the report generating code."""
+
+    content: str
+    """
+    Summary of constraint information on the :any:`Design`.
+    """
+
+    num_violations: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    violated the constraint.
+    """
+
+    num_checks: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    were checked against the constraint.
+    """
