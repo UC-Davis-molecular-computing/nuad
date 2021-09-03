@@ -169,9 +169,9 @@ def main() -> None:
         restart=args.restart,
         random_seed=random_seed,
         max_iterations=None,
-        save_sequences_for_all_updates=False,
-        save_report_for_all_updates=False,
-        save_design_for_all_updates=False,
+        save_sequences_for_all_updates=True,
+        save_report_for_all_updates=True,
+        save_design_for_all_updates=True,
         force_overwrite=True,
     )
     ds.search_for_dna_sequences(design, params)

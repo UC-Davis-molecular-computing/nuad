@@ -2211,7 +2211,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    _strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
+    strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
@@ -2263,14 +2263,97 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         self.domains = remove_duplicates(domains)
 
-        self._strands_by_group_name = defaultdict(list)
+        self.strands_by_group_name = defaultdict(list)
         for strand in self.strands:
-            self._strands_by_group_name[strand.group].append(strand)
+            self.strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
 
         for strand in self.strands:
             strand.compute_derived_fields()
+
+    def to_json(self) -> str:
+        """
+        :return:
+            JSON string representing this :any:`Design`.
+        """
+        self.store_domain_pools()
+        # XXX: disabled the indent suppression because it takes a LONG time for a large Design to
+        # convert the NoIndent instances. Since people tend not to look at design.json files that much
+        # (unlike with scadnano scripting, for instance), hopefully this doesn't matter.
+        # return json_encode(self, suppress_indent=True)
+        return json_encode(self, suppress_indent=False)
+
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
+        """
+        :param suppress_indent:
+            Whether to suppress indentation of some objects using the NoIndent object.
+        :return:
+            Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
+            by calling ``json.dumps(d)``.
+        """
+        return {
+            strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
+            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
+            domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()]
+        }
+
+    @staticmethod
+    def from_json(json_str: str,
+                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                  ) -> Design[StrandLabel, DomainLabel]:
+        """
+        :param json_str:
+            The string representing the :any:`Design` as a JSON object.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
+        :return:
+            :any:`Design` described by this JSON string, assuming it was created using
+            :py:meth`Design.to_json`.
+        """
+        json_map = json.loads(json_str)
+        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
+            json_map, domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
+        return design
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any],
+                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                               ) -> 'Design[StrandLabel, DomainLabel]':
+        """
+        :param json_map:
+            JSON serializable object encoding this :any:`Design`, as returned by
+            :py:meth:`Design.to_json_serializable`.
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
+        :return:
+            :any:`Design` represented by dict `json_map`, assuming it was created by
+            :py:meth:`Design.to_json_serializable`. No constraints are populated.
+        """
+        pools_json = mandatory_field(Design, json_map, domain_pools_key)
+        pools: List[DomainPool] = [DomainPool.from_json_serializable(pool_json) for pool_json in pools_json]
+        pool_with_name: Dict[str, DomainPool] = {pool.name: pool for pool in pools}
+
+        domains_json = mandatory_field(Design, json_map, domains_key)
+        domains: List[Domain] = [
+            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
+                                          label_decoder=domain_label_decoder)
+            for domain_json in domains_json]
+        domain_with_name = {domain.name: domain for domain in domains}
+
+        strands_json = mandatory_field(Design, json_map, strands_key)
+        strands = [Strand.from_json_serializable(
+            json_map=strand_json, domain_with_name=domain_with_name,
+            label_decoder=strand_label_decoder)
+            for strand_json in strands_json]
+
+        return Design(strands=strands)
 
     def to_idt_bulk_input_format(self,
                                  delimiter: str = ',',
@@ -2433,96 +2516,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             list of all :any:`DomainPool`'s in this :any:`Design`
         """
         return list(self.domain_pools_to_domain_map.keys())
-
-    def to_json(self) -> str:
-        """
-        :return:
-            JSON string representing this :any:`Design`.
-        """
-        self.store_domain_pools()
-        # XXX: disabling the indent suppression because it takes a LONG time for a large Design to
-        # convert the NoIndent instances. Since people tend not to read design.json files that much
-        # (unlike with scadnano scripting, for instance), hopefully this doesn't matter.
-        # return json_encode(self, suppress_indent=True)
-        return json_encode(self, suppress_indent=False)
-
-    @staticmethod
-    def from_json(json_str: str,
-                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                  ) -> Design[StrandLabel, DomainLabel]:
-        """
-        :param json_str:
-            The string representing the :any:`Design` as a JSON object.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
-        :return:
-            :any:`Design` described by this JSON string, assuming it was created using
-            :py:meth`Design.to_json`.
-        """
-        json_map = json.loads(json_str)
-        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
-            json_map, domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
-        return design
-
-    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
-        """
-        :param suppress_indent:
-            Whether to suppress indentation of some objects using the NoIndent object.
-        :return:
-            Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
-            by calling ``json.dumps(d)``.
-        """
-        return {
-            strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
-            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
-            domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()]
-        }
-
-    @staticmethod
-    def from_json_serializable(json_map: Dict[str, Any],
-                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                               ) -> 'Design[StrandLabel, DomainLabel]':
-        """
-        :param json_map:
-            JSON serializable object encoding this :any:`Design`, as returned by
-            :py:meth:`Design.to_json_serializable`.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
-        :return:
-            :any:`Design` represented by dict `json_map`, assuming it was created by
-            :py:meth:`Design.to_json_serializable`. No constraints are populated.
-        """
-        pools_json = mandatory_field(Design, json_map, domain_pools_key)
-        pools: List[DomainPool] = [DomainPool.from_json_serializable(pool_json) for pool_json in pools_json]
-        pool_with_name: Dict[str, DomainPool] = {pool.name: pool for pool in pools}
-
-        domains_json = mandatory_field(Design, json_map, domains_key)
-        domains: List[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
-                                          label_decoder=domain_label_decoder)
-            for domain_json in domains_json]
-        domain_with_name = {domain.name: domain for domain in domains}
-
-        strands_json = mandatory_field(Design, json_map, strands_key)
-        strands = [Strand.from_json_serializable(
-            json_map=strand_json, domain_with_name=domain_with_name,
-            label_decoder=strand_label_decoder)
-            for strand_json in strands_json]
-
-        return Design(strands=strands)
-
-    def strands_by_group_name(self, group: str) -> List[Strand[StrandLabel, DomainLabel]]:
-        """
-        :param group: name of a group
-        :return: list of :any:`Strand`'s in that group
-        """
-        return self._strands_by_group_name[group]
 
     def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain[DomainLabel]]:
         """
