@@ -660,7 +660,8 @@ class _Directories:
             dc.logger.addHandler(self.info_file_handler)
 
     @staticmethod
-    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: Union[int, str], ext: str) -> str:
+    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: Union[int, str],
+                                    ext: str) -> str:
         relative_filename = f'{filename_no_ext}-{idx}.{ext}'
         full_filename = os.path.join(directory, relative_filename)
         return full_filename
@@ -1160,11 +1161,11 @@ def timestamp() -> str:
 def _restart_from_directory(directories: _Directories, design: dc.Design) \
         -> Tuple[int, np.random.Generator]:
     # NOTE: If the subdirectory design/ exists, then this restarts from highest index found in the
-    # subdirectory, NOT from "current-best-design.json" file, which is ignored in that case.
+    # subdirectory, NOT from "design_best.json" file, which is ignored in that case.
     # It is only used if the design/ subdirectory is missing.
-    # This also dictates whether rng_state/ subdirectory or current-best-rng-state.json is used,
+    # This also dictates whether rng/ subdirectory or rng_best.json is used,
     # so if design/ exists and has a file, e.g., design/design-75.json, then it is assumed that the file
-    # rng_state/rng-state-75.json also exists.
+    # rng/rng-75.json also exists.
 
     if os.path.isdir(directories.design):
         # returns highest index found in design subdirectory
@@ -1179,12 +1180,12 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
 
         # try to find number of updates from other directories
         # so that future written files will have the correct number
-        if os.path.isdir(directories.report):
-            highest_idx = _find_highest_index_in_directory(directories.report,
-                                                           directories.report_filename_no_ext, 'txt')
-        elif os.path.isdir(directories.sequence):
+        if os.path.isdir(directories.sequence):
             highest_idx = _find_highest_index_in_directory(directories.sequence,
                                                            directories.sequences_filename_no_ext, 'txt')
+        elif os.path.isdir(directories.report):
+            highest_idx = _find_highest_index_in_directory(directories.report,
+                                                           directories.report_filename_no_ext, 'txt')
         else:
             highest_idx = 0
 
