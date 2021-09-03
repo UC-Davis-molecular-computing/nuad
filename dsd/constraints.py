@@ -682,15 +682,16 @@ class DomainPool:
                           hamming_probability=hamming_probability,
                           )
 
-    def _filter_sequence_constraints(self, seqs: dn.DNASeqList) -> None:
+    def _first_sequence_satisfying_sequence_constraints(self, seqs: dn.DNASeqList) -> Optional[str]:
+        if len(seqs) == 0:
+            return None
         if len(self.sequence_constraints) == 0:
-            return
-        idxs_to_keep = []
+            return seqs.get_seq_str(0)
         for idx in range(seqs.numseqs):
             seq = seqs.get_seq_str(idx)
             if self.satisfies_sequence_constraints(seq):
-                idxs_to_keep.append(idx)
-        seqs.keep_seqs_at_indices(idxs_to_keep)
+                return seq
+        return None
 
     def satisfies_sequence_constraints(self, sequence: str) -> bool:
         """
@@ -741,10 +742,8 @@ class DomainPool:
         # pick a distance at random, then re-pick if no sequences are at that distance
         available_distances_list = list(range(1, len(previous_sequence) + 1))
         num_to_generate = 100
-        seqs: Optional[dn.DNASeqList] = None
-        sequence: Optional[str] = None
 
-        while sequence is None:
+        while True:
             if len(available_distances_list) == 0:
                 raise ValueError('out of Hamming distances to try, quitting')
 
@@ -752,10 +751,13 @@ class DomainPool:
             available_distances_arr = np.array(available_distances_list)
             existing_hamming_probabilities = hamming_probabilities[available_distances_arr - 1]
             prob_sum = existing_hamming_probabilities.sum()
+            assert prob_sum > 0.0
             existing_hamming_probabilities /= prob_sum
             sampled_distance: int = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
 
-            while seqs is None or len(seqs) == 0:
+            sequence: Optional[str] = None
+
+            while sequence is None:
                 bases = self._bases_to_use()
                 length = self.length
 
@@ -768,69 +770,83 @@ class DomainPool:
                     num_to_generate = num_sequences_at_sampled_distance
 
                 if num_to_generate >= num_sequences_at_sampled_distance // 4:
-                    # if we want sufficiently many random sequences, just generate all and sample a subset
-                    all_seqs = dn.DNASeqList(
+                    # if we want sufficiently many random sequences, just generate all possible sequences
+                    seqs = dn.DNASeqList(
                         hamming_distance_from_sequence=(sampled_distance, previous_sequence), alphabet=bases,
                         shuffle=True, rng=rng)
                     generated_all_seqs = True
                 else:
                     # otherwise sample num_to_generate with replacement
-                    all_seqs = dn.DNASeqList(
+                    seqs = dn.DNASeqList(
                         hamming_distance_from_sequence=(sampled_distance, previous_sequence), alphabet=bases,
                         shuffle=True, num_random_seqs=num_to_generate, rng=rng)
                     generated_all_seqs = False
 
-                seqs = self._filter_numpy_constraints(all_seqs)
-                self._log_numpy_generation(length, num_to_generate, len(seqs))
-                self._filter_sequence_constraints(seqs)
+                seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
+                self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_constraints))
+                sequence = self._first_sequence_satisfying_sequence_constraints(
+                    seqs_satisfying_numpy_constraints)
+                if sequence is not None:
+                    return sequence
 
-                if num_to_generate >= 10 ** 9 and len(seqs) == 0:
+                if num_to_generate >= 10 ** 9:
                     logger.info("We've generated over 1 billion random DNA sequences and not "
                                 "found one that passed your NumpyConstraints and "
                                 f"SequenceConstraints at Hamming distance {sampled_distance} from "
-                                f"the previous sequence {previous_sequence}. Trying another distance")
+                                f"the previous sequence {previous_sequence}. Trying another distance.")
+                    available_distances_list.remove(sampled_distance)
+
+                if generated_all_seqs:
+                    logger.info(f"We've generated all possible DNA sequences at Hamming distance "
+                                f"{sampled_distance} from the previous sequence {previous_sequence} and not "
+                                "found one that passed your NumpyConstraints and "
+                                f"SequenceConstraints. Trying another distance.")
                     available_distances_list.remove(sampled_distance)
                 num_to_generate *= 2
 
-                if len(seqs) == 0 and generated_all_seqs:
-                    # found no sequences passing constraints at distance `sampled_distance`,
+                if sequence is None and (generated_all_seqs or num_to_generate >= 10 ** 9):
+                    # found no sequences passing constraints at distance `sampled_distance`
+                    # (either through exhaustive search, or trying at least 1 billion),
                     # need to try a new Hamming distance
                     break
 
-            if len(seqs) > 0:
-                sequence = seqs.random_sequence(rng=rng)
-
-        return sequence
+        # mypy actually flags the next line as unreachable
+        # raise AssertionError('should be unreachable')
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         num_to_generate = 100
-        seqs: Optional[dn.DNASeqList] = None
         num_sequences_total = len(self._bases_to_use()) ** self.length
 
-        while seqs is None or seqs.numseqs == 0:
+        sequence = None
+        while sequence is None:
             if num_to_generate >= num_sequences_total / 2:
                 num_to_generate = num_sequences_total
-            seqs = self._generate_sequences_satisfying_numpy_constraints(rng, num_to_generate)
-            self._filter_sequence_constraints(seqs)
-            if num_to_generate > 10 ** 9 and len(seqs) == 0:
+
+            seqs_satisfying_numpy_constraints = \
+                self._generate_random_sequences_satisfying_numpy_constraints(rng, num_to_generate)
+            sequence = self._first_sequence_satisfying_sequence_constraints(seqs_satisfying_numpy_constraints)
+            if sequence is not None:
+                return sequence
+
+            if num_to_generate > 10 ** 9:
                 raise NotImplementedError("We've generated over 1 billion random DNA sequences of length "
                                           f"{self.length} and found none that passed the NumpyConstraints "
                                           f"and " "SequenceConstraints. Try relaxing the constraints so "
                                           "that it's more likely a random sequence satisfies the "
                                           "constraints.")
-            if num_to_generate == num_sequences_total and len(seqs) == 0:
+            if num_to_generate == num_sequences_total:
                 raise NotImplementedError(f"We generated all possible {num_sequences_total} DNA sequences "
                                           f"of length {self.length} and found none that passed the "
                                           f"NumpyConstraints and "
-                                          "SequenceConstraints. Try relaxing the constraints so that it's "
-                                          "more likely a random sequence satisfies the constraints.")
+                                          "SequenceConstraints. Try relaxing the constraints so that "
+                                          "some sequence satisfies the constraints.")
 
             num_to_generate *= 2
 
-        return seqs[0]
+        raise AssertionError('should be unreachable')
 
-    def _generate_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator,
-                                                         num_to_generate: int) -> dn.DNASeqList:
+    def _generate_random_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator,
+                                                                num_to_generate: int) -> dn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
         _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
