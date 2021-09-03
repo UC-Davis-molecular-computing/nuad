@@ -444,7 +444,6 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         for domain in domains:
             violations[domain].add(violation)
 
-    sw.log(f'{constraint.short_description} end of _violations_of_constraint')
     return violations, quit_early
 
 
