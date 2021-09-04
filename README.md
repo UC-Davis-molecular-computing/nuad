@@ -134,6 +134,8 @@ In more detail, there are five main types of objects you create to describe your
     
     `part` is the individual part of the design that caused a problem. generally it will be one of the elements of the list passed to `evaluate_bulk`, though the returned list could be smaller than the input list. This is because some parts may satisfy the constraint, and generally the only parts returned from `evaluate_bulk` are those that violated the constraint. `excess` and `summary` have the same interpretation as with the "singular" constraints.
 
+    The full search algorithm is described in the [API documentation for the function dsd.search.search_for_dna_sequences](https://dnadsd.readthedocs.io/en/latest/#search.search_for_dna_sequences)
+
 
 ## Example
 TODO
