@@ -3,6 +3,9 @@ The main export of the search module is the function :meth:`search_for_dna_seque
 which is a stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
 Various parameters of the search can be controlled using :any:`SearchParameters`.
+
+Instructions for using the dsd library are available at
+https://github.com/UC-Davis-molecular-computing/dsd#data-model
 """
 
 # Since dsd is distributed with NUPACK, we include the following license
