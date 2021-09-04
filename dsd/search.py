@@ -879,7 +879,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     **Search algorithm:**
     This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
     More precisely, it adds the total score of all violated constraints
-    (sum of :py:data:`constraints.Constraint.weight`*score_of_violation over all violated
+    (sum of :data:`constraints.Constraint.weight` * score_of_violation over all violated
     :any:`Constraint`'s).
     The goal is to reduce this total score until it is 0 (i.e., no violated constraints).
     Any :any:`Domain` "involved" in the violated :any:`Constraint` is noted as being one of the
