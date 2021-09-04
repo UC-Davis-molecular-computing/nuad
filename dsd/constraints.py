@@ -2315,6 +2315,26 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         }
 
     @staticmethod
+    def from_design_file(filename: str,
+                         strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
+                         domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
+                         ) -> Design[StrandLabel, DomainLabel]:
+        """
+        :param filename:
+            name of JSON file describing the :any:`Design`
+        :param domain_label_decoder:
+            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
+        :param strand_label_decoder:
+            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
+        :return:
+            :any:`Design` described by the JSON file with name `filename`, assuming it was created using
+            :py:meth`Design.to_json`.
+        """
+        with open(filename, 'r') as f:
+            json_str = f.read()
+        return Design.from_json(json_str, strand_label_decoder, domain_label_decoder)
+
+    @staticmethod
     def from_json(json_str: str,
                   strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
                   domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
