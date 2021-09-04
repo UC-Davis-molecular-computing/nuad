@@ -140,16 +140,22 @@ TODO
 
 
 ## Parallelism
-TODO describe parallelism and warn that it's probably more effective just to run many independent instances than to use dsd's parallelism.
+Each "singular" constraint in dsd includes the ability to specify the Boolean field `Constraint.parallel`. If True, then the various parts of the Design will be evaluated in parallel, taking advantage of multi-core systems. In practice, we have found that the overhead associated with doing this is fairly hefty, so it is unlikely that one would see, for example, an 8-fold speedup on an 8-core system. However, one could potentially see a speedup of 2x or 3x.
 
-Each constraint is specified primarily by a function called `evaluate` that takes two major types of arguments: DNA sequence(s) of the related design part(s), and optional arguments containing the part(s) themselves. For example, a `StrandPairConstraint`'s `evaluate` function takes as input two DNA sequences corresponding to the two `Strand` objects, as well as the two `Strand`'s themselves.
+Given the nature of the stochastic local search, we have found that it is often a more effective and low-overhead use of multiple cores to simply start many independent instances of the designer, each with `Constraint.parallel = False` for all of the `Constraint`'s. One reason this approach is preferable is that, with very tight constraints that are difficult to satisfy, many runs of the designer will get stuck in local minima, and one often will simply pick the run that got stuck in the lowest minimum.
+
+However, the parallelism feature is there if desired, and it is the reason that the `evaluate` and `evaluate_bulk` functions described in `#data-model` above take slightly more complicated arguments than hinted in that section, which we explain next.
+
+Each "singular" constraint `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`, or `ComplexConstraint` is specified primarily by a function called `evaluate` that takes two major types of arguments: DNA sequence(s) of the related design part(s), and optional arguments containing the part(s) themselves. For example, a `StrandPairConstraint`'s `evaluate` function takes as input two DNA sequences corresponding to the two `Strand` objects, as well as the two `Strand`'s themselves.
     
-The type of the `Strand` parameters is actually `Optional[Strand]`, so could have the value `None`, for the following reason. If you use dsd's automatic parallelization feature (by setting a Constraint's `threaded` field to True), then when constraints such as this are called, the `Strand`'s will not be given to the `evaluate` function, only the DNA sequences. This is because the [pathos](https://pypi.org/project/pathos/) library is used for parallelization, which uses the [dill](https://pypi.org/project/dill/) library to serialize objects for parallel processing. In practice it takes much longer to serialize the entire `Strand` object than only its DNA sequence. The upshot is that if you don't use parallelization, then you can write constraints that reference not only the DNA sequence of a Strand or other part of the design, but the object representing the part itself. However, to use parallelization, only the DNA sequence of the part will be available to evaluate the constraint, and the second argument representing the part itself will be `None`.
+The type of the `Strand` parameter is actually `Optional[Strand]`, so could have the value `None`, for the following reason. If you use dsd's automatic parallelization feature (by setting a Constraint's `threaded` field to True), then when constraints such as this are called, the `Strand`'s will not be given to the `evaluate` function, only the DNA sequences. This is because the [pathos](https://pypi.org/project/pathos/) library is used for parallelization, which uses the [dill](https://pypi.org/project/dill/) library to serialize objects for parallel processing. In practice it takes much longer to serialize the entire `Strand` object than only its DNA sequence. The upshot is that if you don't use parallelization, then you can write constraints that reference not only the DNA sequence of a Strand or other part of the design, but the object representing the part itself. However, to use parallelization, only the DNA sequence of the part will be available to evaluate the constraint, and the second argument representing the part itself will be `None`.
+
+The `evaluate_bulk` function for "plural" constraints `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, and `StrandPairsConstraint` does not have this issue, since there is no automatic parallelization feature for "plural" constraints. Therefore it simply takes as input a list of the design "parts" (e.g., list of `Strand`'s, list of pairs of `Domain`'s, etc.) to be evaluated.
 
 
 ## Reporting issues
 
-Please report issues (bugs or feature requests) at the [dsd GitHub repository](https://github.com/UC-Davis-molecular-computing/dsd/issues).
+Please report issues (bugs or feature requests) at the [dsd GitHub repository issues page](https://github.com/UC-Davis-molecular-computing/dsd/issues).
 
 
 ## Contributing
