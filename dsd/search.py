@@ -1048,7 +1048,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 def create_report(design: dc.Design, constraints: Iterable[Constraint]) -> str:
     """
     Returns string containing report of how well `design` does according to `constraints`, assuming
-    `design` has sequences assigned to it, for example, if it was read using :meth:`Design.from_design_file`
+    `design` has sequences assigned to it, for example, if it was read using
+    :meth:`constraints.Design.from_design_file`
     from a design.json file writte as part of a call to :meth:`search_for_dna_sequences`.
 
     The report is the same format as written to the reports generated when calling
