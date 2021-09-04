@@ -111,7 +111,7 @@ def default_output_directory() -> str:
 
 
 def _violations_of_constraints(design: Design,
-                               params: SearchParameters,
+                               constraints: [dc.Constraint],
                                never_increase_score: bool,
                                domains_changed: Optional[Iterable[Domain]],
                                violation_set_old: Optional[dc.ViolationSet],
@@ -120,8 +120,8 @@ def _violations_of_constraints(design: Design,
     """
     :param design:
         The :any:`Design` for which to find DNA sequences.
-    :param params:
-        The :any:`SearchParameters` to apply to `design`.
+    :param constraints:
+        List of :any:`constraints.Constraint`'s to apply
     :param domains_changed:
         The :any:`Domain`'s that just changed; if None, then recalculate all constraints, otherwise assume no
         constraints changed that do not involve a :any:`Domain` in `domains_changed`.
@@ -159,7 +159,7 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
-    for constraint in params.constraints:
+    for constraint in constraints:
         parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
         current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
@@ -1045,6 +1045,34 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         dc.logger.removeHandler(directories.info_file_handler)  # noqa
 
 
+def create_report(design: dc.Design, constraints: Iterable[Constraint]) -> str:
+    """
+    Returns string containing report of how well `design` does according to `constraints`, assuming
+    `design` has sequences assigned to it, for example, if it was read using :meth:`Design.from_design_file`
+    from a design.json file writte as part of a call to :meth:`search_for_dna_sequences`.
+
+    The report is the same format as written to the reports generated when calling
+    :meth:`search_for_dna_sequences`
+
+    :param design:
+        the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
+    :param constraints:
+        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :return:
+        string describing a report of how well `design` does according to `constraints`
+    """
+    violation_set: dc.ViolationSet = _violations_of_constraints(
+        design=design, constraints=constraints, never_increase_score=False,
+        domains_changed=None, violation_set_old=None, iteration=0)
+
+    content = f'''\
+Report on constraints
+=====================
+''' + summary_of_constraints(constraints, True, violation_set=violation_set)
+
+    return content
+
+
 def _check_cpu_count(cpu_count: int) -> None:
     # alters number of threads in ThreadPool if cpu count changed. (Lets us hot-swap CPUs, e.g.,
     # in Amazon web services, without stopping the program.)
@@ -1319,7 +1347,7 @@ def _find_violations_and_score(design: Design,
     """
 
     violation_set: dc.ViolationSet = _violations_of_constraints(
-        design, params, never_increase_score, domains_changed, violation_set_old, iteration)
+        design, params.constraints, never_increase_score, domains_changed, violation_set_old, iteration)
 
     # NOTE: this filters out the fixed domains,
     # but we keep them in violation_set for the sake of reports
