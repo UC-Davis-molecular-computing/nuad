@@ -80,23 +80,7 @@ def main() -> None:
     strand3: dc.Strand[str] = dc.Strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
     strands = [strand0, strand1, strand2, strand3]
 
-    strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl',
-        pairs=((strand0, strand1), (strand2, strand3))
-    )
-    strand_pairs_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
-        threshold=-7.0, temperature=52, short_description='StrandPairCompl',
-        pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
-    )
-    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
-        threshold=-0.0, temperature=52, short_description='StrandSS')
-
-    initial_design = dc.Design(strands,
-                               constraints=[strand_pairs_no_comp_constraint,
-                                            strand_pairs_comp_constraint,
-                                            strand_individual_ss_constraint,
-                                            # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
-                                            ])
+    initial_design = dc.Design(strands)
 
     if args.initial_design_filename is not None:
         with open(args.initial_design_filename, 'r') as file:
@@ -112,21 +96,11 @@ def main() -> None:
         dc.RunsOfBasesConstraint(['A', 'T'], 4),
     ]
 
-    def nupack_binding_energy_in_bounds(seq: str) -> bool:
-        energy = dv.binding_complement(seq, 52)
-        dc.logger.debug(f'nupack complement binding energy = {energy}')
-        return -12 < energy < -8
-
-    sequence_constraints = [
-        # nupack_binding_energy_in_bounds,
-    ]
-
     lengths = [9, 10, 11, 12]
     domain_pools = {
         length:
             dc.DomainPool(f'length-{length} domains', length,
-                          numpy_constraints=numpy_constraints,
-                          sequence_constraints=sequence_constraints) for length in lengths
+                          numpy_constraints=numpy_constraints) for length in lengths
     }
 
     for strand in [strand0, strand1]:
@@ -140,9 +114,24 @@ def main() -> None:
     strand3.domains[0].pool = domain_pools[lengths[1]]
     strand3.domains[1].pool = domain_pools[lengths[2]]
 
+    strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
+        threshold=-1.0, temperature=52, short_description='StrandPairNoCompl',
+        pairs=((strand0, strand1), (strand2, strand3))
+    )
+    strand_pairs_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
+        threshold=-7.0, temperature=52, short_description='StrandPairCompl',
+        pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
+    )
+    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
+        threshold=-0.0, temperature=52, short_description='StrandSS')
+
     params = ds.SearchParameters(
+        constraints=[strand_pairs_no_comp_constraint,
+                     strand_pairs_comp_constraint,
+                     strand_individual_ss_constraint,
+                     # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
+                     ],
         # weigh_violations_equally=True,
-        report_delay=0.0,
         out_directory=args.directory,
         restart=args.restart,
         # force_overwrite=True,

@@ -365,13 +365,22 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
     :rtype: dc.DomainPairConstraint
     """
 
-    def evaluate(seq1: str, seq2: str, domain1: Optional[dc.Domain], domain2: Optional[dc.Domain]) -> float:
+    def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[dc.DomainPair]) \
+            -> Tuple[float, str]:
+        seq1, seq2 = seqs
+        if domain_pair is not None:
+            domain1, domain2 = domain_pair.domain1, domain_pair.domain2
+        else:
+            domain1, domain2 = None, None
+
+        # evaluate
         num_of_matches = 0
         run_of_matches = 0
         assert len(seq1) == len(seq2)
         length = len(seq1)
         run_of_matches_limit = 0.35 * length
         num_of_matches_limit = 0.7 * length
+        result = 0
         for i in range(length):
             if seq1[i] == seq2[i]:
                 num_of_matches += 1
@@ -379,25 +388,27 @@ def base_difference_constraint(domains: Iterable[dc.Domain]) -> dc.DomainPairCon
             else:
                 run_of_matches = 0
             if num_of_matches > num_of_matches_limit or run_of_matches > run_of_matches_limit:
-                return 100
-        return 0
+                result = 100
+                break
 
-    def summary(domain1: dc.Domain, domain2: dc.Domain) -> str:
-        if evaluate(domain1.sequence, domain2.sequence, domain1, domain2) > 0:
-            return (f'Too many matches between {domain1} and {domain2}\n'
-                    f'\t{domain1}: {domain1.sequence}\n'
-                    f'\t{domain2}: {domain2.sequence}\n')
+        # summary
+
+        if result > 0:
+            summary = (f'Too many matches between domains {domain1} and {domain2}\n'
+                       f'\t{domain1}: {domain1.sequence}\n'
+                       f'\t{domain2}: {domain2.sequence}\n')
         else:
-            return (f'Sufficient difference between {domain1} and {domain2}\n'
-                    f'\t{domain1}: {domain1.sequence}\n'
-                    f'\t{domain2}: {domain2.sequence}\n')
+            summary = (f'Sufficient difference between domains {domain1} and {domain2}\n'
+                       f'\t{domain1}: {domain1.sequence}\n'
+                       f'\t{domain2}: {domain2.sequence}\n')
+
+        return result, summary
 
     pairs = itertools.combinations(domains, 2)
 
-    return dc.DomainPairConstraint(
-        pairs=tuple(pairs),
-        evaluate=evaluate, summary=summary, description='base difference constraint',
-        short_description='base difference constraint')
+    return dc.DomainPairConstraint(pairs=tuple(pairs), evaluate=evaluate,
+                                   description='base difference constraint',
+                                   short_description='base difference constraint')
 
 
 def strand_substring_constraint(
