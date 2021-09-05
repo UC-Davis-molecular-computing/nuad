@@ -1340,8 +1340,13 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     @staticmethod
     def complementary_domain_name(domain_name: str) -> str:
         """
-        Returns the name of the domain complementary to `domain_name`
-        :param domain_name: name of domain
+        Returns the name of the domain complementary to `domain_name`. In other words, a ``*`` is either
+        removed from the end of `domain_name`, or appended to it if not already there.
+
+        :param domain_name:
+            name of domain
+        :return:
+            name of complementary domain
         """
         return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
 
@@ -1349,7 +1354,6 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         """Return true if self is independent (not dependent or fixed).
 
         :return: [description]
-        :rtype: bool
         """
         return not self.dependent or self.fixed
 
@@ -3116,6 +3120,31 @@ class ViolationSet:
 
 @dataclass(frozen=True, eq=False)
 class Constraint(Generic[DesignPart], ABC):
+    """
+    Abstract base class of all "soft" constraints to apply when running
+    :meth:`search.search_for_dna_sequences`.
+    Unlike a :any:`NumpyConstraint` or a :any:`SequenceConstraint`, which disallow certain DNA sequences
+    from ever being assigned to a :any:`Domain`, a :any:`Constraint` can be violated during the search.
+    The goal of the search is to reduce the number of violated :any:`Constraint`'s.
+    See :meth:`search.search_for_dna_sequences` for a more detailed description of how the search algorithm
+    interacts with the constraints.
+
+    You will not use this class directly, but instead its concrete subclasses
+    :any:`DomainConstraint`,
+    :any:`StrandConstraint`,
+    :any:`DomainPairConstraint`,
+    :any:`StrandPairConstraint`,
+    :any:`ComplexConstraint`,
+    which are subclasses of :any:`SingularConstraint`,
+    :any:`DomainsConstraint`,
+    :any:`StrandsConstraint`,
+    :any:`DomainPairsConstraint`,
+    :any:`StrandPairsConstraint`,
+    which are subclasses of :any:`BulkConstraint`,
+    or
+    :any:`DesignConstraint`.
+    """
+
     description: str
     """
     Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol'.
