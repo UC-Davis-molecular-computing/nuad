@@ -5858,7 +5858,7 @@ def nupack_complex_base_pair_probability_constraint(
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         description: Optional[str] = None,
-        short_description: str = 'complex_secondary_structure_nupack',
+        short_description: str = 'ComplexBPProbs',
         parallel: bool = False,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
