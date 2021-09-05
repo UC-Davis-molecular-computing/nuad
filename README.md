@@ -1,12 +1,14 @@
 # dsd
 
+Note: If you are reading this on the PyPI website, many links below won't work. They are relative links intended to be read on the [GitHub README page](https://github.com/UC-Davis-molecular-computing/dsd/tree/main#readme).
+
 ## Table of contents
 
 * [Overview](#overview)
 * [API documentation](#api-documentation)
 * [Installation](#installation)
 * [Data model](#data-model)
-* [Example](#example)
+* [Examples](#examples)
 * [Parallelism](#parallelism)
 * [Reporting issues](#reporting-issues)
 * [Contributing](#contributing)
@@ -139,18 +141,18 @@ In more detail, there are five main types of objects you create to describe your
     The full search algorithm is described in the [API documentation for the function dsd.search.search_for_dna_sequences](https://dnadsd.readthedocs.io/en/latest/#search.search_for_dna_sequences).
 
 
-## Example
-TODO
+## Examples
+Some example scripts can be found in the [examples/](examples/) subfolder.
 
 
 ## Parallelism
 Each "singular" constraint in dsd includes the ability to specify the Boolean field `Constraint.parallel`. If True, then the various parts of the Design will be evaluated in parallel, taking advantage of multi-core systems. In practice, we have found that the overhead associated with doing this is fairly hefty, so it is unlikely that one would see, for example, an 8-fold speedup on an 8-core system. However, one could potentially see a speedup of 2x or 3x.
 
-Given the nature of the stochastic local search, we have found that it is often a more effective and low-overhead use of multiple cores to simply start many independent instances of the designer, each with `Constraint.parallel = False` for all of the `Constraint`'s. One reason this approach is preferable is that, with very tight constraints that are difficult to satisfy, many runs of the designer will get stuck in local minima, and one often will simply pick the run that got stuck in the lowest minimum.
+Given the nature of the stochastic local search, we have found that it is often a more effective and low-overhead use of multiple cores to simply start many independent instances of the designer, each with `Constraint.parallel` = False for all of the `Constraint`'s. One reason this approach is preferable is that, with very tight constraints that are difficult to satisfy, many runs of the designer will get stuck in local minima, and one often will simply pick the run that got stuck in the lowest minimum.
 
 However, the parallelism feature is there if desired, and it is the reason that the `evaluate` function described in [the Data model section](#data-model) above take slightly more complicated arguments than hinted in that section, which we explain next.
 
-Each "singular" constraint `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`, or `ComplexConstraint` is specified primarily by a function called `evaluate` that takes two major types of arguments: DNA sequence(s) of the related design part(s), and optional arguments containing the part(s) themselves. For example, a `StrandPairConstraint`'s `evaluate` function takes as input two DNA sequences corresponding to the two `Strand` objects, as well as the two `Strand`'s themselves.
+Each "singular" constraint `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`, or `ComplexConstraint` is specified primarily by a function called `evaluate` that takes two major types of arguments: DNA sequence(s) of the related design part(s), and optional arguments containing the part(s) themselves. For example, a `StrandConstraint`'s `evaluate` function takes as input a tuple of strings of length 1, containing the DNA sequence corresponding to the `Strand` object, as well as the `Strand` object themselves. For concreteness, we stick with this example of `StrandConstraint`, but the idea applies to the other singular constraints above.
     
 The type of the `Strand` parameter is actually `Optional[Strand]`, so could have the value `None`, for the following reason. If you use dsd's automatic parallelization feature (by setting a Constraint's `threaded` field to True), then when constraints such as this are called, the `Strand`'s will not be given to the `evaluate` function, only the DNA sequences. This is because the [pathos](https://pypi.org/project/pathos/) library is used for parallelization, which uses the [dill](https://pypi.org/project/dill/) library to serialize objects for parallel processing. In practice it takes much longer to serialize the entire `Strand` object than only its DNA sequence. The upshot is that if you don't use parallelization, then you can write constraints that reference not only the DNA sequence of a Strand or other part of the design, but the object representing the part itself. However, to use parallelization, only the DNA sequence of the part will be available to evaluate the constraint, and the second argument representing the part itself will be `None`.
 
