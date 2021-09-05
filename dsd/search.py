@@ -392,12 +392,11 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
 
     score_discovered_here: float = 0.0
     quit_early = False
-    num_threads = dc.cpu_count()
 
-    if not constraint.parallel or num_threads == 1 or len(parts) == 1:
-        if isinstance(constraint,
-                      (DomainConstraint, StrandConstraint,
-                       DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+    if isinstance(constraint,
+                  (DomainConstraint, StrandConstraint,
+                   DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+        if not constraint.parallel or len(parts) == 1 or dc.cpu_count() == 1:
             for part in parts:
                 score, summary = _evaluate_individual_part_constraint(constraint, part)
                 if score > 0.0:
@@ -407,29 +406,28 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
                         if _is_significantly_greater(score_discovered_here, current_score_gap):
                             quit_early = True
                             break
-
-        elif isinstance(constraint,
-                        (DomainsConstraint, StrandsConstraint,
-                         DomainPairsConstraint, StrandPairsConstraint,
-                         ComplexesConstraint, DesignConstraint)):
-            if isinstance(constraint, DesignConstraint):
-                violating_parts_scores_summaries = constraint.evaluate_design(design, domains_changed)
-            else:
-                # XXX: I don't understand the mypy error on the next line
-                violating_parts_scores_summaries = constraint.evaluate_bulk(parts)  # type: ignore
-
-            # we can't quite this function early,
-            # but we can let the caller know to stop evaluating constraints
-            total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
-            if current_score_gap is not None:
-                score_discovered_here += total_score
-                if _is_significantly_greater(score_discovered_here, current_score_gap):
-                    quit_early = True
         else:
-            raise AssertionError(f'constraint {constraint} of unrecognized type {type(constraint)}')
+            raise NotImplementedError('TODO: implement parallelization')
 
+    elif isinstance(constraint,
+                    (DomainsConstraint, StrandsConstraint,
+                     DomainPairsConstraint, StrandPairsConstraint,
+                     ComplexesConstraint, DesignConstraint)):
+        if isinstance(constraint, DesignConstraint):
+            violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_changed)
+        else:
+            # XXX: I don't understand the mypy error on the next line
+            violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
+
+        # we can't quite this function early,
+        # but we can let the caller know to stop evaluating constraints
+        total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
+        if current_score_gap is not None:
+            score_discovered_here += total_score
+            if _is_significantly_greater(score_discovered_here, current_score_gap):
+                quit_early = True
     else:
-        raise NotImplementedError('TODO: implement parallelization')
+        raise AssertionError(f'constraint {constraint} of unrecognized type {type(constraint)}')
 
     for part, score, summary in violating_parts_scores_summaries:
         domains = _domains_in_part(part, exclude_fixed=False)
@@ -444,16 +442,16 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
 def _evaluate_individual_part_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tuple[float, str]:
     if isinstance(constraint, (DomainConstraint, StrandConstraint)):
         assert isinstance(part, (Domain, Strand))
-        score, summary = constraint.evaluate((part.sequence(),), part)
+        score, summary = constraint.call_evaluate((part.sequence(),), part)
     elif isinstance(constraint, (DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
         assert isinstance(part, (DomainPair, StrandPair, Complex))
         seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
         # mypy doesn't like the next line because of the duck typing,
         # i.e., DomainPair, StrandPair, Complex all have an individual_parts method, which returns
         # what we want here, but not sure how to encode it in Python typing Generics logic
-        score, summary = constraint.evaluate(seqs, part)  # type: ignore
+        score, summary = constraint.call_evaluate(seqs, part)  # type: ignore
     else:
-        raise AssertionError()
+        raise AssertionError('should be unreachable')
     return score, summary
 
 
@@ -478,7 +476,8 @@ def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:
         domain_iterable: Iterable[Domain] = _flatten(domains_per_strand)
         return list(domain_iterable)
     else:
-        raise NotImplementedError()
+        raise AssertionError(f'part {part} not recognized as one of Domain, Strand, '
+                             f'DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}')
 
 
 T = TypeVar('T')
@@ -1433,10 +1432,10 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
             skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                                f'That domain has a NON-FIXED sequence {domain.sequence}, ' \
+                                f'That domain has a NON-FIXED sequence {domain.sequence()}, ' \
                                 f'which the search will attempt to replace.'
             skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                             f'That domain has a FIXED sequence {domain.sequence}.'
+                             f'That domain has a FIXED sequence {domain.sequence()}.'
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True
