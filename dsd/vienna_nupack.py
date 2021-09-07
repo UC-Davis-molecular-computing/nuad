@@ -76,6 +76,9 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
 
+    By default, a strand association penalty is applied that is not applied by NUPACK's pfunc.
+    See `strand_association_penalty` parameter documentation for details.
+
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
 
