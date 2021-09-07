@@ -909,6 +909,7 @@ def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys:
 
 class Part(ABC):
 
+    @staticmethod
     @abstractmethod
     def name_of_part_type(self) -> str:
         pass
@@ -916,6 +917,10 @@ class Part(ABC):
     @property
     @abstractmethod
     def fixed(self) -> bool:
+        pass
+
+    @abstractmethod
+    def individual_parts(self) -> Union[Tuple[Domain, ...], Tuple[Strand, ...]]:
         pass
 
 
@@ -931,10 +936,11 @@ class DomainPair(Part, Generic[DomainLabel]):
     def name(self) -> str:
         return f'{self.domain1.name}, {self.domain2.name}'
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'domain pair'
 
-    def individual_parts(self) -> Tuple[Domain, Domain]:
+    def individual_parts(self) -> Tuple[Domain, ...]:
         return self.domain1, self.domain2
 
     @property
@@ -1064,8 +1070,12 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         for subdomain in self._subdomains:
             subdomain.parent = self
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'domain'
+
+    def individual_parts(self) -> Tuple[Domain, ...]:
+        return self,
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
@@ -1611,10 +1621,11 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
     def name(self) -> str:
         return f'{self.strand1.name}, {self.strand2.name}'
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'strand pair'
 
-    def individual_parts(self) -> Tuple[Strand, Strand]:
+    def individual_parts(self) -> Tuple[Strand, ...]:
         return self.strand1, self.strand2
 
     @property
@@ -1630,6 +1641,7 @@ class Complex(Part, Generic[StrandLabel, DomainLabel]):
     def name(self) -> str:
         return ', '.join(strand.name for strand in self.strands)
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'complex'
 
@@ -1777,8 +1789,12 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
 
         self.compute_derived_fields()
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'strand'
+
+    def individual_parts(self) -> Tuple[Strand, ...]:
+        return self,
 
     def clone(self, name: Optional[str]) -> Strand:
         """
