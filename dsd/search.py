@@ -1595,9 +1595,8 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc
         summary_score_unfixed = None
 
     indented_content = textwrap.indent(report.content, '  ')
-    delim = '*' * 80
     summary = f'''
-{delim}
+**{"*" * len(report.constraint.description)}
 * {report.constraint.description}
 * checks:     {report.num_checks}
 * violations: {report.num_violations}
