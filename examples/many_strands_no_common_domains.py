@@ -156,14 +156,14 @@ def main() -> None:
         threshold=-3.5, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
 
     params = ds.SearchParameters(constraints=[
-        domain_nupack_ss_constraint,
-        strand_individual_ss_constraint,
+        # domain_nupack_ss_constraint,
+        # strand_individual_ss_constraint,
         strand_pair_nupack_constraint,
-        domain_pair_nupack_constraint,
-        domain_pairs_rna_duplex_constraint,
-        strand_pairs_rna_duplex_constraint,
-        strand_base_pair_prob_constraint,
-        dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
+        # domain_pair_nupack_constraint,
+        # domain_pairs_rna_duplex_constraint,
+        # strand_pairs_rna_duplex_constraint,
+        # strand_base_pair_prob_constraint,
+        # dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
     ],
         out_directory=args.directory,
         restart=args.restart,

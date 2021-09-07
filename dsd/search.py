@@ -273,8 +273,7 @@ def _determine_strands_to_check(all_strands: Iterable[Strand],
 
 def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
                                      domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithDomainPairs) \
-        -> Sequence[DomainPair]:
+                                     constraint: ConstraintWithDomainPairs) -> Sequence[DomainPair]:
     """
     Determines domain pairs to check between domains in `all_domains`.
     If `domain_changed` is None, then this is all pairs where they are not both fixed if constraint.pairs
@@ -305,8 +304,7 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
 
 def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
                                      domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithStrandPairs) -> \
-        Sequence[StrandPair]:
+                                     constraint: ConstraintWithStrandPairs) -> Sequence[StrandPair]:
     """
     Similar to _determine_domain_pairs_to_check but for strands.
     """
@@ -315,7 +313,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
         strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
             [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_strands, where=_at_least_one_strand_unfixed)
+        pairs = all_pairs(all_strands, with_replacement=True, where=_at_least_one_strand_unfixed)
         strand_pairs_to_check_if_domain_changed_none = [StrandPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
