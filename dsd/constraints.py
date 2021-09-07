@@ -2998,7 +2998,8 @@ class ViolationSet:
         # and each of its values is a new set, but each of the :any:`Domain`'s and :any:`Violation`'s
         # is the same object as in the original :any:`ViolationSet`.
         #
-        # This is required for efficiently processing :any:`Violation`'s from one search iteration to the next.
+        # This is required for efficiently processing :any:`Violation`'s from one search iteration to the
+        # next.
         #
         # :return: A deep-ish copy of this :any:`ViolationSet`.
         domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
@@ -4544,7 +4545,8 @@ class BasePairType(Enum):
     Base pair is located inside of a strand but not next
     to a base pair that resides on the end of a strand.
 
-    Similar base-pairing probability compared to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` but usually breathes less.
+    Similar base-pairing probability compared to :py:attr:`ADJACENT_TO_EXTERIOR_BASE_PAIR` 
+    but usually breathes less.
 
     .. code-block:: none
 
@@ -5100,7 +5102,8 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                         # if the domain is length 2 and the 5' type is not interior, then
                         # it is adjacent to exterior base pair type
                         domain = domain_addr.strand.domains[domain_addr.domain_idx]
-                        domain_next_to_interior_base_pair = domain_addr.neighbor_5p() is not None and complementary_addr.neighbor_3p() is not None
+                        domain_next_to_interior_base_pair = (domain_addr.neighbor_5p() is not None
+                                                             and complementary_addr.neighbor_3p() is not None)
                         if domain.length == 2 and not domain_next_to_interior_base_pair:
                             #   domain_addr == adjacent_5n_addr        adjacent_addr
                             #     |                                       |
@@ -5314,7 +5317,8 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
             # Variable is None, False, True respectively based on cases above
             domain_3n_complementary_3n_addr_is_bound: Optional[bool] = None
             if domain_3n_complementary_3n_addr is not None:
-                domain_3n_complementary_3n_addr_is_bound = domain_3n_complementary_3n_addr in all_bound_domain_addresses
+                domain_3n_complementary_3n_addr_is_bound = \
+                    domain_3n_complementary_3n_addr in all_bound_domain_addresses
 
             # Not an internal base pair since domain_addr's 3' neighbor is
             # bounded to a domain that is not complementary's 5' neighbor
@@ -5582,7 +5586,8 @@ def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
 
     :param strand_complex: Tuple of strands representing strand complex
     :type strand_complex: Complex
-    :param nonimplicit_base_pairs_domain_names: Set of all domain names to ignore in this search, defaults to None
+    :param nonimplicit_base_pairs_domain_names:
+        Set of all domain names to ignore in this search, defaults to None
     :type nonimplicit_base_pairs_domain_names: Set[str], optional
     :return: Map of all implicitly bound domain addresses
     :rtype: Dict[StrandDomainAddress, StrandDomainAddress]
@@ -5709,7 +5714,8 @@ def _get_base_pair_domain_endpoints_to_check(
 
     :param strand_complex: Tuple of strands representing strand complex
     :type strand_complex: Complex
-    :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
+    :param nonimplicit_base_pairs:
+        Set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
     :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
@@ -5745,7 +5751,8 @@ def __get_base_pair_domain_endpoints_to_check(
 
     :param strand_complex: Tuple of strands representing strand complex
     :type strand_complex: Complex
-    :param nonimplicit_base_pairs: Set of base pairs that cannot be inferred (usually due to competition), defaults to None
+    :param nonimplicit_base_pairs:
+        Set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
     :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
@@ -5788,7 +5795,8 @@ def __get_base_pair_domain_endpoints_to_check(
     for strand in strand_complex:
         if strand in seen_strands:
             raise ValueError(f"Multiple instances of a strand in a complex is not allowed."
-                             " Please make a separate Strand object with the same Domain objects in the same order"
+                             " Please make a separate Strand object with the"
+                             " same Domain objects in the same order"
                              " but a different strand name")
         seen_strands.add(strand)
         for idx, domain in enumerate(strand.domains):
@@ -5803,7 +5811,8 @@ def __get_base_pair_domain_endpoints_to_check(
         if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
             assert domain_name not in nonimplicit_base_pairs_domain_names
             raise ValueError(
-                f"Multiple instances of domain in a complex is not allowed when its complement is also in the complex. "
+                f"Multiple instances of domain in a complex is not allowed "
+                f"when its complement is also in the complex. "
                 f"Violating domain: {domain_name_complement}")
     # End Input Validation #
 
@@ -6019,7 +6028,8 @@ def nupack_complex_base_pair_probability_constraint(
     except ModuleNotFoundError:
         raise ImportError(
             'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. '
-            'Installation instructions can be found at https://piercelab-caltech.github.io/nupack-docs/start/.')
+            'Installation instructions can be found at '
+            'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     # Start Input Validation
     if len(strand_complexes) == 0:
@@ -6117,23 +6127,6 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
             summary = '\n'.join(summary_list)
         return err_sq, summary
 
-    # summary would print all the base pairs
-    # * indices of the bases e.g 2,7: 97.3% (<99%);  9,13: 75% (<80%); 1,7: 2.1% (>1%)
-    # * maybe consider puting second and after base pairs on new line with indent
-    # def summary(strand_complex_: Complex) -> str:
-    #     bps = _violation_base_pairs(strand_complex_)
-    #     if len(bps) == 0:
-    #         return "\tAll base pairs satisfy thresholds."
-    #     summary_list = []
-    #     for bp in bps:
-    #         i = bp.base_index1
-    #         j = bp.base_index2
-    #         p = bp.base_pairing_probability
-    #         t = bp.base_pair_type
-    #         summary_list.append(
-    #             f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])')
-    #     return '\n'.join(summary_list)
-
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
         nupack_complex_result = dv.nupack_complex_base_pair_probabilities(strand_complex_,
                                                                           temperature=temperature,
@@ -6214,7 +6207,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
                 prob_thres = internal_base_pair_prob
                 bp_type = BasePairType.INTERIOR_TO_STRAND
                 if i == 1 and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND \
-                        or i == domain_length_ - 2 and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
+                        or i == domain_length_ - 2 \
+                        and d1_3p_d2_5p_ext_bp_prob_thres is not BasePairType.INTERIOR_TO_STRAND:
                     prob_thres = border_internal_base_pair_prob
                     bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
 
