@@ -236,8 +236,8 @@ def _determine_domains_to_check(all_domains: Iterable[Domain],
     it is just those in `domains_changed` that appear in `all_domains`.
     """
     # either all pairs, or just constraint.pairs if specified
-    domains_to_check_if_domain_changed_none = constraint.domains if constraint.domains is not None \
-        else [domain for domain in all_domains if not domain.fixed]
+    domains_to_check_if_domain_changed_none = all_domains \
+        if constraint.domains is None else constraint.domains
 
     # filter out those not containing domain_change if specified
     domains_to_check = list(domains_to_check_if_domain_changed_none) if domains_changed is None \
@@ -254,13 +254,15 @@ def _determine_strands_to_check(all_strands: Iterable[Strand],
     Similar to _determine_domains_to_check but for strands.
     """
     # either all pairs, or just constraint.pairs if specified
-    strands_to_check_if_domain_changed_none = constraint.strands if constraint.strands is not None \
-        else [strand for strand in all_strands if not strand.fixed]
+    strands_to_check_if_domain_changed_none = all_strands \
+        if constraint.strands is None else constraint.strands
+        # constraint.strands if constraint.strands is not None \
+        # else [strand for strand in all_strands if not strand.fixed]
 
     # filter out those not containing domain_change if specified
     strands_to_check: List[Strand] = []
     if domains_changed is None:
-        strands_to_check = strands_to_check_if_domain_changed_none
+        strands_to_check = list(strands_to_check_if_domain_changed_none)
     else:
         for strand in strands_to_check_if_domain_changed_none:
             for domain_changed in domains_changed:
@@ -286,7 +288,7 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
         domain_pairs_to_check_if_domain_changed_none: List[DomainPair] = \
             [DomainPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_domains, with_replacement=True, where=_at_least_one_domain_unfixed)
+        pairs = all_pairs(all_domains, with_replacement=True)
         domain_pairs_to_check_if_domain_changed_none = [DomainPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
@@ -313,7 +315,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
         strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
             [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_strands, with_replacement=True, where=_at_least_one_strand_unfixed)
+        pairs = all_pairs(all_strands, with_replacement=True)
         strand_pairs_to_check_if_domain_changed_none = [StrandPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
