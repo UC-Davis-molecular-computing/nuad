@@ -256,8 +256,6 @@ def _determine_strands_to_check(all_strands: Iterable[Strand],
     # either all pairs, or just constraint.pairs if specified
     strands_to_check_if_domain_changed_none = all_strands \
         if constraint.strands is None else constraint.strands
-        # constraint.strands if constraint.strands is not None \
-        # else [strand for strand in all_strands if not strand.fixed]
 
     # filter out those not containing domain_change if specified
     strands_to_check: List[Strand] = []
@@ -398,7 +396,8 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
                    DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
         if not constraint.parallel or len(parts) == 1 or dc.cpu_count() == 1:
             for part in parts:
-                score, summary = _evaluate_individual_part_constraint(constraint, part)
+                seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
+                score, summary = constraint.call_evaluate(seqs, part)
                 if score > 0.0:
                     violating_parts_scores_summaries.append((part, score, summary))
                     if current_score_gap is not None:
@@ -427,7 +426,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
             if _is_significantly_greater(score_discovered_here, current_score_gap):
                 quit_early = True
     else:
-        raise AssertionError(f'constraint {constraint} of unrecognized type {type(constraint)}')
+        raise AssertionError(f'constraint {constraint} of unrecognized type {constraint.__class__.__name__}')
 
     for part, score, summary in violating_parts_scores_summaries:
         domains = _domains_in_part(part, exclude_fixed=False)
@@ -437,22 +436,6 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
             violations[domain].add(violation)
 
     return violations, quit_early
-
-
-def _evaluate_individual_part_constraint(constraint: dc.Constraint, part: dc.DesignPart) -> Tuple[float, str]:
-    if isinstance(constraint, (DomainConstraint, StrandConstraint)):
-        assert isinstance(part, (Domain, Strand))
-        score, summary = constraint.call_evaluate((part.sequence(),), part)
-    elif isinstance(constraint, (DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
-        assert isinstance(part, (DomainPair, StrandPair, Complex))
-        seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-        # mypy doesn't like the next line because of the duck typing,
-        # i.e., DomainPair, StrandPair, Complex all have an individual_parts method, which returns
-        # what we want here, but not sure how to encode it in Python typing Generics logic
-        score, summary = constraint.call_evaluate(seqs, part)  # type: ignore
-    else:
-        raise AssertionError('should be unreachable')
-    return score, summary
 
 
 def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:

@@ -909,6 +909,7 @@ def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys:
 
 class Part(ABC):
 
+    @staticmethod
     @abstractmethod
     def name_of_part_type(self) -> str:
         pass
@@ -916,6 +917,10 @@ class Part(ABC):
     @property
     @abstractmethod
     def fixed(self) -> bool:
+        pass
+
+    @abstractmethod
+    def individual_parts(self) -> Union[Tuple[Domain, ...], Tuple[Strand, ...]]:
         pass
 
 
@@ -931,10 +936,11 @@ class DomainPair(Part, Generic[DomainLabel]):
     def name(self) -> str:
         return f'{self.domain1.name}, {self.domain2.name}'
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'domain pair'
 
-    def individual_parts(self) -> Tuple[Domain, Domain]:
+    def individual_parts(self) -> Tuple[Domain, ...]:
         return self.domain1, self.domain2
 
     @property
@@ -1064,8 +1070,12 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         for subdomain in self._subdomains:
             subdomain.parent = self
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'domain'
+
+    def individual_parts(self) -> Tuple[Domain, ...]:
+        return self,
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
@@ -1611,10 +1621,11 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
     def name(self) -> str:
         return f'{self.strand1.name}, {self.strand2.name}'
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'strand pair'
 
-    def individual_parts(self) -> Tuple[Strand, Strand]:
+    def individual_parts(self) -> Tuple[Strand, ...]:
         return self.strand1, self.strand2
 
     @property
@@ -1630,6 +1641,7 @@ class Complex(Part, Generic[StrandLabel, DomainLabel]):
     def name(self) -> str:
         return ', '.join(strand.name for strand in self.strands)
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'complex'
 
@@ -1777,8 +1789,12 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
 
         self.compute_derived_fields()
 
+    @staticmethod
     def name_of_part_type(self) -> str:
         return 'strand'
+
+    def individual_parts(self) -> Tuple[Strand, ...]:
+        return self,
 
     def clone(self, name: Optional[str]) -> Strand:
         """
@@ -3589,13 +3605,9 @@ def nupack_domain_complex_free_energy_constraint(
         the constraint
     """
 
-    def evaluate(seqs: Tuple[str], domain: Optional[Domain]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Tuple[float, str]:
         sequence = seqs[0]
         energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        if domain is not None:
-            logger.debug(
-                f'domain ss threshold: {threshold:6.2f} '
-                f'secondary_structure_single_strand({domain.name, temperature}) = {energy:6.2f} ')
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
@@ -3658,20 +3670,11 @@ def nupack_strand_complex_free_energy_constraint(
         the constraint
     """
 
-    def evaluate(seqs: Tuple[str], strand: Optional[Strand]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Tuple[float, str]:
         sequence = seqs[0]
         energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        if strand is not None:
-            logger.debug(
-                f'strand ss threshold: {threshold:6.2f} '
-                f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
-
-    # def summary(strand: Strand) -> str:
-    #     sequence = strand.sequence()
-    #     energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-    #     return f'{energy:6.2f} kcal/mol'
 
     if description is None:
         description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
@@ -3848,25 +3851,11 @@ def nupack_strand_pair_constraint(
     if description is None:
         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
 
-    # def evaluate(sequence1: str, sequence2: str,
-    #              strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-    def evaluate(seqs: Tuple[str, ...],
-                 strand_pair: Optional[StrandPair]) -> Tuple[float, str]:
-        sequence1, sequence2 = seqs
-        energy = dv.binding(sequence1, sequence2, temperature=temperature,
-                            sodium=sodium, magnesium=magnesium)
-        if strand_pair is not None:
-            strand1, strand2 = strand_pair.individual_parts()
-            logger.debug(
-                f'strand pair threshold: {threshold:6.2f} '
-                f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+    def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Tuple[float, str]:
+        seq1, seq2 = seqs
+        energy = dv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
-
-    # def summary(strand1: Strand, strand2: Strand) -> str:
-    #     energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature=temperature,
-    #                         sodium=sodium, magnesium=magnesium)
-    #     return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -3986,9 +3975,7 @@ def rna_duplex_domain_pairs_constraint(
     if description is None:
         description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
 
-    def evaluate(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
-        # if any(pair.domain1.sequence is None or pair.domain2.sequence is None for pair in domain_pairs):
-        #     raise ValueError('cannot evaluate domains unless they have sequences assigned')
+    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
         sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
         pairs_scores_summaries: List[Tuple[DomainPair, float, str]] = []
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
@@ -4009,7 +3996,7 @@ def rna_duplex_domain_pairs_constraint(
                                  short_description=short_description,
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate,
+                                 evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
 
 
