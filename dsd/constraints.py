@@ -3676,11 +3676,6 @@ def nupack_strand_complex_free_energy_constraint(
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
-    # def summary(strand: Strand) -> str:
-    #     sequence = strand.sequence()
-    #     energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-    #     return f'{energy:6.2f} kcal/mol'
-
     if description is None:
         description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
 
@@ -3856,8 +3851,6 @@ def nupack_strand_pair_constraint(
     if description is None:
         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
 
-    # def evaluate(sequence1: str, sequence2: str,
-    #              strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
     def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Tuple[float, str]:
         seq1, seq2 = seqs
         energy = dv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
@@ -3982,9 +3975,7 @@ def rna_duplex_domain_pairs_constraint(
     if description is None:
         description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
 
-    def evaluate(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
-        # if any(pair.domain1.sequence is None or pair.domain2.sequence is None for pair in domain_pairs):
-        #     raise ValueError('cannot evaluate domains unless they have sequences assigned')
+    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
         sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
         pairs_scores_summaries: List[Tuple[DomainPair, float, str]] = []
         energies = dv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
@@ -4005,7 +3996,7 @@ def rna_duplex_domain_pairs_constraint(
                                  short_description=short_description,
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate,
+                                 evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
 
 
