@@ -3605,13 +3605,9 @@ def nupack_domain_complex_free_energy_constraint(
         the constraint
     """
 
-    def evaluate(seqs: Tuple[str], domain: Optional[Domain]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Tuple[float, str]:
         sequence = seqs[0]
         energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        if domain is not None:
-            logger.debug(
-                f'domain ss threshold: {threshold:6.2f} '
-                f'secondary_structure_single_strand({domain.name, temperature}) = {energy:6.2f} ')
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
@@ -3674,13 +3670,9 @@ def nupack_strand_complex_free_energy_constraint(
         the constraint
     """
 
-    def evaluate(seqs: Tuple[str], strand: Optional[Strand]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Tuple[float, str]:
         sequence = seqs[0]
         energy = dv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        if strand is not None:
-            logger.debug(
-                f'strand ss threshold: {threshold:6.2f} '
-                f'secondary_structure_single_strand({strand.name, temperature}) = {energy:6.2f} ')
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
@@ -3866,23 +3858,11 @@ def nupack_strand_pair_constraint(
 
     # def evaluate(sequence1: str, sequence2: str,
     #              strand1: Optional[Strand], strand2: Optional[Strand]) -> float:
-    def evaluate(seqs: Tuple[str, ...],
-                 strand_pair: Optional[StrandPair]) -> Tuple[float, str]:
-        sequence1, sequence2 = seqs
-        energy = dv.binding(sequence1, sequence2, temperature=temperature,
-                            sodium=sodium, magnesium=magnesium)
-        if strand_pair is not None:
-            strand1, strand2 = strand_pair.individual_parts()
-            logger.debug(
-                f'strand pair threshold: {threshold:6.2f} '
-                f'binding({strand1.name, strand2.name, temperature}) = {energy:6.2f} ')
+    def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Tuple[float, str]:
+        seq1, seq2 = seqs
+        energy = dv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
-
-    # def summary(strand1: Strand, strand2: Strand) -> str:
-    #     energy = dv.binding(strand1.sequence(), strand2.sequence(), temperature=temperature,
-    #                         sodium=sodium, magnesium=magnesium)
-    #     return f'{energy:6.2f} kcal/mol'
 
     if pairs is not None:
         pairs = tuple(pairs)
