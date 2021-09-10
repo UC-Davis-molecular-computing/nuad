@@ -856,7 +856,7 @@ class SearchParameters:
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
-    :any:`Constraint`'s associated with `design`.
+    :any:`Constraint`'s in :data:`SearchParameters.constraints`.
 
     **Search algorithm:**
     This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
@@ -882,7 +882,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
     The way to decide whether to keep the changed sequence, or revert to the
     old sequence, can be configured, but the default is to keep the change if and only if it
-    lowers the score of violations.
+    does not increase the total score of violations.
     More generally, we calculate the total score of all violated constraints in the original and changed
     :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
     The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
