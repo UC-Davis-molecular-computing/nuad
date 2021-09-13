@@ -856,7 +856,7 @@ class SearchParameters:
 def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
-    :any:`Constraint`'s associated with `design`.
+    :any:`Constraint`'s in :data:`SearchParameters.constraints`.
 
     **Search algorithm:**
     This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
@@ -865,23 +865,34 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     :any:`Constraint`'s).
     The goal is to reduce this total score until it is 0 (i.e., no violated constraints).
     Any :any:`Domain` "involved" in the violated :any:`Constraint` is noted as being one of the
-    :any:`Domain`'s responsible for the violation. (For example, if a :any:`DomainConstraint` is violated,
+    :any:`Domain`'s responsible for the violation, i.e., is "blamed".
+    For example, if a :any:`DomainConstraint` is violated,
     only one :any:`Domain` is blamed, whereas if a :any:`StrandConstraint` is violated, every :any:`Domain`
-    in the :any:`Strand` is blamed.) While any :any:`Constraint`'s are violated, a :any:`Domain` is picked
+    in the :any:`Strand` is blamed.
+    However, fixed domains (those with :data:`constraints.Domain.fixed` = True) are never blamed,
+    since their DNA sequences cannot be changed.
+
+    While any :any:`Constraint`'s are violated, a :any:`Domain` is picked
     at random, with probability proportional to the total score of all the :any:`Constraint`'s
-    for which the :any:`Domain` was blamed. A new DNA sequence is assigned to this
-    :any:`Domain` by calling :py:meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
-    of that :any:`Domain`. The way to decide whether to keep the changed sequence, or revert to the
-    old sequence, is to calculate the total score of all violated constraints in the original and changed
+    for which the :any:`Domain` was blamed (so probability 0 to pick a :any:`Domain` that is fixed or that
+    was involved in no violations).
+    A new DNA sequence is assigned to this
+    :any:`Domain` by calling :meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
+    of that :any:`Domain`.
+
+    The way to decide whether to keep the changed sequence, or revert to the
+    old sequence, can be configured, but the default is to keep the change if and only if it
+    does not increase the total score of violations.
+    More generally, we calculate the total score of all violated constraints in the original and changed
     :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
     The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
     is kept. The default function computing this probability is returned by
-    :py:meth:`default_probability_of_keeping_change_function`.
+    :meth:`default_probability_of_keeping_change_function`, which simply assigns probability 0
+    to keep the change if `score_delta` is positive (i.e., the score went up) and probability 1
+    otherwise.
+    In particular, the change is kept if the score is identical (though this would happen only rarely).
 
     The :any:`Design` is modified in place; each :any:`Domain` is modified to have a DNA sequence.
-
-    Only :any:`Domain`'s with :py:data:`constraints.Domain.fixed` = False are eligible to have their
-    DNA sequences modified; fixed :any:`Domain`'s are never blamed for violating :any:`Constraint`'s.
 
     If no DNA sequences are assigned to the :any:`Domain`'s initially, they are picked at random
     from the :any:`DomainPool` associated to each :any:`Domain` by calling
@@ -894,8 +905,7 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     assigning DNA sequences to any :any:`Domain`.)
 
     The function has some side effects. It writes a report on the optimal sequence assignment found so far
-    every time a new improve assignment is found. This re-evaluates the entire design, so it can be expensive,
-    but in practice the design is strictly improved many fewer times than total iterations.
+    every time a new improve assignment is found.
 
     Whenever a new optimal sequence assignment is found, the following are written to files:
     - DNA sequences of each strand are written to a text file .

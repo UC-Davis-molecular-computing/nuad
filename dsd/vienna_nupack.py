@@ -134,7 +134,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     return dg
 
 
-def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex',
+def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex', # circular import causes problems
                                            temperature: float = default_temperature,
                                            sodium: float = default_sodium,
                                            magnesium: float = default_magnesium) -> np.ndarray:
