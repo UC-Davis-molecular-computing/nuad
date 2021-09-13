@@ -13,7 +13,6 @@ from dsd.constraints import NumpyConstraint
 # command-line arguments
 class CLArgs(NamedTuple):
     directory: str
-    initial_design_filename: Optional[str]
     restart: bool
 
 
@@ -32,19 +31,10 @@ def parse_command_line_arguments() -> CLArgs:
                              '(assuming they are numbered with a number such as -84), and will start the '
                              'numbering from there (i.e., the next files to be written upon improving the '
                              'design will have -85).')
-    parser.add_argument('-i', '--initial_design', type=str, default=None,
-                        help='(Probably you don\'t want this option, and would prefer -r/--restart.)'
-                             'name of JSON filename of initial design. If specified, then the DNA sequences '
-                             'of domains will start equal to what they are in the design. This is useful, '
-                             'for instance, when starting a DNA sequence design search from a sequence '
-                             'assignment that was saved during a prior execution of the dsd sequence '
-                             'designer. The strands and domains of the saved design will be compared to '
-                             'the scadnano design (though not the DNA sequences).')
 
     args = parser.parse_args()
 
-    return CLArgs(directory=args.output_dir,
-                  initial_design_filename=args.initial_design, restart=args.restart)
+    return CLArgs(directory=args.output_dir, restart=args.restart)
 
 
 def main() -> None:

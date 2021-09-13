@@ -144,6 +144,8 @@ In more detail, there are five main types of objects you create to describe your
 ## Examples
 Some example scripts can be found in the [examples/](examples/) subfolder.
 
+In particular, the example [sst_canvas.py](examples/sst_canvas.py) shows a fairly simple design with realistic constraints for designing DNA sequences for a 2D canvas of single-stranded tiles (SSTs), similar to the sort of design from [this paper](https://doi.org/10.1038/nature11075).
+
 
 ## Parallelism
 Each "singular" constraint in dsd includes the ability to specify the Boolean field `Constraint.parallel`. If True, then the various parts of the Design will be evaluated in parallel, taking advantage of multi-core systems. In practice, we have found that the overhead associated with doing this is fairly hefty, so it is unlikely that one would see, for example, an 8-fold speedup on an 8-core system. However, one could potentially see a speedup of 2x or 3x.
