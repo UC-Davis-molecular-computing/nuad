@@ -165,7 +165,7 @@ def create_design(width: int, height: int) -> dc.Design:
                              name=f't_{x}_{y}')
             tiles.append(tile)
 
-            if x + y % 2 == 0:
+            if (x + y) % 2 == 0:
                 outer_pool = domain_pool_11
                 inner_pool = domain_pool_10
             else:
@@ -250,7 +250,7 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
     #     |
     #     |
     #     +==========--===========]
-    no_gggg_constraint = create_tile_no_gggg_constraint(weight=1)
+    no_gggg_constraint = create_tile_no_gggg_constraint(weight=100)
 
     return [
         strand_individual_ss_constraint,
