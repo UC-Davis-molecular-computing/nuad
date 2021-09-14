@@ -30,12 +30,22 @@ def main() -> None:
 
 
 # command-line arguments
-class CLArgs(NamedTuple):
+@dataclass
+class CLArgs:
     directory: str
+    """output directory for search"""
+
     restart: bool
+    """whether to restart a stopped search"""
+
     width: int
+    """width of SST canvas"""
+
     height: int
+    """height of SST canvas"""
+
     seed: Optional[int] = None
+    """seed for random number generator; set to fixed integer for reproducibility"""
 
 
 def parse_command_line_arguments() -> CLArgs:
@@ -85,31 +95,25 @@ def create_design(width: int, height: int) -> dc.Design:
 
     .. code-block:: none
 
-            10          11           10          11           10          11           10
+        |   10     |    11      |    10     |    11      |    10     |    11      |    10     |
 
                                 +==========--===========>
-                                |               t_0_2
-                                |
+                                |        t_0_2
                                 +==========--===========]
                    +===========--==========>+===========--==========>
-                   |                t_0_1   |                t_1_2
-                   |                        |
+                   |         t_0_1          |         t_1_2
                    +===========--==========]+===========--==========]
         +==========-===========>+==========--===========>+==========--===========>
-        |              t_0_0    |               t_1_1    |               t_2_2
-        |                       |                        |
+        |        t_0_0          |        t_1_1           |        t_2_2
         +==========-===========]+==========--===========]+==========--===========]
                    +===========--==========>+===========--==========>+===========--==========>
-                   |                t_1_0   |                t_2_1   |                t_3_2
-                   |                        |                        |
+                   |         t_1_0          |         t_2_1          |         t_3_2
                    +===========--==========]+===========--==========]+===========--==========]
                                 +==========--===========>+==========--===========>
-                                |               t_2_0    |               t_3_1
-                                |                        |
+                                |        t_2_0           |        t_3_1
                                 +==========--===========]+==========--===========]
                                             +===========--==========>
-                                            |                t_3_0
-                                            |
+                                            |         t_3_0
                                             +===========--==========]
 
     :param width:
