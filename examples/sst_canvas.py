@@ -270,7 +270,7 @@ def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
     # sufficient. See also source code of custom constraints in dsd.constraints for more examples,
     # particularly for examples that call NUPACK or ViennaRNA.
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[dc.Strand]) -> [float, str]:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[dc.Strand]) -> Tuple[float, str]:  # noqa
         sequence = seqs[0]
         if 'GGGG' in sequence:
             return 1.0, f'GGGG found in {sequence}'
