@@ -165,4 +165,4 @@ Please report issues (bugs or feature requests) at the [dsd GitHub repository is
 
 ## Contributing
 
-TODO
+See the [CONTRIBUTING document](CONTRIBUTING.md).
