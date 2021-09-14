@@ -5,9 +5,8 @@ import argparse
 import os
 from typing import List, Tuple
 
-import dsd.constraints as dc  # type: ignore
-import dsd.vienna_nupack as dv  # type: ignore
-import dsd.search as ds  # type: ignore
+import dsd.constraints as dc
+import dsd.search as ds
 from dsd.constraints import NumpyConstraint
 
 
