@@ -5,9 +5,8 @@ import argparse
 import os
 from typing import List, Tuple
 
-import dsd.constraints as dc  # type: ignore
-import dsd.vienna_nupack as dv  # type: ignore
-import dsd.search as ds  # type: ignore
+import dsd.constraints as dc
+import dsd.search as ds
 from dsd.constraints import NumpyConstraint
 
 
@@ -218,6 +217,7 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
         starred_domains_sets[strand.name] = strand.starred_domains_set()
 
     # determine which pairs of strands have 0 complementary domains and which have 1
+    # so we can set different RNAduplex energy constraints for each of them
     strand_pairs_0_comp = []
     strand_pairs_1_comp = []
     for strand1, strand2 in itertools.combinations_with_replacement(design.strands, 2):
@@ -241,7 +241,6 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
     strand_pairs_rna_duplex_constraint_0comp = dc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_0comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA0Comp', pairs=strand_pairs_0_comp)
-
     strand_pairs_rna_duplex_constraint_1comp = dc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_1comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA1Comp', pairs=strand_pairs_1_comp)
@@ -270,7 +269,7 @@ def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
     # sufficient. See also source code of custom constraints in dsd.constraints for more examples,
     # particularly for examples that call NUPACK or ViennaRNA.
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[dc.Strand]) -> [float, str]:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[dc.Strand]) -> Tuple[float, str]:  # noqa
         sequence = seqs[0]
         if 'GGGG' in sequence:
             return 1.0, f'GGGG found in {sequence}'
@@ -279,10 +278,8 @@ def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
 
     description = "No GGGG allowed in strand's sequence"
 
-    return dc.StrandConstraint(description=description,
-                               short_description='NoGGGG',
-                               weight=weight,
-                               evaluate=evaluate)
+    return dc.StrandConstraint(description=description, short_description='NoGGGG',
+                               weight=weight, evaluate=evaluate)
 
 
 if __name__ == '__main__':
