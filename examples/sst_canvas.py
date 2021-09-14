@@ -279,10 +279,8 @@ def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
 
     description = "No GGGG allowed in strand's sequence"
 
-    return dc.StrandConstraint(description=description,
-                               short_description='NoGGGG',
-                               weight=weight,
-                               evaluate=evaluate)
+    return dc.StrandConstraint(description=description, short_description='NoGGGG',
+                               weight=weight, evaluate=evaluate)
 
 
 if __name__ == '__main__':
