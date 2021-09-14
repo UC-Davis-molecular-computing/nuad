@@ -891,6 +891,10 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     to keep the change if `score_delta` is positive (i.e., the score went up) and probability 1
     otherwise.
     In particular, the change is kept if the score is identical (though this would happen only rarely).
+    One reason to favor this default is that it allows an optimization that speeds up the search
+    significantly in practice: When evaluating constraints, once the total score of violations exceeds
+    that of the best design so far, no further constraints need to be evaluated, since we can decide
+    immediately that the new design change will not be kept.
 
     The :any:`Design` is modified in place; each :any:`Domain` is modified to have a DNA sequence.
 
