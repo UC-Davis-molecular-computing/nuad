@@ -30,12 +30,22 @@ def main() -> None:
 
 
 # command-line arguments
-class CLArgs(NamedTuple):
+@dataclass
+class CLArgs:
     directory: str
+    """output directory for search"""
+
     restart: bool
+    """whether to restart a stopped search"""
+
     width: int
+    """width of SST canvas"""
+
     height: int
+    """height of SST canvas"""
+
     seed: Optional[int] = None
+    """seed for random number generator; set to fixed integer for reproducibility"""
 
 
 def parse_command_line_arguments() -> CLArgs:
