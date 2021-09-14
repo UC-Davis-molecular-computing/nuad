@@ -218,6 +218,7 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
         starred_domains_sets[strand.name] = strand.starred_domains_set()
 
     # determine which pairs of strands have 0 complementary domains and which have 1
+    # so we can set different RNAduplex energy constraints for each of them
     strand_pairs_0_comp = []
     strand_pairs_1_comp = []
     for strand1, strand2 in itertools.combinations_with_replacement(design.strands, 2):
@@ -241,7 +242,6 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
     strand_pairs_rna_duplex_constraint_0comp = dc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_0comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA0Comp', pairs=strand_pairs_0_comp)
-
     strand_pairs_rna_duplex_constraint_1comp = dc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_1comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA1Comp', pairs=strand_pairs_1_comp)
