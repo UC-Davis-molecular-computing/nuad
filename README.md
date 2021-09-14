@@ -27,12 +27,7 @@ dsd requires Python version 3.7 or higher. Currently, it cannot be installed usi
 
 dsd uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download), which must be installed separately (see below for link to installation instructions). While it is technically possible to use dsd without them, most of the pre-packaged constraints require them.
 
-To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system.
-Installing NUPACK 4 allows access to functions such as `pfunc` and related functions
-and can be done by following the installation instructions
-in the online [user guide](https://piercelab-caltech.github.io/nupack-docs/start/).
-
-If you are using Windows, you can then run python code calling the dsd library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4, which is not available in under standard Windows Python installations.
+To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the dsd library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
 To install dsd:
 
