@@ -109,7 +109,7 @@ In more detail, there are five main types of objects you create to describe your
         
         - `DomainConstraint`: This only looks at a single `Domain`. In practice this is not used much, since there's not much information in a `Domain` other than its DNA sequence, so a `SequenceConstraint` or `NumpyConstraint` typically would already have filtered out any DNA sequence not satisfying such a constraint.
 
-        - `StrandConstraint`: This evaluates at a whole `Strand`. A common example is that NUPACK's `pfunc` should indicate a partition function energy above a certain threshold (indicating the `Strand` has little secondary structure.)
+        - `StrandConstraint`: This evaluates a whole `Strand`. A common example is that NUPACK's `pfunc` should indicate a complex free energy above a certain threshold, indicating the `Strand` has little secondary structure. This example constraint is available in the library by calling [nupack_strand_complex_free_energy_constraint](https://dnadsd.readthedocs.io/en/latest/#constraints.nupack_strand_complex_free_energy_constraint).
 
         - `DomainPairConstraint`: This evaluates a pair of `Domain`'s.
 
