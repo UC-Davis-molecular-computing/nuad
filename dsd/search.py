@@ -841,6 +841,11 @@ class SearchParameters:
     that update is also written. Set to False to use less space on disk. 
     """
 
+    log_time: bool = False
+    """
+    Whether to log the time taken per iteration to the screen.
+    """
+
     def __post_init__(self):
         self._check_constraint_types()
 
@@ -984,8 +989,12 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
 
         iteration = 0
 
+        stopwatch = Stopwatch()
         while violation_set_opt.has_nonfixed_violations() and \
                 (params.max_iterations is None or iteration < params.max_iterations):
+            if params.log_time:
+                stopwatch.restart()
+
             _check_cpu_count(cpu_count)
 
             domains_changed, original_sequences = _reassign_domains(domains_opt, scores_opt,
@@ -1026,6 +1035,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                                               violation_set=violation_set_opt)
 
             iteration += 1
+            if params.log_time:
+                stopwatch.stop()
+                _log_time(stopwatch)
 
         _log_constraint_summary(params=params,
                                 violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
@@ -1306,12 +1318,12 @@ def _log_time(stopwatch: Stopwatch) -> None:
         time_last_n_calls.append(stopwatch.milliseconds())
         ave_time = statistics.mean(time_last_n_calls)
         med_time = statistics.median(time_last_n_calls)
-        logger.info(('-' * 79) +
-                    f'\n| time: {stopwatch.milliseconds_str()} ms; '
-                    f'last {n_in_last_n_calls} calls '
-                    f'average: {ave_time:.2f} ms '
-                    f'median: {med_time:.2f} ms'
-                    )
+        content = (f'| time: {stopwatch.milliseconds_str()} ms;   '
+                   f'last {n_in_last_n_calls} calls   '
+                   f'average: {ave_time:.2f} ms   '
+                   f'median: {med_time:.2f} ms |')
+        content_width = len(content)
+        logger.info('-'*content_width + '\n' + content)
     else:
         # skip appending first time, since it is much larger and skews the average
         logger.info(f'time for first call: {stopwatch.milliseconds_str()} ms')
@@ -1372,7 +1384,7 @@ def _log_constraint_summary(*, params: SearchParameters,
                             violation_set_new: dc.ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    score_header = 'iteration|updates|opt score||new score|'
+    score_header = '\niteration|updates|opt score||new score|'
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in params.constraints)
     header = score_header + all_constraints_header

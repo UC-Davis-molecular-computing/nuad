@@ -24,6 +24,7 @@ def main() -> None:
         out_directory=args.directory,
         restart=args.restart,
         random_seed=args.seed,
+        # log_time=True,
     )
 
     ds.search_for_dna_sequences(design, params)
@@ -137,9 +138,10 @@ def create_design(width: int, height: int) -> dc.Design:
         for y in range(height):
             # domains are named after the strand for which they are on the bottom,
             # so the two domains on top are starred and named after the tiles to which they bind
-            # If you tile your head 45 degrees left, then glues are
+            # If you tilt your head 45 degrees left, then glues are
             # "north" (n), "south" (s), "west" (w), "east" (e),
             # so start with either ns_ ("north-south") or we_ ("west-east")
+            # From 5' ] to 3' >, they are in the order s, w, n, e.
             #
             # Parity of x+y determines whether first and last domain (s and e) are length 11 or 10.
             #

@@ -63,7 +63,7 @@ To install dsd:
     To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
     To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
 
-5. Test NUPACK and ViennaRNA are avaiable from within dsd by typing `python` at the command line, then typing `import dsd`. It should import without errors:
+5. Test NUPACK and ViennaRNA are available from within dsd by typing `python` at the command line, then typing `import dsd`. It should import without errors:
 
     ```python
     $ python
@@ -88,7 +88,7 @@ To install dsd:
 dsd allows one to go from a design with abstract "domains", such as `a`, `a*`, `b`, `b*`, to concrete DNA sequences, for example, 
 `a` = 5'-CCCAA-3', `a*` = 3'-GGGTT-5', `b` = 5'-AAAAAAC-3', `b*` = 3'-TTTTTTG-5', obeying the constraints you specify.
 
-There are some pre-built constraints, for example limiting the number of G's in a domain or checking the partition function energy of a multi-domain strand (i.e., the strand's quantitative "secondary structure") according to the 3rd-party tools NUPACK and ViennaRNA. The user can also specify custom constraints.
+There are some pre-built constraints, for example limiting the number of G's in a domain or checking the complex free energy of a strand (i.e., the strand's quantitative amount of "secondary structure") according to the 3rd-party tools [NUPACK](http://www.nupack.org) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA). The user can also specify custom constraints.
 
 In more detail, there are five main types of objects you create to describe your system:
 
@@ -165,4 +165,4 @@ Please report issues (bugs or feature requests) at the [dsd GitHub repository is
 
 ## Contributing
 
-TODO
+See the [CONTRIBUTING document](CONTRIBUTING.md).
