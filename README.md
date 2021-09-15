@@ -63,7 +63,7 @@ To install dsd:
     To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
     To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
 
-5. Test NUPACK and ViennaRNA are avaiable from within dsd by typing `python` at the command line, then typing `import dsd`. It should import without errors:
+5. Test NUPACK and ViennaRNA are available from within dsd by typing `python` at the command line, then typing `import dsd`. It should import without errors:
 
     ```python
     $ python
