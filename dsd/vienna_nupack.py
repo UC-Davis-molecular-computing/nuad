@@ -116,7 +116,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
         from nupack import Model  # type: ignore
     except ModuleNotFoundError:
         raise ImportError(
-            'NUPACK 4 must be installed to use pfunc4. Installation instructions can be found at '
+            'NUPACK 4 must be installed to use pfunc. Installation instructions can be found at '
             'https://piercelab-caltech.github.io/nupack-docs/start/.')
 
     # expensive to create a Model, so don't create the same one twice
