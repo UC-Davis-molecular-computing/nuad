@@ -3561,6 +3561,20 @@ def convert_threshold(threshold: Union[float, Dict[T, float]], key: T) -> float:
     return threshold_value
 
 
+def _check_nupack_installed() -> None:
+    """
+     Raises ImportError if nupack module is not installed.
+    """
+    try:
+        import nupack
+    except ModuleNotFoundError:
+        raise ImportError(
+            'NUPACK 4 must be installed to create a constraint that uses NUPACK. '
+            'Installation instructions can be found at '
+            'https://github.com/UC-Davis-molecular-computing/dsd#installation and '
+            'https://piercelab-caltech.github.io/nupack-docs/start/')
+
+
 def nupack_domain_complex_free_energy_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
@@ -3604,6 +3618,7 @@ def nupack_domain_complex_free_energy_constraint(
     :return:
         the constraint
     """
+    _check_nupack_installed()
 
     def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Tuple[float, str]:
         sequence = seqs[0]
@@ -3669,6 +3684,7 @@ def nupack_strand_complex_free_energy_constraint(
     :return:
         the constraint
     """
+    _check_nupack_installed()
 
     def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Tuple[float, str]:
         sequence = seqs[0]
@@ -3727,6 +3743,7 @@ def nupack_domain_pair_constraint(
     :return:
         The :any:`DomainPairConstraint`.
     """
+    _check_nupack_installed()
 
     if description is None:
         if isinstance(threshold, Number):
@@ -3847,6 +3864,7 @@ def nupack_strand_pair_constraint(
     :return:
         The :any:`StrandPairConstraint`.
     """
+    _check_nupack_installed()
 
     if description is None:
         description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
@@ -3937,6 +3955,17 @@ and make parallel processing more efficient:
     return count
 
 
+def _check_vienna_rna_installed() -> None:
+    try:
+        dv.rna_duplex_multiple([("ACGT", "TGCA")])
+    except:
+        raise ImportError('Vienna RNA is not installed correctly. Please install it and ensure that '
+                          'executables such as RNAduplex can be called from the command line. '
+                          'Installation instructions can be found at '
+                          'https://github.com/UC-Davis-molecular-computing/dsd#installation and '
+                          'https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html')
+
+
 def rna_duplex_domain_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
@@ -3971,6 +4000,7 @@ def rna_duplex_domain_pairs_constraint(
     :return:
         constraint
     """
+    _check_vienna_rna_installed()
 
     if description is None:
         description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
@@ -4037,6 +4067,7 @@ def rna_duplex_strand_pairs_constraint(
     :return:
         The :any:`StrandPairsConstraint`.
     """
+    _check_vienna_rna_installed()
 
     if description is None:
         description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
@@ -4138,6 +4169,7 @@ def rna_cofold_strand_pairs_constraint(
     :return:
         The :any:`StrandPairsConstraint`.
     """
+    _check_vienna_rna_installed()
 
     if description is None:
         description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
@@ -6004,19 +6036,7 @@ def nupack_complex_base_pair_probability_constraint(
     :return: ComplexConstraint
     :rtype: ComplexConstraint
     """
-    try:
-        from nupack import Complex as NupackComplex
-        from nupack import Model as NupackModel
-        from nupack import ComplexSet as NupackComplexSet
-        from nupack import Strand as NupackStrand
-        from nupack import SetSpec as NupackSetSpec
-        from nupack import complex_analysis as nupack_complex_analysis
-        from nupack import PairsMatrix as NupackPairsMatrix
-    except ModuleNotFoundError:
-        raise ImportError(
-            'NUPACK 4 must be installed to use nupack_4_complex_secondary_structure_constraint. '
-            'Installation instructions can be found at '
-            'https://piercelab-caltech.github.io/nupack-docs/start/.')
+    _check_nupack_installed()
 
     # Start Input Validation
     if len(strand_complexes) == 0:
