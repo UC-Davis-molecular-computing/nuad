@@ -1307,26 +1307,27 @@ def _pfunc_killall() -> None:
     logger.warning('#' * 79)
 
 
-n_in_last_n_calls = 20
+n_in_last_n_calls = 50
 time_last_n_calls: Deque = deque(maxlen=n_in_last_n_calls)
 time_last_n_calls_available = False
 
 
-def _log_time(stopwatch: Stopwatch) -> None:
+def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
     global time_last_n_calls_available
     if time_last_n_calls_available:
         time_last_n_calls.append(stopwatch.milliseconds())
         ave_time = statistics.mean(time_last_n_calls)
-        med_time = statistics.median(time_last_n_calls)
-        content = (f'| time: {stopwatch.milliseconds_str()} ms;   '
-                   f'last {n_in_last_n_calls} calls   '
-                   f'average: {ave_time:.2f} ms   '
-                   f'median: {med_time:.2f} ms |')
+        content = f'| time: {stopwatch.milliseconds_str(1, 6)} ms ' + \
+                  f'| last {len(time_last_n_calls)} calls average: {ave_time:.1f} ms |'
+        if include_median:
+            med_time = statistics.median(time_last_n_calls)
+            content += f' median: {med_time:.1f} ms |'
         content_width = len(content)
-        logger.info('-'*content_width + '\n' + content)
+        logger.info('-' * content_width + '\n' + content)
     else:
         # skip appending first time, since it is much larger and skews the average
-        logger.info(f'time for first call: {stopwatch.milliseconds_str()} ms')
+        content = f'| time for first call: {stopwatch.milliseconds_str()} ms |'
+        logger.info('-' * len(content) + '\n' + content)
         time_last_n_calls_available = True
 
 

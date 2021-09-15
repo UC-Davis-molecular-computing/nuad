@@ -24,7 +24,7 @@ def main() -> None:
         out_directory=args.directory,
         restart=args.restart,
         random_seed=args.seed,
-        # log_time=True,
+        log_time=True,
     )
 
     ds.search_for_dna_sequences(design, params)
