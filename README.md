@@ -88,7 +88,7 @@ To install dsd:
 dsd allows one to go from a design with abstract "domains", such as `a`, `a*`, `b`, `b*`, to concrete DNA sequences, for example, 
 `a` = 5'-CCCAA-3', `a*` = 3'-GGGTT-5', `b` = 5'-AAAAAAC-3', `b*` = 3'-TTTTTTG-5', obeying the constraints you specify.
 
-There are some pre-built constraints, for example limiting the number of G's in a domain or checking the partition function energy of a multi-domain strand (i.e., the strand's quantitative "secondary structure") according to the 3rd-party tools NUPACK and ViennaRNA. The user can also specify custom constraints.
+There are some pre-built constraints, for example limiting the number of G's in a domain or checking the complex free energy of a sstrand (i.e., the strand's quantitative amount of "secondary structure") according to the 3rd-party tools NUPACK and ViennaRNA. The user can also specify custom constraints.
 
 In more detail, there are five main types of objects you create to describe your system:
 
