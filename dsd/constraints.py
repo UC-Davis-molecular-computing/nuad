@@ -3964,12 +3964,13 @@ and make parallel processing more efficient:
 def _check_vienna_rna_installed() -> None:
     try:
         dv.rna_duplex_multiple([("ACGT", "TGCA")])
-    except:
-        raise ImportError('Vienna RNA is not installed correctly. Please install it and ensure that '
-                          'executables such as RNAduplex can be called from the command line. '
-                          'Installation instructions can be found at '
-                          'https://github.com/UC-Davis-molecular-computing/dsd#installation and '
-                          'https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html')
+    except FileNotFoundError:
+        raise ImportError('''
+Vienna RNA is not installed correctly. Please install it and ensure that 
+executables such as RNAduplex can be called from the command line. 
+Installation instructions can be found at 
+https://github.com/UC-Davis-molecular-computing/dsd#installation and 
+https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html''')
 
 
 def rna_duplex_domain_pairs_constraint(
