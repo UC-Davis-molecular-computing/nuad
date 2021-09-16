@@ -505,6 +505,12 @@ class RunsOfBasesConstraint(NumpyConstraint):
     Restricts the sequence not to contain runs of a certain length from a certain subset of bases,
     (e.g., forbidding any substring in {C,G}^3;
     no four bases can appear in a row that are either C or G)
+
+    This works by simply generating all strings representing the runs of bases,
+    and then using a :any:`ForbiddenSubstringConstraint` with those strings. So this will not be efficient
+    for forbidding, for example {A,C,T}^20 (i.e., all runs of A's, C's, or T's of length 20),
+    which would generate all 3^20 = 3,486,784,401 strings of length 20 from the alphabet {A,C,T}^20.
+    Hopefully such a constraint would not be used in practice.
     """
 
     bases: Collection[str]
