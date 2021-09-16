@@ -97,8 +97,9 @@ class Stopwatch:
     def microseconds_str(self, precision: int = 2) -> str:
         return f'{self.microseconds():.{precision}f}'
 
-    def milliseconds_str(self, precision: int = 2) -> str:
-        return f'{self.milliseconds():.{precision}f}'
+    def milliseconds_str(self, precision: int = 2, width: Optional[int] = None) -> str:
+        width_spec = '' if width == None else width
+        return f'{self.milliseconds():{width_spec}.{precision}f}'
 
     def seconds_str(self, precision: int = 2) -> str:
         return f'{self.seconds():.{precision}f}'

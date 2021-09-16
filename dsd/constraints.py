@@ -29,9 +29,8 @@ import itertools
 import logging
 from multiprocessing.pool import ThreadPool
 from numbers import Number
-from enum import Enum, auto
+from enum import Enum, auto, unique
 
-import enum
 import numpy as np  # noqa
 from ordered_set import OrderedSet
 
@@ -505,6 +504,12 @@ class RunsOfBasesConstraint(NumpyConstraint):
     Restricts the sequence not to contain runs of a certain length from a certain subset of bases,
     (e.g., forbidding any substring in {C,G}^3;
     no four bases can appear in a row that are either C or G)
+
+    This works by simply generating all strings representing the runs of bases,
+    and then using a :any:`ForbiddenSubstringConstraint` with those strings. So this will not be efficient
+    for forbidding, for example {A,C,T}^20 (i.e., all runs of A's, C's, or T's of length 20),
+    which would generate all 3^20 = 3,486,784,401 strings of length 20 from the alphabet {A,C,T}^20.
+    Hopefully such a constraint would not be used in practice.
     """
 
     bases: Collection[str]
@@ -550,6 +555,7 @@ log_numpy_generation = True
 
 
 # log_numpy_generation = False
+
 
 @dataclass
 class DomainPool:
@@ -2167,8 +2173,8 @@ _384WELL_PLATE_ROWS: List[str] = [
 _384WELL_PLATE_COLS: List[int] = list(range(1, 25))
 
 
-@enum.unique
-class PlateType(int, enum.Enum):
+@unique
+class PlateType(int, Enum):
     """Represents two different types of plates in which DNA sequences can be ordered."""
 
     wells96 = 96
@@ -3958,12 +3964,13 @@ and make parallel processing more efficient:
 def _check_vienna_rna_installed() -> None:
     try:
         dv.rna_duplex_multiple([("ACGT", "TGCA")])
-    except:
-        raise ImportError('Vienna RNA is not installed correctly. Please install it and ensure that '
-                          'executables such as RNAduplex can be called from the command line. '
-                          'Installation instructions can be found at '
-                          'https://github.com/UC-Davis-molecular-computing/dsd#installation and '
-                          'https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html')
+    except FileNotFoundError:
+        raise ImportError('''
+Vienna RNA is not installed correctly. Please install it and ensure that 
+executables such as RNAduplex can be called from the command line. 
+Installation instructions can be found at 
+https://github.com/UC-Davis-molecular-computing/dsd#installation and 
+https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html''')
 
 
 def rna_duplex_domain_pairs_constraint(
