@@ -29,9 +29,8 @@ import itertools
 import logging
 from multiprocessing.pool import ThreadPool
 from numbers import Number
-from enum import Enum, auto
+from enum import Enum, auto, unique
 
-import enum
 import numpy as np  # noqa
 from ordered_set import OrderedSet
 
@@ -556,6 +555,7 @@ log_numpy_generation = True
 
 
 # log_numpy_generation = False
+
 
 @dataclass
 class DomainPool:
@@ -2173,8 +2173,8 @@ _384WELL_PLATE_ROWS: List[str] = [
 _384WELL_PLATE_COLS: List[int] = list(range(1, 25))
 
 
-@enum.unique
-class PlateType(int, enum.Enum):
+@unique
+class PlateType(int, Enum):
     """Represents two different types of plates in which DNA sequences can be ordered."""
 
     wells96 = 96

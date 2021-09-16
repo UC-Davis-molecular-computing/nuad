@@ -231,7 +231,6 @@ def comb(n: int, k: int) -> int:
     return numer // denom
 
 
-
 def make_array_with_all_dna_seqs_hamming_distance(
         dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """
@@ -299,6 +298,11 @@ def combnr_idxs(length: int, number: int) -> np.ndarray:
     # :return:
     #     numpy array, with `length` columns and (`length` choose `number`) rows,
     #     representing all ways to set exactly `number` elements of the row True and the others to False.
+    if number == 0:
+        return np.array([[False] * length], dtype=bool)
+    elif number > length // 2:
+        vals = combnr_idxs(length, length - number)
+        return np.logical_not(vals)
     x = np.array(np.meshgrid(*([np.arange(0, length)] * number))).T.reshape(-1, number)
     z = np.sum(np.identity(length)[x], 1, dtype=bool).astype(int)
     return np.unique(z[np.sum(z, axis=1) == number], axis=0).astype(bool)
