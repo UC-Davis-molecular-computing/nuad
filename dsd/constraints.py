@@ -750,9 +750,10 @@ class DomainPool:
 
         # pick a distance at random, then re-pick if no sequences are at that distance
         available_distances_list = list(range(1, len(previous_sequence) + 1))
-        num_to_generate = 100
 
-        while True:
+        while True:  # each iteration of this loop tries one sampled distance
+            num_to_generate = 100
+
             if len(available_distances_list) == 0:
                 raise ValueError('out of Hamming distances to try, quitting')
 
@@ -766,7 +767,7 @@ class DomainPool:
 
             sequence: Optional[str] = None
 
-            while sequence is None:
+            while sequence is None:  # each iteration of this loop tries one value of num_to_generate
                 bases = self._bases_to_use()
                 length = self.length
 
@@ -778,7 +779,8 @@ class DomainPool:
                 if num_to_generate > num_sequences_at_sampled_distance:
                     num_to_generate = num_sequences_at_sampled_distance
 
-                if num_to_generate >= num_sequences_at_sampled_distance // 4:
+                if num_to_generate >= num_sequences_at_sampled_distance // 2:
+                    num_to_generate = num_sequences_at_sampled_distance
                     # if we want sufficiently many random sequences, just generate all possible sequences
                     seqs = dn.DNASeqList(
                         hamming_distance_from_sequence=(sampled_distance, previous_sequence), alphabet=bases,
@@ -798,26 +800,29 @@ class DomainPool:
                 if sequence is not None:
                     return sequence
 
-                if num_to_generate >= 10 ** 9:
-                    logger.info("We've generated over 1 billion random DNA sequences and not "
-                                "found one that passed your NumpyConstraints and "
-                                f"SequenceConstraints at Hamming distance {sampled_distance} from "
-                                f"the previous sequence {previous_sequence}. Trying another distance.")
-                    available_distances_list.remove(sampled_distance)
+                max_to_generate_before_moving_on = 10 ** 6
 
                 if generated_all_seqs:
-                    logger.info(f"We've generated all possible DNA sequences at Hamming distance "
-                                f"{sampled_distance} from the previous sequence {previous_sequence} and not "
-                                "found one that passed your NumpyConstraints and "
-                                f"SequenceConstraints. Trying another distance.")
+                    logger.info(f"""\
+We've generated all possible DNA sequences at Hamming distance {sampled_distance} 
+from the previous sequence {previous_sequence} and not found one that passed your 
+NumpyConstraints and SequenceConstraints. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
-                num_to_generate *= 2
+                elif num_to_generate >= max_to_generate_before_moving_on:
+                    logger.info(f"""\
+We've generated over {max_to_generate_before_moving_on} DNA sequences at Hamming distance {sampled_distance} 
+from the previous sequence {previous_sequence} and not found one that passed your 
+NumpyConstraints and SequenceConstraints. Trying another distance.""")
+                    available_distances_list.remove(sampled_distance)
 
-                if sequence is None and (generated_all_seqs or num_to_generate >= 10 ** 9):
+                if sequence is None and (
+                        generated_all_seqs or num_to_generate >= max_to_generate_before_moving_on):
                     # found no sequences passing constraints at distance `sampled_distance`
                     # (either through exhaustive search, or trying at least 1 billion),
                     # need to try a new Hamming distance
                     break
+
+                num_to_generate *= 2
 
         # mypy actually flags the next line as unreachable
         # raise AssertionError('should be unreachable')

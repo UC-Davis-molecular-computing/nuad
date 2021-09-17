@@ -17,6 +17,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import logging
 import time
 from typing import Optional, Callable, Any
 
@@ -133,7 +134,9 @@ class Stopwatch:
     def log(self, msg: str,
             # units: Optional[Literal['s', 'ms', 'us', 'ns']] = None, # Literal not supported in Python 3.7
             units: Optional[str] = None,
-            restart: bool = True) -> None:
+            restart: bool = True,
+            logger: Optional[logging.Logger] = None,
+            ) -> None:
         """
         Useful for timing statements/blocks of statements via the following:
 
@@ -154,11 +157,19 @@ class Stopwatch:
         :param restart:
             whether to restart this Stopwatch instance after logging
             (useful for timing several statements in a row)
+        :param logger:
+            if specified, writes log message to `logger` instead of printing to stdout
         """
-        if units is None:
-            print(f'time for {msg}: {self}')
+        if logger is None:
+            print_local = print
         else:
-            print(f'time for {msg}: {self.time_in_units(units)}')
+            def print_local(msg: str) -> None:
+                logger.info(msg)
+
+        if units is None:
+            print_local(f'time for {msg}: {self}')
+        else:
+            print_local(f'time for {msg}: {self.time_in_units(units)}')
 
         if restart:
             self.restart()
