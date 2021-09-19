@@ -254,7 +254,6 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
     #      ACGATCGATG  GGGATGCATGA
     #     +==========--===========>
     #     |
-    #     |
     #     +==========--===========]
     no_gggg_constraint = create_tile_no_gggg_constraint(weight=100)
 
