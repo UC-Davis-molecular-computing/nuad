@@ -696,12 +696,12 @@ class DNASeqList:
 
         - `filename`
 
-        - `hamming_distance_from_sequence`
+        - `hamming_distance_from_sequence` (possibly along with `alphabet` and `num_random_seqs`)
 
         :param length:
             length of sequences; `num_seqs` and `alphabet` can also be specified along with it
         :param hamming_distance_from_sequence:
-            if specified and equal to `(dist, seq)`,
+            if specified and equal to `(dist, seq)` of type (int, str),
             then only sequences at Hamming distance `dist` from `seq` will be generated.
             Raises error if `length`, `seqs`, `seqarr`, or `filename` is specified.
         :param num_random_seqs:
