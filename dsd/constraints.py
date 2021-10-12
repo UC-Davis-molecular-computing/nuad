@@ -3228,7 +3228,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate: Callable[[Tuple[str, ...], Optional[DesignPart]],
                        Tuple[float, str]] = lambda _: _raise_unreachable()
     """
-    Function that evaluates the :any:`Constraint`. It takes as input a tuple of DNA sequences 
+    Essentially a wrapper for a function that evaluates the :any:`Constraint`. 
+    It takes as input a tuple of DNA sequences 
     (Python strings) and an optional :any:`Part`, where :any:`Part` is one of 
     :any:`Domain`, :any:`Strand`, :any:`DomainPair`, :any:`StrandPair`, or :any:`Complex`
     (the latter being an alias for arbitrary-length tuple of :any:`Strand`'s).
@@ -3243,15 +3244,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     parallel: bool = False
     """
     Whether or not to use parallelization across multiple processes to take advantage of multiple
-    processors/cores. (Not applicable to some types of constraints. 
-    """
-
-    sequence_only: bool = True
-    """
-    If :py:data:`Constraint.parallel` is True, then this should be set to True so that only the 
-    sequence is serialized when passing data to other processes for parallel computation.
-    Otherwise, significant time is spent serializing objects such as :any:`Strand` or :any:`Domain`,
-    which is slower than not using parallelization in the first place.
+    processors/cores, by calling :data:`SingularConstraint.evaluate` on different :any:`DesignPart`'s
+    in separate processes.
     """
 
     def __post_init__(self) -> None:
@@ -3265,15 +3259,10 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-        if self.parallel and not self.sequence_only:
-            raise ValueError('cannot have both parallel=True and sequence_only=False;\n'
-                             'if you want to use parallel=True, the constraint must be sequence_only=True '
-                             'for efficiency, since the pathos library is used for parallel processing, '
-                             'and it is too inefficient to serialize anything more than the DNA sequence')
-
     def call_evaluate(self, seqs: Tuple[str, ...], part: Optional[DesignPart]) -> Tuple[float, str]:
         """
-        Evaluates this :any:`Constraint` using function `_evaluate` supplied in constructor.
+        Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
+        supplied in constructor.
 
         :param seqs:
             sequence(s) of relevant :any:`Part`, e.g., if `part` is a pair of :any:`Strand`'s,
@@ -3290,10 +3279,6 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             `excess` might be the difference 1.5 between the energy and the threshold,
             and `summary` might be the string "-2.5 kcal/mol".
         """
-        if not self.sequence_only and part is None:
-            raise AssertionError('if sequence_only is False, '
-                                 'then the design part cannot be None, but it is')
-
         excess, summary = (self.evaluate)(seqs, part)  # noqa
         if excess < 0.0:
             excess = 0.0
