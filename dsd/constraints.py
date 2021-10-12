@@ -3197,13 +3197,15 @@ class Constraint(Generic[DesignPart], ABC):
     """
     Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
     float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
-    secondary structure energy exceeding a threshold, it will return the difference between the energy and 
-    the threshold.
-    It is then passed through the `score_transfer_function`.
+    secondary structure energy exceeding a threshold, the score returned is the difference between 
+    the energy and the threshold.
+    
+    The score is then passed through the `score_transfer_function`.
     The default is the squared ReLU function: f(x) = max(0, x^2).
-    This "punishes" more severe violations more, i.e., it would
+    This "punishes" more severe violations more, for example, it would
     bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
-    threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
+    threshold to 2 kcal/mol excess,
+    than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
     """
 
     @staticmethod
