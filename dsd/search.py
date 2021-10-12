@@ -415,7 +415,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
             # XXX: I don't understand the mypy error on the next line
             violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
 
-        # we can't quite this function early,
+        # we can't quit this function early,
         # but we can let the caller know to stop evaluating constraints
         total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
         if current_score_gap is not None:
