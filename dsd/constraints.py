@@ -3617,7 +3617,8 @@ def nupack_domain_complex_free_energy_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threadds to parallelize.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param domains:
         :any:`Domain`'s to check; if not specified, all domains are checked.
     :param description:
@@ -3683,7 +3684,8 @@ def nupack_strand_complex_free_energy_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threadds to parallelize.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param strands:
         Strands to check; if not specified, all strands are checked.
     :param description:
@@ -3863,7 +3865,8 @@ def nupack_strand_pair_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threading to parallelize evaluating this constraint.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param description:
         Detailed description of constraint suitable for report.
     :param short_description:
