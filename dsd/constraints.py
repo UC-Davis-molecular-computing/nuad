@@ -1498,11 +1498,15 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
 
-    :param check_complements: whether to also ensure the check for Watson-Crick complements of the sequences
-    :param short_description: short description of constraint suitable for logging to stdout
-    :param weight: weight to assign to constraint
-    :return: a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
-             (in particular, if they are equal length, then they are not the same domain)
+    :param check_complements:
+        whether to also ensure the check for Watson-Crick complements of the sequences
+    :param short_description:
+        short description of constraint suitable for logging to stdout
+    :param weight:
+        weight to assign to constraint
+    :return:
+        a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
+        (in particular, if they are equal length, then they are not the same domain)
     """
 
     # def evaluate(s1: str, s2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
@@ -4313,7 +4317,7 @@ def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], floa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]], BulkConstraint[Complex]):
     """
     Similar to :any:`ComplexConstraint` but operates on a specified list of complexes
     (tuples of :any:`Strand`'s).

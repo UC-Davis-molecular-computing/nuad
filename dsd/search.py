@@ -93,7 +93,7 @@ from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint
     logger, all_pairs, ConstraintWithDomains, ConstraintWithStrands, \
     ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
     DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint, \
-    DomainPair, StrandPair
+    DomainPair, StrandPair, SingularConstraint, BulkConstraint
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -393,9 +393,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
     score_discovered_here: float = 0.0
     quit_early = False
 
-    if isinstance(constraint,
-                  (DomainConstraint, StrandConstraint,
-                   DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+    if isinstance(constraint, SingularConstraint):
         if not constraint.parallel or len(parts) == 1 or dc.cpu_count() == 1:
             for part in parts:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
@@ -410,10 +408,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         else:
             raise NotImplementedError('TODO: implement parallelization')
 
-    elif isinstance(constraint,
-                    (DomainsConstraint, StrandsConstraint,
-                     DomainPairsConstraint, StrandPairsConstraint,
-                     ComplexesConstraint, DesignConstraint)):
+    elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
         if isinstance(constraint, DesignConstraint):
             violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_changed)
         else:
