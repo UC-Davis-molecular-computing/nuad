@@ -152,6 +152,7 @@ def _violations_of_constraints(design: Design,
                          f'domains_changed = {domains_changed}'
                          f'violation_set_old = {violation_set_old}')
 
+    # remove violations involving domains_changed, since they might evaluate differently now
     violation_set: dc.ViolationSet
     if domains_changed is None:
         violation_set = dc.ViolationSet()
@@ -162,6 +163,7 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
+    # find new violations of parts involving domains in domains_changed, and add them to violation_set
     for constraint in constraints:
         parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
