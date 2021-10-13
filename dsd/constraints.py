@@ -3246,7 +3246,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     parallel: bool = False
     """
     Whether or not to use parallelization across multiple processes to take advantage of multiple
-    processors/cores, by calling :data:`SingularConstraint.evaluate` on different :any:`DesignPart`'s
+    processors/cores, by calling :data:`SingularConstraint.evaluate` on different DesignParts
     in separate processes.
     """
 

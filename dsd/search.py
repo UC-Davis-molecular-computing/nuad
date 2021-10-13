@@ -438,7 +438,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
 def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:
     """
     :param part:
-        :any:`DesignPart` (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
+        DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
     :param exclude_fixed:
         whether to exclude :any:`Domain`'s with :data:`Domain.fixed` == True
     :return:
