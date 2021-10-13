@@ -990,6 +990,12 @@ class DNASeqList:
         return DNASeqList(seqarr=new_seqarr)
 
     def energies(self, temperature: float) -> np.ndarray:
+        """
+        :param temperature:
+            temperature in Celsius
+        :return:
+            nearest-neighbor energies of each sequence with its perfect Watson-Crick complement
+        """
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
         return wcenergies
 
