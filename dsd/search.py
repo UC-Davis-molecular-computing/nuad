@@ -93,7 +93,7 @@ from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint
     logger, all_pairs, ConstraintWithDomains, ConstraintWithStrands, \
     ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
     DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint, \
-    DomainPair, StrandPair
+    DomainPair, StrandPair, SingularConstraint, BulkConstraint
 import dsd.constraints as dc
 
 from dsd.stopwatch import Stopwatch
@@ -152,6 +152,7 @@ def _violations_of_constraints(design: Design,
                          f'domains_changed = {domains_changed}'
                          f'violation_set_old = {violation_set_old}')
 
+    # remove violations involving domains_changed, since they might evaluate differently now
     violation_set: dc.ViolationSet
     if domains_changed is None:
         violation_set = dc.ViolationSet()
@@ -162,6 +163,7 @@ def _violations_of_constraints(design: Design,
             assert not domain_changed.fixed
             violation_set.remove_violations_of_domain(domain_changed)
 
+    # find new violations of parts involving domains in domains_changed, and add them to violation_set
     for constraint in constraints:
         parts_to_check = find_parts_to_check(constraint, design, domains_changed)
 
@@ -391,9 +393,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
     score_discovered_here: float = 0.0
     quit_early = False
 
-    if isinstance(constraint,
-                  (DomainConstraint, StrandConstraint,
-                   DomainPairConstraint, StrandPairConstraint, ComplexConstraint)):
+    if isinstance(constraint, SingularConstraint):
         if not constraint.parallel or len(parts) == 1 or dc.cpu_count() == 1:
             for part in parts:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
@@ -408,17 +408,14 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
         else:
             raise NotImplementedError('TODO: implement parallelization')
 
-    elif isinstance(constraint,
-                    (DomainsConstraint, StrandsConstraint,
-                     DomainPairsConstraint, StrandPairsConstraint,
-                     ComplexesConstraint, DesignConstraint)):
+    elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
         if isinstance(constraint, DesignConstraint):
             violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_changed)
         else:
             # XXX: I don't understand the mypy error on the next line
             violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
 
-        # we can't quite this function early,
+        # we can't quit this function early,
         # but we can let the caller know to stop evaluating constraints
         total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
         if current_score_gap is not None:
@@ -441,7 +438,7 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
 def _domains_in_part(part: dc.DesignPart, exclude_fixed: bool) -> List[Domain]:
     """
     :param part:
-        :any:`DesignPart` (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
+        DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
     :param exclude_fixed:
         whether to exclude :any:`Domain`'s with :data:`Domain.fixed` == True
     :return:

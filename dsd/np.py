@@ -696,12 +696,12 @@ class DNASeqList:
 
         - `filename`
 
-        - `hamming_distance_from_sequence`
+        - `hamming_distance_from_sequence` (possibly along with `alphabet` and `num_random_seqs`)
 
         :param length:
             length of sequences; `num_seqs` and `alphabet` can also be specified along with it
         :param hamming_distance_from_sequence:
-            if specified and equal to `(dist, seq)`,
+            if specified and equal to `(dist, seq)` of type (int, str),
             then only sequences at Hamming distance `dist` from `seq` will be generated.
             Raises error if `length`, `seqs`, `seqarr`, or `filename` is specified.
         :param num_random_seqs:
@@ -990,6 +990,12 @@ class DNASeqList:
         return DNASeqList(seqarr=new_seqarr)
 
     def energies(self, temperature: float) -> np.ndarray:
+        """
+        :param temperature:
+            temperature in Celsius
+        :return:
+            nearest-neighbor energies of each sequence with its perfect Watson-Crick complement
+        """
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
         return wcenergies
 

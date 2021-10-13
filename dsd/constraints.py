@@ -727,10 +727,9 @@ class DomainPool:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         :param previous_sequence:
             previously generated sequence to be replaced by a new sequence; None if no previous
-            sequence exists. Used in :py:meth:`DomainPool.find_steps_distance_sequences`
-            to choose a new sequence "close" to itself in Hamming distance. The number of
-            differences between previous_sequence and its neighbors is determined by randomly
-            picking a Hamming distance from :py:data:`DomainPool.hamming_probability` with
+            sequence exists. Used to choose a new sequence "close" to itself in Hamming distance.
+            The number of differences between previous_sequence and its neighbors is determined by randomly
+            picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
         :return:
             DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
@@ -1499,11 +1498,15 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
 
-    :param check_complements: whether to also ensure the check for Watson-Crick complements of the sequences
-    :param short_description: short description of constraint suitable for logging to stdout
-    :param weight: weight to assign to constraint
-    :return: a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
-             (in particular, if they are equal length, then they are not the same domain)
+    :param check_complements:
+        whether to also ensure the check for Watson-Crick complements of the sequences
+    :param short_description:
+        short description of constraint suitable for logging to stdout
+    :param weight:
+        weight to assign to constraint
+    :return:
+        a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
+        (in particular, if they are equal length, then they are not the same domain)
     """
 
     # def evaluate(s1: str, s2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
@@ -3194,13 +3197,15 @@ class Constraint(Generic[DesignPart], ABC):
     """
     Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
     float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
-    secondary structure energy exceeding a threshold, it will return the difference between the energy and 
-    the threshold.
-    It is then passed through the `score_transfer_function`.
+    secondary structure energy exceeding a threshold, the score returned is the difference between 
+    the energy and the threshold.
+    
+    The score is then passed through the `score_transfer_function`.
     The default is the squared ReLU function: f(x) = max(0, x^2).
-    This "punishes" more severe violations more, i.e., it would
+    This "punishes" more severe violations more, for example, it would
     bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
-    threshold than to reduce (by the same amount) a violation only 1 kcal/mol in excess of its threshold.
+    threshold to 2 kcal/mol excess,
+    than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
     """
 
     @staticmethod
@@ -3225,7 +3230,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate: Callable[[Tuple[str, ...], Optional[DesignPart]],
                        Tuple[float, str]] = lambda _: _raise_unreachable()
     """
-    Function that evaluates the :any:`Constraint`. It takes as input a tuple of DNA sequences 
+    Essentially a wrapper for a function that evaluates the :any:`Constraint`. 
+    It takes as input a tuple of DNA sequences 
     (Python strings) and an optional :any:`Part`, where :any:`Part` is one of 
     :any:`Domain`, :any:`Strand`, :any:`DomainPair`, :any:`StrandPair`, or :any:`Complex`
     (the latter being an alias for arbitrary-length tuple of :any:`Strand`'s).
@@ -3240,15 +3246,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     parallel: bool = False
     """
     Whether or not to use parallelization across multiple processes to take advantage of multiple
-    processors/cores. (Not applicable to some types of constraints. 
-    """
-
-    sequence_only: bool = True
-    """
-    If :py:data:`Constraint.parallel` is True, then this should be set to True so that only the 
-    sequence is serialized when passing data to other processes for parallel computation.
-    Otherwise, significant time is spent serializing objects such as :any:`Strand` or :any:`Domain`,
-    which is slower than not using parallelization in the first place.
+    processors/cores, by calling :data:`SingularConstraint.evaluate` on different DesignParts
+    in separate processes.
     """
 
     def __post_init__(self) -> None:
@@ -3262,15 +3261,10 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-        if self.parallel and not self.sequence_only:
-            raise ValueError('cannot have both parallel=True and sequence_only=False;\n'
-                             'if you want to use parallel=True, the constraint must be sequence_only=True '
-                             'for efficiency, since the pathos library is used for parallel processing, '
-                             'and it is too inefficient to serialize anything more than the DNA sequence')
-
     def call_evaluate(self, seqs: Tuple[str, ...], part: Optional[DesignPart]) -> Tuple[float, str]:
         """
-        Evaluates this :any:`Constraint` using function `_evaluate` supplied in constructor.
+        Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
+        supplied in constructor.
 
         :param seqs:
             sequence(s) of relevant :any:`Part`, e.g., if `part` is a pair of :any:`Strand`'s,
@@ -3287,10 +3281,6 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             `excess` might be the difference 1.5 between the energy and the threshold,
             and `summary` might be the string "-2.5 kcal/mol".
         """
-        if not self.sequence_only and part is None:
-            raise AssertionError('if sequence_only is False, '
-                                 'then the design part cannot be None, but it is')
-
         excess, summary = (self.evaluate)(seqs, part)  # noqa
         if excess < 0.0:
             excess = 0.0
@@ -3618,7 +3608,8 @@ def nupack_domain_complex_free_energy_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threadds to parallelize.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param domains:
         :any:`Domain`'s to check; if not specified, all domains are checked.
     :param description:
@@ -3684,7 +3675,8 @@ def nupack_strand_complex_free_energy_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threadds to parallelize.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param strands:
         Strands to check; if not specified, all strands are checked.
     :param description:
@@ -3864,7 +3856,8 @@ def nupack_strand_pair_constraint(
     :param score_transfer_function:
         See :py:data:`Constraint.score_transfer_function`.
     :param parallel:
-        Whether to use threading to parallelize evaluating this constraint.
+        Whether to use parallelization by running constraint evaluation in separate processes
+        to take advantage of multiple cores.
     :param description:
         Detailed description of constraint suitable for report.
     :param short_description:
@@ -4311,7 +4304,7 @@ def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], floa
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
-class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]]):
+class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]], BulkConstraint[Complex]):
     """
     Similar to :any:`ComplexConstraint` but operates on a specified list of complexes
     (tuples of :any:`Strand`'s).
