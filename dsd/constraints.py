@@ -223,9 +223,11 @@ class NumpyConstraint(ABC):
         in this way, it is typically *very* fast to apply; many millions of sequences can
         be processed in a few seconds.
 
-        :param seqs: :any:`np.DNASeqList` object representing DNA sequences
-        :return: a new :any:`np.DNASeqList` object representing the DNA sequences in `seqs` that
-                 satisfy the constraint
+        :param seqs:
+            :any:`np.DNASeqList` object representing DNA sequences
+        :return:
+            a new :any:`np.DNASeqList` object representing the DNA sequences in `seqs` that
+            satisfy the constraint
         """
         pass
 
