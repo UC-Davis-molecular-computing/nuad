@@ -3713,6 +3713,8 @@ def nupack_strand_complex_free_energy_constraint(
 def nupack_domain_pair_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
+        sodium: float = dv.default_sodium,
+        magnesium: float = dv.default_magnesium,
         parallel: bool = False,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
@@ -3729,6 +3731,11 @@ def nupack_domain_pair_constraint(
         Energy threshold in kcal/mol.
     :param temperature:
         Temperature in Celsius
+    :param sodium:
+        molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        molarity of magnesium (Mg++) in moles per liter
     :param parallel:
         Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
         :py:data:`Constraint.parallel`)
@@ -3762,7 +3769,8 @@ def nupack_domain_pair_constraint(
                              f'but it is {type(threshold)}')
 
     def binding_closure(seq_pair: Tuple[str, str]) -> float:
-        return dv.binding(seq_pair[0], seq_pair[1], temperature=temperature)
+        return dv.binding(seq_pair[0], seq_pair[1], temperature=temperature,
+                          sodium=sodium, magnesium=magnesium)
 
     # def evaluate(seq1: str, seq2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
     def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[DomainPair]) -> Tuple[float, str]:
