@@ -193,7 +193,7 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     # so the number of non-empty bins is Poisson with rate m.
     # We use this bound:
     #   https://doi.org/10.1109/TIT.2006.890791, Appendix II
-    # for Poisson r.v.'s P(y) with rate m to be less than a constant k, if k < m:
+    # for Poisson r.v.'s P(m) with rate m to be less than a constant k, if k < m:
     #
     #   Pr[P(m) <= k] <= e^{-m} * (e*m / k)^k
     #
