@@ -188,8 +188,9 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     # We want m sufficiently large that at least k bins are non-empty.
     # We use the Poisson approximation to balls-in-bins
     #   [Probability and Computing, Mitzenbacher and Upfal, 2nd edition, Section 5.4]
-    # where each bin is modeled as getting P(m/n) balls, where P(m/n) is a Poisson r.v. with rate m/n.
-    # The sum of Poisson r.v.'s is Poisson (with rate = sum of individual rates),
+    # where each bin is modeled as getting P(m/n) balls,
+    # where each P(m/n) is an independent Poisson r.v. with rate m/n.
+    # The sum of independent Poisson r.v.'s is Poisson (with rate = sum of individual rates),
     # so the number of non-empty bins is Poisson with rate m.
     # We use this bound:
     #   https://doi.org/10.1109/TIT.2006.890791, Appendix II
