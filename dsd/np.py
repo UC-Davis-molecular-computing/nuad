@@ -193,8 +193,8 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     # so the number of these that land in non-empty bins is at most X=Binomial(2*k, 1/4), with E[X] = k/2.
     # Using Chernoff bounds for X=Binomial(n,p) with E[X]=np and delta=2 giving
     #   Pr[we generate fewer than k unique sequences]
-    #   Pr[at least k out of 2*k balls land in non-empty bins]
-    #   Pr[X >= (1+delta)E[X]]
+    #      = Pr[at least k out of 2*k balls land in non-empty bins]
+    #      = Pr[X >= (1+delta)E[X]]
     #     <= e^{-delta^2 E[X] / 3}
     #      = e^{-2*k/3}
 
