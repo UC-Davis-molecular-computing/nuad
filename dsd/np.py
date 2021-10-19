@@ -185,28 +185,18 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     #   k = num_random_seqs = desired number of unique sequences
     #
     # If we sample m sequences with replacement, out of n total, this is tossing m balls into n bins.
-    # We want m sufficiently large that at least k bins are non-empty.
-    # We use the Poisson approximation to balls-in-bins
-    #   [Probability and Computing, Mitzenbacher and Upfal, 2nd edition, Section 5.4]
-    # where each bin is modeled as getting P(m/n) balls,
-    # where each P(m/n) is an independent Poisson r.v. with rate m/n.
-    # The sum of independent Poisson r.v.'s is Poisson (with rate = sum of individual rates),
-    # so the number of non-empty bins is Poisson with rate m.
-    # We use this bound:
-    #   https://doi.org/10.1109/TIT.2006.890791, Appendix II
-    # for Poisson r.v.'s P(m) with rate m to be less than a constant k, if k < m:
+    # We want m sufficiently large that at least k bins are non-empty. We throw m=2*k balls.
     #
-    #   Pr[P(m) <= k] <= e^{-m} * (e*m / k)^k
-    #
-    # They state only the bound for the upper tail Pr[P(m) >= k],
-    # but the proof also works for the lower tail Pr[P(m) <= k].
-    #
-    # Setting m = c*k for c > 1, we have
-    #   Pr[P(m) <= k]
-    #     <= e^{-c*k} * (e*c*k / k)^k
-    #      = (e^{-c})^k * (e*c)^k
-    #      = (e^{1-c}*c)^k
-    # Setting c = 2 gives e^{1-c}*c = 2 / e ~ 0.736, so Pr[P(m) <= k] <= 0.75^k.
+    # Above we check if k >= n/4 and generate all sequences if so. Thus, if we need the random selection
+    # below, then k < n/4. Thus at least 3/4 of bins are empty the entire time, so each time we throw a ball,
+    # there is a < 1/4 chance for it to land in an non-empty bin. We are throwing m=2*k balls,
+    # so the number of these that land in non-empty bins is at most X=Binomial(2*k, 1/4), with E[X] = k/2.
+    # Using Chernoff bounds for X=Binomial(n,p) with E[X]=np and delta=2 giving
+    #   Pr[we generate fewer than k unique sequences]
+    #   Pr[at least k out of 2*k balls land in non-empty bins]
+    #   Pr[X >= (1+delta)E[X]]
+    #     <= e^{-delta^2 E[X] / 3}
+    #      = e^{-2*k/3}
 
     base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
     num_seqs_to_sample = 2 * num_random_seqs  # c*k in analysis above
