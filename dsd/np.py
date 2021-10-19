@@ -173,7 +173,7 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
         return sampled_seqs
 
     # This comment justifies why we sample 2*num_random_seqs sequences randomly (with replacement) in order
-    # to get our goal of at least num_seqs *unique* sequences. We sample with replacement since that's
+    # to get our goal of at least num_random_seqs *unique* sequences. We sample with replacement since that's
     # the only option using numpy's random number generation routines: we are generating a 2D array
     # of numbers and want each *row* to be unique, but numpy can only let us say each *number* is unique,
     # which doesn't describe what we want.
