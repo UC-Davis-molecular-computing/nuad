@@ -189,7 +189,7 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     #
     # Above we check if k >= n/4 and generate all sequences if so. Thus, if we need the random selection
     # below, then k < n/4. Thus at least 3/4 of bins are empty the entire time, so each time we throw a ball,
-    # there is a < 1/4 chance for it to land in an non-empty bin. We are throwing m=2*k balls,
+    # there is a < 1/4 chance for it to land in a non-empty bin. We are throwing m=2*k balls,
     # so the number of these that land in non-empty bins is at most X=Binomial(2*k, 1/4), with E[X] = k/2.
     # Using Chernoff bounds for X=Binomial(n,p) with E[X]=np and delta=2 giving
     #   Pr[we generate fewer than k unique sequences]
