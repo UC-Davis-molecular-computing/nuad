@@ -121,7 +121,7 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C'
 
 
 def make_array_with_random_subset_of_dna_seqs(
-        length: int, num_seqs: int, rng: np.random.Generator = default_rng,
+        length: int, num_random_seqs: int, rng: np.random.Generator = default_rng,
         bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """
     Return 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length.
@@ -134,7 +134,7 @@ def make_array_with_random_subset_of_dna_seqs(
 
     :param length:
         length of each row
-    :param num_seqs:
+    :param num_random_seqs:
         number of rows
     :param bases:
         DNA bases to use
@@ -144,11 +144,11 @@ def make_array_with_random_subset_of_dna_seqs(
         2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
     """
     if length < 0:
-        raise ValueError(f'length = {num_seqs} must be nonnegative')
+        raise ValueError(f'length = {num_random_seqs} must be nonnegative')
     elif length == 0:
         return np.array([[]], dtype=np.ubyte)
-    if num_seqs <= 0:
-        raise ValueError(f'num_seqs = {num_seqs} must be positive')
+    if num_random_seqs <= 0:
+        raise ValueError(f'num_seqs = {num_random_seqs} must be positive')
     if not set(bases) <= {'A', 'C', 'G', 'T'}:
         raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
     if len(bases) == 0:
@@ -157,62 +157,65 @@ def make_array_with_random_subset_of_dna_seqs(
         raise ValueError('bases must have at least two elements')
 
     max_possible = len(bases) ** length
-    if num_seqs > max_possible:
-        raise ValueError(f'num_seqs = {num_seqs} is greater than the total number {max_possible} '
-                         f'of sequences of length {length} using alphabet {bases}, so we cannot guarantee '
-                         f'that many unique sequences. Please set num_seqs <= {max_possible}.')
+    if num_random_seqs > max_possible:
+        raise ValueError(f'''\
+num_random_seqs = {num_random_seqs} is greater than the total number {max_possible} 
+of sequences of length {length} using alphabet {bases}, so we cannot guarantee 
+that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
 
     # If we want sufficiently many sequences, then it's simpler to just generate all sequences
     # of that length and choose a random subset of size num_seqs.
-    if num_seqs >= max_possible / 4:
+    if num_random_seqs >= max_possible / 4:
         all_seqs = make_array_with_all_dna_seqs(length=length, bases=bases)
         # https://stackoverflow.com/a/27815343/5339430
-        idxs = rng.choice(all_seqs.shape[0], num_seqs, replace=False)
+        idxs = rng.choice(all_seqs.shape[0], num_random_seqs, replace=False)
         sampled_seqs = all_seqs[idxs]
         return sampled_seqs
 
-    # This comment justifies why we sample 2*num_seqs sequences randomly (with replacement) in order
-    # to get our goal of at least num_seqs *unique* sequences. Define
+    # This comment justifies why we sample 2*num_random_seqs sequences randomly (with replacement) in order
+    # to get our goal of at least num_random_seqs *unique* sequences. We sample with replacement since that's
+    # the only option using numpy's random number generation routines: we are generating a 2D array
+    # of numbers and want each *row* to be unique, but numpy can only let us say each *number* is unique,
+    # which doesn't describe what we want.
     #
-    #   m = number of sequences we sample with replacement
-    #   n = len(bases)^length = total number of sequences of that length
-    #   k = num_seqs = desired number of unique sequences
+    # Define
+    #
+    #   m = num_seqs_to_sample = number of sequences we sample with replacement
+    #   n = max_possible       = total number of sequences of that length
+    #   k = num_random_seqs    = desired number of unique sequences
     #
     # If we sample m sequences with replacement, out of n total, this is tossing m balls into n bins.
-    # We want m sufficiently large that at least k bins are non-empty.
-    # We use the Poisson approximation to balls-in-bins
-    #   (Probability and Computing, Mitzenbacher and Upfal, 2nd edition, Section 5.4),
-    # where each bin is modeled as getting P(m/n) balls, where P(m/n) is a Poisson r.v. with rate m/n.
-    # The sum of Poisson r.v.'s is Poisson, so the number of non-empty bins is Poisson with rate m.
-    # We use this bound:
-    #   https://doi.org/10.1109/TIT.2006.890791, Appendix II
-    # for Poisson r.v.'s P(y)  with rate m to be less than a constant k, if k < m:
+    # We want m sufficiently large that at least k bins are non-empty. We throw m=2*k balls.
     #
-    #   Pr[P(m) <= k] <= e^{-m} * (e*m / k)^k
-    #
-    # They state only the bound for the upper tail, but the proof works for the lower tail as well.
-    #
-    # Setting m = c*k for c > 1, we have
-    #   Pr[P(m) <= k]
-    #     <= e^{-c*k} * (e*c*k / k)^k
-    #      = (e^{-c})^k * (e*c)^k
-    #      = (e^{1-c}*c)^k
-    # Setting c = 2 gives e^{1-c}*c ~ 0.736, so  Pr[P(m) <= k] <= 0.75^k.
+    # Above we check if k >= n/4 and generate all sequences if so. Thus, if we need the random selection
+    # below, then k < n/4. Thus at least 3/4 of bins are empty the entire time, so each time we throw a ball,
+    # there is a < 1/4 chance for it to land in a non-empty bin. We are throwing m=2*k balls,
+    # so the number of these that land in non-empty bins is at most X=Binomial(2*k, 1/4), with E[X] = k/2.
+    # Using Chernoff bounds for X=Binomial(n,p) with E[X]=np and delta=2 giving
+    #   Pr[we generate fewer than k unique sequences]
+    #      = Pr[more than k out of 2*k balls land in non-empty bins]
+    #      = Pr[X > (1+delta)E[X]]
+    #      < e^{-delta^2 E[X] / 3}
+    #      = e^{-2*k/3},
+    # i.e., for large k, a very small probability. Even for k=1, this is about 1/2,
+    # so we'll only need to execute expected 2 iterations of the while loop below.
 
     base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
-    num_seqs_to_sample = 2 * num_seqs
+    num_seqs_to_sample = 2 * num_random_seqs  # c*k in analysis above
     unique_sorted_arr = None
 
     # odds are low to have a collision, so for simplicity we just repeat the whole process if needed
-    while unique_sorted_arr is None or len(unique_sorted_arr) < num_seqs:
+    while unique_sorted_arr is None or len(unique_sorted_arr) < num_random_seqs:
         arr = rng.choice(a=base_bits, size=(num_seqs_to_sample, length))
         unique_sorted_arr = np.unique(arr, axis=0)
-        if len(unique_sorted_arr) < num_seqs:
-            print(f'WARNING: did not find {num_seqs} unique sequences. If you are seeing this warning '
+        if len(unique_sorted_arr) < num_random_seqs:
+            print(f'WARNING: did not find {num_random_seqs} unique sequences. If you are seeing this warning '
                   f'repeatedly, check the parameters to make_array_with_random_subset_of_dna_seqs.')
 
-    # we probably have too many, so pick a random subset of sequences to return
-    idxs = rng.choice(unique_sorted_arr.shape[0], num_seqs, replace=False)
+    # We probably have too many, so pick a random subset of sequences to return.
+    # We need a random subset, rather than just taking the first num_random_seqs elements,
+    # since numpy.unique above sorts the elements.
+    idxs = rng.choice(unique_sorted_arr.shape[0], num_random_seqs, replace=False)
     sampled_seqs = unique_sorted_arr[idxs]
     return sampled_seqs
 
@@ -750,7 +753,7 @@ class DNASeqList:
                 self.seqarr = make_array_with_all_dna_seqs(length=length, bases=alphabet)
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs(
-                    length=length, num_seqs=num_random_seqs, rng=self.rng, bases=alphabet)
+                    length=length, num_random_seqs=num_random_seqs, rng=self.rng, bases=alphabet)
             self.seqlen = length
             self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
 
