@@ -180,9 +180,9 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     #
     # Define
     #
-    #   m = number of sequences we sample with replacement
-    #   n = len(bases)^length = total number of sequences of that length
-    #   k = num_random_seqs = desired number of unique sequences
+    #   m = num_seqs_to_sample = number of sequences we sample with replacement
+    #   n = max_possible       = total number of sequences of that length
+    #   k = num_random_seqs    = desired number of unique sequences
     #
     # If we sample m sequences with replacement, out of n total, this is tossing m balls into n bins.
     # We want m sufficiently large that at least k bins are non-empty. We throw m=2*k balls.
@@ -193,10 +193,12 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
     # so the number of these that land in non-empty bins is at most X=Binomial(2*k, 1/4), with E[X] = k/2.
     # Using Chernoff bounds for X=Binomial(n,p) with E[X]=np and delta=2 giving
     #   Pr[we generate fewer than k unique sequences]
-    #      = Pr[at least k out of 2*k balls land in non-empty bins]
-    #      = Pr[X >= (1+delta)E[X]]
-    #     <= e^{-delta^2 E[X] / 3}
-    #      = e^{-2*k/3}
+    #      = Pr[more than k out of 2*k balls land in non-empty bins]
+    #      = Pr[X > (1+delta)E[X]]
+    #      < e^{-delta^2 E[X] / 3}
+    #      = e^{-2*k/3},
+    # i.e., for large k, a very small probability. Even for k=1, this is about 1/2,
+    # so we'll only need to execute expected 2 iterations of the while loop below.
 
     base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
     num_seqs_to_sample = 2 * num_random_seqs  # c*k in analysis above
@@ -210,8 +212,9 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
             print(f'WARNING: did not find {num_random_seqs} unique sequences. If you are seeing this warning '
                   f'repeatedly, check the parameters to make_array_with_random_subset_of_dna_seqs.')
 
-    # we probably have too many, so pick a random subset of sequences to return
-    # we need a random subset since numpy.unique sorts the elements
+    # We probably have too many, so pick a random subset of sequences to return.
+    # We need a random subset, rather than just taking the first num_random_seqs elements,
+    # since numpy.unique above sorts the elements.
     idxs = rng.choice(unique_sorted_arr.shape[0], num_random_seqs, replace=False)
     sampled_seqs = unique_sorted_arr[idxs]
     return sampled_seqs
