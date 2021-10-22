@@ -15,7 +15,7 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 
 ## Overview
 
-dsd stands for "DNA sequence designer". It is a Python library that enables one to specify constraints on a DNA nanostructure made from synthetic DNA, and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The dsd library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
+dsd stands for "DNA sequence designer". It is a Python library that enables one to specify constraints on a DNA nanostructure made from synthetic DNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to NUPACK*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the nearest-neighbor energy model*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The dsd library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
 
 
 ## API documentation
