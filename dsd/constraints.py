@@ -732,8 +732,10 @@ class DomainPool:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         :param previous_sequence:
             previously generated sequence to be replaced by a new sequence; None if no previous
-            sequence exists. Used to choose a new sequence "close" to itself in Hamming distance.
-            The number of differences between previous_sequence and its neighbors is determined by randomly
+            sequence exists. Used to choose a new sequence "close" to itself in Hamming distance,
+            if the field :data:`DomainPool.replace_with_close_sequences` is True and `previous_sequence`
+            is not None.
+            The number of differences between `previous_sequence` and its neighbors is determined by randomly
             picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
         :return:
