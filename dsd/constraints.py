@@ -886,7 +886,7 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
                          f'passed the numpy sequence constraints')
 
     def _bases_to_use(self) -> Collection[str]:
-        # checks explicitly for NumpyRestrictBasesConstraint
+        # checks explicitly for RestrictBasesConstraint
         for constraint in self.numpy_constraints:
             if isinstance(constraint, RestrictBasesConstraint):
                 return constraint.bases
