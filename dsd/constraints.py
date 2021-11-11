@@ -5652,7 +5652,6 @@ def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
             # Assertions checks that domain_name was not previously seen.
             # This is to check that the non-competition requirement on
             # implicit domains was properly checked earlier in input validation.
-            assert domain_name not in implicit_seen_domains
             implicit_seen_domains[domain_name] = strand_domain_address
 
             complementary_domain_name = Domain.complementary_domain_name(domain_name)
