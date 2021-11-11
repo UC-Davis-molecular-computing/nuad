@@ -271,9 +271,12 @@ class RestrictBasesConstraint(NumpyConstraint):
 @dataclass
 class NearestNeighborEnergyConstraint(NumpyConstraint):
     """
-    This constraint calculates the nearest-neighbor sum of a domain with its perfect complement, using
-    parameters from the 2004 Santa-Lucia and Hicks paper, and it rejects any sequences whose energy
-    according to this sum is outside the range
+    This constraint calculates the nearest-neighbor binding energy of a domain with its perfect complement
+    (summing over all length-2 substrings of the domain's sequence),
+    using parameters from the 2004 Santa-Lucia and Hicks paper
+    (https://www.annualreviews.org/doi/abs/10.1146/annurev.biophys.32.110601.141800,
+    see Table 1, and example on page 419).
+    It rejects any sequences whose energy according to this sum is outside the range
     [:py:data:`NearestNeighborEnergyConstraint.low_energy`,
     :py:data:`NearestNeighborEnergyConstraint.high_energy`].
     """
@@ -582,7 +585,7 @@ class DomainPool:
     when returning a sequence from :meth:`DomainPool.generate_sequence`,
     one is picked "close" in Hamming distance to the previous sequence of the :any:`Domain`.
     The field :data:`DomainPool.hamming_probability` is used to pick a distance at random, after which
-    a sequence that distance from the previous sequence is selected to return from .
+    a sequence that distance from the previous sequence is selected to return.
     """
 
     hamming_probability: Dict[int, float] = field(default_factory=dict)
@@ -596,7 +599,7 @@ class DomainPool:
     """
     :any:`NumpyConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
-    in the method :py:meth:`DomainPool.generate`.
+    in the method :py:meth:`DomainPool.generate_sequence`.
 
     The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied
     efficiently to many sequences at once, represented as a numpy 2D array of bytes (via the class
@@ -729,8 +732,10 @@ class DomainPool:
             numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
         :param previous_sequence:
             previously generated sequence to be replaced by a new sequence; None if no previous
-            sequence exists. Used to choose a new sequence "close" to itself in Hamming distance.
-            The number of differences between previous_sequence and its neighbors is determined by randomly
+            sequence exists. Used to choose a new sequence "close" to itself in Hamming distance,
+            if the field :data:`DomainPool.replace_with_close_sequences` is True and `previous_sequence`
+            is not None.
+            The number of differences between `previous_sequence` and its neighbors is determined by randomly
             picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
         :return:
@@ -881,7 +886,7 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
                          f'passed the numpy sequence constraints')
 
     def _bases_to_use(self) -> Collection[str]:
-        # checks explicitly for NumpyRestrictBasesConstraint
+        # checks explicitly for RestrictBasesConstraint
         for constraint in self.numpy_constraints:
             if isinstance(constraint, RestrictBasesConstraint):
                 return constraint.bases
@@ -5647,7 +5652,6 @@ def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
             # Assertions checks that domain_name was not previously seen.
             # This is to check that the non-competition requirement on
             # implicit domains was properly checked earlier in input validation.
-            assert domain_name not in implicit_seen_domains
             implicit_seen_domains[domain_name] = strand_domain_address
 
             complementary_domain_name = Domain.complementary_domain_name(domain_name)
