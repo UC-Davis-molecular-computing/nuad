@@ -49,8 +49,8 @@ def main() -> None:
     # just for testing parallel processing
 
     # num_strands = 2
-    num_strands = 5
-    # num_strands = 10
+    # num_strands = 5
+    num_strands = 10
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
@@ -73,10 +73,10 @@ def main() -> None:
     design = dc.Design(strands)
 
     numpy_constraints: List[NumpyConstraint] = [
-        dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
+        # dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
         # dc.BaseCountConstraint(base='G', high_count=1),
         # dc.BaseEndConstraint(bases=('C', 'G')),
-        dc.RunsOfBasesConstraint(['C', 'G'], 4),
+        # dc.RunsOfBasesConstraint(['C', 'G'], 4),
         # dc.RunsOfBasesConstraint(['A', 'T'], 4),
         # dc.BaseEndConstraint(bases=('A', 'T')),
         # dc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
@@ -148,12 +148,12 @@ def main() -> None:
     params = ds.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
-        strand_pair_nupack_constraint,
+        # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_duplex_constraint,
-        strand_pairs_rna_duplex_constraint,
+        # strand_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
-        dc.domains_not_substrings_of_each_other_domain_pair_constraint(),
+        dc.domains_not_substrings_of_each_other_constraint(),
     ],
         out_directory=args.directory,
         restart=args.restart,
