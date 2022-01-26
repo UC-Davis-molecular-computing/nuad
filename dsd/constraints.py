@@ -748,9 +748,9 @@ class DomainPool:
 
         **Note:** By default, there is no check that the sequence returned is unequal to one already
         assigned somewhere in the design, since both :py:data:`DomainPool.numpy_constraints` and
-        :py:data:`DomainPool.sequence_constraints` do not have access to the whole :any:`Design`.
+        :data:`DomainPool.sequence_constraints` do not have access to the whole :any:`Design`.
         But the :any:`DomainPairConstraint` returned by
-        :py:meth:`domains_not_substrings_of_each_other_domain_pair_constraint`
+        :meth:`domains_not_substrings_of_each_other_constraint`
         can be used to specify this :any:`Design`-wide constraint.
 
         :param rng:
