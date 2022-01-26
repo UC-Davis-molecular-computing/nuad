@@ -288,7 +288,7 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
         domain_pairs_to_check_if_domain_changed_none: List[DomainPair] = \
             [DomainPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_domains, with_replacement=True)
+        pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself)
         domain_pairs_to_check_if_domain_changed_none = [DomainPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
@@ -315,7 +315,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
         strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
             [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_strands, with_replacement=True)
+        pairs = all_pairs(all_strands, with_replacement=constraint.check_strand_against_itself)
         strand_pairs_to_check_if_domain_changed_none = [StrandPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified

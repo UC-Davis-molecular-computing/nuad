@@ -475,7 +475,9 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
 
         lengths = {len(substring) for substring in self.substrings}
         if len(lengths) > 1:
-            raise ValueError(f'all substrings must have same length, but they have these lengths: {lengths}')
+            raise ValueError(f'all substrings must have same length, but they have these lengths: '
+                             f'{lengths}\n'
+                             f'substrings: {self.substrings}')
 
         for substring in self.substrings:
             if not (set(substring) < all_dna_bases):
@@ -484,6 +486,18 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
                                  f'{set(substring) - all_dna_bases}')
             if len(substring) == 0:
                 raise ValueError('substring cannot be empty')
+
+    def length(self) -> int:
+        """
+        :return:
+            length of substring(s) to check
+        """
+        if isinstance(self.substrings, str):
+            return len(self.substrings)
+        else:
+            # should be a collection
+            first_substring = self.substrings[0]
+            return len(first_substring)
 
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
         """Remove sequences that have a string in :py:data:`ForbiddenSubstringConstraint.substrings`
@@ -647,7 +661,18 @@ class DomainPool:
             if not isinstance(numpy_constraint, NumpyConstraint):
                 raise ValueError('each element of numpy_constraints must be an instance of NumpyConstraint, '
                                  f'but the element at index {idx} is of type {type(numpy_constraint)}')
+            elif isinstance(numpy_constraint, RunsOfBasesConstraint):
+                if numpy_constraint.length > self.length:
+                    raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
+                                     f'RunsOfBasesConstraint was specified with larger length '
+                                     f'{numpy_constraint.length}, which is not allowed')
+            elif isinstance(numpy_constraint, ForbiddenSubstringConstraint):
+                if numpy_constraint.length() > self.length:
+                    raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
+                                     f'ForbiddenSubstringConstraint was specified with larger length '
+                                     f'{numpy_constraint.length()}, which is not allowed')
             idx += 1
+
 
         idx = 0
         for seq_constraint in self.sequence_constraints:
@@ -1498,7 +1523,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 _domains_interned: Dict[str, Domain] = {}
 
 
-def domains_not_substrings_of_each_other_domain_pair_constraint(
+def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0) \
         -> DomainPairConstraint:
     """
@@ -1545,6 +1570,7 @@ def domains_not_substrings_of_each_other_domain_pair_constraint(
     return DomainPairConstraint(description='domains not substrings of each other',
                                 short_description=short_description,
                                 weight=weight,
+                                check_domain_against_itself=False,
                                 evaluate=evaluate)
 
 
@@ -3367,12 +3393,24 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     List of pairs of :any:`Domain`'s to check; if not specified, all pairs in :any:`Design` are checked.
     """
 
+    check_domain_against_itself: bool = True
+    """
+    Whether to check a domain against itself when checking all pairs of :any:`Domain`'s in the :any:`Design`. 
+    Only used if :data:`ConstraintWithDomainPairs.pairs` is not specified, otherwise it is ignored.
+    """
+
 
 @dataclass(frozen=True, eq=False)
 class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     pairs: Optional[Tuple[Tuple[Strand, Strand], ...]] = None
     """
     List of pairs of :any:`Strand`'s to check; if not specified, all pairs in :any:`Design` are checked.
+    """
+
+    check_strand_against_itself: bool = True
+    """
+    Whether to check a strand against itself when checking all pairs of :any:`Strand`'s in the :any:`Design`. 
+    Only used if :data:`ConstraintWithStrandPairs.pairs` is not specified, otherwise it is ignored.
     """
 
 
