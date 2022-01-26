@@ -1524,7 +1524,8 @@ _domains_interned: Dict[str, Domain] = {}
 
 
 def domains_not_substrings_of_each_other_constraint(
-        check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0) \
+        check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
         -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
@@ -1536,6 +1537,8 @@ def domains_not_substrings_of_each_other_constraint(
         short description of constraint suitable for logging to stdout
     :param weight:
         weight to assign to constraint
+    :param pairs:
+        pairs of domains to check (by default all pairs of unequal domains are compared)
     :return:
         a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
         (in particular, if they are equal length, then they are not the same domain)
@@ -1571,6 +1574,7 @@ def domains_not_substrings_of_each_other_constraint(
                                 short_description=short_description,
                                 weight=weight,
                                 check_domain_against_itself=False,
+                                pairs=pairs,
                                 evaluate=evaluate)
 
 
