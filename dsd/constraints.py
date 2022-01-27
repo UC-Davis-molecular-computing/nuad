@@ -113,8 +113,9 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
     to allow the search to explore different rotations of M13.
 
     For example, suppose `m13_subdomains` is a list containing :any:`Domain`'s from the :any:`Design`,
-    which are consecutive subdomains of M13 from 5' to 3'. Then the following code creates a
-    :any:`Strand` representing the M13 portion that binds to other :any:`Strand`'s in the :any:`Design`.
+    which are consecutive subdomains of M13 from 5' to 3' (all with :data:`Domain.dependent` set to True).
+    Then the following code creates a :any:`Strand` representing the M13 portion
+    that binds to other :any:`Strand`'s in the :any:`Design`.
 
     .. code-block:: python
 
