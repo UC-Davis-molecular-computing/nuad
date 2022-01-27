@@ -733,6 +733,7 @@ class DomainPool:
         if ((self.length is None and self.possible_sequences is None) or
                 (self.length is not None and self.possible_sequences is not None)):
             raise ValueError('exactly one of length or possible_sequences should be specified')
+
         if self.possible_sequences is not None:
             if len(self.possible_sequences) == 0:
                 raise ValueError('possible_sequences cannot be empty')
@@ -751,50 +752,53 @@ class DomainPool:
             if len(self.sequence_constraints) > 0:
                 raise ValueError('If possible_sequences is specified, then sequence_constraints should '
                                  'not be specified.')
-        if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
-            # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
-            # for i in range(self.length):
-            #     self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
-            # self.hamming_probability[self.length] *= 2
 
-            # linearly decreasing probability of making i+1 (since i starts at 0) base changes
-            total = 0.0
-            for i in range(self.length):
-                prob = 1 / (i + 1)
-                self.hamming_probability[i + 1] = prob
-                total += prob
-            # normalize to be a probability measure
-            for length in self.hamming_probability:
-                self.hamming_probability[length] /= total
+        if self.length is not None:
+            if  len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
+                # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
+                # for i in range(self.length):
+                #     self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
+                # self.hamming_probability[self.length] *= 2
 
-        idx = 0
-        for numpy_constraint in self.numpy_constraints:
-            if not isinstance(numpy_constraint, NumpyConstraint):
-                raise ValueError('each element of numpy_constraints must be an instance of NumpyConstraint, '
-                                 f'but the element at index {idx} is of type {type(numpy_constraint)}')
-            elif isinstance(numpy_constraint, RunsOfBasesConstraint):
-                if numpy_constraint.length > self.length:
-                    raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
-                                     f'RunsOfBasesConstraint was specified with larger length '
-                                     f'{numpy_constraint.length}, which is not allowed')
-            elif isinstance(numpy_constraint, ForbiddenSubstringConstraint):
-                if numpy_constraint.length() > self.length:
-                    raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
-                                     f'ForbiddenSubstringConstraint was specified with larger length '
-                                     f'{numpy_constraint.length()}, which is not allowed')
-            idx += 1
+                # linearly decreasing probability of making i+1 (since i starts at 0) base changes
+                total = 0.0
+                for i in range(self.length):
+                    prob = 1 / (i + 1)
+                    self.hamming_probability[i + 1] = prob
+                    total += prob
+                # normalize to be a probability measure
+                for length in self.hamming_probability:
+                    self.hamming_probability[length] /= total
 
-        idx = 0
-        for seq_constraint in self.sequence_constraints:
-            # SequenceConstraint is an alias for Callable[[str], float],
-            # which is not checkable using isinstance
-            # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
-            if not callable(seq_constraint):
-                raise ValueError('each element of numpy_constraints must be an instance of '
-                                 'SequenceConstraint (i.e., be a function that takes a single string '
-                                 'and returns a bool), '
-                                 f'but the element at index {idx} is of type {type(seq_constraint)}')
-            idx += 1
+            idx = 0
+            for numpy_constraint in self.numpy_constraints:
+                if not isinstance(numpy_constraint, NumpyConstraint):
+                    raise ValueError('each element of numpy_constraints must be an instance of '
+                                     'NumpyConstraint, '
+                                     f'but the element at index {idx} is of type {type(numpy_constraint)}')
+                elif isinstance(numpy_constraint, RunsOfBasesConstraint):
+                    if numpy_constraint.length > self.length:
+                        raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
+                                         f'RunsOfBasesConstraint was specified with larger length '
+                                         f'{numpy_constraint.length}, which is not allowed')
+                elif isinstance(numpy_constraint, ForbiddenSubstringConstraint):
+                    if numpy_constraint.length() > self.length:
+                        raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
+                                         f'ForbiddenSubstringConstraint was specified with larger length '
+                                         f'{numpy_constraint.length()}, which is not allowed')
+                idx += 1
+
+            idx = 0
+            for seq_constraint in self.sequence_constraints:
+                # SequenceConstraint is an alias for Callable[[str], float],
+                # which is not checkable using isinstance
+                # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
+                if not callable(seq_constraint):
+                    raise ValueError('each element of numpy_constraints must be an instance of '
+                                     'SequenceConstraint (i.e., be a function that takes a single string '
+                                     'and returns a bool), '
+                                     f'but the element at index {idx} is of type {type(seq_constraint)}')
+                idx += 1
 
     def __hash__(self) -> int:
         return hash((self.name, self.length))
