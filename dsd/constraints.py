@@ -102,6 +102,16 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
     Return all substrings of the M13mp18 DNA sequence of length `length`,
     except those overlapping indices in `except_indices`.
 
+    This is useful with the field :data:`DomainPool.possible_sequences`, when one strand in the
+    :any:`Design` represents a small portion of the full M13 sequence,
+    and part of the sequence design process is to choose a rotation of M13 to use.
+    One can set that strand to have a single :any:`Domain`,
+    which contains dependent subdomains (those with :data:`Domain.dependent` set to True).
+    These subdomains are the smaller domains where M13 attaches to other :any:`Strand`'s in the
+    :any:`Design`. Then, give the parent :any:`Domain` a :any:`DomainPool` with
+    :data:`DomainPool.possible_sequences` set to the return value of this function,
+    to allow the search to explore different rotations of M13.
+
     :param length:
         length of substrings to return
     :param except_indices:
