@@ -113,13 +113,17 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
     to allow the search to explore different rotations of M13.
 
     For example, suppose `m13_subdomains` is a list containing :any:`Domain`'s from the :any:`Design`,
-    which are consecutive subdomains of M13 from 5' to 3' (all with :data:`Domain.dependent` set to True).
+    which are consecutive subdomains of M13 from 5' to 3' (all with :data:`Domain.dependent` set to True),
+    and `m13_length` is the sum of their lengths (note this needs to be calculated manually since the
+    following code assumes no :any:`Domain` in `m13_subdomains` has a :any:`DomainPool` yet, thus none
+    yet have a length).
     Then the following code creates a :any:`Strand` representing the M13 portion
     that binds to other :any:`Strand`'s in the :any:`Design`.
 
     .. code-block:: python
 
-        m13_length = sum([m13_subdomain.length for m13_subdomain in m13_subdomains])
+        m13_subdomains = # subdomains of M13 used in the design
+        m13_length = # sum of lengths of domains in m13_subdomains
         m13_substrings = dc.m13_substrings_of_length(m13_length)
         m13_domain_pool = dc.DomainPool(name='m13 domain pool', possible_sequences=m13_substrings)
         m13_domain = dc.Domain(name='m13', subdomains=m13_subdomains, pool=m13_domain_pool)
