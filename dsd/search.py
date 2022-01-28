@@ -288,7 +288,12 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
         domain_pairs_to_check_if_domain_changed_none: List[DomainPair] = \
             [DomainPair(pair[0], pair[1]) for pair in constraint.pairs]
     else:
-        pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself)
+        # check all pairs of domains unless one is an ancestor of another in a subdomain tree
+        def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
+            return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
+
+        pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
+                          where=not_subdomain)
         domain_pairs_to_check_if_domain_changed_none = [DomainPair(pair[0], pair[1]) for pair in pairs]
 
     # filter out those not containing domain_change if specified
@@ -684,15 +689,21 @@ def _check_design(design: dc.Design) -> None:
     for strand in design.strands:
         for domain in strand.domains:
             # noinspection PyProtectedMember
-            if domain._pool is None and not domain.fixed:
-                raise ValueError(f'for strand {strand.name}, Strand.pool is None, but it has a '
-                                 f'non-fixed domain {domain.name} with a DomainPool set to None.\n'
-                                 f'For non-fixed domains, exactly one of these must be None.')
+            if domain._pool is None and not (domain.fixed or domain.dependent):
+                raise ValueError(f'for strand {strand.name}, it has a '
+                                 f'non-fixed, non-dependent domain {domain.name} '
+                                 f'with pool set to None.\n'
+                                 f'For domains that are not fixed and not dependent, '
+                                 f'exactly one of these must be None.')
             # noinspection PyProtectedMember
             elif domain._pool is not None and domain.fixed:
                 raise ValueError(f'for strand {strand.name}, it has a '
                                  f'domain {domain.name} that is fixed, even though that Domain has a '
                                  f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.')
+            elif domain._pool is not None and domain.dependent:
+                raise ValueError(f'for strand {strand.name}, it has a '
+                                 f'domain {domain.name} that is dependent, even though that Domain has a '
+                                 f'DomainPool.\nA Domain cannot be dependent and have a DomainPool.')
 
 
 @dataclass
@@ -1116,7 +1127,8 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
     # pick domain to change, with probability proportional to total score of constraints it violates
     probs_opt = np.asarray(scores_opt)
     probs_opt /= probs_opt.sum()
-    num_domains_to_change = rng.choice(a=range(1, max_domains_to_change + 1))
+    num_domains_to_change = 1 if max_domains_to_change == 1 \
+        else rng.choice(a=range(1, max_domains_to_change + 1))
     domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
                                                     size=num_domains_to_change))
 
@@ -1126,6 +1138,7 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
     original_sequences: Dict[Domain, str] = {}
     independent_domains = [domain for domain in domains_changed if not domain.dependent]
 
+    # first re-assign independent domains
     for domain in independent_domains:
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
@@ -1134,9 +1147,18 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
         new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
         domain.set_sequence(new_sequence)
 
+    # then for each dependent domain, find the independent domain in its tree that can change it,
+    # and re-assign that domain
     dependent_domains = [domain for domain in domains_changed if domain.dependent]
-    for domain in dependent_domains:
-        original_sequences[domain] = domain.sequence()
+    for dependent_domain in dependent_domains:
+        independent_domain = dependent_domain.independent_ancestor_or_descendent()
+        assert independent_domain not in original_sequences
+        previous_sequence = independent_domain.sequence()
+        original_sequences[independent_domain] = previous_sequence
+        new_sequence = independent_domain.pool.generate_sequence(rng, previous_sequence)
+        independent_domain.set_sequence(new_sequence)
+        domains_changed.remove(dependent_domain)
+        domains_changed.append(independent_domain)
 
     return domains_changed, original_sequences
 
@@ -1459,7 +1481,7 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
             if not domain.fixed and not domain.has_sequence():
                 new_sequence = domain.pool.generate_sequence(rng)
                 domain.set_sequence(new_sequence)
-                assert len(domain.sequence()) == domain.pool.length
+                assert len(domain.sequence()) == domain.get_length()
             elif warn_fixed_sequences:
                 if domain.fixed:
                     logger.info(skip_fixed_msg)

@@ -203,7 +203,7 @@ _configure_logger()
 
 def all_pairs(values: Iterable[T],
               with_replacement: bool = True,
-              where: Callable[[Tuple[T, T]], bool] = lambda _: True) -> List[Tuple[T, T]]:
+              where: Callable[[T, T], bool] = lambda _,__: True) -> List[Tuple[T, T]]:
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
 
@@ -213,10 +213,14 @@ def all_pairs(values: Iterable[T],
         Whether to include self pairs, i.e., pairs (a,a)
     :param where:
         Predicate indicating whether to include a specific pair.
+        Must take two parameters, each of type T, and return a bool.
     :return:
         List of all pairs of values from `iterable`.
     """
-    return list(all_pairs_iterator(values, with_replacement=with_replacement, where=where))
+    def where_tuple(pair: Tuple[T, T]) -> bool:
+        item1, item2 = pair
+        return where(item1, item2)
+    return list(all_pairs_iterator(values, with_replacement=with_replacement, where=where_tuple))
 
 
 def all_pairs_iterator(values: Iterable[T],
@@ -756,7 +760,7 @@ class DomainPool:
                                  'not be specified.')
 
         if self.length is not None:
-            if  len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
+            if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
                 # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
                 # for i in range(self.length):
                 #     self.hamming_probability[i + 1] = 1 / 2 ** (i + 1)
@@ -1191,13 +1195,20 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     so the domains are dependent on the root domain's assigned sequence.
     """
 
+    length: Optional[int] = None
+    """
+    Length of this domain. If None, then the method :meth:`Domain.length` asks :data:`Domain.pool`
+    for the length. However, a :any:`Domain` with :data:`Domain.dependent` set to True has no
+    :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
+    """
+
     _subdomains: List[Domain] = field(init=False, default_factory=list)
     """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
     """
 
     parent: Optional[Domain] = field(init=False, default=None)
     """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based 
-    on the :py:data:`Domain.subdomains` of other domains in the same tree.
+    on the :data:`Domain.subdomains` of other domains in the same tree.
     """
 
     def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
@@ -1364,20 +1375,31 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             True if this :any:`Domain` has a length, which means either a sequence has been assigned
             to it, or it has a :any:`DomainPool`.
         """
-        return self._sequence is not None or self._pool is not None
+        return self._sequence is not None or (
+                    self._pool is not None and self._pool.length is not None) or self.length is not None
 
-    @property
-    def length(self) -> int:
+    def get_length(self) -> int:
         """
-        :return: Length of this domain (delegates to pool)
-        :raises ValueError: if no :any:`DomainPool` has been set for this :any:`Domain`
+        :return:
+            Length of this domain (delegates to pool)
+        :raises ValueError:
+            if no :any:`DomainPool` has been set for this :any:`Domain`
         """
+        if self.length is not None:
+            return self.length
         if self.fixed and self._sequence is not None:
             return len(self._sequence)
         if self._pool is None:
-            raise ValueError('No DomainPool has been set for this Domain, so it has no length yet.\n'
+            raise ValueError(f'No DomainPool has been set for domain {self.name}, '
+                             f'so it has no length yet.\n'
                              'Assign a DomainPool (which has a length field) to give this Domain a length.')
-        return self._pool.length
+        if self._pool.length is not None:
+            return self._pool.length
+        elif self._pool.possible_sequences is not None:
+            # if pool.length is None, then possible_sequences must be not None and nonempty,
+            # so we consult its first sequence to inquire about the length
+            assert len(self._pool.possible_sequences) > 0
+            return len(self._pool.possible_sequences[0])
 
     def sequence(self) -> str:
         """
@@ -1396,18 +1418,18 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         if self.fixed:
             raise ValueError('cannot assign a new sequence to this Domain; its sequence is fixed as '
                              f'{self._sequence}')
-        if self.has_length() and len(new_sequence) != self.length:
+        if self.has_length() and len(new_sequence) != self.get_length():
             raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
-                             f'it is length {len(new_sequence)}, but this domain is length {self.length}')
+                             f'it is length {len(new_sequence)}, but this domain is length {self.get_length()}')
         # Check that total length of subdomains (if used) adds up domain length.
         if len(self._subdomains) != 0:
             sd_total_length = 0
             for sd in self._subdomains:
-                sd_total_length += sd.length
-            if sd_total_length != self.length:
+                sd_total_length += sd.get_length()
+            if sd_total_length != self.get_length():
                 raise ValueError(
-                    f'Domain {self} is length {self.length} but subdomains {self._subdomains} has total '
-                    f'length of {sd_total_length}')
+                    f'Domain {self} is length {self.get_length()} but subdomains {self._subdomains} '
+                    f'have total length of {sd_total_length}')
         self._sequence = new_sequence
         self._starred_sequence = dv.wc(new_sequence)
         self._set_subdomain_sequences(new_sequence)
@@ -1421,9 +1443,10 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         """
         sequence_idx = 0
         for sd in self._subdomains:
-            sd_len = sd.length
+            sd_len = sd.get_length()
             sd_sequence = new_sequence[sequence_idx: sequence_idx + sd_len]
             sd._sequence = sd_sequence
+            sd._starred_sequence = dv.wc(sd_sequence)
             sd._set_subdomain_sequences(sd_sequence)
             sequence_idx += sd_len
 
@@ -1436,7 +1459,8 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         parent = self.parent
         if parent is not None:
             if parent._sequence is None:
-                parent._sequence = '?' * parent.length
+                parent._sequence = '?' * parent.get_length()
+                parent._starred_sequence = '?' * parent.get_length()
             # Add up lengths of subdomains, add new_sequence
             idx = 0
             assert self in parent._subdomains
@@ -1445,10 +1469,11 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
                 if sd == self:
                     break
                 else:
-                    idx += sd.length
+                    idx += sd.get_length()
             assert sd is not None
             old_sequence = parent._sequence
-            parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.length:]
+            parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.get_length():]
+            parent._starred_sequence = dv.wc(parent._sequence)
             parent._set_parent_sequence(parent._sequence)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
@@ -1642,6 +1667,60 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             whether a :any:`DomainPool` has been assigned to this :any:`Domain`
         """
         return self._pool is not None
+
+    def contains_in_subtree(self, other: Domain) -> bool:
+        """
+        :param other:
+            another :any:`Domain`
+        :return:
+            True if `self` contains `other` in its subtree of subdomains
+        """
+        # base case
+        if self is other:
+            return True
+
+        # recursive case
+        for subdomain in self._subdomains:
+            if subdomain.contains_in_subtree(other):
+                return True
+
+        return False
+
+    def independent_ancestor_or_descendent(self) -> Domain:
+        """
+        Find the indepdent ancestor or descendent of this dependent :any:`Domain`.
+        Raises exception if this is not a dependent :any:`Domain`.
+
+        :return:
+            The indepdent ancestor or descendent of this :any:`Domain`.
+        """
+        if not self.dependent:
+            raise ValueError('cannot call independent_ancestor_or_descendent on non-dependent Domain'
+                             f' {self.name}')
+
+        # first try ancestors
+        domain = self
+        while domain.parent is not None:
+            domain = domain.parent
+            if not domain.dependent:
+                return domain
+
+        # then try descendents
+        independent_descendent = self._independent_descendent()
+        if independent_descendent is None:
+            raise ValueError(f'could not find an independent ancestor or descendent of domain {self.name}')
+
+    def _independent_descendent(self) -> Optional[Domain]:
+        if not self.dependent:
+            return self
+
+        if len(self.subdomains) > 0:
+            for subdomain in self.subdomains:
+                independent_descendent = subdomain._independent_descendent()
+                if independent_descendent is not None:
+                    return independent_descendent
+
+        return None
 
 
 _domains_interned: Dict[str, Domain] = {}
@@ -2014,7 +2093,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             Sum of lengths of :any:`Domain`'s in this :any:`Strand`.
             Each :any:`Domain` must have a :any:`DomainPool` assigned so that the length is defined.
         """
-        return sum(domain.length for domain in self.domains)
+        return sum(domain.get_length() for domain in self.domains)
 
     def domain_names_concatenated(self, delim: str = '-') -> str:
         """
@@ -2141,7 +2220,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                              f'{sequence} has length {len(sequence)}')
         start = 0
         for domain in self.domains:
-            end = start + domain.length
+            end = start + domain.get_length()
             domain_sequence = sequence[start:end]
             domain.set_sequence(domain_sequence)
             start = end
@@ -2324,7 +2403,7 @@ def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> s
         prev_end = 0
         for domain in strand.domains:
             sc_domain = sc.Domain(helix=helix_idx, forward=True,
-                                  start=prev_end, end=prev_end + domain.length)
+                                  start=prev_end, end=prev_end + domain.get_length())
             prev_end = sc_domain.end
             sc_domains.append(sc_domain)
         sc_strand = sc.Strand(domains=sc_domains, idt=idt_export,
@@ -5309,7 +5388,7 @@ def _exterior_base_type_of_domain_3p_end(domain_addr: StrandDomainAddress,
                         domain = domain_addr.strand.domains[domain_addr.domain_idx]
                         domain_next_to_interior_base_pair = (domain_addr.neighbor_5p() is not None
                                                              and complementary_addr.neighbor_3p() is not None)
-                        if domain.length == 2 and not domain_next_to_interior_base_pair:
+                        if domain.get_length() == 2 and not domain_next_to_interior_base_pair:
                             #   domain_addr == adjacent_5n_addr        adjacent_addr
                             #     |                                       |
                             #    [--###-------------------------------------#
@@ -5844,7 +5923,7 @@ def _get_addr_to_starting_base_pair_idx(strand_complex: Complex) -> Dict[StrandD
     for strand in strand_complex:
         for domain_idx, domain in enumerate(strand.domains):
             addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
-            domain_base_index += domain.length
+            domain_base_index += domain.get_length()
 
     return addr_to_starting_base_pair_idx
 
@@ -6029,8 +6108,8 @@ def __get_base_pair_domain_endpoints_to_check(
     base_pair_domain_endpoints_to_check: Set[_BasePairDomainEndpoint] = set()
 
     for (domain_addr, comple_addr) in all_bound_domain_addresses.items():
-        domain_base_length = domain_addr.domain().length
-        assert domain_base_length == comple_addr.domain().length
+        domain_base_length = domain_addr.domain().get_length()
+        assert domain_base_length == comple_addr.domain().get_length()
 
         if domain_addr not in addr_to_starting_base_pair_idx:
             if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:
@@ -6271,8 +6350,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
                     f"Strand {other_strand} contains {len(other_strand.domains)} domains but template "
                     f"strand {template_strand} contains {len(template_strand.domains)} domains.")
             for d in range(1, len(other_strand.domains)):
-                domain_length: int = other_strand.domains[d].length
-                template_domain_length: int = template_strand.domains[d].length
+                domain_length: int = other_strand.domains[d].get_length()
+                template_domain_length: int = template_strand.domains[d].get_length()
                 if domain_length != template_domain_length:
                     raise ValueError(
                         f"Strand {other_strand} (the strand at index {s} of the complex located at index "
