@@ -186,8 +186,17 @@ def _violations_of_constraints(design: Design,
     return violation_set
 
 
+# optimization so we don't keep recomputing parts to check for each constraint,
+# only used when domains_changed is None, otherwise the parts to check depends on the domains that changed
+_parts_to_check_cache = {}
+
+
 def find_parts_to_check(constraint: dc.Constraint, design: dc.Design,
                         domains_changed: Optional[Iterable[Domain]]) -> Sequence[dc.DesignPart]:
+    cache_key = (constraint, id(design))
+    if domains_changed is None and cache_key in _parts_to_check_cache:
+        return _parts_to_check_cache[cache_key]
+
     parts_to_check: Sequence[dc.DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
         parts_to_check = _determine_domains_to_check(design.domains, domains_changed, constraint)
@@ -203,6 +212,10 @@ def find_parts_to_check(constraint: dc.Constraint, design: dc.Design,
         parts_to_check = []  # not used when checking DesignConstraint
     else:
         raise NotImplementedError()
+
+    if domains_changed is None:
+        _parts_to_check_cache[cache_key] = parts_to_check
+
     return parts_to_check
 
 
@@ -283,24 +296,39 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     If `domain_changed` is not None, then among those pairs specified above,
     it is all pairs where one of the two is `domain_changed`.
     """
-    # either all pairs, or just constraint.pairs if specified
-    if constraint.pairs is not None:
-        domain_pairs_to_check_if_domain_changed_none: List[DomainPair] = \
-            [DomainPair(pair[0], pair[1]) for pair in constraint.pairs]
+    # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
+    # all pairs of domains only to filter out most of them that don't intersect domains_changed
+    if domains_changed is None:
+        # either all pairs, or just constraint.pairs if specified
+        if constraint.pairs is not None:
+            domain_pairs_to_check: List[DomainPair] = \
+                [DomainPair(domain1, domain2) for domain1, domain2 in constraint.pairs]
+        else:
+            # check all pairs of domains unless one is an ancestor of another in a subdomain tree
+            def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
+                return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
+
+            pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
+                              where=not_subdomain)
+            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs]
+
     else:
-        # check all pairs of domains unless one is an ancestor of another in a subdomain tree
-        def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
-            return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
+        # either all pairs, or just constraint.pairs if specified
+        if constraint.pairs is not None:
+            domain_pairs_to_check: List[DomainPair] = \
+                [DomainPair(domain1, domain2) for domain1, domain2 in constraint.pairs
+                 if domain1 in domains_changed or domain2 in domains_changed]
+        else:
+            # check all pairs of domains unless one is an ancestor of another in a subdomain tree
+            def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
+                return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
 
-        pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
-                          where=not_subdomain)
-        domain_pairs_to_check_if_domain_changed_none = [DomainPair(pair[0], pair[1]) for pair in pairs]
-
-    # filter out those not containing domain_change if specified
-    domain_pairs_to_check = list(domain_pairs_to_check_if_domain_changed_none) if domains_changed is None \
-        else [domain_pair for domain_pair in
-              domain_pairs_to_check_if_domain_changed_none
-              if domain_pair.domain1 in domains_changed or domain_pair.domain2 in domains_changed]
+            domain_pairs_to_check = []
+            for domain_changed in domains_changed:
+                for other_domain in all_domains:
+                    if domain_changed is not other_domain or constraint.check_domain_against_itself:
+                        if not_subdomain(domain_changed, other_domain):
+                            domain_pairs_to_check.append(DomainPair(domain_changed, other_domain))
 
     return domain_pairs_to_check
 
@@ -315,25 +343,32 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
     """
     Similar to _determine_domain_pairs_to_check but for strands.
     """
-    # either all pairs, or just constraint.pairs if specified
-    if constraint.pairs is not None:
-        strand_pairs_to_check_if_domain_changed_none: List[StrandPair] = \
-            [StrandPair(pair[0], pair[1]) for pair in constraint.pairs]
-    else:
-        pairs = all_pairs(all_strands, with_replacement=constraint.check_strand_against_itself)
-        strand_pairs_to_check_if_domain_changed_none = [StrandPair(pair[0], pair[1]) for pair in pairs]
-
-    # filter out those not containing domain_change if specified
-    strand_pairs_to_check: List[StrandPair] = []
+    # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
+    # all pairs of strands only to filter out most of them that don't intersect domains_changed
     if domains_changed is None:
-        strand_pairs_to_check = strand_pairs_to_check_if_domain_changed_none
+        # either all pairs, or just constraint.pairs if specified
+        if constraint.pairs is not None:
+            strand_pairs_to_check: List[StrandPair] = \
+                [StrandPair(strand1, strand2) for strand1, strand2 in constraint.pairs]
+        else:
+            pairs = all_pairs(all_strands, with_replacement=constraint.check_strand_against_itself)
+            strand_pairs_to_check = [StrandPair(strand1, strand2) for strand1, strand2 in pairs]
     else:
-        for strand_pair in strand_pairs_to_check_if_domain_changed_none:
+        strand_pairs_to_check = []
+        if constraint.pairs is not None:
+            for strand1, strand2 in constraint.pairs:
+                for domain_changed in domains_changed:
+                    if domain_changed in strand1.domains or domain_changed in strand2.domains:
+                        strand_pairs_to_check.append(StrandPair(strand1, strand2))
+        else:
             for domain_changed in domains_changed:
-                if domain_changed in strand_pair.strand1.domains or \
-                        domain_changed in strand_pair.strand2.domains:
-                    strand_pairs_to_check.append(strand_pair)
-                    break
+                strands_with_domain_changed = [strand for strand in all_strands
+                                               if domain_changed in strand.domains]
+                for strand_with_domain_changed in strands_with_domain_changed:
+                    for other_strand in all_strands:
+                        if strand_with_domain_changed is not other_strand or \
+                                constraint.check_strand_against_itself:
+                            strand_pairs_to_check.append(StrandPair(strand_with_domain_changed, other_strand))
 
     return strand_pairs_to_check
 
@@ -937,6 +972,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
+    design.check_subdomain_graphs()
+
     if params.random_seed is not None:
         if params.restart:
             logger.warning(f"Since you selected the restart option, I'm ignoring your random seed of "

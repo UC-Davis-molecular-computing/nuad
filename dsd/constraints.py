@@ -1681,6 +1681,8 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
         # recursive case
         for subdomain in self._subdomains:
+            if subdomain is other:
+                return True
             if subdomain.contains_in_subtree(other):
                 return True
 
@@ -2030,11 +2032,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
+        #XXX: moved this check to start of search_for_dna_sequences to allow subdomain graphs to be
+        # constructed gradually while building up the design
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
-        for d in cast(List[Domain], domains):
-            d._check_acyclic_subdomain_graph()  # noqa
-            d._check_subdomain_graph_is_uniquely_assignable()  # noqa
+        # for d in cast(List[Domain], domains):
+        #     d._check_acyclic_subdomain_graph()  # noqa
+        #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
@@ -3138,6 +3142,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # since new sequences won't change derived fields
         if not computed_derived_fields:
             self.compute_derived_fields()
+
+    def check_subdomain_graphs(self) -> None:
+        """
+        Check that subdomain graphs are consistent and raise error if not.
+        """
+        for strand in self.strands:
+            # Check that each base in the sequence is assigned by exactly one
+            # independent subdomain.
+            for d in cast(List[Domain], strand.domains):
+                d._check_acyclic_subdomain_graph()  # noqa
+                d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
 
 # represents a "Design Part", e.g., Strand, Tuple[Domain, Domain], etc... whatever portion of the Design
