@@ -972,7 +972,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
-    design.check_subdomain_graphs()
+    design.check_all_subdomain_graphs_acyclic()
+    design.check_all_subdomain_graphs_uniquely_assignable()
 
     if params.random_seed is not None:
         if params.restart:

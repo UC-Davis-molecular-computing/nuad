@@ -842,7 +842,9 @@ class TestSubdomains(unittest.TestCase):
 
         a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[b, C])
 
-        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
+        strand = Strand(domains=[a], starred_domain_indices=[])
+
+        self.assertRaises(ValueError, Design, strands=[strand])
 
     def test_error_strand_with_redundant_independence(self):
         """
@@ -869,12 +871,17 @@ class TestSubdomains(unittest.TestCase):
 
         a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[B, C])
 
-        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
+        strand = Strand(domains=[a], starred_domain_indices=[])
+
+        self.assertRaises(ValueError, Design, strands=[strand])
 
     def test_error_cycle(self):
         """
         Test that constructing a domain with a cycle in its subdomain graph
         rasies a ValueError.
+
+        This isn't checked when instantiating objects, but when first calling search_for_dna_sequences,
+        which calls Design.check_subdomain_graphs().
 
         .. code-block:: none
 
@@ -887,8 +894,9 @@ class TestSubdomains(unittest.TestCase):
         a = Domain('a', assign_domain_pool_of_size(5), dependent=True)
         b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a], dependent=True)
         a.subdomains = [b]
+        strand = Strand(domains=[a], starred_domain_indices=[])
 
-        self.assertRaises(ValueError, Strand, domains=[a], starred_domain_indices=[])
+        self.assertRaises(ValueError, Design, strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
         """Returns domains with the following subdomain hierarchy:

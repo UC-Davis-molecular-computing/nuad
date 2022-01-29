@@ -2514,6 +2514,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             the :any:`Strand`'s in this :any:`Design`
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
+        self.check_all_subdomain_graphs_acyclic()
+        self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
 
     def compute_derived_fields(self) -> None:
@@ -3143,7 +3145,19 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         if not computed_derived_fields:
             self.compute_derived_fields()
 
-    def check_subdomain_graphs(self) -> None:
+
+
+    def check_all_subdomain_graphs_acyclic(self) -> None:
+        """
+        Check that all domain graphs (if subdomains are used) are acyclic.
+        """
+        for strand in self.strands:
+            # Check that each base in the sequence is assigned by exactly one
+            # independent subdomain.
+            for d in cast(List[Domain], strand.domains):
+                d._check_acyclic_subdomain_graph()  # noqa
+
+    def check_all_subdomain_graphs_uniquely_assignable(self) -> None:
         """
         Check that subdomain graphs are consistent and raise error if not.
         """
