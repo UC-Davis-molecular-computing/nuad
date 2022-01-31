@@ -1748,6 +1748,7 @@ _domains_interned: Dict[str, Domain] = {}
 
 def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
+        min_length: int = 0,
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
         -> DomainPairConstraint:
     """
@@ -1760,6 +1761,8 @@ def domains_not_substrings_of_each_other_constraint(
         short description of constraint suitable for logging to stdout
     :param weight:
         weight to assign to constraint
+    :param min_length:
+        minimum length substring to check
     :param pairs:
         pairs of domains to check (by default all pairs of unequal domains are compared)
     :return:
@@ -1776,16 +1779,16 @@ def domains_not_substrings_of_each_other_constraint(
         summary = ''
         score = 0.0
         passed = True
-        if s1 in s2:
+        if len(s1) >= min_length and s1 in s2:
             score = 1.0
-            summary = f'{s1} is a substring of {s2}'
+            summary = f'{s1} is a length->={min_length} substring of {s2}'
             passed = False
         if check_complements:
             # by symmetry, only need to check c1 versus s2 for WC complement, since
             # (s1 not in s2 <==> c1 in c2) and (c1 in s2 <==> s1 in c2)
             c1 = dv.wc(s1)
-            if c1 in s2:
-                msg = f'{c1} is a substring of {s2}'
+            if len(c1) >= min_length and c1 in s2:
+                msg = f'{c1} is a length->={min_length} substring of {s2}'
                 if not passed:
                     summary += f'; {msg}'
                 else:
