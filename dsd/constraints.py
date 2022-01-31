@@ -825,7 +825,8 @@ class DomainPool:
             length_key: self.length,
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
-            possible_sequences_key: self.possible_sequences,
+            # with M13, writing possible_sequences greatly increases the size of the file
+            # possible_sequences_key: self.possible_sequences,
         }
         # return NoIndent(dct) if suppress_indent else dct
         return dct
@@ -837,11 +838,11 @@ class DomainPool:
         replace_with_close_sequences = json_map[replace_with_close_sequences_key]
         hamming_probability_str_keys = json_map[hamming_probability_key]
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
-        possible_sequences = json_map[possible_sequences_key]
+        # possible_sequences = json_map[possible_sequences_key]
         return DomainPool(name=name, length=length,
                           replace_with_close_sequences=replace_with_close_sequences,
                           hamming_probability=hamming_probability,
-                          possible_sequences=possible_sequences,
+                          # possible_sequences=possible_sequences,
                           )
 
     def _first_sequence_satisfying_sequence_constraints(self, seqs: dn.DNASeqList) -> Optional[str]:
@@ -1361,6 +1362,23 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
     @property
     def subdomains(self) -> List["Domain"]:
+        """
+        Subdomains of this :any:`Domain`.
+
+        WARNING: this can be a bit tricky to determine the order when setting these.
+        The subdomains should be listed in 5' to 3' order for UNSTARRED domains.
+        If there is a starred domain with starred subdomains, they would be listed in
+        REVERSE order.
+
+        For example, if there is a domain `dom*`  ``[--------->`` of length 11
+        with two subdomains `sub1*` ``[----->`` of length 7 and `sub2*` ``[-->`` of length 4
+        (put together they look like ``[----->[-->``)
+        that appear
+        in that order left to right (5' to 3'), then one would assign the domain `dom` to have subdomains
+        ``[sub2, sub1]``, since the UNSTARRED domains appear ``<-----]<--]``, i.e., in 5' to 3' order
+        for the unstarred domains, first the length 4 domain `dom2` appears,
+        then the length 7 domain `dom1`.
+        """
         return self._subdomains
 
     @subdomains.setter
@@ -1730,6 +1748,7 @@ _domains_interned: Dict[str, Domain] = {}
 
 def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
+        min_length: int = 0,
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
         -> DomainPairConstraint:
     """
@@ -1742,6 +1761,8 @@ def domains_not_substrings_of_each_other_constraint(
         short description of constraint suitable for logging to stdout
     :param weight:
         weight to assign to constraint
+    :param min_length:
+        minimum length substring to check
     :param pairs:
         pairs of domains to check (by default all pairs of unequal domains are compared)
     :return:
@@ -1758,16 +1779,16 @@ def domains_not_substrings_of_each_other_constraint(
         summary = ''
         score = 0.0
         passed = True
-        if s1 in s2:
+        if len(s1) >= min_length and s1 in s2:
             score = 1.0
-            summary = f'{s1} is a substring of {s2}'
+            summary = f'{s1} is a length->={min_length} substring of {s2}'
             passed = False
         if check_complements:
             # by symmetry, only need to check c1 versus s2 for WC complement, since
             # (s1 not in s2 <==> c1 in c2) and (c1 in s2 <==> s1 in c2)
             c1 = dv.wc(s1)
-            if c1 in s2:
-                msg = f'{c1} is a substring of {s2}'
+            if len(c1) >= min_length and c1 in s2:
+                msg = f'{c1} is a length->={min_length} substring of {s2}'
                 if not passed:
                     summary += f'; {msg}'
                 else:
