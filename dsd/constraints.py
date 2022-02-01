@@ -3019,6 +3019,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         Assumes that each domain name in domains in `sc_design` is a :py:data:`Domain.name` of a
         :any:`Domain` in this :any:`Design`.
 
+        If multiple strands in `sc_design` share the same name, then all of them are assigned the
+        DNA sequence of the dsd :any:`Strand` with that name.
+
         :param sc_design:
             a scadnano design
         :param ignored_strands:
