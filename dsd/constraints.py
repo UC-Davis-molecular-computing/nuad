@@ -17,6 +17,7 @@ https://github.com/UC-Davis-molecular-computing/dsd#data-model
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import math
 import json
@@ -38,9 +39,11 @@ import scadnano as sc  # type: ignore
 
 import dsd.vienna_nupack as dv
 import dsd.np as dn
+import dsd.modifications as dm
 from dsd.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
 # from dsd.stopwatch import Stopwatch
+from dsd.modifications import Modification5Prime
 
 try:
     from scadnano import Design as scDesign  # type: ignore
@@ -203,7 +206,7 @@ _configure_logger()
 
 def all_pairs(values: Iterable[T],
               with_replacement: bool = True,
-              where: Callable[[T, T], bool] = lambda _,__: True) -> List[Tuple[T, T]]:
+              where: Callable[[T, T], bool] = lambda _, __: True) -> List[Tuple[T, T]]:
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
 
@@ -217,9 +220,11 @@ def all_pairs(values: Iterable[T],
     :return:
         List of all pairs of values from `iterable`.
     """
+
     def where_tuple(pair: Tuple[T, T]) -> bool:
         item1, item2 = pair
         return where(item1, item2)
+
     return list(all_pairs_iterator(values, with_replacement=with_replacement, where=where_tuple))
 
 
@@ -1394,7 +1399,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             to it, or it has a :any:`DomainPool`.
         """
         return self._sequence is not None or (
-                    self._pool is not None and self._pool.length is not None) or self.length is not None
+                self._pool is not None and self._pool.length is not None) or self.length is not None
 
     def get_length(self) -> int:
         """
@@ -1973,6 +1978,31 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
     _name: Optional[str] = None
     """Optional name of strand."""
 
+    modification_5p: Optional[dm.Modification5Prime] = None
+    """
+    5' modification; None if there is no 5' modification. 
+    """
+
+    modification_3p: Optional[dm.Modification3Prime] = None
+    """
+    3' modification; None if there is no 3' modification. 
+    """
+
+    modifications_int: Dict[int, dm.ModificationInternal] = field(default_factory=dict)
+    """
+    :any:`Modification`'s to the DNA sequence (e.g., biotin, Cy3/Cy5 fluorphores). 
+    
+    Maps index within DNA sequence to modification. If the internal modification is attached to a base 
+    (e.g., internal biotin, /iBiodT/ from IDT), 
+    then the index is that of the base.
+    If it goes between two bases 
+    (e.g., internal Cy3, /iCy3/ from IDT),
+    then the index is that of the previous base, 
+    e.g., to put a Cy3 between bases at indices 3 and 4, the index should be 3. 
+    So for an internal modified base on a sequence of length n, the allowed indices are 0,...,n-1,
+    and for an internal modification that goes between bases, the allowed indices are 0,...,n-2.
+    """
+
     label: Optional[StrandLabel] = None
     """
     Optional generic "label" object to associate to this :any:`Strand`.
@@ -2053,7 +2083,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
-        #XXX: moved this check to start of search_for_dna_sequences to allow subdomain graphs to be
+        # XXX: moved this check to start of search_for_dna_sequences to allow subdomain graphs to be
         # constructed gradually while building up the design
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
@@ -2065,6 +2095,10 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
         self.idt = idt
+
+        # don't know why we have to do this, but we get a missing attribute error otherwise
+        # https://stackoverflow.com/questions/70986725/python-dataclass-attribute-missing-when-using-explicit-init-constructor-and
+        self.modifications_int = {}
 
         self.compute_derived_fields()
 
@@ -2139,6 +2173,53 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             domain_names.append(domain.get_name(is_starred))
         return tuple(domain_names)
 
+    def idt_dna_sequence(self) -> str:
+        """
+        :return: DNA sequence as it needs to be typed to order from IDT, with
+            :py:data:`Modification5Prime`'s,
+            :py:data:`Modification3Prime`'s,
+            and
+            :py:data:`ModificationInternal`'s represented with text codes, e.g., "/5Biosg/ACGT" for sequence
+            ACGT with a 5' biotin modification.
+        """
+        self._ensure_modifications_legal(check_offsets_legal=True)
+
+        ret_list: List[str] = []
+        if self.modification_5p is not None and self.modification_5p.idt_text is not None:
+            ret_list.append(self.modification_5p.idt_text)
+
+        for offset, base in enumerate(self.sequence(delimiter='')):
+            ret_list.append(base)
+            if offset in self.modifications_int:  # if internal mod attached to base, replace base
+                mod = self.modifications_int[offset]
+                if mod.idt_text is not None:
+                    if mod.allowed_bases is not None:
+                        if base not in mod.allowed_bases:
+                            msg = f'internal modification {mod} can only replace one of these bases: ' \
+                                  f'{",".join(mod.allowed_bases)}, but the base at offset {offset} is {base}'
+                            raise ValueError(msg)
+                        ret_list[-1] = mod.idt_text  # replace base with modified base
+                    else:
+                        ret_list.append(mod.idt_text)  # append modification between two bases
+
+        if self.modification_3p is not None and self.modification_3p.idt_text is not None:
+            ret_list.append(self.modification_3p.idt_text)
+
+        return ''.join(ret_list)
+
+    def _ensure_modifications_legal(self, check_offsets_legal: bool = False) -> None:
+        if check_offsets_legal:
+            mod_i_offsets_list = list(self.modifications_int.keys())
+            min_offset = min(mod_i_offsets_list) if len(mod_i_offsets_list) > 0 else None
+            max_offset = max(mod_i_offsets_list) if len(mod_i_offsets_list) > 0 else None
+            if min_offset is not None and min_offset < 0:
+                raise ValueError(f"smallest offset is {min_offset} but must be nonnegative: "
+                                 f"{self.modifications_int}")
+            if max_offset is not None and max_offset > len(self.sequence(delimiter='')):
+                raise ValueError(f"largest offset is {max_offset} but must be at most "
+                                 f"{len(self.sequence(delimiter=''))}: "
+                                 f"{self.modifications_int}")
+
     def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
         """
         :return:
@@ -2159,6 +2240,18 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
 
         if self.idt is not None:
             dct[idt_key] = self.idt.to_json_serializable(suppress_indent)
+
+        if self.modification_5p is not None:
+            dct[dm.modification_5p_key] = self.modification_5p.to_json_serializable(suppress_indent)
+
+        if self.modification_3p is not None:
+            dct[dm.modification_3p_key] = self.modification_3p.to_json_serializable(suppress_indent)
+
+        if len(self.modifications_int) > 0:
+            mods_dict = {}
+            for offset, mod in self.modifications_int.items():
+                mods_dict[f"{offset}"] = mod.id
+            dct[dm.modifications_int_key] = NoIndent(mods_dict) if suppress_indent else mods_dict
 
         return dct
 
@@ -2433,6 +2526,22 @@ def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> s
             sc_domains.append(sc_domain)
         sc_strand = sc.Strand(domains=sc_domains, idt=idt_export,
                               dna_sequence=strand.sequence(), name=strand.name)
+
+        # handle modifications
+        if strand.modification_5p is not None:
+            mod = strand.modification_5p
+            sc_mod = sc.Modification5Prime(idt_text=mod.idt_text, id=mod.id, display_text=mod.idt_text)
+            sc_strand.modification_5p = sc_mod
+        if strand.modification_3p is not None:
+            mod = strand.modification_3p
+            sc_mod = sc.Modification3Prime(idt_text=mod.idt_text, id=mod.id, display_text=mod.idt_text)
+            sc_strand.modification_3p = sc_mod
+        if len(strand.modifications_int) > 0:
+            for offset, mod in strand.modifications_int.items():
+                sc_mod = sc.ModificationInternal(idt_text=mod.idt_text, id=mod.id, display_text=mod.idt_text,
+                                                 allowed_bases=mod.allowed_bases)
+                sc_strand.modifications_int[offset] = sc_mod
+
         sc_strands.append(sc_strand)
     design = sc.Design(helices=helices, strands=sc_strands, grid=sc.square)
     return design
@@ -2591,11 +2700,23 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             Dictionary ``d`` representing this :any:`Design` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
-        return {
+
+        dct = {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
             domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
             domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()]
         }
+
+        # modifications
+        mods = self.modifications()
+        if len(mods) > 0:
+            mods_dict = {}
+            for mod in mods:
+                if mod.id not in mods_dict:
+                    mods_dict[mod.id] = mod.to_json_serializable(suppress_indent)
+            dct[dm.design_modifications_key] = mods_dict
+
+        return dct
 
     @staticmethod
     def from_design_file(filename: str,
@@ -2672,7 +2793,81 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             label_decoder=strand_label_decoder)
             for strand_json in strands_json]
 
+        # modifications in whole design
+        if dm.design_modifications_key in json_map:
+            all_mods_json = json_map[dm.design_modifications_key]
+            all_mods = {}
+            for mod_key, mod_json in all_mods_json.items():
+                mod = dm.Modification.from_json(mod_json)
+                mod = dataclasses.replace(mod, id=mod_key)
+                all_mods[mod_key] = mod
+            Design.assign_modifications_to_strands(strands, strands_json, all_mods)
+
         return Design(strands=strands)
+
+    @staticmethod
+    def assign_modifications_to_strands(strands: List[Strand], strand_jsons: List[dict],
+                                        all_mods: Dict[str, dm.Modification]) -> None:
+        for strand, strand_json in zip(strands, strand_jsons):
+            if dm.modification_5p_key in strand_json:
+                mod_name = strand_json[dm.modification_5p_key]
+                strand.modification_5p = cast(dm.Modification5Prime, all_mods[mod_name])
+            if dm.modification_3p_key in strand_json:
+                mod_name = strand_json[dm.modification_3p_key]
+                strand.modification_3p = cast(dm.Modification3Prime, all_mods[mod_name])
+            if dm.modifications_int_key in strand_json:
+                mod_names_by_offset = strand_json[dm.modifications_int_key]
+                for offset_str, mod_name in mod_names_by_offset.items():
+                    offset = int(offset_str)
+                    strand.modifications_int[offset] = cast(dm.ModificationInternal, all_mods[mod_name])
+
+    def modifications(self, mod_type: Optional[dm.ModificationType] = None) -> Set[dm.Modification]:
+        """
+        Returns either set of all :any:`Modification`'s in this :any:`Design`, or set of all modifications
+        of a given type (5', 3', or internal).
+
+        :param mod_type:
+            type of modifications (5', 3', or internal); if not specified, all three types are returned
+        :return:
+            Set of all modifications in this :any:`Design` (possibly of a given type).
+        """
+        if mod_type is None:
+            mods_5p = {strand.modification_5p for strand in self.strands if
+                       strand.modification_5p is not None}
+            mods_3p = {strand.modification_3p for strand in self.strands if
+                       strand.modification_3p is not None}
+            mods_int = {mod for strand in self.strands for mod in strand.modifications_int.values()}
+
+            all_mods = mods_5p | mods_3p | mods_int
+
+        elif mod_type is dm.ModificationType.five_prime:
+            all_mods = {strand.modification_5p for strand in self.strands if
+                        strand.modification_5p is not None}
+
+        elif mod_type is dm.ModificationType.three_prime:
+            all_mods = {strand.modification_3p for strand in self.strands if
+                        strand.modification_3p is not None}
+
+        elif mod_type is dm.ModificationType.internal:
+            all_mods = {mod for strand in self.strands for mod in strand.modifications_int.values()}
+
+        else:
+            raise AssertionError('should be unreachable')
+
+        self._ensure_mods_unique_names(all_mods)
+
+        return all_mods
+
+    @staticmethod
+    def _ensure_mods_unique_names(all_mods: Set[dm.Modification]) -> None:
+        mods_dict = {}
+        for mod in all_mods:
+            if mod.id not in mods_dict:
+                mods_dict[mod.id] = mod
+            else:
+                other_mod = mods_dict[mod.id]
+                raise ValueError(f'two different modifications share the id {mod.id}; '
+                                 f'one is\n  {mod}\nand the other is\n  {other_mod}')
 
     def to_idt_bulk_input_format(self,
                                  delimiter: str = ',',
@@ -3168,8 +3363,6 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # since new sequences won't change derived fields
         if not computed_derived_fields:
             self.compute_derived_fields()
-
-
 
     def check_all_subdomain_graphs_acyclic(self) -> None:
         """
