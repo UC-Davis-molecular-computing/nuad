@@ -1990,7 +1990,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
 
     modifications_int: Dict[int, dm.ModificationInternal] = field(default_factory=dict)
     """
-    :any:`Modification`'s to the DNA sequence (e.g., biotin, Cy3/Cy5 fluorphores). 
+    :any:`modifications.Modification`'s to the DNA sequence (e.g., biotin, Cy3/Cy5 fluorphores). 
     
     Maps index within DNA sequence to modification. If the internal modification is attached to a base 
     (e.g., internal biotin, /iBiodT/ from IDT), 
@@ -2823,8 +2823,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def modifications(self, mod_type: Optional[dm.ModificationType] = None) -> Set[dm.Modification]:
         """
-        Returns either set of all :any:`Modification`'s in this :any:`Design`, or set of all modifications
-        of a given type (5', 3', or internal).
+        Returns either set of all :any:`modifications.Modification`'s in this :any:`Design`,
+        or set of all modifications of a given type (5', 3', or internal).
 
         :param mod_type:
             type of modifications (5', 3', or internal); if not specified, all three types are returned
