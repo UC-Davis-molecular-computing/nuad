@@ -1863,7 +1863,7 @@ class IDTFields(JSONSerializable):
             del dct['plate']
         if self.well is None:
             del dct['well']
-        return NoIndent(dct)
+        return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any]) -> IDTFields:
