@@ -20,6 +20,11 @@ dsd.constraints
 .. automodule:: constraints
    :members:
 
+dsd.modifications
+=====================
+.. automodule:: modifications
+   :members:
+
 dsd.vienna_nupack
 =====================
 .. automodule:: vienna_nupack
