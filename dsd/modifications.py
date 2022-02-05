@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Optional, Any, Dict, AbstractSet
 
+import scadnano as sc
 from dsd.json_noindent_serializer import JSONSerializable, NoIndent
 
 _default_modification_id = "WARNING: no id assigned to modification"
@@ -127,6 +128,9 @@ class Modification5Prime(Modification):
     def modification_type() -> ModificationType:
         return ModificationType.five_prime
 
+    def to_scadnano_modification(self) -> sc.Modification5Prime:
+        return sc.Modification5Prime(display_text=self.idt_text, idt_text=self.idt_text, id=self.id)
+
 
 @dataclass(frozen=True, eq=True)
 class Modification3Prime(Modification):
@@ -149,6 +153,9 @@ class Modification3Prime(Modification):
     @staticmethod
     def modification_type() -> ModificationType:
         return ModificationType.three_prime
+
+    def to_scadnano_modification(self) -> sc.Modification3Prime:
+        return sc.Modification3Prime(display_text=self.idt_text, idt_text=self.idt_text, id=self.id)
 
 
 @dataclass(frozen=True, eq=True)
@@ -189,3 +196,7 @@ class ModificationInternal(Modification):
     @staticmethod
     def modification_type() -> ModificationType:
         return ModificationType.internal
+
+    def to_scadnano_modification(self) -> sc.ModificationInternal:
+        return sc.ModificationInternal(display_text=self.idt_text, idt_text=self.idt_text, id=self.id,
+                                       allowed_bases=self.allowed_bases)
