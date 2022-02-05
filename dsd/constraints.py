@@ -3218,9 +3218,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         DNA sequence of the dsd :any:`Strand` with that name.
 
         :param sc_design:
-            a scadnano design
+            a scadnano design.
         :param ignored_strands:
-            strands in the scadnano design that are to be ignored by the sequence designer
+            strands in the scadnano design that are to be ignored by the sequence designer.
         """
 
         # filter out ignored strands
@@ -3250,6 +3250,80 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                f'that is None.\n'
                                f'Make sure that this is a strand you intended to leave out of the '
                                f'sequence design process')
+
+    def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+                                             ignored_strands: Iterable[Strand] = ()) -> None:
+        """
+        Assigns :any:`IDTFields` from this :any:`Design` into `sc_design`.
+
+        If multiple strands in `sc_design` share the same name, then all of them are assigned the
+        IDT fields of the dsd :any:`Strand` with that name.
+
+        :param sc_design:
+            a scadnano design.
+        :param ignored_strands:
+            strands in the scadnano design that are to be not assigned.
+        :raises ValueError:
+            if scadnano strand already has any modifications assigned
+        """
+        # filter out ignored strands
+        sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
+
+        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        for sc_strand in sc_strands_to_include:
+            dsd_strand = dsd_strands_by_name[sc_strand.name]
+            if dsd_strand.idt is not None:
+                if sc_strand.idt is not None:
+                    raise ValueError(f'Cannot assign IDT fields from dsd strand to scadnano strand '
+                                     f'{sc_strand.name} because the scadnano strand already has IDT fields '
+                                     f'assigned:\n{sc_strand.idt}')
+                sc_strand.idt = dsd_strand.idt.to_scadnano_idt()
+
+    def assign_modifications_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+                                                ignored_strands: Iterable[Strand] = ()) -> None:
+        """
+        Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
+
+        If multiple strands in `sc_design` share the same name, then all of them are assigned the
+        modifications of the dsd :any:`Strand` with that name.
+
+        :param sc_design:
+            a scadnano design.
+        :param ignored_strands:
+            strands in the scadnano design that are to be not assigned.
+        :raises ValueError:
+            if scadnano strand already has any modifications assigned
+        """
+        print('WARNING: the method assign_modifications_to_scadnano_design has not been tested yet '
+              'and may have errors')
+        # filter out ignored strands
+        sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
+
+        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        for sc_strand in sc_strands_to_include:
+            dsd_strand: Strand = dsd_strands_by_name[sc_strand.name]
+            if dsd_strand.modification_5p is not None:
+                if sc_strand.modification_5p is not None:
+                    raise ValueError(f'Cannot assign 5\' modification from dsd strand to scadnano strand '
+                                     f'{sc_strand.name} because the scadnano strand already has a 5\''
+                                     f'modification assigned:\n{sc_strand.modification_5p}')
+                sc_strand.modification_5p = dsd_strand.modification_5p.to_scadnano_modification()
+
+            if dsd_strand.modification_3p is not None:
+                if sc_strand.modification_3p is not None:
+                    raise ValueError(f'Cannot assign 3\' modification from dsd strand to scadnano strand '
+                                     f'{sc_strand.name} because the scadnano strand already has a 3\''
+                                     f'modification assigned:\n{sc_strand.modification_3p}')
+                sc_strand.modification_3p = dsd_strand.modification_3p.to_scadnano_modification()
+
+            for offset, mod_int in dsd_strand.modifications_int.items():
+                if offset in sc_strand.modifications_int is not None:
+                    raise ValueError(f'Cannot assign internal modification from dsd strand to '
+                                     f'scadnano strand {sc_strand.name} at offset {offset} '
+                                     f'because the scadnano strand already has an internal '
+                                     f'modification assigned at that offset:\n'
+                                     f'{sc_strand.modifications_int[offset]}')
+                sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
     def _assign_to_strand_with_no_sequence(self,
                                            sc_strand: sc.Strand[StrandLabel, DomainLabel],
