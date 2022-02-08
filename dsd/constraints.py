@@ -1187,7 +1187,8 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     dependent: bool = False
     """
     Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
-    However, domains can be subdivided hierarchically into a tree of domains. In this case exactly
+    However, domains can be subdivided hierarchically into a tree of domains by setting 
+    :data:`Domain.subdomains` to describe the tree. In this case exactly
     one domain along every path from the root to any leaf must be independent, and the rest dependent:
     the dependent domains will have their sequences calculated from the indepenedent ones.
     
@@ -1369,6 +1370,11 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     def subdomains(self) -> List["Domain"]:
         """
         Subdomains of this :any:`Domain`.
+
+        Used in connection with :data:`Domain.dependent` to declare that
+        some :any:`Domain`'s are contained within other domains (forming a tree in general),
+        and domains with :data:`Domain.dependent` set to True automatically take their sequences from
+        independent domains.
 
         WARNING: this can be a bit tricky to determine the order when setting these.
         The subdomains should be listed in 5' to 3' order for UNSTARRED domains.
