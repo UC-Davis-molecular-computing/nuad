@@ -44,7 +44,7 @@ To install dsd:
 
       and then unzip somewhere on your file system.
 
-2. Add the directory `dsd` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your `~/.bashrc` file, where `/path/to/dsd` represents the path to the `dsd` directory:
+2. Add the directory `dsd` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/dsd` represents the path to the `dsd` directory:
 
     ```
     export PYTHONPATH="${PYTHONPATH}:/path/to/dsd"
