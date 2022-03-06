@@ -1672,7 +1672,9 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc
 * violations: {report.num_violations}
 * score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
 {indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
-                         'when set to False\n' if not report_only_violations else '')
+                         'when set to False\n'
+                         'see https://github.com/UC-Davis-molecular-computing/dsd/issues/134\n'
+                                       if not report_only_violations else '')
     return summary
 
 
