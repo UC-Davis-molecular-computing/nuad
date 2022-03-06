@@ -1110,7 +1110,10 @@ def create_report(design: dc.Design, constraints: Iterable[Constraint]) -> str:
     from a design.json file writte as part of a call to :meth:`search_for_dna_sequences`.
 
     The report is the same format as written to the reports generated when calling
-    :meth:`search_for_dna_sequences`
+    :meth:`search_for_dna_sequences`.
+    Unfortunately this means it suffers the limitation that it currently only prints a summary
+    for *violations* of constraints;
+    see https://github.com/UC-Davis-molecular-computing/dsd/issues/134
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
