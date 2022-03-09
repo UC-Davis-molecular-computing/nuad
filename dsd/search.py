@@ -1618,6 +1618,9 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
 
         violations_nonfixed = violation_set.violations_nonfixed[constraint]
         violations_fixed = violation_set.violations_fixed[constraint]
+
+        some_fixed_violations = len(violations_fixed) > 0
+
         for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
                                         (violations_fixed, f"fixed {part_type_name}s")]:
             if len(violations) == 0:
@@ -1636,7 +1639,10 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
 
             lines = (line for line, _ in lines_and_scores)
             content = '\n'.join(lines)
-            summary = _small_header(header_name, "=") + f'\n{content}\n'
+
+            # only put header to distinguish fixed from unfixed violations if there are some fixed
+            full_header = _small_header(header_name, "=") if some_fixed_violations else ''
+            summary = full_header + f'\n{content}\n'
             summaries.append(summary)
 
         content = ''.join(summaries)
