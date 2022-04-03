@@ -16,54 +16,21 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
 
     steps:
-    - name: Update packages with APT
-      run: apt update
-    - name: Install curl with APT to install SSL support
-      run: apt install -y curl
-    - name: Check root directory
-      run: |
-        ls /
-    - name: Check current directory
-      run: |
-        pwd
-        ls
+    - name: Install ca-certificates to enable SSL
+      run: apt update && apt install -y ca-certificates
     - uses: actions/checkout@v2
-    - name: Check current directory
-      run: |
-        pwd
-        ls
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Check current directory
-      run: |
-        pwd
-        ls
     - name: Upgrade pip
       run: python -m pip install --upgrade pip
-    - name: Check current directory
-      run: |
-        pwd
-        ls
     - name: Install NUPACK
       run: |
         python -m pip install -U nupack -f /nupack/package
-    - name: Check current directory
-      run: |
-        pwd
-        ls
     - name: Install dependencies
       run: |
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Check current directory
-      run: |
-        pwd
-        ls
     - name: Test with unittest
       run: |
         python -m unittest -v tests/test.py
-    - name: Check current directory
-      run: |
-        pwd
-        ls
