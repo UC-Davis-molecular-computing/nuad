@@ -16,8 +16,6 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
 
     steps:
-    - name: Install ca-certificates to enable SSL
-      run: apt update && apt install -y ca-certificates
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
