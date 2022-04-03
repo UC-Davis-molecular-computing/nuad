@@ -43,7 +43,7 @@ jobs:
         ls
     - name: Install NUPACK
       run: |
-        sudo -H python -m pip install -U nupack -f /nupack/package
+        sudo -H pip install -U nupack -f /nupack/package
     - name: Check current directory
       run: |
         pwd
