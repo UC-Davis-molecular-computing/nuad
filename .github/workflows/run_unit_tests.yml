@@ -15,6 +15,8 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
 
     steps:
+    - name: Install sudo
+    - run: apt update && apt install sudo 
     - name: Check root directory
       run: |
         ls /
