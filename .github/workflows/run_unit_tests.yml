@@ -16,7 +16,7 @@ jobs:
 
     steps:
     - name: Install sudo
-    - run: apt update && apt install sudo 
+      run: apt update && apt install sudo 
     - name: Check root directory
       run: |
         ls /
