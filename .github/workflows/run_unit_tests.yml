@@ -9,7 +9,10 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    container: unhumbleben/nupack:latest
+    container:
+      image: unhumbleben/nupack:latest
+      volumes:
+        - /etc/ssl/certs:/etc/ssl/certs
     strategy:
       matrix:
         python-version: [3.7, 3.8, 3.9]
