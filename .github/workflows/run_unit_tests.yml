@@ -41,9 +41,9 @@ jobs:
       run: |
         pwd
         ls
-    - name: Install NUPACK
-      run: |
-        python -m pip install -U nupack -f /nupack/package
+#     - name: Install NUPACK
+#       run: |
+#         python -m pip install -U nupack -f /nupack/package
     - name: Check current directory
       run: |
         pwd
