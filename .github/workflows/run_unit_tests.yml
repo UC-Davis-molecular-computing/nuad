@@ -18,6 +18,8 @@ jobs:
     steps:
     - name: Update packages with APT
       run: apt update
+    - name: Install curl with APT to install SSL support
+      run: apt install curl
     - name: Check root directory
       run: |
         ls /
