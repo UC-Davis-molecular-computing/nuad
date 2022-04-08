@@ -24,7 +24,7 @@ jobs:
       uses: py-actions/py-dependency-install@v2
     - name: Install Sphinx
       run: |
-        pip install sphinx sphinx_rtd_theme
+        python -m pip install sphinx sphinx_rtd_theme
     - name: Move to docs folder and build
       run: |
         cd doc
