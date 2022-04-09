@@ -14,7 +14,7 @@ or post questions as issues on the [issues page](https://github.com/UC-Davis-mol
 * [Pushing to the repository dev branch and documenting changes (done on all updates)](#pushing-to-the-repository-dev-branch-and-documenting-changes-done-on-all-updates)
 * [Pushing to the repository main branch and documenting changes (done less frequently)](#pushing-to-the-repository-main-branch-and-documenting-changes-done-less-frequently)
 * [Styleguide](#styleguide)
-
+* [Miscellaneous](#miscellaneous)
 
 
 ## What should I know before I get started?
@@ -153,3 +153,50 @@ Follow the [Python style guide](https://www.python.org/dev/peps/pep-0008/), whic
 
 The line length should be configured to 110, as the style guide limit of 79 is a bit too restrictive.
 
+
+## Miscellaneous
+
+### Creating the NUPACK Docker Image
+
+For future reference, I list out the steps to create the [Docker image for NUPACK](https://hub.docker.com/r/unhumbleben/nupack).
+
+#### Prerequisite
+
+* [Install NUPACK](http://www.nupack.org/downloads/register)
+* [Install Docker](https://docs.docker.com/engine/install/)
+
+#### Dockerfile
+
+Create the following Dockerfile in the same directory where NUPACK is installed:
+```
+FROM ubuntu:20.04
+COPY nupack-4.0.0.27/ /nupack
+# Install ca-certificates to enable SSL
+RUN apt-get update && apt-get install -y ca-certificates
+```
+
+The first line sets the [ubuntu:20.04](https://hub.docker.com/_/ubuntu) 
+image as the base image from which we will build our NUPACK image.
+
+The second line [copies](https://docs.docker.com/engine/reference/builder/#copy) new files or directories from the local
+filesystem nupack-4.0.0.27/ and adds them to the filesystem of the container at the path /nupack. You may need to change the first argument
+(nupack-4.0.0.27/) depending on the exact version of NUPACK you have.
+
+The last line is needed to [enable SSL](https://packages.debian.org/sid/ca-certificates), which is required to run pip.
+
+#### Build the Image
+```
+docker build -t unhumbleben/nupack .
+```
+
+The `-t unhumbleben/nupack` argument names the image
+`unhumbleben/nupack`, but can be named to anything for testing purposes.
+
+To play with the container, you can run
+
+```
+docker run -it <name-of-container>
+```
+
+To push the image to DockerHub, follow the instructions in the
+[Docker documentation](https://docs.docker.com/get-started/04_sharing_app/#push-the-image).
