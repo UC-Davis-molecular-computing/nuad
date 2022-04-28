@@ -1,8 +1,8 @@
 from typing import List, Optional
 
 # Test ComplexConstraint evaluate
-import dsd.constraints as dc
-import dsd.search as ds  # type: ignore
+import nuad.constraints as dc
+import nuad.search as ds  # type: ignore
 
 LONG_DOMAIN_LENGTH = 15
 SUB_LONG_DOMAIN_LENGTH = 2

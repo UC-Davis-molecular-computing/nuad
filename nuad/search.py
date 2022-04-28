@@ -71,7 +71,7 @@ import numpy.random
 from ordered_set import OrderedSet
 import numpy as np  # noqa
 
-import dsd.np as dn
+import nuad.np as dn
 
 # XXX: If I understand ThreadPool versus Pool, ThreadPool will get no benefit from multiple cores,
 # but Pool will. However, when I check the core usage, all of them spike when using ThreadPool, which
@@ -88,15 +88,15 @@ import dsd.np as dn
 # from multiprocessing.pool import ThreadPool
 import pathos
 
-from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
+from nuad.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
     logger, all_pairs, ConstraintWithDomains, ConstraintWithStrands, \
     ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
     DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint, \
     DomainPair, StrandPair, SingularConstraint, BulkConstraint
-import dsd.constraints as dc
+import nuad.constraints as dc
 
-from dsd.stopwatch import Stopwatch
+from nuad.stopwatch import Stopwatch
 
 
 def new_process_pool(cpu_count: int) -> pathos.multiprocessing.Pool:
@@ -1680,7 +1680,7 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc
 {indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
                          'when set to False\n'
                          'see https://github.com/UC-Davis-molecular-computing/dsd/issues/134\n'
-                                       if not report_only_violations else '')
+                         if not report_only_violations else '')
     return summary
 
 

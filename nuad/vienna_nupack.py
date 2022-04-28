@@ -23,7 +23,7 @@ from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
 
 import numpy as np
 
-import dsd.constraints as dc
+import nuad.constraints as dc
 
 os_is_windows = sys.platform == 'win32'
 
@@ -134,7 +134,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     return dg
 
 
-def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex', # circular import causes problems
+def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex',  # circular import causes problems
                                            temperature: float = default_temperature,
                                            sodium: float = default_sodium,
                                            magnesium: float = default_magnesium) -> np.ndarray:
@@ -469,7 +469,7 @@ def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc((seq1, seq2), temperature, sodium, magnesium) - (
-            pfunc(seq1, temperature, sodium, magnesium) + pfunc(seq2, temperature, sodium, magnesium))
+        pfunc(seq1, temperature, sodium, magnesium) + pfunc(seq2, temperature, sodium, magnesium))
 
 
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:

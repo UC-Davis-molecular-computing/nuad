@@ -5,11 +5,11 @@ import os
 import numpy
 import xlrd
 
-from dsd import constraints
-import dsd.constraints as dc
-import dsd.search as ds
+from nuad import constraints
+import nuad.constraints as dc
+import nuad.search as ds
 import scadnano as sc
-from dsd.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
+from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
     _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
     Strand, DomainPool, BasePairType, StrandDomainAddress
 

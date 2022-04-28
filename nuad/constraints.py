@@ -37,13 +37,13 @@ from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
 
-import dsd.vienna_nupack as dv
-import dsd.np as dn
-import dsd.modifications as dm
-from dsd.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
+import nuad.vienna_nupack as dv
+import nuad.np as dn
+import nuad.modifications as dm
+from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
 # from dsd.stopwatch import Stopwatch
-from dsd.modifications import Modification5Prime
+from nuad.modifications import Modification5Prime
 
 try:
     from scadnano import Design as scDesign  # type: ignore
@@ -1405,7 +1405,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             to it, or it has a :any:`DomainPool`.
         """
         return self._sequence is not None or (
-                self._pool is not None and self._pool.length is not None) or self.length is not None
+            self._pool is not None and self._pool.length is not None) or self.length is not None
 
     def get_length(self) -> int:
         """
@@ -1448,8 +1448,9 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             raise ValueError('cannot assign a new sequence to this Domain; its sequence is fixed as '
                              f'{self._sequence}')
         if self.has_length() and len(new_sequence) != self.get_length():
-            raise ValueError(f'new_sequence={new_sequence} is not the correct length; '
-                             f'it is length {len(new_sequence)}, but this domain is length {self.get_length()}')
+            raise ValueError(
+                f'new_sequence={new_sequence} is not the correct length; '
+                f'it is length {len(new_sequence)}, but this domain is length {self.get_length()}')
         # Check that total length of subdomains (if used) adds up domain length.
         if len(self._subdomains) != 0:
             sd_total_length = 0
