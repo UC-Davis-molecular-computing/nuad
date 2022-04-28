@@ -15,11 +15,13 @@
 
 ## Overview
 
-nuad stands for "NUcleic Acid Designer". It is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to [NUPACK](http://www.nupack.org/)*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the [nearest-neighbor energy model](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method)*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The nuad library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
+nuad stands for "NUcleic Acid Designer".† It is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to [NUPACK](http://www.nupack.org/)*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the [nearest-neighbor energy model](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method)*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The nuad library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
 
 Note: If you are reading this on the PyPI website, many links below won't work. They are relative links intended to be read on the [GitHub README page](https://github.com/UC-Davis-molecular-computing/nuad/tree/main#readme).
 
 Note: The nuad package was originally called dsd (DNA sequence designer), so you may see some old references to this name for the package.
+
+†A secondary reason for the name of the package is that some work was done when the primary author was on sabbatical in Maynooth, Ireland, whose original Irish name is *Maigh Nuad*.
 
 
 ## API documentation
