@@ -1,6 +1,6 @@
-import dsd.search as ds  # type: ignore
-import dsd.constraints as dc  # type: ignore
-import dsd.vienna_nupack as dv  # type: ignore
+import nuad.search as ds  # type: ignore
+import nuad.constraints as dc  # type: ignore
+import nuad.vienna_nupack as dv  # type: ignore
 
 
 def main():

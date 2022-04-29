@@ -17,14 +17,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('../dsd'))
+sys.path.insert(0, os.path.abspath('../nuad'))
 
 # Type "make html" at the command line to generate the documentation.
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'dsd: DNA sequence designer'
+project = 'nuad: NUcleic Acid Designer'
 copyright = '2020, David Doty and Damien Woods'
 author = 'David Doty and Damien Woods'
 

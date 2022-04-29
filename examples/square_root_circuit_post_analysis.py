@@ -5,7 +5,7 @@ from typing import List, Iterable, Dict, Tuple
 from itertools import chain, combinations
 from functools import reduce
 from collections import defaultdict
-from dsd.vienna_nupack import pfunc, binding
+from nuad.vienna_nupack import pfunc, binding
 from nupack import Model, Complex, ComplexSet, SetSpec, complex_analysis
 from nupack import Strand as NupackStrand
 

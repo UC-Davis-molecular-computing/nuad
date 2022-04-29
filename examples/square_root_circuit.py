@@ -3,8 +3,8 @@ from math import ceil, floor
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 import itertools
 
-import dsd.search as ds  # type: ignore
-import dsd.constraints as dc
+import nuad.search as ds  # type: ignore
+import nuad.constraints as dc
 
 # TODO: Go over each constraint, using NUPACK
 #   - check pfunc for each strand

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Any, Dict, AbstractSet
 
 import scadnano as sc
-from dsd.json_noindent_serializer import JSONSerializable, NoIndent
+from nuad.json_noindent_serializer import JSONSerializable, NoIndent
 
 _default_modification_id = "WARNING: no id assigned to modification"
 default_connector_length = 4
