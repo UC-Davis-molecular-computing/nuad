@@ -21,7 +21,7 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 
 Note: The nuad package was originally called dsd (DNA sequence designer), so you may see some old references to this name for the package.
 
-†A secondary reason for the name of the package is that some work was done when the primary author was on sabbatical in Maynooth, Ireland, whose original Irish name is *Maigh Nuad*.
+†A secondary reason for the name of the package is that some work was done when the primary author was on sabbatical in Maynooth, Ireland, whose original Irish name is [*Maigh Nuad*](https://en.wikipedia.org/wiki/Maynooth#Etymology).
 
 
 ## API documentation
