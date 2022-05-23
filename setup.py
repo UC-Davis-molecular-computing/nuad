@@ -25,6 +25,7 @@ def extract_version(filename: str):
 version = extract_version('nuad/__version__.py')
 print(f'nuad version = {version}')
 
+
 with open("requirements.txt") as fp:
     install_requires = fp.read().strip().split("\n")
 
