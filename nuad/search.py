@@ -8,46 +8,6 @@ Instructions for using the dsd library are available at
 https://github.com/UC-Davis-molecular-computing/dsd#data-model
 """
 
-# Since dsd is distributed with NUPACK, we include the following license
-# agreement as required by NUPACK. (http://www.nupack.org/downloads/register)
-#
-# NUPACK Software License Agreement for Non-Commercial Academic Use and
-# Redistribution
-# Copyright © 2021 California Institute of Technology. All rights reserved.
-#
-# Use and redistribution in source form and/or binary form, with or without
-# modification, are permitted for non-commercial academic purposes only,
-# provided that the following conditions are met:
-#
-# Redistributions in source form must retain the above copyright notice,
-# this list of conditions and the following disclaimer.
-#
-# Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# provided with the distribution.
-#
-# Web applications that use the software in source form or binary form must
-# reproduce the above copyright notice, this list of conditions and the
-# following disclaimer in online documentation provided with the web
-# application.
-#
-# Neither the name of the copyright holder nor the names of its contributors
-# may be used to endorse or promote derivative works without specific prior
-# written permission.
-#
-# Disclaimer
-# This software is provided by the copyright holders and contributors "as is"
-# and any express or implied warranties, including, but not limited to, the
-# implied warranties of merchantability and fitness for a particular purpose
-# are disclaimed.  In no event shall the copyright holder or contributors be
-# liable for any direct, indirect, incidental, special, exemplary, or
-# consequential damages (including, but not limited to, procurement of
-# substitute goods or services; loss of use, data, or profits; or business
-# interruption) however caused and on any theory of liability, whether in
-# contract, strict liability, or tort (including negligence or otherwise)
-# arising in any way out of the use of this software, even if advised of the
-# possibility of such damage.
-
 from __future__ import annotations
 
 import json
@@ -71,7 +31,7 @@ import numpy.random
 from ordered_set import OrderedSet
 import numpy as np  # noqa
 
-import dsd.np as dn
+import nuad.np as dn
 
 # XXX: If I understand ThreadPool versus Pool, ThreadPool will get no benefit from multiple cores,
 # but Pool will. However, when I check the core usage, all of them spike when using ThreadPool, which
@@ -88,15 +48,15 @@ import dsd.np as dn
 # from multiprocessing.pool import ThreadPool
 import pathos
 
-from dsd.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
+from nuad.constraints import Domain, Strand, Design, Constraint, DomainConstraint, StrandConstraint, \
     DomainPairConstraint, StrandPairConstraint, ConstraintWithDomainPairs, ConstraintWithStrandPairs, \
     logger, all_pairs, ConstraintWithDomains, ConstraintWithStrands, \
     ComplexConstraint, ConstraintWithComplexes, Complex, DomainsConstraint, StrandsConstraint, \
     DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint, DesignPart, DesignConstraint, \
     DomainPair, StrandPair, SingularConstraint, BulkConstraint
-import dsd.constraints as dc
+import nuad.constraints as dc
 
-from dsd.stopwatch import Stopwatch
+from nuad.stopwatch import Stopwatch
 
 
 def new_process_pool(cpu_count: int) -> pathos.multiprocessing.Pool:
@@ -1110,7 +1070,10 @@ def create_report(design: dc.Design, constraints: Iterable[Constraint]) -> str:
     from a design.json file writte as part of a call to :meth:`search_for_dna_sequences`.
 
     The report is the same format as written to the reports generated when calling
-    :meth:`search_for_dna_sequences`
+    :meth:`search_for_dna_sequences`.
+    Unfortunately this means it suffers the limitation that it currently only prints a summary
+    for *violations* of constraints;
+    see https://github.com/UC-Davis-molecular-computing/dsd/issues/134
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
@@ -1615,6 +1578,9 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
 
         violations_nonfixed = violation_set.violations_nonfixed[constraint]
         violations_fixed = violation_set.violations_fixed[constraint]
+
+        some_fixed_violations = len(violations_fixed) > 0
+
         for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
                                         (violations_fixed, f"fixed {part_type_name}s")]:
             if len(violations) == 0:
@@ -1633,7 +1599,10 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
 
             lines = (line for line, _ in lines_and_scores)
             content = '\n'.join(lines)
-            summary = _small_header(header_name, "=") + f'\n{content}\n'
+
+            # only put header to distinguish fixed from unfixed violations if there are some fixed
+            full_header = _small_header(header_name, "=") if some_fixed_violations else ''
+            summary = full_header + f'\n{content}\n'
             summaries.append(summary)
 
         content = ''.join(summaries)
@@ -1669,7 +1638,9 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: dc
 * violations: {report.num_violations}
 * score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
 {indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
-                         'when set to False\n' if not report_only_violations else '')
+                         'when set to False\n'
+                         'see https://github.com/UC-Davis-molecular-computing/dsd/issues/134\n'
+                         if not report_only_violations else '')
     return summary
 
 

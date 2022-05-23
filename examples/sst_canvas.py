@@ -5,9 +5,9 @@ import argparse
 import os
 from typing import List, Tuple
 
-import dsd.constraints as dc
-import dsd.search as ds
-from dsd.constraints import NumpyConstraint
+import nuad.constraints as dc
+import nuad.search as ds
+from nuad.constraints import NumpyConstraint
 
 
 # DNA sequence designer for a 2D canvas of single-stranded tiles (SSTs).

@@ -22,8 +22,9 @@ def extract_version(filename: str):
     raise AssertionError(f'could not find version in {filename}')
 
 
-version = extract_version('dsd/__version__.py')
-print(f'dsd version = {version}')
+version = extract_version('nuad/__version__.py')
+print(f'nuad version = {version}')
+
 
 with open("requirements.txt") as fp:
     install_requires = fp.read().strip().split("\n")
@@ -33,14 +34,14 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-setup(name='dsd',
-      packages=['dsd'],
+setup(name='nuad',
+      packages=['nuad'],
       version=version,
       license='MIT',
-      description="dsd stands for \"DNA sequence designer\". Enables one to specify constraints on a DNA nanostructure made from synthetic DNA and then attempts to find concrete DNA sequences that satisfy the constraints.",
+      description="nuad stands for \"NUcleic Acid Designer\". Enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA and then attempts to find concrete DNA sequences that satisfy the constraints.",
       author="David Doty",
       author_email="doty@ucdavis.edu",
-      url="https://github.com/UC-Davis-molecular-computing/dsd",
+      url="https://github.com/UC-Davis-molecular-computing/nuad",
       long_description=long_description,
       long_description_content_type='text/markdown; variant=GFM',
       python_requires='>=3.7',

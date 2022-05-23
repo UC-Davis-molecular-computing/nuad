@@ -4,10 +4,10 @@ import os
 import logging
 from typing import List
 
-import dsd.constraints as dc  # type: ignore
-import dsd.vienna_nupack as dv  # type: ignore
-import dsd.search as ds  # type: ignore
-from dsd.constraints import NumpyConstraint
+import nuad.constraints as dc  # type: ignore
+import nuad.vienna_nupack as dv  # type: ignore
+import nuad.search as ds  # type: ignore
+from nuad.constraints import NumpyConstraint
 
 
 # command-line arguments
