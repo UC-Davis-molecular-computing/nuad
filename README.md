@@ -25,7 +25,7 @@ Note: The nuad package was originally called dsd (DNA sequence designer), so you
 
 
 ## API documentation
-The API documentation is on readthedocs: https://dnadsd.readthedocs.io/
+The API documentation is on readthedocs: https://nuad.readthedocs.io/
 
 
 ## Installation
