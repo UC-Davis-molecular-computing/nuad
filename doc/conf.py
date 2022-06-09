@@ -45,6 +45,7 @@ extensions = [
 ]
 
 autodoc_typehints = "description"
+autodoc_mock_imports = ["nupack"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
