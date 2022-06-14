@@ -45,5 +45,6 @@ setup(name='nuad',
       long_description=long_description,
       long_description_content_type='text/markdown; variant=GFM',
       python_requires='>=3.7',
-      install_requires=install_requires
+      install_requires=install_requires,
+      include_package_data=True
       )
