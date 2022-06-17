@@ -29,7 +29,7 @@ copyright = '2020, David Doty and Damien Woods'
 author = 'David Doty and Damien Woods'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+release = '0.1.1'
 # version = __version__
 # release = __version__
 
