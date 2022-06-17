@@ -1,36 +1,36 @@
-.. dsd documentation master file, created by
+.. nuad documentation master file, created by
    sphinx-quickstart on Tue Jul 16 10:14:04 2019.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-dsd documentation
+nuad documentation
 ====================================
 
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
 
-dsd.search
+nuad.search
 =====================
 .. automodule:: search
    :members:
 
-dsd.constraints
+nuad.constraints
 =====================
 .. automodule:: constraints
    :members:
 
-dsd.modifications
+nuad.modifications
 =====================
 .. automodule:: modifications
    :members:
 
-dsd.vienna_nupack
+nuad.vienna_nupack
 =====================
 .. automodule:: vienna_nupack
    :members:
 
-dsd.np
+nuad.np
 =====================
 .. automodule:: np
    :members:
