@@ -3179,7 +3179,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 # assign sequence
                 if sequence is not None:
                     for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
-                        domain_sequence = sc_domain.dna_sequence()
+                        domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
                         # take the WC complement first so the dsd Domain stores the "canonical" sequence
                         if sc_domain.name[-1] == '*':
@@ -3395,7 +3395,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sequence_list: List[str] = []
         for sc_domain, dsd_domain, domain_name in zip(sc_strand.domains, dsd_strand.domains, domain_names):
             starred = domain_name[-1] == '*'
-            sc_domain_sequence = sc_domain.dna_sequence()
+            sc_domain_sequence = sc_domain.dna_sequence
 
             # if we're in this method, then domains of sc_strand should have a partial assignment
             assert sc_domain_sequence is not None
