@@ -5,9 +5,8 @@ import argparse
 import os
 from typing import List, Tuple
 
-import nuad.constraints as dc
-import nuad.search as ds
-from nuad.constraints import NumpyConstraint
+import nuad.constraints as nc
+import nuad.search as ns
 
 
 # DNA sequence designer for a 2D canvas of single-stranded tiles (SSTs).
@@ -19,7 +18,7 @@ def main() -> None:
     design = create_design(width=args.width, height=args.height)
     thresholds = Thresholds()
     constraints = create_constraints(design, thresholds)
-    params = ds.SearchParameters(
+    params = ns.SearchParameters(
         constraints=constraints,
         out_directory=args.directory,
         restart=args.restart,
@@ -27,7 +26,7 @@ def main() -> None:
         log_time=True,
     )
 
-    ds.search_for_dna_sequences(design, params)
+    ns.search_for_dna_sequences(design, params)
 
 
 # command-line arguments
@@ -50,7 +49,7 @@ class CLArgs:
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join('output', ds.script_name_no_ext())
+    default_directory = os.path.join('output', ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(
         description='Designs DNA sequences for a canvas of single-stranded tiles (SSTs).',
@@ -84,7 +83,7 @@ def parse_command_line_arguments() -> CLArgs:
                   restart=args.restart)
 
 
-def create_design(width: int, height: int) -> dc.Design:
+def create_design(width: int, height: int) -> nc.Design:
     """
     Creates an SST canvas `width` tiles width and `height` tiles high.
 
@@ -124,14 +123,14 @@ def create_design(width: int, height: int) -> dc.Design:
     :return:
         design with `width` x `height` canvas of SSTs
     """
-    numpy_constraints: List[NumpyConstraint] = [
-        dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),  # energies should all be "close"
-        dc.RunsOfBasesConstraint(['C', 'G'], 4),  # forbid substrings of form {C,G}^4
-        dc.ForbiddenSubstringConstraint(['AAAAA', 'TTTTT']),  # forbid 5 A's in a row or 5 T's in a row
+    numpy_constraints = [
+        nc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),  # energies should all be "close"
+        nc.RunsOfBasesConstraint(['C', 'G'], 4),  # forbid substrings of form {C,G}^4
+        nc.ForbiddenSubstringConstraint(['AAAAA', 'TTTTT']),  # forbid 5 A's in a row or 5 T's in a row
     ]
 
-    domain_pool_10 = dc.DomainPool(f'length-10_domains', 10, numpy_constraints=numpy_constraints)
-    domain_pool_11 = dc.DomainPool(f'length-11_domains', 11, numpy_constraints=numpy_constraints)
+    domain_pool_10 = nc.DomainPool(f'length-10_domains', 10, numpy_constraints=numpy_constraints)
+    domain_pool_11 = nc.DomainPool(f'length-11_domains', 11, numpy_constraints=numpy_constraints)
 
     tiles = []
     for x in range(width):
@@ -167,7 +166,7 @@ def create_design(width: int, height: int) -> dc.Design:
             w_domain_name = f'we_{x}_{y}'
             n_domain_name = f'ns_{x - 1}_{y}*'
             e_domain_name = f'we_{x}_{y + 1}*'
-            tile = dc.Strand(domain_names=[s_domain_name, w_domain_name, n_domain_name, e_domain_name],
+            tile = nc.Strand(domain_names=[s_domain_name, w_domain_name, n_domain_name, e_domain_name],
                              name=f't_{x}_{y}')
             tiles.append(tile)
 
@@ -188,7 +187,7 @@ def create_design(width: int, height: int) -> dc.Design:
             if not w_domain.has_pool():
                 w_domain.pool = inner_pool
 
-    design = dc.Design(strands=tiles)
+    design = nc.Design(strands=tiles)
     return design
 
 
@@ -207,8 +206,8 @@ class Thresholds:
     """RNAduplex complex free energy threshold for pairs tiles with 1 complementary domain."""
 
 
-def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Constraint]:
-    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
+def create_constraints(design: nc.Design, thresholds: Thresholds) -> List[nc.Constraint]:
+    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
         threshold=thresholds.tile_ss, temperature=thresholds.temperature, short_description='StrandSS')
 
     # This reduces the number of times we have to create these sets from quadratic to linear
@@ -240,10 +239,10 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
         else:
             raise AssertionError('each pair of strands should have exactly 0 or 1 complementary domains')
 
-    strand_pairs_rna_duplex_constraint_0comp = dc.rna_duplex_strand_pairs_constraint(
+    strand_pairs_rna_duplex_constraint_0comp = nc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_0comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA0Comp', pairs=strand_pairs_0_comp)
-    strand_pairs_rna_duplex_constraint_1comp = dc.rna_duplex_strand_pairs_constraint(
+    strand_pairs_rna_duplex_constraint_1comp = nc.rna_duplex_strand_pairs_constraint(
         threshold=thresholds.tile_pair_1comp, temperature=thresholds.temperature,
         short_description='StrandPairRNA1Comp', pairs=strand_pairs_1_comp)
 
@@ -265,12 +264,12 @@ def create_constraints(design: dc.Design, thresholds: Thresholds) -> List[dc.Con
     ]
 
 
-def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
+def create_tile_no_gggg_constraint(weight: float) -> nc.StrandConstraint:
     # This shows how one might make a custom constraint, in case those in dsd.constraints are not
     # sufficient. See also source code of provided constraints in dsd/constraints.py for more examples,
     # particularly for examples that call NUPACK or ViennaRNA.
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[dc.Strand]) -> Tuple[float, str]:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:  # noqa
         sequence = seqs[0]
         if 'GGGG' in sequence:
             return 1.0, f'GGGG found in {sequence}'
@@ -279,7 +278,7 @@ def create_tile_no_gggg_constraint(weight: float) -> dc.StrandConstraint:
 
     description = "No GGGG allowed in strand's sequence"
 
-    return dc.StrandConstraint(description=description, short_description='NoGGGG',
+    return nc.StrandConstraint(description=description, short_description='NoGGGG',
                                weight=weight, evaluate=evaluate)
 
 
