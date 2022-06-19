@@ -4,9 +4,9 @@ import os
 import logging
 from typing import List
 
-import nuad.constraints as dc  # type: ignore
-import nuad.vienna_nupack as dv  # type: ignore
-import nuad.search as ds  # type: ignore
+import nuad.constraints as nc  # type: ignore
+import nuad.vienna_nupack as nv  # type: ignore
+import nuad.search as ns  # type: ignore
 from nuad.constraints import NumpyConstraint
 
 
@@ -17,7 +17,7 @@ class CLArgs(NamedTuple):
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join('output', ds.script_name_no_ext())
+    default_directory = os.path.join('output', ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(  # noqa
         description='Small example design for testing.',
@@ -41,7 +41,7 @@ def main() -> None:
     args: CLArgs = parse_command_line_arguments()
 
     # dc.logger.setLevel(logging.DEBUG)
-    dc.logger.setLevel(logging.INFO)
+    nc.logger.setLevel(logging.INFO)
 
     random_seed = 1
 
@@ -57,7 +57,7 @@ def main() -> None:
 
     #                     si         wi         ni         ei
     # strand i is    [----------|----------|----------|---------->
-    strands = [dc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
+    strands = [nc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
 
     # some_fixed = False
     some_fixed = True
@@ -70,7 +70,7 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    design = dc.Design(strands)
+    design = nc.Design(strands)
 
     numpy_constraints: List[NumpyConstraint] = [
         # dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
@@ -97,11 +97,11 @@ def main() -> None:
 
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
-    domain_pool_10 = dc.DomainPool(f'length-10_domains', 10,
+    domain_pool_10 = nc.DomainPool(f'length-10_domains', 10,
                                    numpy_constraints=numpy_constraints,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
-    domain_pool_11 = dc.DomainPool(f'length-11_domains', 11,
+    domain_pool_11 = nc.DomainPool(f'length-11_domains', 11,
                                    numpy_constraints=numpy_constraints,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
@@ -122,30 +122,30 @@ def main() -> None:
 
     # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
     # so that we know the domain lengths
-    strand_complexes = [dc.Complex((strand,)) for i, strand in enumerate(strands[2:])]
-    strand_base_pair_prob_constraint = dc.nupack_complex_base_pair_probability_constraint(
+    strand_complexes = [nc.Complex((strand,)) for i, strand in enumerate(strands[2:])]
+    strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
-    domain_nupack_ss_constraint = dc.nupack_domain_complex_free_energy_constraint(
+    domain_nupack_ss_constraint = nc.nupack_domain_complex_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='DomainSS')
 
-    domain_pairs_rna_duplex_constraint = dc.rna_duplex_domain_pairs_constraint(
+    domain_pairs_rna_duplex_constraint = nc.rna_duplex_domain_pairs_constraint(
         threshold=-2.0, temperature=52, short_description='DomainPairRNA')
 
-    domain_pair_nupack_constraint = dc.nupack_domain_pair_constraint(
+    domain_pair_nupack_constraint = nc.nupack_domain_pair_constraint(
         threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
         parallel=parallel)
 
-    strand_pairs_rna_duplex_constraint = dc.rna_duplex_strand_pairs_constraint(
+    strand_pairs_rna_duplex_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0, temperature=52, short_description='StrandPairRNA', parallel=parallel)
 
-    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
+    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
 
-    strand_pair_nupack_constraint = dc.nupack_strand_pair_constraint(
+    strand_pair_nupack_constraint = nc.nupack_strand_pair_constraint(
         threshold=3.0, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
 
-    params = ds.SearchParameters(constraints=[
+    params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
         # strand_pair_nupack_constraint,
@@ -153,7 +153,7 @@ def main() -> None:
         # domain_pairs_rna_duplex_constraint,
         # strand_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
-        dc.domains_not_substrings_of_each_other_constraint(),
+        nc.domains_not_substrings_of_each_other_constraint(),
     ],
         out_directory=args.directory,
         restart=args.restart,
@@ -164,7 +164,7 @@ def main() -> None:
         save_design_for_all_updates=True,
         force_overwrite=True,
     )
-    ds.search_for_dna_sequences(design, params)
+    ns.search_for_dna_sequences(design, params)
 
 
 if __name__ == '__main__':

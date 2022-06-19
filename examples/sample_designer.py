@@ -2,9 +2,9 @@ from typing import NamedTuple, Optional
 import os
 import argparse
 
-import nuad.constraints as dc  # type: ignore
-import nuad.vienna_nupack as dv  # type: ignore
-import nuad.search as ds  # type: ignore
+import nuad.constraints as nc  # type: ignore
+import nuad.vienna_nupack as nv  # type: ignore
+import nuad.search as ns  # type: ignore
 
 
 # command-line arguments
@@ -16,7 +16,7 @@ class CLArgs(NamedTuple):
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join('output', ds.script_name_no_ext())
+    default_directory = os.path.join('output', ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(  # noqa
         description='Small example design for testing.',
@@ -74,32 +74,32 @@ def main() -> None:
     #               |    w4*          s4*
     #               \===========--==========]
 
-    strand0: dc.Strand[str] = dc.Strand(['s1', 'w1', 'n1', 'e1'], name='strand 0')
-    strand1: dc.Strand[str] = dc.Strand(['s2', 'w2', 'n2', 'e2'], name='strand 1')
-    strand2: dc.Strand[None] = dc.Strand(['n2*', 'e1*', 'n3*', 'e3*'], name='strand 2')
-    strand3: dc.Strand[str] = dc.Strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
+    strand0: nc.Strand[str] = nc.Strand(['s1', 'w1', 'n1', 'e1'], name='strand 0')
+    strand1: nc.Strand[str] = nc.Strand(['s2', 'w2', 'n2', 'e2'], name='strand 1')
+    strand2: nc.Strand[None] = nc.Strand(['n2*', 'e1*', 'n3*', 'e3*'], name='strand 2')
+    strand3: nc.Strand[str] = nc.Strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
     strands = [strand0, strand1, strand2, strand3]
 
-    initial_design = dc.Design(strands)
+    initial_design = nc.Design(strands)
 
     if args.initial_design_filename is not None:
         with open(args.initial_design_filename, 'r') as file:
             design_json_str: str = file.read()
-        design = dc.Design.from_json(design_json_str)
+        design = nc.Design.from_json(design_json_str)
     else:
         design = initial_design
 
     numpy_constraints = [
-        dc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
-        dc.BaseCountConstraint(base='G', high_count=1),
-        dc.RunsOfBasesConstraint(['C', 'G'], 4),
-        dc.RunsOfBasesConstraint(['A', 'T'], 4),
+        nc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
+        nc.BaseCountConstraint(base='G', high_count=1),
+        nc.RunsOfBasesConstraint(['C', 'G'], 4),
+        nc.RunsOfBasesConstraint(['A', 'T'], 4),
     ]
 
     lengths = [9, 10, 11, 12]
     domain_pools = {
         length:
-            dc.DomainPool(f'length-{length} domains', length,
+            nc.DomainPool(f'length-{length} domains', length,
                           numpy_constraints=numpy_constraints) for length in lengths
     }
 
@@ -114,18 +114,18 @@ def main() -> None:
     strand3.domains[0].pool = domain_pools[lengths[1]]
     strand3.domains[1].pool = domain_pools[lengths[2]]
 
-    strand_pairs_no_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
+    strand_pairs_no_comp_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0, temperature=52, short_description='StrandPairNoCompl',
         pairs=((strand0, strand1), (strand2, strand3))
     )
-    strand_pairs_comp_constraint = dc.rna_duplex_strand_pairs_constraint(
+    strand_pairs_comp_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-7.0, temperature=52, short_description='StrandPairCompl',
         pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
     )
-    strand_individual_ss_constraint = dc.nupack_strand_complex_free_energy_constraint(
+    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='StrandSS')
 
-    params = ds.SearchParameters(
+    params = ns.SearchParameters(
         constraints=[strand_pairs_no_comp_constraint,
                      strand_pairs_comp_constraint,
                      strand_individual_ss_constraint,
@@ -138,7 +138,7 @@ def main() -> None:
         report_only_violations=False,
         random_seed=1, )
 
-    ds.search_for_dna_sequences(design=design, params=params)
+    ns.search_for_dna_sequences(design=design, params=params)
 
     # for strand in design.strands:
     #     print(f'strand seq = {strand.sequence(spaces_between_domains=True)}')
