@@ -50,9 +50,9 @@ def main() -> None:
 
     # num_strands = 2
     # num_strands = 5
-    num_strands = 10
+    # num_strands = 10
     # num_strands = 50
-    # num_strands = 100
+    num_strands = 100
     # num_strands = 355
 
     #                     si         wi         ni         ei
@@ -147,13 +147,13 @@ def main() -> None:
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
-        # strand_individual_ss_constraint,
+        strand_individual_ss_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_duplex_constraint,
         # strand_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
-        nc.domains_not_substrings_of_each_other_constraint(),
+        # nc.domains_not_substrings_of_each_other_constraint(),
     ],
         out_directory=args.directory,
         restart=args.restart,

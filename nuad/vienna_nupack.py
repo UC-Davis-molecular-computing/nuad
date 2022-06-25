@@ -329,14 +329,14 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
         energies[i] = energy
         if cache:
-            key = (seq_pair, temperature, parameters_filename)
-            _rna_duplex_cache[key] = energy
-
             # clear out oldest cache key if _rna_duplex_queue is full
             if len(_rna_duplex_queue) == _rna_duplex_queue.maxlen:
                 lru_item = _rna_duplex_queue[0]
-                del _rna_duplex_cache[lru_item]
+                if lru_item in _rna_duplex_cache:
+                    del _rna_duplex_cache[lru_item]
 
+            key = (seq_pair, temperature, parameters_filename)
+            _rna_duplex_cache[key] = energy
             _rna_duplex_queue.append(key)
 
     return energies
