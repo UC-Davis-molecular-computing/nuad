@@ -1108,15 +1108,19 @@ def _setup_directories(params: SearchParameters) -> _Directories:
     out_directory = params.out_directory
     if out_directory is None:
         out_directory = default_output_directory()
+
+    if not os.path.exists(out_directory):
+        os.makedirs(out_directory)
+    if not params.restart:
+        _clear_directory(out_directory, params.force_overwrite)
+
     directories = _Directories(out=out_directory, debug=params.debug_log_file,
                                info=params.info_log_file)
-    if not os.path.exists(directories.out):
-        os.makedirs(directories.out)
-    if not params.restart:
-        _clear_directory(directories.out, params.force_overwrite)
+
     for subdir in directories.all_subdirectories(params):
         if not os.path.exists(subdir):
             os.makedirs(subdir)
+
     return directories
 
 
