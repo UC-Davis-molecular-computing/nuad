@@ -936,13 +936,8 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
     design.check_all_subdomain_graphs_uniquely_assignable()
 
     if params.random_seed is not None:
-        if params.restart:
-            logger.warning(f"Since you selected the restart option, I'm ignoring your random seed of "
-                           f"{params.random_seed}, and instead we'll use the stored random seed from the "
-                           f"previous run that is being restarted.")
-        else:
-            logger.info(f'using random seed of {params.random_seed}; '
-                        f'use this same seed to reproduce this run')
+        logger.info(f'using random seed of {params.random_seed}; '
+                    f'use this same seed to reproduce this run')
 
     # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
     # StrandPool that contains them.
@@ -980,7 +975,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
         else:
-            num_new_optimal, rng = _restart_from_directory(directories, design)
+            num_new_optimal, rng_restart = _restart_from_directory(directories, design, params)
+            if rng_restart is not None:
+                rng = rng_restart
 
         violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
             design=design, params=params, never_increase_score=params.never_increase_score, iteration=-1)
@@ -1222,7 +1219,7 @@ def timestamp() -> str:
     return time_str
 
 
-def _restart_from_directory(directories: _Directories, design: dc.Design) \
+def _restart_from_directory(directories: _Directories, design: dc.Design, params: SearchParameters) \
         -> Tuple[int, np.random.Generator]:
     # NOTE: If the subdirectory design/ exists, then this restarts from highest index found in the
     # subdirectory, NOT from "design_best.json" file, which is ignored in that case.
@@ -1230,6 +1227,7 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # This also dictates whether rng/ subdirectory or rng_best.json is used,
     # so if design/ exists and has a file, e.g., design/design-75.json, then it is assumed that the file
     # rng/rng-75.json also exists.
+    # If params.random_seed is defined, then the rng returned is None.
 
     if os.path.isdir(directories.design):
         # returns highest index found in design subdirectory
@@ -1259,12 +1257,25 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     design_stored = dc.Design.from_json(design_json_str)
     dc.verify_designs_match(design_stored, design, check_fixed=False)
 
-    # read RNG state
-    with open(rng_filename, 'r') as file:
-        rng_state_json = file.read()
-    rng_state = json.loads(rng_state_json)
-    rng = numpy.random.default_rng()
-    rng.bit_generator.state = rng_state
+    rng = None
+
+    if params.random_seed is not None:
+        logger.warning(f"""\
+When using the restart option, normally I use the stored random seed in
+rng_best.json so that the search continues with the same results as if it
+had not be stopped. However, you specified a different random seed of
+{params.random_seed}, so the results will be different than if the original
+run of the search algorithm had been allowed to continue.""")
+    else:
+        # read RNG state
+        with open(rng_filename, 'r') as file:
+            rng_state_json = file.read()
+        rng_state = json.loads(rng_state_json)
+        rng = numpy.random.default_rng()
+        rng.bit_generator.state = rng_state
+        logger.warning(f"""\
+Using stored random seed from file {rng_filename} to produce search results
+identical to those that would have happened if the search had not be stopped.""")
 
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
@@ -1272,7 +1283,7 @@ def _restart_from_directory(directories: _Directories, design: dc.Design) \
     # is the Design being modified by the search (not the Design that is read in from the stored .json)
     design.copy_sequences_from(design_stored)
 
-    return highest_idx, rng
+    return highest_idx, (rng if rng is not None else None)
 
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
