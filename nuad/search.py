@@ -794,6 +794,14 @@ class SearchParameters:
     Maximum number of iterations of search to perform.
     """
 
+    target_score: Optional[float] = None
+    """
+    Total violation score to attempt to obtain. A score of 0.0 represents that all constraints 
+    are satisfied. Often a search can get very close to score 0.0 quickly, but take a very long time
+    to reach a score of 0.0. Set this to a small positive value to allow the search to quit before
+    all constraints are satisfied, but they are "mostly" satisfied. 
+    """
+
     max_domains_to_change: int = 1
     """
     Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
@@ -993,8 +1001,9 @@ def search_for_dna_sequences(design: dc.Design, params: SearchParameters) -> Non
         iteration = 0
 
         stopwatch = Stopwatch()
-        while violation_set_opt.has_nonfixed_violations() and \
-                (params.max_iterations is None or iteration < params.max_iterations):
+        while (violation_set_opt.total_score() > params.target_score if params.target_score is not None else
+               violation_set_opt.has_nonfixed_violations()) \
+                and (params.max_iterations is None or iteration < params.max_iterations):
             if params.log_time:
                 stopwatch.restart()
 
