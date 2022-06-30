@@ -4412,7 +4412,7 @@ def nupack_domain_pair_constraint(
                                 pairs=pairs)
 
 
-def nupack_strand_pair_constraint(
+def nupack_strand_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
         sodium: float = dv.default_sodium,
