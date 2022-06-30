@@ -3276,15 +3276,16 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
-        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
+
         for sc_strand in sc_strands_to_include:
-            dsd_strand = dsd_strands_by_name[sc_strand.name]
-            if dsd_strand.idt is not None:
+            nuad_strand = nuad_strands_by_name[sc_strand.name]
+            if nuad_strand.idt is not None:
                 if sc_strand.idt is not None:
                     raise ValueError(f'Cannot assign IDT fields from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has IDT fields '
                                      f'assigned:\n{sc_strand.idt}')
-                sc_strand.idt = dsd_strand.idt.to_scadnano_idt()
+                sc_strand.idt = nuad_strand.idt.to_scadnano_idt()
 
     def assign_modifications_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                                 ignored_strands: Iterable[Strand] = ()) -> None:
