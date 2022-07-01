@@ -4797,12 +4797,13 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     for num_matching_domains, threshold in thresholds.items():
         pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
 
-        if descriptions is None:
+        if descriptions is None or num_matching_domains not in descriptions:
             description = f'RNAduplex energy for pairs strand with {num_matching_domains} ' \
                           f'matching domains exceeds {threshold} kcal/mol at {temperature} C'
         else:
             description = descriptions[num_matching_domains]
-        if short_descriptions is None:
+        
+        if short_descriptions is None or num_matching_domains not in short_descriptions:
             short_description = f'RNADup{num_matching_domains}Comp'
         else:
             short_description = short_descriptions[num_matching_domains]
