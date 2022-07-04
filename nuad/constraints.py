@@ -4857,7 +4857,7 @@ def rna_duplex_domain_pairs_constraint(
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
+        description: str = 'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol',
         short_description: str = 'rna_dup_dom_pairs',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
         parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
@@ -4888,8 +4888,13 @@ def rna_duplex_domain_pairs_constraint(
     """
     _check_vienna_rna_installed()
 
-    if description is None:
-        description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
+    description = description.format(
+        threshold=threshold,
+        temperature=temperature,
+        weight=weight,
+        short_description=short_description,
+        parameters_filename=parameters_filename
+    )
 
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
         sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
