@@ -5210,7 +5210,8 @@ def rna_duplex_strand_pairs_constraint(
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+        format_description: bool = True) \
         -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -5241,20 +5242,32 @@ def rna_duplex_strand_pairs_constraint(
     :param parameters_filename:
         Name of parameters file for ViennaRNA;
         default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :param format_description:
+        Whether to format the description with {} string formatting; if True constraint 
+        parameters other than score_transfer_function and format_description can be included
+        in the description by adding them between {}, eg, "{threshold}".
     :return:
         The :any:`StrandPairsConstraint`.
     """
     _check_vienna_rna_installed()
 
-    description = description.format(
-        threshold=threshold,
-        temperature=temperature,
-        weight=weight,
-        short_description=short_description,
-        parallel=parallel,
-        pairs=pairs,
-        parameters_filename=parameters_filename
-    )
+    if format_description:
+        try:
+            description = description.format(
+                threshold=threshold,
+                temperature=temperature,
+                weight=weight,
+                short_description=short_description,
+                parallel=parallel,
+                pairs=pairs,
+                parameters_filename=parameters_filename
+            )
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
 
     num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
