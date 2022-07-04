@@ -73,21 +73,21 @@ def main() -> None:
     design = nc.Design(strands)
 
     numpy_constraints: List[NumpyConstraint] = [
-        # dc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
-        # dc.BaseCountConstraint(base='G', high_count=1),
-        # dc.BaseEndConstraint(bases=('C', 'G')),
-        # dc.RunsOfBasesConstraint(['C', 'G'], 4),
-        # dc.RunsOfBasesConstraint(['A', 'T'], 4),
-        # dc.BaseEndConstraint(bases=('A', 'T')),
-        # dc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
-        # dc.BaseAtPositionConstraint(bases='T', position=3),
-        # dc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
-        # dc.RestrictBasesConstraint(bases=['A', 'T', 'C']),
+        nc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
+        # nc.BaseCountConstraint(base='G', high_count=1),
+        # nc.BaseEndConstraint(bases=('C', 'G')),
+        # nc.RunsOfBasesConstraint(['C', 'G'], 4),
+        # nc.RunsOfBasesConstraint(['A', 'T'], 4),
+        # nc.BaseEndConstraint(bases=('A', 'T')),
+        # nc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
+        # nc.BaseAtPositionConstraint(bases='T', position=3),
+        # nc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
+        # nc.RestrictBasesConstraint(bases=['A', 'T', 'C']),
     ]
 
     # def nupack_binding_energy_in_bounds(seq: str) -> bool:
     #     energy = dv.binding_complement(seq, 52)
-    #     dc.logger.debug(f'nupack complement binding energy = {energy}')
+    #     nc.logger.debug(f'nupack complement binding energy = {energy}')
     #     return -11 < energy < -9
     #
     # # list of functions:
@@ -151,7 +151,7 @@ def main() -> None:
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_duplex_constraint,
-        # strand_pairs_rna_duplex_constraint,
+        strand_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
         # nc.domains_not_substrings_of_each_other_constraint(),
     ],
