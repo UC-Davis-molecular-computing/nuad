@@ -583,7 +583,11 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
             return len(self.substrings)
         else:
             # should be a collection
-            first_substring = self.substrings[0]
+            first_substring = ''
+            for sub in self.substrings:
+                first_substring = sub
+                break
+            assert len(first_substring) != 0
             return len(first_substring)
 
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
