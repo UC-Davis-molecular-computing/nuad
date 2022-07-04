@@ -3276,15 +3276,16 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
-        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
+
         for sc_strand in sc_strands_to_include:
-            dsd_strand = dsd_strands_by_name[sc_strand.name]
-            if dsd_strand.idt is not None:
+            nuad_strand = nuad_strands_by_name[sc_strand.name]
+            if nuad_strand.idt is not None:
                 if sc_strand.idt is not None:
                     raise ValueError(f'Cannot assign IDT fields from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has IDT fields '
                                      f'assigned:\n{sc_strand.idt}')
-                sc_strand.idt = dsd_strand.idt.to_scadnano_idt()
+                sc_strand.idt = nuad_strand.idt.to_scadnano_idt()
 
     def assign_modifications_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                                 ignored_strands: Iterable[Strand] = ()) -> None:
@@ -4411,7 +4412,7 @@ def nupack_domain_pair_constraint(
                                 pairs=pairs)
 
 
-def nupack_strand_pair_constraint(
+def nupack_strand_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
         sodium: float = dv.default_sodium,
@@ -4664,7 +4665,7 @@ def rna_duplex_strand_pairs_constraint(
     if description is None:
         description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
 
-    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
+    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
@@ -4766,7 +4767,7 @@ def rna_cofold_strand_pairs_constraint(
     if description is None:
         description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
 
-    num_threads = cpu_count() - 1  # this seems to be slightly faster than using all cores
+    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
