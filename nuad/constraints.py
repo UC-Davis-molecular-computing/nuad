@@ -22,7 +22,7 @@ import os
 import math
 import json
 from typing import List, Set, Optional, Dict, Callable, Iterable, Tuple, Union, Collection, TypeVar, Any, \
-    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Protocol
+    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -41,6 +41,11 @@ import nuad.vienna_nupack as dv
 import nuad.np as dn
 import nuad.modifications as dm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
+
+try:
+    from typing import Protocol
+except ImportError:
+    from typing_extensions import Protocol
 
 # from dsd.stopwatch import Stopwatch
 
