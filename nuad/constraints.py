@@ -47,6 +47,7 @@ try:
 except ImportError:
     from typing_extensions import Protocol
 
+
 # from dsd.stopwatch import Stopwatch
 
 try:
