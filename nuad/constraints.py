@@ -22,7 +22,7 @@ import os
 import math
 import json
 from typing import List, Set, Optional, Dict, Callable, Iterable, Tuple, Union, Collection, TypeVar, Any, \
-    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
+    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Protocol
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -4662,6 +4662,7 @@ def _populate_strand_list_and_pairs(strands: Optional[Iterable[Strand]],
 
     return strands, pairs
 
+
 def strand_pairs_by_lengths(strands: Iterable[Strand]) -> Dict[Tuple[int, int], List[Tuple[Strand, Strand]]]:
     """
     Separates pairs of strands in `strands` by lengths. If there are n different strand lengths
@@ -4680,6 +4681,7 @@ def strand_pairs_by_lengths(strands: Iterable[Strand]) -> Dict[Tuple[int, int], 
         len1, len2 = s1.length(), s2.length()
         pairs[(len1, len2)].append((s1, s2))
     return pairs
+
 
 def strand_pairs_by_number_matching_domains(*, strands: Optional[Iterable[Strand]] = None,
                                             pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None) \
@@ -4722,6 +4724,126 @@ def strand_pairs_by_number_matching_domains(*, strands: Optional[Iterable[Strand
     return strand_pairs
 
 
+class _StrandPairsConstraintCreator(Protocol):
+    # Used to specify type of function that
+    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
+    # and
+    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    # both are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
+    # The Protocol class seems to be available in the typing module, even though the above
+    # documentation seems to indicate it is only in typing_extensions?
+    def __call__(self,
+                 threshold: float,
+                 temperature: float = dv.default_temperature,
+                 weight: float = 1.0,
+                 score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+                 description: Optional[str] = None,
+                 short_description: str = 'rna_dup_strand_pairs',
+                 parallel: bool = False,
+                 pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+                 parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+                 ) -> StrandPairsConstraint: ...
+
+
+def _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator: _StrandPairsConstraintCreator,
+        thresholds: Dict[int, float],
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+):
+    # function to share common code between
+    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
+    # and
+    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    if strands is None and pairs is None:
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
+    elif strands is not None and pairs is not None:
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
+
+    if strands is not None:
+        assert pairs is None
+        pairs = itertools.combinations_with_replacement(strands, 2)
+
+    pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
+    keys = set(pairs_by_matching_domains.keys())
+    if thresholds is not None:
+        thres_keys = set(thresholds.keys())
+        if keys != thres_keys:
+            raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
+                             'which is the set of integers representing the number of matching domains '
+                             'across all pairs of Strands in the parameter pairs, '
+                             f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
+
+    constraints: List[StrandPairsConstraint] = []
+
+    for num_matching_domains, threshold in thresholds.items():
+        pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
+
+        if descriptions is None or num_matching_domains not in descriptions:
+            description = f'RNAduplex energy for pairs strand with {num_matching_domains} ' \
+                          f'matching domains exceeds {threshold} kcal/mol at {temperature} C'
+        else:
+            description = descriptions[num_matching_domains]
+
+        if short_descriptions is None or num_matching_domains not in short_descriptions:
+            short_description = f'RNADup{num_matching_domains}Comp'
+        else:
+            short_description = short_descriptions[num_matching_domains]
+
+        constraint = constraint_creator(
+            threshold=threshold,
+            temperature=temperature,
+            weight=weight,
+            score_transfer_function=score_transfer_function,
+            description=description,
+            short_description=short_description,
+            parallel=parallel,
+            pairs=pairs_with_matching_domains,
+            parameters_filename=parameters_filename,
+        )
+        constraints.append(constraint)
+
+    return constraints
+
+
+def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
+        thresholds: Dict[int, float],
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> List[StrandPairsConstraint]:
+    """
+    Similar to :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
+    """
+    return _strand_pairs_constraints_by_number_matching_domains(
+        rna_cofold_strand_pairs_constraint,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        parameters_filename=parameters_filename,
+    )
+
+
 def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = dv.default_temperature,
@@ -4761,67 +4883,28 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
         strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
                  Mutually exclusive with `pairs`.
-        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`.
-                 Mutually exclusive with `strands`.
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
+               including each strand with itself.
+               Mutually exclusive with `strands`.
         parameters_filename: Name of parameters file for ViennaRNA;
                              default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
 
     Returns:
         list of constraints, one per threshold in `thresholds`
     """
-    if strands is None and pairs is None:
-        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
-    elif strands is not None and pairs is not None:
-        raise ValueError('exactly one of strands or pairs must be specified, but both are')
-
-    if strands is not None:
-        assert pairs is None
-        pairs = itertools.combinations_with_replacement(strands, 2)
-
-    pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
-    keys = set(pairs_by_matching_domains.keys())
-    for param_name, param in [('thresholds', thresholds),
-                              ('descriptions', descriptions),
-                              ('short_descriptions', short_descriptions)]:
-        if param is None:
-            continue
-        param_keys = set(param.keys())
-        if keys != param_keys:
-            raise ValueError(f'The keys of parameter {param} must be exactly {sorted(list(keys))}, '
-                             'which is the set of integers representing the number of matching domains '
-                             'across all pairs of Strands in the parameter pairs, '
-                             f'but instead the keys of {param} is {sorted(list(param_keys))}')
-
-    constraints: List[StrandPairsConstraint] = []
-
-    for num_matching_domains, threshold in thresholds.items():
-        pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
-
-        if descriptions is None or num_matching_domains not in descriptions:
-            description = f'RNAduplex energy for pairs strand with {num_matching_domains} ' \
-                          f'matching domains exceeds {threshold} kcal/mol at {temperature} C'
-        else:
-            description = descriptions[num_matching_domains]
-        
-        if short_descriptions is None or num_matching_domains not in short_descriptions:
-            short_description = f'RNADup{num_matching_domains}Comp'
-        else:
-            short_description = short_descriptions[num_matching_domains]
-
-        constraint = rna_duplex_strand_pairs_constraint(
-            threshold=threshold,
-            temperature=temperature,
-            weight=weight,
-            score_transfer_function=score_transfer_function,
-            description=description,
-            short_description=short_description,
-            parallel=parallel,
-            pairs=pairs_with_matching_domains,
-            parameters_filename=parameters_filename,
-        )
-        constraints.append(constraint)
-
-    return constraints
+    return _strand_pairs_constraints_by_number_matching_domains(
+        rna_duplex_strand_pairs_constraint,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        parameters_filename=parameters_filename,
+    )
 
 
 def rna_duplex_strand_pairs_constraint(
