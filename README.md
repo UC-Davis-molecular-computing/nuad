@@ -187,7 +187,7 @@ See the [CONTRIBUTING document](CONTRIBUTING.md).
 
 ## NUPACK Copyright Notice
 
-Since dsd is distributed with NUPACK, we include the following license
+Since nuad will eventually be distributed with NUPACK, we include the following license
 agreement as required by [NUPACK](http://www.nupack.org/downloads/register).
 
 ### NUPACK Software License Agreement for Non-Commercial Academic Use and Redistribution
