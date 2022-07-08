@@ -2494,10 +2494,10 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             dct[idt_key] = self.idt.to_json_serializable(suppress_indent)
 
         if self.modification_5p is not None:
-            dct[dm.modification_5p_key] = self.modification_5p.to_json_serializable(suppress_indent)
+            dct[dm.modification_5p_key] = self.modification_5p.id
 
         if self.modification_3p is not None:
-            dct[dm.modification_3p_key] = self.modification_3p.to_json_serializable(suppress_indent)
+            dct[dm.modification_3p_key] = self.modification_3p.id
 
         if len(self.modifications_int) > 0:
             mods_dict = {}
