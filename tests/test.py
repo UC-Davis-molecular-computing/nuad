@@ -6,8 +6,8 @@ import numpy
 import xlrd
 
 from nuad import constraints
-import nuad.constraints as dc
-import nuad.search as ds
+import nuad.constraints as nc
+import nuad.search as ns
 import scadnano as sc
 from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
     _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
@@ -62,14 +62,88 @@ def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Stra
     return s
 
 
+class TestSampleSubstrings(unittest.TestCase):
+
+    def test_substrings(self) -> None:
+        sampler = nc.SubstringSampler(supersequence='abcdefghij',
+                                      substring_length=4,
+                                      except_start_indices=[2, 3, 5])
+        self.assertEqual('abcdefghij', sampler.extended_supersequence)
+        self.assertEqual([0, 1, 4, 6], sampler.start_indices)
+
+        # sample lots of substrings to ensure we get them all
+        rng = numpy.random.default_rng(1)
+        substrings = set()
+        for _ in range(100):
+            substrings.add(sampler.sample_substring(rng))
+        substrings = sorted(list(substrings))
+        # abcdefghij
+        # 0123456789
+        #   XX X
+        # abcd
+        #  bcde
+        #     efgh
+        #       ghij
+        self.assertEqual(['abcd', 'bcde', 'efgh', 'ghij'], substrings)
+
+    def test_substrings_circular(self) -> None:
+        sampler_circular = nc.SubstringSampler(supersequence='abcdefghij',
+                                               substring_length=4,
+                                               except_start_indices=[1, 3, 5],
+                                               circular=True)
+        self.assertEqual('abcdefghijabc', sampler_circular.extended_supersequence)
+        self.assertEqual([0, 2, 4, 6, 7, 8, 9], sampler_circular.start_indices)
+
+        # sample lots of substrings to ensure we get them all
+        rng = numpy.random.default_rng(1)
+        substrings = set()
+        for _ in range(100):
+            substrings.add(sampler_circular.sample_substring(rng))
+        substrings = sorted(list(substrings))
+        # abcdefghijabc
+        # 0123456789012
+        #  X X X     X
+        # abcd
+        #   cdef
+        #     efgh
+        #       ghij
+        #        hija
+        #         ijab
+        #          jabc
+        self.assertEqual(['abcd', 'cdef', 'efgh', 'ghij', 'hija', 'ijab', 'jabc'], substrings)
+
+    def test_substrings_circular_except_overlapping_indices(self) -> None:
+        sampler = nc.SubstringSampler(supersequence='abcdefghij',
+                                      substring_length=3,
+                                      except_overlapping_indices=[2, 7],
+                                      circular=True)
+        self.assertEqual('abcdefghijab', sampler.extended_supersequence)
+        self.assertEqual([3, 4, 8, 9], sampler.start_indices)
+
+        # sample lots of substrings to ensure we get them all
+        rng = numpy.random.default_rng(1)
+        substrings = set()
+        for _ in range(100):
+            substrings.add(sampler.sample_substring(rng))
+        substrings = sorted(list(substrings))
+        # abcdefghijabc
+        # 0123456789
+        #   X    X
+        #    def
+        #     efg
+        #         ija
+        #          jab
+        self.assertEqual(['def', 'efg', 'ija', 'jab'], substrings)
+
+
 class TestModifyDesignAfterCreated(unittest.TestCase):
     def setUp(self) -> None:
-        strand = dc.Strand(domain_names=['x', 'y'])
-        self.design = dc.Design(strands=[strand])
+        strand = nc.Strand(domain_names=['x', 'y'])
+        self.design = nc.Design(strands=[strand])
 
     def add_domain(self):
         strand = self.design.strands[0]
-        strand.domains.append(dc.Domain('z'))
+        strand.domains.append(nc.Domain('z'))
         self.design.compute_derived_fields()
         return strand
 
@@ -89,7 +163,7 @@ class TestModifyDesignAfterCreated(unittest.TestCase):
         for domain in strand.domains:
             domain.pool = pool
         rng = numpy.random.default_rng(0)
-        ds.assign_sequences_to_domains_randomly_from_pools(self.design, True, rng)
+        ns.assign_sequences_to_domains_randomly_from_pools(self.design, True, rng)
 
         # assert we don't raise an exception trying to access the sequence of each domain
         s0 = strand.domains[0].sequence  # noqa
@@ -108,8 +182,8 @@ class TestFromScadnanoDesign(unittest.TestCase):
         '''
         helices = [sc.Helix(max_offset=100) for _ in range(2)]
         sc_design = sc.Design(helices=helices)
-        sc_design.strand(0, 0).move(10).cross(1).move(-10)
-        sc_design.strand(0, 10).move(10).cross(1).move(-10)
+        sc_design.draw_strand(0, 0).move(10).cross(1).move(-10)
+        sc_design.draw_strand(0, 10).move(10).cross(1).move(-10)
         s0, s1 = sc_design.strands
         d00: sc.Domain = s0.domains[0]
         d01: sc.Domain = s0.domains[1]
@@ -120,7 +194,7 @@ class TestFromScadnanoDesign(unittest.TestCase):
         d10.set_name('x')
         d11.set_name('y*')
 
-        dsd_design = dc.Design.from_scadnano_design(sc_design)
+        dsd_design = nc.Design.from_scadnano_design(sc_design)
         dsd_d00 = dsd_design.strands[0].domains[0]
         dsd_d01 = dsd_design.strands[0].domains[1]
         dsd_d10 = dsd_design.strands[1].domains[0]
@@ -138,12 +212,12 @@ class TestFromScadnanoDesign(unittest.TestCase):
 class TestExportDNASequences(unittest.TestCase):
 
     def test_idt_bulk_export(self) -> None:
-        custom_idt = dc.IDTFields(scale='100nm', purification='PAGE')
+        custom_idt = nc.IDTFields(scale='100nm', purification='PAGE')
         strands = [
-            dc.Strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt),
-            dc.Strand(domain_names=['d', 'c*', 'e', 'f'], name='s1'),
+            nc.Strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt),
+            nc.Strand(domain_names=['d', 'c*', 'e', 'f'], name='s1'),
         ]
-        design = dc.Design(strands)
+        design = nc.Design(strands)
         #        a      b       c       d       e           f
         seqs = ['AACG', 'CCGT', 'GGTA', 'TTAC', 'AAAACCCC', 'AAAAGGGG']
         # s0: AACG-ACGG-GGTA-GTAA
@@ -174,11 +248,11 @@ class TestExportDNASequences(unittest.TestCase):
 
             strands = []
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
-                idt = dc.IDTFields()
-                strand = dc.Strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
+                idt = nc.IDTFields()
+                strand = nc.Strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
                 strand.domains[0].set_fixed_sequence('T' * strand_len)
                 strands.append(strand)
-            design = dc.Design(strands=strands)
+            design = nc.Design(strands=strands)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
 
@@ -203,13 +277,13 @@ class TestExportDNASequences(unittest.TestCase):
 class TestNumpyConstraints(unittest.TestCase):
     def test_NearestNeighborEnergyConstraint_raises_exception_if_energies_in_wrong_order(self) -> None:
         with self.assertRaises(ValueError):
-            dc.NearestNeighborEnergyConstraint(-10, -15)
+            nc.NearestNeighborEnergyConstraint(-10, -15)
 
 
 class TestInsertDomains(unittest.TestCase):
     def setUp(self) -> None:
-        strands = [dc.Strand(domain_names=['a', 'b*', 'c', 'd*'])]
-        self.design = dc.Design(strands)
+        strands = [nc.Strand(domain_names=['a', 'b*', 'c', 'd*'])]
+        self.design = nc.Design(strands)
         self.strand = self.design.strands[0]
 
     def test_no_insertion(self) -> None:

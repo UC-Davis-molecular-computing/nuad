@@ -63,7 +63,8 @@ release = version
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
-    # 'sphinx.ext.napoleon',
+    'sphinx.ext.napoleon',
+    # 'sphinxcontrib.napoleon', # found this online but 'sphinx.ext.napoleon' seems to work
 ]
 
 autodoc_typehints = "description"

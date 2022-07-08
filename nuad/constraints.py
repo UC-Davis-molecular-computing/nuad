@@ -18,6 +18,7 @@ https://github.com/UC-Davis-molecular-computing/dsd#data-model
 from __future__ import annotations
 
 import dataclasses
+import enum
 import os
 import math
 import json
@@ -42,14 +43,19 @@ import nuad.np as dn
 import nuad.modifications as dm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
+# need typing_extensions package prior to Python 3.8 to get Protocol object
+try:
+    from typing import Protocol
+except ImportError:
+    from typing_extensions import Protocol
+
 # from dsd.stopwatch import Stopwatch
-from nuad.modifications import Modification5Prime
 
 try:
     from scadnano import Design as scDesign  # type: ignore
     from scadnano import Strand as scStrand  # type: ignore
     from scadnano import Domain as scDomain  # type: ignore
-    from scadnano import m13 as m13_func  # type: ignore
+    from scadnano import m13 as m13_sc  # type: ignore
 except ModuleNotFoundError:
     scDesign = Any
     scStrand = Any
@@ -68,6 +74,9 @@ starred_domain_indices_key = 'starred_domain_indices'
 group_key = 'group'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
+substring_length_key = 'substring_length'
+except_indices_key = 'except_start_indices'
+circular_key = 'circular'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
 replace_with_close_sequences_key = 'replace_with_close_sequences'
@@ -99,11 +108,99 @@ Set of all DNA bases.
 """
 
 
-def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(range(5514, 5557))) \
-        -> List[str]:
+class M13Variant(enum.Enum):
+    """Variants of M13mp18 viral genome. "Standard" variant is p7249. Other variants are longer."""
+
+    p7249 = "p7249"
+    """"Standard" variant of M13mp18; 7249 bases long, available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7249
+
+    https://www.neb.com/products/n4040-m13mp18-single-stranded-dna
+
+    http://www.bayoubiolabs.com/biochemicat/vectors/pUCM13/ 
+    """  # noqa
+
+    p7560 = "p7560"
+    """Variant of M13mp18 that is 7560 bases long. Available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7560
     """
+
+    p8064 = "p8064"
+    """Variant of M13mp18 that is 8064 bases long. Available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
+    """
+
+    def length(self) -> int:
+        """
+        :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
+        """
+        if self is M13Variant.p7249:
+            return 7249
+        if self is M13Variant.p7560:
+            return 7560
+        if self is M13Variant.p8064:
+            return 8064
+        raise AssertionError('should be unreachable')
+
+    def scadnano_variant(self) -> sc.M13Variant:
+        if self is M13Variant.p7249:
+            return sc.M13Variant.p7249
+        if self is M13Variant.p7560:
+            return sc.M13Variant.p7560
+        if self is M13Variant.p8064:
+            return sc.M13Variant.p8064
+        raise AssertionError('should be unreachable')
+
+
+def m13(rotation: int = 5587, variant: M13Variant = M13Variant.p7249) -> str:
+    """
+    The M13mp18 DNA sequence (commonly called simply M13).
+
+    By default, starts from cyclic rotation 5587 
+    (with 0-based indexing;  commonly this is called rotation 5588, which assumes that indexing begins at 1), 
+    as defined in
+    `GenBank <https://www.ncbi.nlm.nih.gov/nuccore/X02513.1>`_.
+
+    By default, returns the "standard" variant of consisting of 7249 bases, sold by companies such as  
+    `Tilibit <https://cdn.shopify.com/s/files/1/1299/5863/files/Product_Sheet_single-stranded_scaffold_DNA_type_7249_M1-10.pdf?14656642867652657391>`_
+    and
+    `New England Biolabs <https://www.neb.com/~/media/nebus/page%20images/tools%20and%20resources/interactive%20tools/dna%20sequences%20and%20maps/m13mp18_map.pdf>`_.
+
+    The actual M13 DNA strand itself is circular, 
+    so assigning this sequence to the scaffold :any:`Strand` in a :any:`Design`
+    means that the "5' end" of the scaffold :any:`Strand` 
+    (which is a fiction since the actual circular DNA strand has no endpoint) 
+    will have the sequence starting at position 5587 starting at the displayed 5' in scadnano,
+    assigned until the displayed 3' end. 
+    Assuming the displayed scaffold :any:`Strand` has length :math:`n < 7249`, then a loopout of length 
+    :math:`7249 - n` consisting of the undisplayed bases will be present in the actual DNA structure.
+    For a more detailed discussion of why this particular rotation of M13 is chosen,
+    see 
+    `Supplementary Note S8 <http://www.dna.caltech.edu/Papers/DNAorigami-supp1.linux.pdf>`_ 
+    in
+    [`Folding DNA to create nanoscale shapes and patterns. Paul W. K. Rothemund, Nature 440:297-302 (2006) <http://www.nature.com/nature/journal/v440/n7082/abs/nature04586.html>`_].
+
+    :param rotation: rotation of circular strand. Valid values are 0 through length-1.
+    :param variant: variant of M13 strand to use
+    :return: M13 strand sequence
+    """  # noqa
+    return m13_sc(rotation=rotation, variant=variant.scadnano_variant())
+
+
+def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(range(5514, 5557)),
+                             variant: M13Variant = M13Variant.p7249) -> List[str]:
+    """
+    *WARNING*: This function was previously recommended to use with :any:`DomainPool.possible_sequences`
+    to specify possible rotations of M13 to use. However, it creates a large file size to
+    write all those sequences to disk on every update in the search. A better method now exists
+    to specify this, which is to specify a :any:`SubstringSampler` object as the value for
+    :any:`DomainPool.possible_sequences` instead of calling this function.
+
     Return all substrings of the M13mp18 DNA sequence of length `length`,
-    except those overlapping indices in `except_indices`.
+    except those overlapping indices in `except_start_indices`.
 
     This is useful with the field :data:`DomainPool.possible_sequences`, when one strand in the
     :any:`Design` represents a small portion of the full M13 sequence,
@@ -141,24 +238,26 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
         (When using 1-based indexing, these are indices 5515-5557.)
         For example, if `length` = 10, then the *starting* indices of substrings will avoid the list
         [5505, 5506, ..., 5556]
+    :param variant:
+        :any:`M13Variant` to use
     :return:
         All substrings of the M13mp18 DNA sequence, except those that overlap any index in
-        `except_indices`.
+        `except_start_indices`.
     """
-    m13 = m13_func(rotation=0)
+    m13_ = m13_sc(rotation=0, variant=variant)
 
     # append start of m13 to its end to help with circular condition
-    m13 += m13[:length]
+    m13_ += m13_[:length]
 
-    # add indices beyond 7248 that correspond to indices near the start
+    # add indices beyond 7248 (or whatever is the length) that correspond to indices near the start
     extended_except_indices = list(except_indices)
     for skip_idx in except_indices:
         if skip_idx > length:
             break
-        extended_except_indices.append(skip_idx + 7249)
+        extended_except_indices.append(skip_idx + variant.length())
 
     substrings = []
-    for start_idx in range(7249):
+    for start_idx in range(variant.length()):
         end_idx = start_idx + length
         skip = False
         for skip_idx in except_indices:
@@ -167,7 +266,7 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
                 break
         if skip:
             continue
-        substring = m13[start_idx:end_idx]
+        substring = m13_[start_idx:end_idx]
         substrings.append(substring)
 
     return substrings
@@ -583,7 +682,8 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
             return len(self.substrings)
         else:
             # should be a collection
-            first_substring = self.substrings[0]
+            first_substring = list(self.substrings)[0]
+            assert len(first_substring) != 0
             return len(first_substring)
 
     def remove_violating_sequences(self, seqs: dn.DNASeqList) -> dn.DNASeqList:
@@ -662,9 +762,144 @@ log_numpy_generation = True
 
 # log_numpy_generation = False
 
+@dataclass
+class SubstringSampler(JSONSerializable):
+    """
+    A :any:`SubstringSampler` is an object for specifying a common case for the field
+    :data:`DomainPool.possible_sequences`, namely where we want the set of possible sequences to be
+    all (or many) substrings of a single longer sequence.
+
+    For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
+    If for example 300 consecutive bases of M13 will be used in the design, and we want to choose
+    the rotation, but disallow the substring of length 300 to overlap the hairpin at indices
+    5514-5556, then one would do the following
+
+    .. code-block:: python
+
+        possible_sequences = SubstringSampler(
+            supersequence=m13(), substring_length=300,
+            except_overlapping_indices=range(5514, 5557), circular=True)
+        pool = DomainPool('M13 rotations', possible_sequences=possible_sequences)
+    """
+
+    supersequence: str
+    """The longer sequence from which to sample substrings."""
+
+    substring_length: int
+    """Length of substrings to sample."""
+
+    except_start_indices: Tuple[int]
+    """*Start* indices in :data:`SubstringSampler.supersequence` to avoid. In the constructor this can 
+    be specified directly. Another option (mutually exclusive with the parameter `except_start_indices`)
+    is to specify the parameter `except_overlapping_indices`, which sets 
+    :data:`SubstringSampler.except_start_indices` so that substrings will not intersect any indices in 
+    `except_overlapping_indices`."""
+
+    circular: bool
+    """Whether :data:`SubstringSampler.supersequence` is circular. If so, then we can sample indices near the 
+    end and the substrings will start at the end and wrap around to the start."""
+
+    start_indices: List[int]
+    """List of start indices from which to sample when calling :meth:`SubstringSampler.sample_substring`.
+    Computed in constructor from other arguments."""
+
+    extended_supersequence: str
+    """If :data:`SubstringSampler.circular` is True, then this is :data:`SubstringSampler.supersequence` extended
+    by its own prefix of length :data:`SubstringSampler.substring_length` to make sampling easier.
+    Otherwise it is simply identical to :data:`SubstringSampler.supersequence`.
+    Computed in constructor from other arguments."""
+
+    def __init__(self, supersequence: str, substring_length: int,
+                 except_start_indices: Optional[Iterable[int]] = None,
+                 except_overlapping_indices: Optional[Iterable[int]] = None,
+                 circular: bool = False,
+                 ) -> None:
+        if except_start_indices is not None and except_overlapping_indices is not None:
+            raise ValueError('at most one of the parameters except_start_indices or '
+                             'except_overlapping_indices can be specified, but you specified both of them')
+        self.supersequence = supersequence
+        self.substring_length = substring_length
+        self.circular = circular
+
+        if except_start_indices is not None:
+            self.except_start_indices = tuple(sorted(except_start_indices))
+        elif except_overlapping_indices is None:
+            self.except_start_indices = cast((), Tuple[int])
+        else:
+            # compute except_start_indices based on except_overlapping_indices
+            assert except_start_indices is None
+            assert except_overlapping_indices is not None
+            set_except_start_indices: Set[int] = set()  # type: ignore
+            # iterate over all idx's in except_overlapping_indices and add all indices between
+            # it and the index `self.substring_length + 1` less than it
+            for skip_idx in except_overlapping_indices:
+                min_start_idx_overlapping_skip_idx = max(0, skip_idx - self.substring_length + 1)
+                indices_to_avoid = range(min_start_idx_overlapping_skip_idx, skip_idx + 1)
+                set_except_start_indices.update(indices_to_avoid)
+            except_start_indices = sorted(list(set_except_start_indices))
+            self.except_start_indices = tuple(except_start_indices)
+
+        # compute set of indices to sample from
+        self.extended_supersequence = self.supersequence
+        if self.circular:
+            indices = set(range(len(self.supersequence)))
+
+            # append start of sequence to its end to help with circular condition
+            self.extended_supersequence += self.supersequence[:self.substring_length - 1]
+
+            # add indices beyond supersequence length that correspond to indices near the start
+            extended_except_indices = list(self.except_start_indices)
+            for skip_idx in self.except_start_indices:
+                if skip_idx >= self.substring_length - 1:
+                    break
+                extended_except_indices.append(skip_idx + len(self.supersequence))
+
+            indices -= set(extended_except_indices)
+        else:
+            indices = set(range(len(self.supersequence) - self.substring_length + 1))
+            indices -= set(self.except_start_indices)
+
+        self.start_indices = sorted(list(indices))  # need to sort so iteration order does not affect RNG
+
+    def sample_substring(self, rng: np.random.Generator) -> str:
+        """
+        :return: a random substring of :data:`SubstringSampler.supersequence`
+                 of length :data:`SubstringSampler.substring_length`.
+        """
+        start_idx = rng.choice(self.start_indices)
+        end_idx = start_idx + self.substring_length
+        supersequence = self.extended_supersequence if self.circular else self.supersequence
+        assert end_idx <= len(supersequence)
+        substring = supersequence[start_idx:end_idx]
+        return substring
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any]) -> SubstringSampler:
+        sequence = json_map[name_key]
+        substring_length = json_map[length_key]
+        except_indices = json_map[replace_with_close_sequences_key]
+        circular = json_map[circular_key]
+        return SubstringSampler(supersequence=sequence, substring_length=substring_length,
+                                except_start_indices=except_indices, circular=circular)
+
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:  # noqa
+        except_indices = NoIndent(self.except_start_indices) if suppress_indent else self.except_start_indices
+        dct = {
+            sequence_key: self.supersequence,
+            substring_length_key: self.substring_length,
+            except_indices_key: except_indices,
+            circular_key: self.circular,
+        }
+        return dct
+
+    def to_json(self) -> str:
+        json_map = self.to_json_serializable(suppress_indent=False)
+        json_str = json.dumps(json_map, indent=2)
+        return json_str
+
 
 @dataclass
-class DomainPool:
+class DomainPool(JSONSerializable):
     """
     Represents a group of related :any:`Domain`'s that share common properties in their sequence design,
     such as length of DNA sequence, or bounds on nearest-neighbor duplex energy.
@@ -682,7 +917,7 @@ class DomainPool:
     
     Should be None if :data:`DomainPool.possible_sequences` is specified."""
 
-    possible_sequences: Optional[List[str]] = None
+    possible_sequences: Union[None, List[str], SubstringSampler] = None
     """
     If specified, all other fields except :data:`DomainPool.name` and :data:`DomainPool.length` 
     are ignored.
@@ -690,6 +925,10 @@ class DomainPool:
     During the search, if a domain with this :any:`DomainPool` is picked to have its sequence changed,
     then a sequence will be picked uniformly at random from this list. Note that no 
     :any:`NumpyConstraint`'s or :any:`SequenceConstraint`'s will be applied.
+    
+    Alternatively, the field can be an instance of :any:`SubstringSampler` for the common case that the 
+    set of possible sequences is simple all (or many) substrings of a single longer sequence.
+    For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
     
     Should be None if :data:`DomainPool.length` is specified.
     """
@@ -746,17 +985,19 @@ class DomainPool:
             raise ValueError('exactly one of length or possible_sequences should be specified')
 
         if self.possible_sequences is not None:
-            if len(self.possible_sequences) == 0:
-                raise ValueError('possible_sequences cannot be empty')
-            first_seq = self.possible_sequences[0]
-            length = len(first_seq)
-            for idx, seq in enumerate(self.possible_sequences):
-                if len(seq) != length:
-                    raise ValueError(f'ERROR: Two sequences in possible_sequence of DomainPool '
-                                     f'"{self.name}" have different lengths:\n'
-                                     f'first sequence {first_seq} has length {length}\n'
-                                     f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
-                                     f'has length {len(seq)}.')
+            if isinstance(self.possible_sequences, list):
+                if len(self.possible_sequences) == 0:
+                    raise ValueError('possible_sequences cannot be empty')
+                first_seq = self.possible_sequences[0]
+                length = len(first_seq)
+                for idx, seq in enumerate(self.possible_sequences):
+                    if len(seq) != length:
+                        raise ValueError(f'ERROR: Two sequences in possible_sequence of DomainPool '
+                                         f'"{self.name}" have different lengths:\n'
+                                         f'first sequence {first_seq} has length {length}\n'
+                                         f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
+                                         f'has length {len(seq)}.')
+
             if len(self.numpy_constraints) > 0:
                 raise ValueError('If possible_sequences is specified, then numpy_constraints should '
                                  'not be specified.')
@@ -824,30 +1065,50 @@ class DomainPool:
         json_str = json.dumps(json_map, indent=2)
         return json_str
 
-    def to_json_serializable(self, suppress_indent: bool) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
+        if self.length is None and self.possible_sequences is None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
+        if self.length is not None and self.possible_sequences is not None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
+
         dct = {
             name_key: self.name,
-            length_key: self.length,
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
-            # with M13, writing possible_sequences greatly increases the size of the file
-            # possible_sequences_key: self.possible_sequences,
         }
-        # return NoIndent(dct) if suppress_indent else dct
+
+        if self.possible_sequences is not None:
+            if isinstance(self.possible_sequences, list):
+                dct[possible_sequences_key] = self.possible_sequences
+            elif isinstance(self.possible_sequences, SubstringSampler):
+                dct[possible_sequences_key] = self.possible_sequences.to_json_serializable(suppress_indent)
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self.possible_sequences)}: {self.possible_sequences}')
+        if self.length is not None:
+            dct[length_key] = self.length
+
         return dct
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
         name = json_map[name_key]
-        length = json_map[length_key]
         replace_with_close_sequences = json_map[replace_with_close_sequences_key]
         hamming_probability_str_keys = json_map[hamming_probability_key]
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
-        # possible_sequences = json_map[possible_sequences_key]
+
+        length = json_map.get(length_key)
+        possible_sequences = json_map.get(possible_sequences_key)
+
+        if length is None and possible_sequences is None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
+        if length is not None and possible_sequences is not None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
+
         return DomainPool(name=name, length=length,
                           replace_with_close_sequences=replace_with_close_sequences,
                           hamming_probability=hamming_probability,
-                          # possible_sequences=possible_sequences,
+                          possible_sequences=possible_sequences,
                           )
 
     def _first_sequence_satisfying_sequence_constraints(self, seqs: dn.DNASeqList) -> Optional[str]:
@@ -900,7 +1161,13 @@ class DomainPool:
             :py:data:`DomainPool.sequence_constraints`
         """
         if self.possible_sequences is not None:
-            sequence = rng.choice(self.possible_sequences)
+            if isinstance(self.possible_sequences, list):
+                sequence = rng.choice(self.possible_sequences)
+            elif isinstance(self.possible_sequences, SubstringSampler):
+                sequence = self.possible_sequences.sample_substring(rng)
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self.possible_sequences)}: {self.possible_sequences}')
         elif not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
@@ -1405,7 +1672,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
             to it, or it has a :any:`DomainPool`.
         """
         return self._sequence is not None or (
-            self._pool is not None and self._pool.length is not None) or self.length is not None
+                self._pool is not None and self._pool.length is not None) or self.length is not None
 
     def get_length(self) -> int:
         """
@@ -1425,10 +1692,16 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         if self._pool.length is not None:
             return self._pool.length
         elif self._pool.possible_sequences is not None:
-            # if pool.length is None, then possible_sequences must be not None and nonempty,
-            # so we consult its first sequence to inquire about the length
-            assert len(self._pool.possible_sequences) > 0
-            return len(self._pool.possible_sequences[0])
+            if isinstance(self._pool.possible_sequences, list):
+                # if pool.length is None, then possible_sequences must be not None and nonempty,
+                # so we consult its first sequence to inquire about the length
+                assert len(self._pool.possible_sequences) > 0
+                return len(self._pool.possible_sequences[0])
+            elif isinstance(self._pool.possible_sequences, SubstringSampler):
+                return self._pool.possible_sequences.substring_length
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}')
 
     def sequence(self) -> str:
         """
@@ -1449,7 +1722,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
                              f'{self._sequence}')
         if self.has_length() and len(new_sequence) != self.get_length():
             raise ValueError(
-                f'new_sequence={new_sequence} is not the correct length; '
+                f'incorrect length for new_sequence={new_sequence};\n'
                 f'it is length {len(new_sequence)}, but this domain is length {self.get_length()}')
         # Check that total length of subdomains (if used) adds up domain length.
         if len(self._subdomains) != 0:
@@ -2249,10 +2522,10 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             dct[idt_key] = self.idt.to_json_serializable(suppress_indent)
 
         if self.modification_5p is not None:
-            dct[dm.modification_5p_key] = self.modification_5p.to_json_serializable(suppress_indent)
+            dct[dm.modification_5p_key] = self.modification_5p.id
 
         if self.modification_3p is not None:
-            dct[dm.modification_3p_key] = self.modification_3p.to_json_serializable(suppress_indent)
+            dct[dm.modification_3p_key] = self.modification_3p.id
 
         if len(self.modifications_int) > 0:
             mods_dict = {}
@@ -4623,6 +4896,292 @@ def rna_duplex_domain_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
+# def _normalize_threshold_as_dict(threshold: Union[float, Dict[int, float]],
+#                                  keys: Iterable[int]) -> Dict[int, float]:
+#     # normalize threshold to be a dict with keys `keys` if it is not already, mapping all of the keys
+#     # to its float value if it is a float
+#     if isinstance(threshold, float):
+#         thresholds: Dict[int, float] = {}
+#         for num_comp_domains in keys:
+#             thresholds[num_comp_domains] = threshold
+#         return thresholds
+#     else:
+#         return threshold
+
+
+def _populate_strand_list_and_pairs(strands: Optional[Iterable[Strand]],
+                                    pairs: Optional[Iterable[Tuple[Strand, Strand]]]) \
+        -> Tuple[List[Strand], List[Tuple[Strand, Strand]]]:
+    # assert exactly one of strands or pairs is None, then populate the other since both are used below
+    # also normalize both to be a list instead of iterable
+    if strands is None and pairs is None:
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
+    elif strands is not None and pairs is not None:
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
+    elif strands is not None:
+        assert pairs is None
+        if not isinstance(strands, list):
+            strands = list(strands)
+        pairs = list(itertools.combinations_with_replacement(strands, 2))
+    elif pairs is not None:
+        assert strands is None
+        if not isinstance(pairs, list):
+            pairs = list(pairs)
+        strand_names: Set[str] = set()
+        strands = []
+        for s1, s2 in pairs:
+            for strand in [s1, s2]:
+                if strand.name not in strand_names:
+                    strand_names.add(strand.name)
+                    strands.append(strand)
+
+    return strands, pairs
+
+
+def strand_pairs_by_lengths(strands: Iterable[Strand]) -> Dict[Tuple[int, int], List[Tuple[Strand, Strand]]]:
+    """
+    Separates pairs of strands in `strands` by lengths. If there are n different strand lengths
+    in `strands`, then there are ((n+1) choose 2) keys in the returned dict, one for each pair of
+    lengths ``(len1, len2)``, including pairs where ``len1 == len2``. This key maps to a list of all pairs of
+    strands in `strands` where the first strand has length ``len1`` and the second has length ``len2``.
+
+    Args:
+        strands: strands to check
+
+    Returns:
+        dict mapping pairs of lengths to pairs of strands from `strands` having those respective lengths
+    """
+    pairs: Dict[Tuple[int, int], List[Tuple[Strand, Strand]]] = defaultdict(list)
+    for s1, s2 in itertools.combinations_with_replacement(strands, 2):
+        len1, len2 = s1.length(), s2.length()
+        pairs[(len1, len2)].append((s1, s2))
+    return pairs
+
+
+def strand_pairs_by_number_matching_domains(*, strands: Optional[Iterable[Strand]] = None,
+                                            pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None) \
+        -> Dict[int, List[Tuple[Strand, Strand]]]:
+    """
+    Utility function for calculating number of complementary domains betweeen several pairs of strands.
+
+    Args:
+        strands: list of :any:`Strand`'s in which to find pairs. Mutually exclusive with `pairs`.
+        pairs: list of pairs of strands. Mutually exclusive with `strands`.
+
+    Returns:
+        dict mapping integer (number of complementary :any:`Domain`'s) to the list of pairs of strands
+        in `strands` with that number of complementary domains
+    """
+    strands, pairs = _populate_strand_list_and_pairs(strands, pairs)
+
+    # This reduces the number of times we have to create these sets from quadratic to linear
+    unstarred_domains_sets = {}
+    starred_domains_sets = {}
+    for strand in strands:
+        unstarred_domains_sets[strand.name] = strand.unstarred_domains_set()
+        starred_domains_sets[strand.name] = strand.starred_domains_set()
+
+    # determine which pairs of strands have each number of complementary domains
+    strand_pairs: Dict[int, List[Tuple[Strand, Strand]]] = defaultdict(list)
+    for strand1, strand2 in pairs:
+        domains1_unstarred = unstarred_domains_sets[strand1.name]
+        domains2_unstarred = unstarred_domains_sets[strand2.name]
+        domains1_starred = starred_domains_sets[strand1.name]
+        domains2_starred = starred_domains_sets[strand2.name]
+
+        complementary_domains = (domains1_unstarred & domains2_starred) | \
+                                (domains2_unstarred & domains1_starred)
+        complementary_domain_names = [domain.name for domain in complementary_domains]
+        num_complementary_domains = len(complementary_domain_names)
+
+        strand_pairs[num_complementary_domains].append((strand1, strand2))
+
+    return strand_pairs
+
+
+class _StrandPairsConstraintCreator(Protocol):
+    # Used to specify type of function that
+    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
+    # and
+    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    # both are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
+    # The Protocol class seems to be available in the typing module, even though the above
+    # documentation seems to indicate it is only in typing_extensions?
+    def __call__(self,
+                 threshold: float,
+                 temperature: float = dv.default_temperature,
+                 weight: float = 1.0,
+                 score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+                 description: Optional[str] = None,
+                 short_description: str = 'rna_dup_strand_pairs',
+                 parallel: bool = False,
+                 pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+                 parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+                 ) -> StrandPairsConstraint: ...
+
+
+def _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator: _StrandPairsConstraintCreator,
+        thresholds: Dict[int, float],
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+):
+    # function to share common code between
+    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
+    # and
+    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    if strands is None and pairs is None:
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
+    elif strands is not None and pairs is not None:
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
+
+    if strands is not None:
+        assert pairs is None
+        pairs = itertools.combinations_with_replacement(strands, 2)
+
+    pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
+    keys = set(pairs_by_matching_domains.keys())
+    if thresholds is not None:
+        thres_keys = set(thresholds.keys())
+        if keys != thres_keys:
+            raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
+                             'which is the set of integers representing the number of matching domains '
+                             'across all pairs of Strands in the parameter pairs, '
+                             f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
+
+    constraints: List[StrandPairsConstraint] = []
+
+    for num_matching_domains, threshold in thresholds.items():
+        pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
+
+        if descriptions is None or num_matching_domains not in descriptions:
+            description = f'RNAduplex energy for pairs strand with {num_matching_domains} ' \
+                          f'matching domains exceeds {threshold} kcal/mol at {temperature} C'
+        else:
+            description = descriptions[num_matching_domains]
+
+        if short_descriptions is None or num_matching_domains not in short_descriptions:
+            short_description = f'RNADup{num_matching_domains}Comp'
+        else:
+            short_description = short_descriptions[num_matching_domains]
+
+        constraint = constraint_creator(
+            threshold=threshold,
+            temperature=temperature,
+            weight=weight,
+            score_transfer_function=score_transfer_function,
+            description=description,
+            short_description=short_description,
+            parallel=parallel,
+            pairs=pairs_with_matching_domains,
+            parameters_filename=parameters_filename,
+        )
+        constraints.append(constraint)
+
+    return constraints
+
+
+def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
+        thresholds: Dict[int, float],
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> List[StrandPairsConstraint]:
+    """
+    Similar to :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
+    """
+    return _strand_pairs_constraints_by_number_matching_domains(
+        rna_cofold_strand_pairs_constraint,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        parameters_filename=parameters_filename,
+    )
+
+
+def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
+        thresholds: Dict[int, float],
+        temperature: float = dv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        -> List[StrandPairsConstraint]:
+    """
+    Convenience function for creating many constraints as returned by
+    :meth:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
+    based on number of matching (complementary) domains between pairs of strands.
+
+    Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
+
+    Exactly one of `strands` or `pairs` must be specified. If `strands`, then all pairs of strands
+    (including a strand with itself) will be checked; otherwise only those pairs in `pairs` will be checked.
+
+    It is also common to set different thresholds according to the lengths of the strands.
+    This can be done by calling :meth:`strand_pairs_by_lengths` to separate first by lengths
+    in a dict mapping length pairs to strand pairs,
+    then calling this function once for each (key, value) in that dict, giving the value
+    (which is a list of pairs of strands) as the `pairs` parameter to this function.
+
+    Args:
+        thresholds: Energy thresholds in kcal/mol. If `k` domains are complementary between the strands,
+                    then use threshold `thresholds[k]`.
+        temperature: Temperature in Celsius.
+        weight: How much to weigh this :any:`Constraint`.
+        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        descriptions: Long descriptions of constraint suitable for putting into constraint report.
+        short_descriptions: Short descriptions of constraint suitable for logging to stdout.
+        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
+                 Mutually exclusive with `pairs`.
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
+               including each strand with itself.
+               Mutually exclusive with `strands`.
+        parameters_filename: Name of parameters file for ViennaRNA;
+                             default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+
+    Returns:
+        list of constraints, one per threshold in `thresholds`
+    """
+    return _strand_pairs_constraints_by_number_matching_domains(
+        rna_duplex_strand_pairs_constraint,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        parameters_filename=parameters_filename,
+    )
+
+
 def rna_duplex_strand_pairs_constraint(
         threshold: float,
         temperature: float = dv.default_temperature,
@@ -4638,8 +5197,14 @@ def rna_duplex_strand_pairs_constraint(
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     Vienna RNA's RNAduplex executable.
 
+    Often one wishes to let the threshold depend on how many domains match between a pair of strands.
+    The function :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains` is useful
+    for this purpose, returning a list of :any:`StrandPairsConstraint`'s such as those returned by this
+    function, one for each possible number of matching domains.
+
     :param threshold:
-        Energy threshold in kcal/mol
+        Energy threshold in kcal/mol. If a float, this is used for all pairs of strands.
+        If a dict[int, float], interpreted to mean that
     :param temperature:
         Temperature in Celsius.
     :param weight:
@@ -4653,7 +5218,7 @@ def rna_duplex_strand_pairs_constraint(
     :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
     :param parameters_filename:
         Name of parameters file for ViennaRNA;
         default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
@@ -4663,7 +5228,8 @@ def rna_duplex_strand_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = f'RNAduplex energy for some strand pairs exceeds {threshold} kcal/mol'
+        description = f'RNAduplex energy for some strand pairs exceeds ' \
+                      f'{threshold} kcal/mol at {temperature} C'
 
     num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
@@ -4940,7 +5506,7 @@ class _AdjacentDuplexType(Enum):
     #                     |||||
     #                    #-----]
     #                       c*
-    BOTTOM_RIGHT_EMPTY = auto()
+    BOTTOM_RIGHT_EMPTY = auto()  # type: ignore
 
     # d* exist, but d does not exist
     #                       c
@@ -4948,7 +5514,7 @@ class _AdjacentDuplexType(Enum):
     #                     |||||
     #                    #-----##----#
     #                       c*    d*
-    BOTTOM_RIGHT_DANGLE = auto()
+    BOTTOM_RIGHT_DANGLE = auto()  # type: ignore
 
     # d* and d exist, but e does not exist
     # d is is the 5' end of the strand
@@ -4957,7 +5523,7 @@ class _AdjacentDuplexType(Enum):
     #                     |||||  ||||
     #                    #-----##----#
     #                       c*    d*
-    TOP_RIGHT_5P = auto()
+    TOP_RIGHT_5P = auto()  # type: ignore
 
     # d* and d and e exist, but e* does not exist
     #                           #
@@ -4970,7 +5536,7 @@ class _AdjacentDuplexType(Enum):
     #                     ||||| ||||
     #                    #-----#----#
     #                       c*    d*
-    TOP_RIGHT_OVERHANG = auto()
+    TOP_RIGHT_OVERHANG = auto()  # type: ignore
 
     # d* and d and e and e* exist
     #
@@ -4987,7 +5553,7 @@ class _AdjacentDuplexType(Enum):
     #                     |||||  ||||
     #                    #-----###---#
     #                       c*    d*
-    TOP_RIGHT_BOUND_OVERHANG = auto()
+    TOP_RIGHT_BOUND_OVERHANG = auto()  # type: ignore
 
 
 default_interior_to_strand_probability = 0.98
@@ -5152,7 +5718,7 @@ class BasePairType(Enum):
                   a*      b*       c*     d*
     """
 
-    INTERIOR_TO_STRAND = auto()
+    INTERIOR_TO_STRAND = auto()  # type: ignore
     """
     Base pair is located inside of a strand but not next
     to a base pair that resides on the end of a strand.
@@ -5171,7 +5737,7 @@ class BasePairType(Enum):
 
     """
 
-    ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()
+    ADJACENT_TO_EXTERIOR_BASE_PAIR = auto()  # type: ignore
     """
     Base pair is located inside of a strand and next
     to a base pair that resides on the end of a strand.
@@ -5200,7 +5766,7 @@ class BasePairType(Enum):
         base pair
     """
 
-    BLUNT_END = auto()
+    BLUNT_END = auto()  # type: ignore
     """
     Base pair is located at the end of both strands.
 
@@ -5214,7 +5780,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    NICK_3P = auto()
+    NICK_3P = auto()  # type: ignore
     """
     Base pair is located at a nick involving the 3' end of the strand.
 
@@ -5229,7 +5795,7 @@ class BasePairType(Enum):
 
     """
 
-    NICK_5P = auto()
+    NICK_5P = auto()  # type: ignore
     """
     Base pair is located at a nick involving the 3' end of the strand.
 
@@ -5243,7 +5809,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    DANGLE_3P = auto()
+    DANGLE_3P = auto()  # type: ignore
     """
     Base pair is located at the end of a strand with a dangle on the
     3' end.
@@ -5258,7 +5824,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    DANGLE_5P = auto()
+    DANGLE_5P = auto()  # type: ignore
     """
     Base pair is located at the end of a strand with a dangle on the
     5' end.
@@ -5273,7 +5839,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    DANGLE_5P_3P = auto()
+    DANGLE_5P_3P = auto()  # type: ignore
     """
     Base pair is located with dangle at both the 3' and 5' end.
 
@@ -5287,7 +5853,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    OVERHANG_ON_THIS_STRAND_3P = auto()
+    OVERHANG_ON_THIS_STRAND_3P = auto()  # type: ignore
     """
     Base pair is next to a overhang on the 3' end.
 
@@ -5306,7 +5872,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    OVERHANG_ON_THIS_STRAND_5P = auto()
+    OVERHANG_ON_THIS_STRAND_5P = auto()  # type: ignore
     """
     Base pair is next to a overhang on the 5' end.
 
@@ -5325,7 +5891,7 @@ class BasePairType(Enum):
               #
     """
 
-    OVERHANG_ON_ADJACENT_STRAND_3P = auto()
+    OVERHANG_ON_ADJACENT_STRAND_3P = auto()  # type: ignore
     """
     Base pair 3' end interfaces with an overhang.
 
@@ -5346,7 +5912,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    OVERHANG_ON_ADJACENT_STRAND_5P = auto()
+    OVERHANG_ON_ADJACENT_STRAND_5P = auto()  # type: ignore
     """
     Base pair 5' end interfaces with an overhang.
 
@@ -5367,7 +5933,7 @@ class BasePairType(Enum):
                 #
     """
 
-    OVERHANG_ON_BOTH_STRANDS_3P = auto()
+    OVERHANG_ON_BOTH_STRANDS_3P = auto()  # type: ignore
     """
     Base pair's 3' end is an overhang and adjacent strand also has an overhang.
 
@@ -5386,7 +5952,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    OVERHANG_ON_BOTH_STRANDS_5P = auto()
+    OVERHANG_ON_BOTH_STRANDS_5P = auto()  # type: ignore
     """
     Base pair's 5' end is an overhang and adjacent strand also has an overhang.
 
@@ -5405,7 +5971,7 @@ class BasePairType(Enum):
               # #
     """
 
-    THREE_ARM_JUNCTION = auto()
+    THREE_ARM_JUNCTION = auto()  # type: ignore
     """
     Base pair is located next to a three-arm-junction.
 
@@ -5425,7 +5991,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    FOUR_ARM_JUNCTION = auto()
+    FOUR_ARM_JUNCTION = auto()  # type: ignore
     """
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
 
@@ -5448,14 +6014,14 @@ class BasePairType(Enum):
               # #
     """
 
-    FIVE_ARM_JUNCTION = auto()
+    FIVE_ARM_JUNCTION = auto()  # type: ignore
     """
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`OTHER`).
 
     Base pair is located next to a five-arm-junction.
     """
 
-    MISMATCH = auto()
+    MISMATCH = auto()  # type: ignore
     """
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`DANGLE_5P_3P`).
 
@@ -5471,7 +6037,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    BULGE_LOOP_3P = auto()
+    BULGE_LOOP_3P = auto()  # type: ignore
     """
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_3P`).
 
@@ -5487,7 +6053,7 @@ class BasePairType(Enum):
          base pair
     """
 
-    BULGE_LOOP_5P = auto()
+    BULGE_LOOP_5P = auto()  # type: ignore
     """
     TODO: Currently, this case isn't actually detected (considered as :py:attr:`OVERHANG_ON_BOTH_STRANDS_5P`).
 
@@ -5503,14 +6069,14 @@ class BasePairType(Enum):
          base pair
     """
 
-    UNPAIRED = auto()
+    UNPAIRED = auto()  # type: ignore
     """
     Base is unpaired.
 
     Probabilities specify how unlikely a base is to be paired with another base.
     """
 
-    OTHER = auto()
+    OTHER = auto()  # type: ignore
     """
     Other base pair types.
     """
