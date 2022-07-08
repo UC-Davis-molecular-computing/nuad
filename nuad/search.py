@@ -1122,7 +1122,7 @@ def _setup_directories(params: SearchParameters) -> _Directories:
         os.makedirs(out_directory)
     if not params.restart:
         import time
-        time.sleep(0.5) # for some reason often get file write errors without this pause
+        time.sleep(0.5)  # for some reason often get file write errors without this pause
         _clear_directory(out_directory, params.force_overwrite)
 
     directories = _Directories(out=out_directory, debug=params.debug_log_file,
