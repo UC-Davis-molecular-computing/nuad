@@ -791,7 +791,7 @@ class SubstringSampler(JSONSerializable):
     """Whether :data:`SubstringSampler.supersequence` is circular. If so, then we can sample indices near the 
     end and the substrings will start at the end and wrap around to the start."""
 
-    start_indices: List[int]
+    start_indices: Tuple[int]
     """List of start indices from which to sample when calling :meth:`SubstringSampler.sample_substring`.
     Computed in constructor from other arguments."""
 
@@ -851,7 +851,10 @@ class SubstringSampler(JSONSerializable):
             indices = set(range(len(self.supersequence) - self.substring_length + 1))
             indices -= set(self.except_start_indices)
 
-        self.start_indices = sorted(list(indices))  # need to sort so iteration order does not affect RNG
+        # need to sort so iteration order does not affect RNG
+        indices_list: List[int] = list(indices)
+        indices_list.sort()
+        self.start_indices = tuple(indices_list)
 
     def sample_substring(self, rng: np.random.Generator) -> str:
         """
