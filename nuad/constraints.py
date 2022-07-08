@@ -75,7 +75,7 @@ group_key = 'group'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
 substring_length_key = 'substring_length'
-except_indices_key = 'except_indices'
+except_indices_key = 'except_start_indices'
 circular_key = 'circular'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
@@ -200,7 +200,7 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
     :any:`DomainPool.possible_sequences` instead of calling this function.
 
     Return all substrings of the M13mp18 DNA sequence of length `length`,
-    except those overlapping indices in `except_indices`.
+    except those overlapping indices in `except_start_indices`.
 
     This is useful with the field :data:`DomainPool.possible_sequences`, when one strand in the
     :any:`Design` represents a small portion of the full M13 sequence,
@@ -242,7 +242,7 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
         :any:`M13Variant` to use
     :return:
         All substrings of the M13mp18 DNA sequence, except those that overlap any index in
-        `except_indices`.
+        `except_start_indices`.
     """
     m13_ = m13_sc(rotation=0, variant=variant)
 
@@ -777,7 +777,8 @@ class SubstringSampler(JSONSerializable):
     .. code-block:: python
 
         possible_sequences = SubstringSampler(
-            supersequence=m13(), substring_length=300, except_indices=range(5514, 5557), circular=True)
+            supersequence=m13(), substring_length=300,
+            except_overlapping_indices=range(5514, 5557), circular=True)
         pool = DomainPool('M13 rotations', possible_sequences=possible_sequences)
     """
 
@@ -787,8 +788,12 @@ class SubstringSampler(JSONSerializable):
     substring_length: int
     """Length of substrings to sample."""
 
-    except_indices: Tuple[int]
-    """Indices in :data:`SubstringSampler.supersequence` to avoid"""
+    except_start_indices: Tuple[int]
+    """*Start* indices in :data:`SubstringSampler.supersequence` to avoid. In the constructor this can 
+    be specified directly. Another option (mutually exclusive with the parameter `except_start_indices`)
+    is to specify the parameter `except_overlapping_indices`, which sets 
+    :data:`SubstringSampler.except_start_indices` so that substrings will not intersect any indices in 
+    `except_overlapping_indices`."""
 
     circular: bool
     """Whether :data:`SubstringSampler.supersequence` is circular. If so, then we can sample indices near the 
@@ -804,12 +809,35 @@ class SubstringSampler(JSONSerializable):
     Otherwise it is simply identical to :data:`SubstringSampler.supersequence`.
     Computed in constructor from other arguments."""
 
-    def __init__(self, supersequence: str, substring_length: int, except_indices: Iterable[int] = (),
-                 circular: bool = False) -> None:
+    def __init__(self, supersequence: str, substring_length: int,
+                 except_start_indices: Optional[Iterable[int]] = None,
+                 except_overlapping_indices: Optional[Iterable[int]] = None,
+                 circular: bool = False,
+                 ) -> None:
+        if except_start_indices is not None and except_overlapping_indices is not None:
+            raise ValueError('at most one of the parameters except_start_indices or '
+                             'except_overlapping_indices can be specified, but you specified both of them')
         self.supersequence = supersequence
         self.substring_length = substring_length
-        self.except_indices = tuple(except_indices)
         self.circular = circular
+
+        if except_start_indices is not None:
+            self.except_start_indices = tuple(sorted(except_start_indices))
+        elif except_overlapping_indices is None:
+            self.except_start_indices = cast((), Tuple[int])
+        else:
+            # compute except_start_indices based on except_overlapping_indices
+            assert except_start_indices is None
+            assert except_overlapping_indices is not None
+            set_except_start_indices: Set[int] = set()  # type: ignore
+            # iterate over all idx's in except_overlapping_indices and add all indices between
+            # it and the index `self.substring_length + 1` less than it
+            for skip_idx in except_overlapping_indices:
+                min_start_idx_overlapping_skip_idx = max(0, skip_idx - self.substring_length + 1)
+                indices_to_avoid = range(min_start_idx_overlapping_skip_idx, skip_idx + 1)
+                set_except_start_indices.update(indices_to_avoid)
+            except_start_indices = sorted(list(set_except_start_indices))
+            self.except_start_indices = tuple(except_start_indices)
 
         # compute set of indices to sample from
         self.extended_supersequence = self.supersequence
@@ -820,8 +848,8 @@ class SubstringSampler(JSONSerializable):
             self.extended_supersequence += self.supersequence[:self.substring_length - 1]
 
             # add indices beyond supersequence length that correspond to indices near the start
-            extended_except_indices = list(self.except_indices)
-            for skip_idx in self.except_indices:
+            extended_except_indices = list(self.except_start_indices)
+            for skip_idx in self.except_start_indices:
                 if skip_idx >= self.substring_length - 1:
                     break
                 extended_except_indices.append(skip_idx + len(self.supersequence))
@@ -829,7 +857,7 @@ class SubstringSampler(JSONSerializable):
             indices -= set(extended_except_indices)
         else:
             indices = set(range(len(self.supersequence) - self.substring_length + 1))
-            indices -= set(self.except_indices)
+            indices -= set(self.except_start_indices)
 
         self.start_indices = sorted(list(indices))  # need to sort so iteration order does not affect RNG
 
@@ -852,10 +880,10 @@ class SubstringSampler(JSONSerializable):
         except_indices = json_map[replace_with_close_sequences_key]
         circular = json_map[circular_key]
         return SubstringSampler(supersequence=sequence, substring_length=substring_length,
-                                except_indices=except_indices, circular=circular)
+                                except_start_indices=except_indices, circular=circular)
 
     def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:  # noqa
-        except_indices = NoIndent(self.except_indices) if suppress_indent else self.except_indices
+        except_indices = NoIndent(self.except_start_indices) if suppress_indent else self.except_start_indices
         dct = {
             sequence_key: self.supersequence,
             substring_length_key: self.substring_length,

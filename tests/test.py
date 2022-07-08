@@ -67,7 +67,7 @@ class TestSampleSubstrings(unittest.TestCase):
     def test_substrings(self) -> None:
         sampler = nc.SubstringSampler(supersequence='abcdefghij',
                                       substring_length=4,
-                                      except_indices=[2, 3, 5])
+                                      except_start_indices=[2, 3, 5])
         self.assertEqual('abcdefghij', sampler.extended_supersequence)
         self.assertEqual([0, 1, 4, 6], sampler.start_indices)
 
@@ -89,7 +89,7 @@ class TestSampleSubstrings(unittest.TestCase):
     def test_substrings_circular(self) -> None:
         sampler_circular = nc.SubstringSampler(supersequence='abcdefghij',
                                                substring_length=4,
-                                               except_indices=[1, 3, 5],
+                                               except_start_indices=[1, 3, 5],
                                                circular=True)
         self.assertEqual('abcdefghijabc', sampler_circular.extended_supersequence)
         self.assertEqual([0, 2, 4, 6, 7, 8, 9], sampler_circular.start_indices)
@@ -111,6 +111,29 @@ class TestSampleSubstrings(unittest.TestCase):
         #         ijab
         #          jabc
         self.assertEqual(['abcd', 'cdef', 'efgh', 'ghij', 'hija', 'ijab', 'jabc'], substrings)
+
+    def test_substrings_circular_except_overlapping_indices(self) -> None:
+        sampler = nc.SubstringSampler(supersequence='abcdefghij',
+                                      substring_length=3,
+                                      except_overlapping_indices=[2, 7],
+                                      circular=True)
+        self.assertEqual('abcdefghijab', sampler.extended_supersequence)
+        self.assertEqual([3, 4, 8, 9], sampler.start_indices)
+
+        # sample lots of substrings to ensure we get them all
+        rng = numpy.random.default_rng(1)
+        substrings = set()
+        for _ in range(100):
+            substrings.add(sampler.sample_substring(rng))
+        substrings = sorted(list(substrings))
+        # abcdefghijabc
+        # 0123456789
+        #   X    X
+        #    def
+        #     efg
+        #         ija
+        #          jab
+        self.assertEqual(['def', 'efg', 'ija', 'jab'], substrings)
 
 
 class TestModifyDesignAfterCreated(unittest.TestCase):
