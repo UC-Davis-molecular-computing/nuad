@@ -796,9 +796,9 @@ class SubstringSampler(JSONSerializable):
     Computed in constructor from other arguments."""
 
     extended_supersequence: str
-    """If :data:`SubstringSampler.circular` is True, then this is :data:`SubstringSampler.supersequence` extended
-    by its own prefix of length :data:`SubstringSampler.substring_length` to make sampling easier.
-    Otherwise it is simply identical to :data:`SubstringSampler.supersequence`.
+    """If :data:`SubstringSampler.circular` is True, then this is :data:`SubstringSampler.supersequence` 
+    extended by its own prefix of length :data:`SubstringSampler.substring_length - 1`,
+    to make sampling easier. Otherwise it is simply identical to :data:`SubstringSampler.supersequence`.
     Computed in constructor from other arguments."""
 
     def __init__(self, supersequence: str, substring_length: int,
