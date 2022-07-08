@@ -18,6 +18,7 @@ https://github.com/UC-Davis-molecular-computing/dsd#data-model
 from __future__ import annotations
 
 import dataclasses
+import enum
 import os
 import math
 import json
@@ -42,11 +43,11 @@ import nuad.np as dn
 import nuad.modifications as dm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
+# need typing_extensions package prior to Python 3.8 to get Protocol object
 try:
     from typing import Protocol
 except ImportError:
     from typing_extensions import Protocol
-
 
 # from dsd.stopwatch import Stopwatch
 
@@ -54,7 +55,7 @@ try:
     from scadnano import Design as scDesign  # type: ignore
     from scadnano import Strand as scStrand  # type: ignore
     from scadnano import Domain as scDomain  # type: ignore
-    from scadnano import m13 as m13_func  # type: ignore
+    from scadnano import m13 as m13_sc  # type: ignore
 except ModuleNotFoundError:
     scDesign = Any
     scStrand = Any
@@ -73,6 +74,9 @@ starred_domain_indices_key = 'starred_domain_indices'
 group_key = 'group'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
+substring_length_key = 'substring_length'
+except_indices_key = 'except_indices'
+circular_key = 'circular'
 strand_name_in_strand_pool_key = 'strand_name'
 sequences_key = 'sequences'
 replace_with_close_sequences_key = 'replace_with_close_sequences'
@@ -104,9 +108,97 @@ Set of all DNA bases.
 """
 
 
-def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(range(5514, 5557))) \
-        -> List[str]:
+class M13Variant(enum.Enum):
+    """Variants of M13mp18 viral genome. "Standard" variant is p7249. Other variants are longer."""
+
+    p7249 = "p7249"
+    """"Standard" variant of M13mp18; 7249 bases long, available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7249
+
+    https://www.neb.com/products/n4040-m13mp18-single-stranded-dna
+
+    http://www.bayoubiolabs.com/biochemicat/vectors/pUCM13/ 
+    """  # noqa
+
+    p7560 = "p7560"
+    """Variant of M13mp18 that is 7560 bases long. Available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7560
     """
+
+    p8064 = "p8064"
+    """Variant of M13mp18 that is 8064 bases long. Available from, for example
+
+    https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
+    """
+
+    def length(self) -> int:
+        """
+        :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
+        """
+        if self is M13Variant.p7249:
+            return 7249
+        if self is M13Variant.p7560:
+            return 7560
+        if self is M13Variant.p8064:
+            return 8064
+        raise AssertionError('should be unreachable')
+
+    def scadnano_variant(self) -> sc.M13Variant:
+        if self is M13Variant.p7249:
+            return sc.M13Variant.p7249
+        if self is M13Variant.p7560:
+            return sc.M13Variant.p7560
+        if self is M13Variant.p8064:
+            return sc.M13Variant.p8064
+        raise AssertionError('should be unreachable')
+
+
+def m13(rotation: int = 5587, variant: M13Variant = M13Variant.p7249) -> str:
+    """
+    The M13mp18 DNA sequence (commonly called simply M13).
+
+    By default, starts from cyclic rotation 5587 
+    (with 0-based indexing;  commonly this is called rotation 5588, which assumes that indexing begins at 1), 
+    as defined in
+    `GenBank <https://www.ncbi.nlm.nih.gov/nuccore/X02513.1>`_.
+
+    By default, returns the "standard" variant of consisting of 7249 bases, sold by companies such as  
+    `Tilibit <https://cdn.shopify.com/s/files/1/1299/5863/files/Product_Sheet_single-stranded_scaffold_DNA_type_7249_M1-10.pdf?14656642867652657391>`_
+    and
+    `New England Biolabs <https://www.neb.com/~/media/nebus/page%20images/tools%20and%20resources/interactive%20tools/dna%20sequences%20and%20maps/m13mp18_map.pdf>`_.
+
+    The actual M13 DNA strand itself is circular, 
+    so assigning this sequence to the scaffold :any:`Strand` in a :any:`Design`
+    means that the "5' end" of the scaffold :any:`Strand` 
+    (which is a fiction since the actual circular DNA strand has no endpoint) 
+    will have the sequence starting at position 5587 starting at the displayed 5' in scadnano,
+    assigned until the displayed 3' end. 
+    Assuming the displayed scaffold :any:`Strand` has length :math:`n < 7249`, then a loopout of length 
+    :math:`7249 - n` consisting of the undisplayed bases will be present in the actual DNA structure.
+    For a more detailed discussion of why this particular rotation of M13 is chosen,
+    see 
+    `Supplementary Note S8 <http://www.dna.caltech.edu/Papers/DNAorigami-supp1.linux.pdf>`_ 
+    in
+    [`Folding DNA to create nanoscale shapes and patterns. Paul W. K. Rothemund, Nature 440:297-302 (2006) <http://www.nature.com/nature/journal/v440/n7082/abs/nature04586.html>`_].
+
+    :param rotation: rotation of circular strand. Valid values are 0 through length-1.
+    :param variant: variant of M13 strand to use
+    :return: M13 strand sequence
+    """  # noqa
+    return m13_sc(rotation=rotation, variant=variant.scadnano_variant())
+
+
+def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(range(5514, 5557)),
+                             variant: M13Variant = M13Variant.p7249) -> List[str]:
+    """
+    *WARNING*: This function was previously recommended to use with :any:`DomainPool.possible_sequences`
+    to specify possible rotations of M13 to use. However, it creates a large file size to
+    write all those sequences to disk on every update in the search. A better method now exists
+    to specify this, which is to specify a :any:`SubstringSampler` object as the value for
+    :any:`DomainPool.possible_sequences` instead of calling this function.
+
     Return all substrings of the M13mp18 DNA sequence of length `length`,
     except those overlapping indices in `except_indices`.
 
@@ -146,24 +238,26 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
         (When using 1-based indexing, these are indices 5515-5557.)
         For example, if `length` = 10, then the *starting* indices of substrings will avoid the list
         [5505, 5506, ..., 5556]
+    :param variant:
+        :any:`M13Variant` to use
     :return:
         All substrings of the M13mp18 DNA sequence, except those that overlap any index in
         `except_indices`.
     """
-    m13 = m13_func(rotation=0)
+    m13_ = m13_sc(rotation=0, variant=variant)
 
     # append start of m13 to its end to help with circular condition
-    m13 += m13[:length]
+    m13_ += m13_[:length]
 
-    # add indices beyond 7248 that correspond to indices near the start
+    # add indices beyond 7248 (or whatever is the length) that correspond to indices near the start
     extended_except_indices = list(except_indices)
     for skip_idx in except_indices:
         if skip_idx > length:
             break
-        extended_except_indices.append(skip_idx + 7249)
+        extended_except_indices.append(skip_idx + variant.length())
 
     substrings = []
-    for start_idx in range(7249):
+    for start_idx in range(variant.length()):
         end_idx = start_idx + length
         skip = False
         for skip_idx in except_indices:
@@ -172,7 +266,7 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
                 break
         if skip:
             continue
-        substring = m13[start_idx:end_idx]
+        substring = m13_[start_idx:end_idx]
         substrings.append(substring)
 
     return substrings
@@ -668,9 +762,116 @@ log_numpy_generation = True
 
 # log_numpy_generation = False
 
+@dataclass
+class SubstringSampler(JSONSerializable):
+    """
+    A :any:`SubstringSampler` is an object for specifying a common case for the field
+    :data:`DomainPool.possible_sequences`, namely where we want the set of possible sequences to be
+    all (or many) substrings of a single longer sequence.
+
+    For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
+    If for example 300 consecutive bases of M13 will be used, in the design, and we want to choose
+    the rotation, but disallow the substring of length 300 to overlap the hairpin at indices
+    5514-5556, then one would do the following
+
+    .. code-block:: python
+
+        possible_sequences = SubstringSampler(
+            supersequence=m13(), substring_length=300, except_indices=range(5514, 5557), circular=True)
+        pool = DomainPool('M13 rotations', possible_sequences=possible_sequences)
+    """
+
+    supersequence: str
+    """The longer sequence from which to sample substrings."""
+
+    substring_length: int
+    """Length of substrings to sample."""
+
+    except_indices: Tuple[int]
+    """Indices in :data:`SubstringSampler.supersequence` to avoid"""
+
+    circular: bool
+    """Whether :data:`SubstringSampler.supersequence` is circular. If so, then we can sample indices near the 
+    end and the substrings will start at the end and wrap around to the start."""
+
+    start_indices: List[int]
+    """List of start indices from which to sample when calling :meth:`SubstringSampler.sample_substring`.
+    Computed in constructor from other arguments."""
+
+    extended_supersequence: str
+    """If :data:`SubstringSampler.circular` is True, then this is :data:`SubstringSampler.supersequence` extended
+    by its own prefix of length :data:`SubstringSampler.substring_length` to make sampling easier.
+    Otherwise it is simply identical to :data:`SubstringSampler.supersequence`.
+    Computed in constructor from other arguments."""
+
+    def __init__(self, supersequence: str, substring_length: int, except_indices: Iterable[int] = (),
+                 circular: bool = False) -> None:
+        self.supersequence = supersequence
+        self.substring_length = substring_length
+        self.except_indices = tuple(except_indices)
+        self.circular = circular
+
+        # compute set of indices to sample from
+        self.extended_supersequence = self.supersequence
+        if self.circular:
+            indices = set(range(len(self.supersequence)))
+
+            # append start of sequence to its end to help with circular condition
+            self.extended_supersequence += self.supersequence[:self.substring_length - 1]
+
+            # add indices beyond supersequence length that correspond to indices near the start
+            extended_except_indices = list(self.except_indices)
+            for skip_idx in self.except_indices:
+                if skip_idx >= self.substring_length - 1:
+                    break
+                extended_except_indices.append(skip_idx + len(self.supersequence))
+
+            indices -= set(extended_except_indices)
+        else:
+            indices = set(range(len(self.supersequence) - self.substring_length + 1))
+            indices -= set(self.except_indices)
+
+        self.start_indices = sorted(list(indices))  # need to sort so iteration order does not affect RNG
+
+    def sample_substring(self, rng: np.random.Generator) -> str:
+        """
+        :return: a random substring of :data:`SubstringSampler.supersequence`
+                 of length :data:`SubstringSampler.substring_length`.
+        """
+        start_idx = rng.choice(self.start_indices)
+        end_idx = start_idx + self.substring_length
+        supersequence = self.extended_supersequence if self.circular else self.supersequence
+        assert end_idx <= len(supersequence)
+        substring = supersequence[start_idx:end_idx]
+        return substring
+
+    @staticmethod
+    def from_json_serializable(json_map: Dict[str, Any]) -> SubstringSampler:
+        sequence = json_map[name_key]
+        substring_length = json_map[length_key]
+        except_indices = json_map[replace_with_close_sequences_key]
+        circular = json_map[circular_key]
+        return SubstringSampler(supersequence=sequence, substring_length=substring_length,
+                                except_indices=except_indices, circular=circular)
+
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:  # noqa
+        except_indices = NoIndent(self.except_indices) if suppress_indent else self.except_indices
+        dct = {
+            sequence_key: self.supersequence,
+            substring_length_key: self.substring_length,
+            except_indices_key: except_indices,
+            circular_key: self.circular,
+        }
+        return dct
+
+    def to_json(self) -> str:
+        json_map = self.to_json_serializable(suppress_indent=False)
+        json_str = json.dumps(json_map, indent=2)
+        return json_str
+
 
 @dataclass
-class DomainPool:
+class DomainPool(JSONSerializable):
     """
     Represents a group of related :any:`Domain`'s that share common properties in their sequence design,
     such as length of DNA sequence, or bounds on nearest-neighbor duplex energy.
@@ -688,7 +889,7 @@ class DomainPool:
     
     Should be None if :data:`DomainPool.possible_sequences` is specified."""
 
-    possible_sequences: Optional[List[str]] = None
+    possible_sequences: Union[None, List[str], SubstringSampler] = None
     """
     If specified, all other fields except :data:`DomainPool.name` and :data:`DomainPool.length` 
     are ignored.
@@ -696,6 +897,10 @@ class DomainPool:
     During the search, if a domain with this :any:`DomainPool` is picked to have its sequence changed,
     then a sequence will be picked uniformly at random from this list. Note that no 
     :any:`NumpyConstraint`'s or :any:`SequenceConstraint`'s will be applied.
+    
+    Alternatively, the field can be an instance of :any:`SubstringSampler` for the common case that the 
+    set of possible sequences is simple all (or many) substrings of a single longer sequence.
+    For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
     
     Should be None if :data:`DomainPool.length` is specified.
     """
@@ -752,17 +957,19 @@ class DomainPool:
             raise ValueError('exactly one of length or possible_sequences should be specified')
 
         if self.possible_sequences is not None:
-            if len(self.possible_sequences) == 0:
-                raise ValueError('possible_sequences cannot be empty')
-            first_seq = self.possible_sequences[0]
-            length = len(first_seq)
-            for idx, seq in enumerate(self.possible_sequences):
-                if len(seq) != length:
-                    raise ValueError(f'ERROR: Two sequences in possible_sequence of DomainPool '
-                                     f'"{self.name}" have different lengths:\n'
-                                     f'first sequence {first_seq} has length {length}\n'
-                                     f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
-                                     f'has length {len(seq)}.')
+            if isinstance(self.possible_sequences, list):
+                if len(self.possible_sequences) == 0:
+                    raise ValueError('possible_sequences cannot be empty')
+                first_seq = self.possible_sequences[0]
+                length = len(first_seq)
+                for idx, seq in enumerate(self.possible_sequences):
+                    if len(seq) != length:
+                        raise ValueError(f'ERROR: Two sequences in possible_sequence of DomainPool '
+                                         f'"{self.name}" have different lengths:\n'
+                                         f'first sequence {first_seq} has length {length}\n'
+                                         f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
+                                         f'has length {len(seq)}.')
+
             if len(self.numpy_constraints) > 0:
                 raise ValueError('If possible_sequences is specified, then numpy_constraints should '
                                  'not be specified.')
@@ -830,30 +1037,50 @@ class DomainPool:
         json_str = json.dumps(json_map, indent=2)
         return json_str
 
-    def to_json_serializable(self, suppress_indent: bool) -> Dict[str, Any]:  # noqa
+    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:
+        if self.length is None and self.possible_sequences is None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
+        if self.length is not None and self.possible_sequences is not None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
+
         dct = {
             name_key: self.name,
-            length_key: self.length,
             replace_with_close_sequences_key: self.replace_with_close_sequences,
             hamming_probability_key: self.hamming_probability,
-            # with M13, writing possible_sequences greatly increases the size of the file
-            # possible_sequences_key: self.possible_sequences,
         }
-        # return NoIndent(dct) if suppress_indent else dct
+
+        if self.possible_sequences is not None:
+            if isinstance(self.possible_sequences, list):
+                dct[possible_sequences_key] = self.possible_sequences
+            elif isinstance(self.possible_sequences, SubstringSampler):
+                dct[possible_sequences_key] = self.possible_sequences.to_json_serializable(suppress_indent)
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self.possible_sequences)}: {self.possible_sequences}')
+        if self.length is not None:
+            dct[length_key] = self.length
+
         return dct
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any]) -> DomainPool:
         name = json_map[name_key]
-        length = json_map[length_key]
         replace_with_close_sequences = json_map[replace_with_close_sequences_key]
         hamming_probability_str_keys = json_map[hamming_probability_key]
         hamming_probability = {int(key): val for key, val in hamming_probability_str_keys.items()}
-        # possible_sequences = json_map[possible_sequences_key]
+
+        length = json_map.get(length_key)
+        possible_sequences = json_map.get(possible_sequences_key)
+
+        if length is None and possible_sequences is None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
+        if length is not None and possible_sequences is not None:
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
+
         return DomainPool(name=name, length=length,
                           replace_with_close_sequences=replace_with_close_sequences,
                           hamming_probability=hamming_probability,
-                          # possible_sequences=possible_sequences,
+                          possible_sequences=possible_sequences,
                           )
 
     def _first_sequence_satisfying_sequence_constraints(self, seqs: dn.DNASeqList) -> Optional[str]:
@@ -906,7 +1133,13 @@ class DomainPool:
             :py:data:`DomainPool.sequence_constraints`
         """
         if self.possible_sequences is not None:
-            sequence = rng.choice(self.possible_sequences)
+            if isinstance(self.possible_sequences, list):
+                sequence = rng.choice(self.possible_sequences)
+            elif isinstance(self.possible_sequences, SubstringSampler):
+                sequence = self.possible_sequences.sample_substring(rng)
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self.possible_sequences)}: {self.possible_sequences}')
         elif not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
@@ -1431,10 +1664,16 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         if self._pool.length is not None:
             return self._pool.length
         elif self._pool.possible_sequences is not None:
-            # if pool.length is None, then possible_sequences must be not None and nonempty,
-            # so we consult its first sequence to inquire about the length
-            assert len(self._pool.possible_sequences) > 0
-            return len(self._pool.possible_sequences[0])
+            if isinstance(self._pool.possible_sequences, list):
+                # if pool.length is None, then possible_sequences must be not None and nonempty,
+                # so we consult its first sequence to inquire about the length
+                assert len(self._pool.possible_sequences) > 0
+                return len(self._pool.possible_sequences[0])
+            elif isinstance(self._pool.possible_sequences, SubstringSampler):
+                return self._pool.possible_sequences.substring_length
+            else:
+                raise ValueError('possible_sequences should be list of strings or SuperSequence but is '
+                                 f'{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}')
 
     def sequence(self) -> str:
         """
@@ -1455,7 +1694,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
                              f'{self._sequence}')
         if self.has_length() and len(new_sequence) != self.get_length():
             raise ValueError(
-                f'new_sequence={new_sequence} is not the correct length; '
+                f'incorrect length for new_sequence={new_sequence};\n'
                 f'it is length {len(new_sequence)}, but this domain is length {self.get_length()}')
         # Check that total length of subdomains (if used) adds up domain length.
         if len(self._subdomains) != 0:
