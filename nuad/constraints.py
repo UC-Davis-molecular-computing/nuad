@@ -770,7 +770,7 @@ class SubstringSampler(JSONSerializable):
     all (or many) substrings of a single longer sequence.
 
     For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
-    If for example 300 consecutive bases of M13 will be used, in the design, and we want to choose
+    If for example 300 consecutive bases of M13 will be used in the design, and we want to choose
     the rotation, but disallow the substring of length 300 to overlap the hairpin at indices
     5514-5556, then one would do the following
 
