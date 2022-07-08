@@ -169,15 +169,7 @@ def m13(rotation: int = 5587, variant: M13Variant = M13Variant.p7249) -> str:
     and
     `New England Biolabs <https://www.neb.com/~/media/nebus/page%20images/tools%20and%20resources/interactive%20tools/dna%20sequences%20and%20maps/m13mp18_map.pdf>`_.
 
-    The actual M13 DNA strand itself is circular, 
-    so assigning this sequence to the scaffold :any:`Strand` in a :any:`Design`
-    means that the "5' end" of the scaffold :any:`Strand` 
-    (which is a fiction since the actual circular DNA strand has no endpoint) 
-    will have the sequence starting at position 5587 starting at the displayed 5' in scadnano,
-    assigned until the displayed 3' end. 
-    Assuming the displayed scaffold :any:`Strand` has length :math:`n < 7249`, then a loopout of length 
-    :math:`7249 - n` consisting of the undisplayed bases will be present in the actual DNA structure.
-    For a more detailed discussion of why this particular rotation of M13 is chosen,
+    For a more detailed discussion of why the default rotation 5587 of M13 is used,
     see 
     `Supplementary Note S8 <http://www.dna.caltech.edu/Papers/DNAorigami-supp1.linux.pdf>`_ 
     in
