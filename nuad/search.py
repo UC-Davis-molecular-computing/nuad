@@ -1468,27 +1468,27 @@ def _log_constraint_summary(*, params: SearchParameters,
                             violation_set_new: nc.ViolationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    score_header = '\niteration|updates|opt score||new score|'
-    all_constraints_header = '|'.join(
-        f'{constraint.short_description}' for constraint in params.constraints)
-    header = score_header + all_constraints_header
+    # score_header = '\niteration|updates|opt score||new score|'
+    # all_constraints_header = '|'.join(
+    #     f'{constraint.short_description}' for constraint in params.constraints)
+    # header = score_header + all_constraints_header
 
     score_opt = violation_set_opt.total_score()
     score_new = violation_set_new.total_score()
     dec_opt = max(1, math.ceil(math.log(1 / score_opt, 10)) + 2) if score_opt > 0 else 1
     dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
-    score_str = f'{iteration:9}|{num_new_optimal:7}|' \
-                f'{score_opt :9.{dec_opt}f}||' \
-                f'{score_new :9.{dec_new}f}|'  # \
-
-    all_constraints_strs = []
-    for constraint in params.constraints:
-        score = violation_set_new.score_of_constraint(constraint)
-        length = len(constraint.short_description)
-        num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
-        constraint_str = f'{score:{length}.{num_decimals}f}'
-        all_constraints_strs.append(constraint_str)
-    all_constraints_str = '|'.join(all_constraints_strs)
+    # score_str = f'{iteration:9}|{num_new_optimal:7}|' \
+    #             f'{score_opt :9.{dec_opt}f}||' \
+    #             f'{score_new :9.{dec_new}f}|'  # \
+    #
+    # all_constraints_strs = []
+    # for constraint in params.constraints:
+    #     score = violation_set_new.score_of_constraint(constraint)
+    #     length = len(constraint.short_description)
+    #     num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+    #     constraint_str = f'{score:{length}.{num_decimals}f}'
+    #     all_constraints_strs.append(constraint_str)
+    # all_constraints_str = '|'.join(all_constraints_strs)
 
     # logger.info(header + '\n' + score_str + all_constraints_str)
 
@@ -1497,8 +1497,8 @@ def _log_constraint_summary(*, params: SearchParameters,
     tb.PRESERVE_WHITESPACE = True
     row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
                                                            for constraint in params.constraints]
-    iteration_str = f'{iteration:9}'
-    num_new_optimal_str = f'{num_new_optimal:6}'
+    # iteration_str = f'{iteration:9}'
+    # num_new_optimal_str = f'{num_new_optimal:6}'
     score_opt_str = f'{score_opt :9.{dec_opt}f}'
     score_new_str = f'{score_new :9.{dec_new}f}'
     row2 = [iteration, num_new_optimal, score_opt_str, score_new_str] + all_constraints_strs  # type:ignore
