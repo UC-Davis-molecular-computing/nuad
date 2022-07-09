@@ -704,7 +704,7 @@ class _Directories:
 
 
 def _check_design(design: nc.Design) -> None:
-    # verify design is legal
+    # verify design is legal in senses not already checked
 
     for strand in design.strands:
         for domain in strand.domains:
@@ -965,8 +965,6 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
-    design.check_all_subdomain_graphs_acyclic()
-    design.check_all_subdomain_graphs_uniquely_assignable()
 
     if params.random_seed is not None:
         logger.info(f'using random seed of {params.random_seed}; '
@@ -976,6 +974,10 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
     # StrandPool that contains them.
     # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
     design.compute_derived_fields()
+
+    design.check_all_subdomain_graphs_acyclic()
+    design.check_all_subdomain_graphs_uniquely_assignable()
+    design.check_names_unique()
     _check_design(design)
 
     directories = _setup_directories(params)
@@ -1480,14 +1482,14 @@ def _log_constraint_summary(*, params: SearchParameters,
     # score_str = f'{iteration:9}|{num_new_optimal:7}|' \
     #             f'{score_opt :9.{dec_opt}f}||' \
     #             f'{score_new :9.{dec_new}f}|'  # \
-    #
-    # all_constraints_strs = []
-    # for constraint in params.constraints:
-    #     score = violation_set_new.score_of_constraint(constraint)
-    #     length = len(constraint.short_description)
-    #     num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
-    #     constraint_str = f'{score:{length}.{num_decimals}f}'
-    #     all_constraints_strs.append(constraint_str)
+
+    all_constraints_strs = []
+    for constraint in params.constraints:
+        score = violation_set_new.score_of_constraint(constraint)
+        length = len(constraint.short_description)
+        num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        constraint_str = f'{score:{length}.{num_decimals}f}'
+        all_constraints_strs.append(constraint_str)
     # all_constraints_str = '|'.join(all_constraints_strs)
 
     # logger.info(header + '\n' + score_str + all_constraints_str)
