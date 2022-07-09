@@ -3838,6 +3838,34 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 d._check_acyclic_subdomain_graph()  # noqa
                 d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
+    def check_names_unique(self) -> None:
+        # domain names already checked in compute_derived_fields()
+        self.check_strand_names_unique()
+        self.check_domain_pool_names_unique()
+
+    def check_strand_names_unique(self) -> None:
+        strands_by_name = {}
+        for strand in self.strands:
+            name = strand.name
+            if name in strands_by_name:
+                raise ValueError(f'found two strands with name {name}:\n'
+                                 f'  {strand}\n'
+                                 f'and\n'
+                                 f'  {strands_by_name[name]}')
+
+    def check_domain_pool_names_unique(self) -> None:
+        # self.domain_pools() already computed by compute_derived_fields()
+        domain_pools_by_name = {}
+        for pool in self.domain_pools():
+            name = pool.name
+            if name in domain_pools_by_name:
+                raise ValueError(f'found two DomainPools with name {name}:\n'
+                                 f'  {pool}\n'
+                                 f'and\n'
+                                 f'  {domain_pools_by_name[name]}')
+            else:
+                domain_pools_by_name[pool.name] = pool
+
 
 # represents a "Design Part", e.g., Strand, Tuple[Domain, Domain], etc... whatever portion of the Design
 # is checked by the constraint
