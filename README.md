@@ -1,5 +1,9 @@
 # nuad
 
+nuad is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA and then attempts to find concrete DNA sequences that satisfy the constraints.
+
+Note: If you are reading this on the PyPI website, many links below won't work. They are relative links intended to be read on the [GitHub README page](https://github.com/UC-Davis-molecular-computing/nuad/tree/main#readme).
+
 ## Table of contents
 
 * [Overview](#overview)
@@ -16,8 +20,6 @@
 ## Overview
 
 nuad stands for "NUcleic Acid Designer".† It is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to [NUPACK](http://www.nupack.org/)*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the [nearest-neighbor energy model](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method)*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The nuad library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
-
-Note: If you are reading this on the PyPI website, many links below won't work. They are relative links intended to be read on the [GitHub README page](https://github.com/UC-Davis-molecular-computing/nuad/tree/main#readme).
 
 Note: The nuad package was originally called dsd (DNA sequence designer), so you may see some old references to this name for the package.
 
@@ -59,10 +61,10 @@ To install nuad:
 3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
 
     ```
-    pip install numpy ordered_set psutil pathos scadnano xlwt xlrd
+    pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
     ``` 
     
-    at the command line.
+    at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
 
 4. Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). (If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within WSL. After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
 

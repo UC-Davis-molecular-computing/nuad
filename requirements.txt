@@ -2,8 +2,9 @@ numpy
 psutil
 ordered_set
 pathos
-scadnano
 xlwt
 xlrd
 nupack
+tabulate
+scadnano
 typing_extensions; python_version < "3.8"
