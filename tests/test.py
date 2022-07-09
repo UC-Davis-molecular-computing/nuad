@@ -22,7 +22,7 @@ def clear_domains_interned() -> None:
     constraints._domains_interned.clear()
 
 
-def assign_domain_pool_of_size(length: int) -> DomainPool:
+def assign_domain_pool_of_length(length: int) -> DomainPool:
     """Returns a DomainPool of given size
 
     :param length: Size of DomainPool
@@ -57,9 +57,82 @@ def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Stra
                          f'lengths')
     s: Strand = Strand(domain_names)
     for (i, length) in enumerate(domain_lengths):
-        s.domains[i].pool = assign_domain_pool_of_size(length)
+        s.domains[i].pool = assign_domain_pool_of_length(length)
     s.compute_derived_fields()
     return s
+
+
+class TestIntersectingDomains(unittest.TestCase):
+
+    def test_strand_intersecting_domains(self) -> None:
+        """
+        Test strand construction with nested subdomains
+
+        .. code-block:: none
+
+                  a
+                /   \
+               b     C
+              / \   / \
+             E   F g   h
+        """
+        E = Domain('e', assign_domain_pool_of_length(5), dependent=False)
+        F = Domain('f', assign_domain_pool_of_length(5), dependent=False)
+        g = Domain('g', assign_domain_pool_of_length(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_length(5), dependent=True)
+
+        b = Domain('b', assign_domain_pool_of_length(10), dependent=True, subdomains=[E, F])
+        C = Domain('C', assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
+
+        a = Domain('a', assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C])
+
+        all_domains = [a, b, C, E, F, g, h]
+
+        # make strands with different concatenations of domains above that cover the whole tree
+        s1 = Strand(domains=[a], starred_domain_indices=[])
+        self.assertEqual(1, len(s1.domains))
+        self.assertEqual(a, s1.domains[0])
+
+        s2 = Strand(domains=[b,C], starred_domain_indices=[])
+        self.assertEqual(2, len(s2.domains))
+        self.assertEqual(b, s2.domains[0])
+        self.assertEqual(C, s2.domains[1])
+
+        s3 = Strand(domains=[E,F,g,h], starred_domain_indices=[])
+        self.assertEqual(4, len(s3.domains))
+        self.assertEqual(E, s3.domains[0])
+        self.assertEqual(F, s3.domains[1])
+        self.assertEqual(g, s3.domains[2])
+        self.assertEqual(h, s3.domains[3])
+
+        s4 = Strand(domains=[E,F,C], starred_domain_indices=[])
+        self.assertEqual(3, len(s4.domains))
+        self.assertEqual(E, s4.domains[0])
+        self.assertEqual(F, s4.domains[1])
+        self.assertEqual(C, s4.domains[2])
+
+        for s in [s1, s2, s3, s4]:
+            for domain in all_domains:
+                self.assertTrue(s.intersects_domain(domain))
+
+        # these strands do not hit every domain
+        s5 = Strand(domains=[b,g], starred_domain_indices=[])
+        self.assertEqual(2, len(s5.domains))
+        self.assertEqual(b, s5.domains[0])
+        self.assertEqual(g, s5.domains[1])
+
+        for domain in [a, b, C, E, F, g]:
+            self.assertTrue(s.intersects_domain(domain))
+        self.assertFalse(s5.intersects_domain(h))
+
+        s6 = Strand(domains=[b], starred_domain_indices=[])
+        self.assertEqual(1, len(s6.domains))
+        self.assertEqual(b, s5.domains[0])
+
+        for domain in [a, b, E, F]:
+            self.assertTrue(s6.intersects_domain(domain))
+        for domain in [C, g, h]:
+            self.assertFalse(s6.intersects_domain(domain))
 
 
 class TestSampleSubstrings(unittest.TestCase):
@@ -69,7 +142,7 @@ class TestSampleSubstrings(unittest.TestCase):
                                       substring_length=4,
                                       except_start_indices=[2, 3, 5])
         self.assertEqual('abcdefghij', sampler.extended_supersequence)
-        self.assertEqual([0, 1, 4, 6], sampler.start_indices)
+        self.assertEqual((0, 1, 4, 6), sampler.start_indices)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -92,7 +165,7 @@ class TestSampleSubstrings(unittest.TestCase):
                                                except_start_indices=[1, 3, 5],
                                                circular=True)
         self.assertEqual('abcdefghijabc', sampler_circular.extended_supersequence)
-        self.assertEqual([0, 2, 4, 6, 7, 8, 9], sampler_circular.start_indices)
+        self.assertEqual((0, 2, 4, 6, 7, 8, 9), sampler_circular.start_indices)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -118,7 +191,7 @@ class TestSampleSubstrings(unittest.TestCase):
                                       except_overlapping_indices=[2, 7],
                                       circular=True)
         self.assertEqual('abcdefghijab', sampler.extended_supersequence)
-        self.assertEqual([3, 4, 8, 9], sampler.start_indices)
+        self.assertEqual((3, 4, 8, 9), sampler.start_indices)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -464,13 +537,13 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                                |              |   |
                               INTERIOR_TO_STRAND  DANGLE_3P
         """
-        ssg = Domain('ssg', assign_domain_pool_of_size(13), dependent=True)
-        sg = Domain('sg', assign_domain_pool_of_size(2), dependent=True)
-        Sg = Domain('Sg', assign_domain_pool_of_size(15), subdomains=[sg, ssg])
-        T = Domain('T', assign_domain_pool_of_size(5))
-        ssi = Domain('ssi', assign_domain_pool_of_size(13), dependent=True)
-        si = Domain('si', assign_domain_pool_of_size(2), dependent=True)
-        Si = Domain('Si', assign_domain_pool_of_size(15), subdomains=[si, ssi])
+        ssg = Domain('ssg', assign_domain_pool_of_length(13), dependent=True)
+        sg = Domain('sg', assign_domain_pool_of_length(2), dependent=True)
+        Sg = Domain('Sg', assign_domain_pool_of_length(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_length(5))
+        ssi = Domain('ssi', assign_domain_pool_of_length(13), dependent=True)
+        si = Domain('si', assign_domain_pool_of_length(2), dependent=True)
+        Si = Domain('Si', assign_domain_pool_of_length(15), subdomains=[si, ssi])
         input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
         gate_base_strand = Strand(domains=[T, Sg, T], starred_domain_indices=[0, 1, 2])
         input_gate_complex = [input_strand, gate_base_strand]
@@ -623,13 +696,13 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                             |     INTERIOR_TO_STRAND  BLUNT_END
                             ADJACENT_TO_EXTERIOR_BASE_PAIR
         """
-        ssg = Domain('ssg', assign_domain_pool_of_size(13), dependent=True)
-        sg = Domain('sg', assign_domain_pool_of_size(2), dependent=True)
-        Sg = Domain('Sg', assign_domain_pool_of_size(15), subdomains=[sg, ssg])
-        T = Domain('T', assign_domain_pool_of_size(5))
-        ssi = Domain('ssi', assign_domain_pool_of_size(13), dependent=True)
-        si = Domain('si', assign_domain_pool_of_size(2), dependent=True)
-        Si = Domain('Si', assign_domain_pool_of_size(15), subdomains=[si, ssi])
+        ssg = Domain('ssg', assign_domain_pool_of_length(13), dependent=True)
+        sg = Domain('sg', assign_domain_pool_of_length(2), dependent=True)
+        Sg = Domain('Sg', assign_domain_pool_of_length(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_length(5))
+        ssi = Domain('ssi', assign_domain_pool_of_length(13), dependent=True)
+        si = Domain('si', assign_domain_pool_of_length(2), dependent=True)
+        Si = Domain('Si', assign_domain_pool_of_length(15), subdomains=[si, ssi])
 
         input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
         threshold_base_strand = Strand(domains=[si, T, Sg], starred_domain_indices=[0, 1, 2])
@@ -785,12 +858,12 @@ class TestSubdomains(unittest.TestCase):
                  b      c      d      e
             <--=====--=====--=====--=====]
         """
-        b = Domain('b', assign_domain_pool_of_size(5), dependent=True)
-        c = Domain('c', assign_domain_pool_of_size(5), dependent=True)
-        d = Domain('d', assign_domain_pool_of_size(5), dependent=True)
-        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
+        b = Domain('b', assign_domain_pool_of_length(5), dependent=True)
+        c = Domain('c', assign_domain_pool_of_length(5), dependent=True)
+        d = Domain('d', assign_domain_pool_of_length(5), dependent=True)
+        e = Domain('e', assign_domain_pool_of_length(5), dependent=True)
 
-        a = Domain('a', assign_domain_pool_of_size(20), subdomains=[b, c, d, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, c, d, e])
         self.assertListEqual([b, c, d, e], a.subdomains)
         self.assertEqual(a, b.parent)
         self.assertEqual(a, c.parent)
@@ -807,10 +880,10 @@ class TestSubdomains(unittest.TestCase):
                / \
              [b] [c]
         """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+        b = Domain('b', assign_domain_pool_of_length(5), fixed=True)
+        c = Domain('c', assign_domain_pool_of_length(4), fixed=True)
 
-        a = Domain('a', assign_domain_pool_of_size(9), fixed=True, subdomains=[b, c])
+        a = Domain('a', assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
         self.assertTrue(a.fixed)
 
     def test_construct_unfixed_domain_with_unfixed_subdomain(self):
@@ -824,10 +897,10 @@ class TestSubdomains(unittest.TestCase):
                / \
               b  [c]
         """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=False)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+        b = Domain('b', assign_domain_pool_of_length(5), fixed=False)
+        c = Domain('c', assign_domain_pool_of_length(4), fixed=True)
 
-        a = Domain('a', assign_domain_pool_of_size(9), subdomains=[b, c], fixed=False)
+        a = Domain('a', assign_domain_pool_of_length(9), subdomains=[b, c], fixed=False)
         self.assertFalse(a.fixed)
 
     def test_error_construct_fixed_domain_with_unfixed_subdomain(self):
@@ -841,10 +914,10 @@ class TestSubdomains(unittest.TestCase):
                / \
               b  [c]
         """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=False)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+        b = Domain('b', assign_domain_pool_of_length(5), fixed=False)
+        c = Domain('c', assign_domain_pool_of_length(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=True,
+        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_length(9), fixed=True,
                           subdomains=[b, c])
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
@@ -858,13 +931,13 @@ class TestSubdomains(unittest.TestCase):
                / \
              [b] [c]
         """
-        b = Domain('b', assign_domain_pool_of_size(5), fixed=True)
-        c = Domain('c', assign_domain_pool_of_size(4), fixed=True)
+        b = Domain('b', assign_domain_pool_of_length(5), fixed=True)
+        c = Domain('c', assign_domain_pool_of_length(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_size(9), fixed=False,
+        self.assertRaises(ValueError, Domain, 'a', assign_domain_pool_of_length(9), fixed=False,
                           subdomains=[b, c])
 
-    def test_construst_strand(self):
+    def test_construct_strand(self):
         """
         Test strand construction with nested subdomains
 
@@ -876,15 +949,15 @@ class TestSubdomains(unittest.TestCase):
               / \   / \
              E   F g   h
         """
-        E = Domain('e', assign_domain_pool_of_size(5), dependent=False)
-        F = Domain('f', assign_domain_pool_of_size(5), dependent=False)
-        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
-        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+        E = Domain('e', assign_domain_pool_of_length(5), dependent=False)
+        F = Domain('f', assign_domain_pool_of_length(5), dependent=False)
+        g = Domain('g', assign_domain_pool_of_length(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_length(5), dependent=True)
 
-        b = Domain('b', assign_domain_pool_of_size(10), dependent=True, subdomains=[E, F])
-        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+        b = Domain('b', assign_domain_pool_of_length(10), dependent=True, subdomains=[E, F])
+        C = Domain('C', assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
 
-        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[b, C])
+        a = Domain('a', assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C])
 
         # Test that constructor runs without errors
         strand = Strand(domains=[a], starred_domain_indices=[])
@@ -906,15 +979,15 @@ class TestSubdomains(unittest.TestCase):
               / \   / \
              e   f g   h
         """
-        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
-        f = Domain('f', assign_domain_pool_of_size(5), dependent=True)
-        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
-        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+        e = Domain('e', assign_domain_pool_of_length(5), dependent=True)
+        f = Domain('f', assign_domain_pool_of_length(5), dependent=True)
+        g = Domain('g', assign_domain_pool_of_length(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_length(5), dependent=True)
 
-        b = Domain('b', assign_domain_pool_of_size(10), dependent=True, subdomains=[e, f])
-        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+        b = Domain('b', assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f])
+        C = Domain('C', assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
 
-        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[b, C])
+        a = Domain('a', assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C])
 
         strand = Strand(domains=[a], starred_domain_indices=[])
 
@@ -935,15 +1008,15 @@ class TestSubdomains(unittest.TestCase):
               / \   / \
              e   F g   h
         """
-        e = Domain('e', assign_domain_pool_of_size(5), dependent=True)
-        F = Domain('F', assign_domain_pool_of_size(5), dependent=False)
-        g = Domain('g', assign_domain_pool_of_size(5), dependent=True)
-        h = Domain('h', assign_domain_pool_of_size(5), dependent=True)
+        e = Domain('e', assign_domain_pool_of_length(5), dependent=True)
+        F = Domain('F', assign_domain_pool_of_length(5), dependent=False)
+        g = Domain('g', assign_domain_pool_of_length(5), dependent=True)
+        h = Domain('h', assign_domain_pool_of_length(5), dependent=True)
 
-        B = Domain('B', assign_domain_pool_of_size(10), dependent=False, subdomains=[e, F])
-        C = Domain('C', assign_domain_pool_of_size(10), dependent=False, subdomains=[g, h])
+        B = Domain('B', assign_domain_pool_of_length(10), dependent=False, subdomains=[e, F])
+        C = Domain('C', assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
 
-        a = Domain('a', assign_domain_pool_of_size(20), dependent=True, subdomains=[B, C])
+        a = Domain('a', assign_domain_pool_of_length(20), dependent=True, subdomains=[B, C])
 
         strand = Strand(domains=[a], starred_domain_indices=[])
 
@@ -965,8 +1038,8 @@ class TestSubdomains(unittest.TestCase):
             |
             a
         """
-        a = Domain('a', assign_domain_pool_of_size(5), dependent=True)
-        b = Domain('b', assign_domain_pool_of_size(5), subdomains=[a], dependent=True)
+        a = Domain('a', assign_domain_pool_of_length(5), dependent=True)
+        b = Domain('b', assign_domain_pool_of_length(5), subdomains=[a], dependent=True)
         a.subdomains = [b]
         strand = Strand(domains=[a], starred_domain_indices=[])
 
@@ -986,15 +1059,15 @@ class TestSubdomains(unittest.TestCase):
         :return: Map of domain name to domain object.
         :rtype: Dict[str, Domain]
         """
-        E: Domain = Domain('E', assign_domain_pool_of_size(5), dependent=False)
-        F: Domain = Domain('F', assign_domain_pool_of_size(6), dependent=False)
-        g: Domain = Domain('g', assign_domain_pool_of_size(7), dependent=True)
-        h: Domain = Domain('h', assign_domain_pool_of_size(8), dependent=True)
+        E: Domain = Domain('E', assign_domain_pool_of_length(5), dependent=False)
+        F: Domain = Domain('F', assign_domain_pool_of_length(6), dependent=False)
+        g: Domain = Domain('g', assign_domain_pool_of_length(7), dependent=True)
+        h: Domain = Domain('h', assign_domain_pool_of_length(8), dependent=True)
 
-        b: Domain = Domain('b', assign_domain_pool_of_size(11), dependent=True, subdomains=[E, F])
-        C: Domain = Domain('C', assign_domain_pool_of_size(15), dependent=False, subdomains=[g, h])
+        b: Domain = Domain('b', assign_domain_pool_of_length(11), dependent=True, subdomains=[E, F])
+        C: Domain = Domain('C', assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h])
 
-        a: Domain = Domain('a', assign_domain_pool_of_size(26), dependent=True, subdomains=[b, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(26), dependent=True, subdomains=[b, C])
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
 
     def test_assign_dna_sequence_to_parent(self):
@@ -1102,10 +1175,10 @@ class TestSubdomains(unittest.TestCase):
                 /   \
                B     C
         """
-        B: Domain = Domain('B', assign_domain_pool_of_size(10), dependent=False)
-        C: Domain = Domain('C', assign_domain_pool_of_size(20), dependent=False)
+        B: Domain = Domain('B', assign_domain_pool_of_length(10), dependent=False)
+        C: Domain = Domain('C', assign_domain_pool_of_length(20), dependent=False)
 
-        a: Domain = Domain('a', assign_domain_pool_of_size(15), dependent=True, subdomains=[B, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(15), dependent=True, subdomains=[B, C])
         with self.assertRaises(ValueError):
             a.set_sequence('A' * 15)
 
@@ -1126,9 +1199,9 @@ class TestSubdomains(unittest.TestCase):
         Strand(domains=[g], starred_domain_indices=[])
 
     def test_design_finds_independent_subdomains(self) -> None:
-        B: Domain = Domain('B', assign_domain_pool_of_size(10), dependent=False)
-        C: Domain = Domain('C', assign_domain_pool_of_size(20), dependent=False)
-        a: Domain = Domain('a', assign_domain_pool_of_size(30), dependent=True, subdomains=[B, C])
+        B: Domain = Domain('B', assign_domain_pool_of_length(10), dependent=False)
+        C: Domain = Domain('C', assign_domain_pool_of_length(20), dependent=False)
+        a: Domain = Domain('a', assign_domain_pool_of_length(30), dependent=True, subdomains=[B, C])
 
         strand_a: Strand = Strand(domains=[a], starred_domain_indices=[])
         strand_b: Strand = Strand(domains=[B], starred_domain_indices=[])

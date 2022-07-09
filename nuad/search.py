@@ -27,6 +27,7 @@ import textwrap
 import re
 import datetime
 
+from tabulate import tabulate
 import numpy.random
 from ordered_set import OrderedSet
 import numpy as np  # noqa
@@ -156,6 +157,14 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     cache_key = (constraint, id(design))
     if domains_changed is None and cache_key in _parts_to_check_cache:
         return _parts_to_check_cache[cache_key]
+
+    if domains_changed is not None:
+        domains_changed_full: OrderedSet[Domain] = OrderedSet()
+        for domain in domains_changed:
+            domains_in_tree = domain.all_domains_in_tree()
+            domains_changed_full.update(domains_in_tree)
+        domains_changed = list(domains_changed_full)
+        # = OrderedSet(domain.all_domains_in_tree() for domain in )
 
     parts_to_check: Sequence[nc.DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
@@ -320,6 +329,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
                 for domain_changed in domains_changed:
                     if domain_changed in strand1.domains or domain_changed in strand2.domains:
                         strand_pairs_to_check.append(StrandPair(strand1, strand2))
+                        break  # ensure we don't add the same strand pair twice
         else:
             for domain_changed in domains_changed:
                 strands_with_domain_changed = [strand for strand in all_strands
@@ -387,12 +397,11 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
                               domains_changed: Optional[Iterable[Domain]] = None,
                               design: Optional[Design] = None,  # only used with DesignConstraint
                               ) -> Tuple[Dict[Domain, OrderedSet[nc.Violation]], bool]:
-    violations: Dict[Domain, OrderedSet[nc.Violation]] = defaultdict(OrderedSet)
-    violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
-
     score_discovered_here: float = 0.0
     quit_early = False
 
+    # measure violations of constraints and collect in list of triples (part, score, summary)
+    violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
     if isinstance(constraint, SingularConstraint):
         if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
             for part in parts:
@@ -425,8 +434,10 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
     else:
         raise AssertionError(f'constraint {constraint} of unrecognized type {constraint.__class__.__name__}')
 
+    # assign blame for violations to domains by looking up associated domains in each part
+    violations: Dict[Domain, OrderedSet[nc.Violation]] = defaultdict(OrderedSet)
     for part, score, summary in violating_parts_scores_summaries:
-        domains = _domains_in_part(part, exclude_fixed=False)
+        domains = _independent_domains_in_part(part, exclude_fixed=False)
         violation = nc.Violation(constraint=constraint, part=part, domains=domains,
                                  score=score, summary=summary)
         for domain in domains:
@@ -435,29 +446,43 @@ def _violations_of_constraint(parts: Sequence[DesignPart],
     return violations, quit_early
 
 
-def _domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> List[Domain]:
+def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> List[Domain]:
     """
     :param part:
         DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
     :param exclude_fixed:
         whether to exclude :any:`Domain`'s with :data:`Domain.fixed` == True
     :return:
-        domains associated with part (e.g., all domains in :any:`Strand`)
+        independent, non-fixed (if exclude_fixed is True) domains associated with part
+        (e.g., all domains in :any:`Strand`), with dependent domains substituted with their
+        independent source via Domain.independent_source()
     """
+    # first compute "direct" domains that appear directly on strands
+    domains: List[Domain]
     if isinstance(part, Domain):
-        return [part] if not (exclude_fixed and part.fixed) else []
+        domains = [part] if not (exclude_fixed and part.fixed) else []
     elif isinstance(part, Strand):
-        return part.domains if not exclude_fixed else part.unfixed_domains()
+        domains = part.domains if not exclude_fixed else part.unfixed_domains()
     elif isinstance(part, DomainPair):
-        return list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
+        domains = list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
     elif isinstance(part, (StrandPair, Complex)):
         domains_per_strand = [strand.domains if not exclude_fixed else strand.unfixed_domains()
                               for strand in part.individual_parts()]
         domain_iterable: Iterable[Domain] = _flatten(domains_per_strand)
-        return list(domain_iterable)
+        domains = list(domain_iterable)
     else:
         raise AssertionError(f'part {part} not recognized as one of Domain, Strand, '
                              f'DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}')
+
+    # Convert direct domains to independent domains.
+    # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
+    independent_domains: List[Domain] = []
+    for domain in domains:
+        independent_domain = domain.independent_source()
+        if independent_domain not in independent_domains:
+            independent_domains.append(independent_domain)
+
+    return independent_domains
 
 
 T = TypeVar('T')
@@ -988,7 +1013,7 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
                 rng = rng_restart
 
         violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
-            design=design, params=params, never_increase_score=params.never_increase_score, iteration=-1)
+            design=design, params=params, iteration=-1)
 
         if not params.restart:
             # write initial sequences and report
@@ -1001,9 +1026,8 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
         iteration = 0
 
         stopwatch = Stopwatch()
-        while (violation_set_opt.total_score() > params.target_score if params.target_score is not None else
-               violation_set_opt.has_nonfixed_violations()) \
-                and (params.max_iterations is None or iteration < params.max_iterations):
+
+        while not _done(iteration, params, violation_set_opt):
             if params.log_time:
                 stopwatch.restart()
 
@@ -1015,11 +1039,11 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
             # evaluate constraints on new Design with domain_to_change's new sequence
             violation_set_new, domains_new, scores_new = _find_violations_and_score(
                 design=design, params=params, domains_changed=domains_changed,
-                violation_set_old=violation_set_opt,
-                never_increase_score=params.never_increase_score, iteration=iteration)
+                violation_set_old=violation_set_opt, iteration=iteration)
 
-            # _double_check_violations_from_scratch(design, iteration, params.never_increase_score,
-            #                                       violation_set_new, violation_set_opt)
+            # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
+            #                                       violation_set_new=violation_set_new,
+            #                                       violation_set_opt=violation_set_opt)
 
             _log_constraint_summary(params=params,
                                     violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
@@ -1066,6 +1090,14 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
 
     if directories.info_file_handler is not None:
         nc.logger.removeHandler(directories.info_file_handler)  # noqa
+
+
+def _done(iteration: int, params: SearchParameters, violation_set_opt: nc.ViolationSet) -> bool:
+    keep_going = (
+            (violation_set_opt.total_score() > params.target_score if params.target_score is not None else
+             violation_set_opt.has_nonfixed_violations())
+            and (params.max_iterations is None or iteration < params.max_iterations))
+    return not keep_going
 
 
 def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
@@ -1138,21 +1170,29 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_domains_to_change: int,
                       rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
-    probs_opt = np.asarray(scores_opt)
+    # first weight scores by domain's weight
+    scores_weighted = [score * domain.weight for domain, score in zip(domains_opt, scores_opt)]
+    probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
     domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
                                                     size=num_domains_to_change))
 
+    # print(f'domains_changed: {domains_changed}')
+
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
 
-    original_sequences: Dict[Domain, str] = {}
-    independent_domains = [domain for domain in domains_changed if not domain.dependent]
+    # dependent domains also cannot be blamed, since their independent source should be blamed
+    assert all(not domain_changed.dependent for domain_changed in domains_changed)
 
-    # first re-assign independent domains
-    for domain in independent_domains:
+    original_sequences: Dict[Domain, str] = {}
+
+    # # first re-assign independent domains
+    # independent_domains = [domain for domain in domains_changed if not domain.dependent]
+
+    for domain in domains_changed:
         # set sequence of domain_changed to random new sequence from its DomainPool
         assert domain not in original_sequences
         previous_sequence = domain.sequence()
@@ -1160,18 +1200,18 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
         new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
         domain.set_sequence(new_sequence)
 
-    # then for each dependent domain, find the independent domain in its tree that can change it,
-    # and re-assign that domain
-    dependent_domains = [domain for domain in domains_changed if domain.dependent]
-    for dependent_domain in dependent_domains:
-        independent_domain = dependent_domain.independent_ancestor_or_descendent()
-        assert independent_domain not in original_sequences
-        previous_sequence = independent_domain.sequence()
-        original_sequences[independent_domain] = previous_sequence
-        new_sequence = independent_domain.pool.generate_sequence(rng, previous_sequence)
-        independent_domain.set_sequence(new_sequence)
-        domains_changed.remove(dependent_domain)
-        domains_changed.append(independent_domain)
+    # # then for each dependent domain, find the independent domain in its tree that can change it,
+    # # and re-assign that domain
+    # dependent_domains = [domain for domain in domains_changed if domain.dependent]
+    # for dependent_domain in dependent_domains:
+    #     independent_domain = dependent_domain.independent_ancestor_or_descendent()
+    #     assert independent_domain not in original_sequences
+    #     previous_sequence = independent_domain.sequence()
+    #     original_sequences[independent_domain] = previous_sequence
+    #     new_sequence = independent_domain.pool.generate_sequence(rng, previous_sequence)
+    #     independent_domain.set_sequence(new_sequence)
+    #     domains_changed.remove(dependent_domain)
+    #     domains_changed.append(independent_domain)
 
     return domains_changed, original_sequences
 
@@ -1185,11 +1225,10 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
 def _double_check_violations_from_scratch(design: nc.Design, params: SearchParameters, iteration: int,
-                                          never_increase_score: bool,
                                           violation_set_new: nc.ViolationSet,
                                           violation_set_opt: nc.ViolationSet):
     violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
-        design=design, params=params, never_increase_score=never_increase_score, iteration=iteration)
+        design=design, params=params, iteration=iteration)
     # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
     # the total score found on quitting early will be less than the total score if not.
     # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
@@ -1203,12 +1242,12 @@ def _double_check_violations_from_scratch(design: nc.Design, params: SearchParam
             (violation_set_new_fs.total_score()
              <= violation_set_opt.total_score()
              < violation_set_new.total_score()):
-        logger.warning(f'WARNING! There is a bug in dsd.')
+        logger.warning(f'WARNING! There is a bug in nuad.')
         logger.warning(f'total score opt = {violation_set_opt.total_score()}')
-        logger.warning(f'from scratch, we found {violation_set_new_fs.total_score()} total score.')
-        logger.warning(f'iteratively, we found  {violation_set_new.total_score()} total score.')
+        logger.warning(f'From scratch, we calculated score {violation_set_new_fs.total_score()}.')
+        logger.warning(f'Iteratively, we calculated score  {violation_set_new.total_score()}.')
         logger.warning(f'This means the iterative search is saying something different about '
-                       f'quitting early than the full search. It indicates a bug in dsd.')
+                       f'quitting early than the full search. ')
         logger.warning(f'This happened on iteration {iteration}.')
         sys.exit(-1)
 
@@ -1381,7 +1420,6 @@ def _find_violations_and_score(design: Design,
                                params: SearchParameters,
                                domains_changed: Optional[Iterable[Domain]] = None,
                                violation_set_old: Optional[nc.ViolationSet] = None,
-                               never_increase_score: bool = False,
                                iteration: int = -1) \
         -> Tuple[nc.ViolationSet, List[Domain], List[float]]:
     """
@@ -1393,8 +1431,6 @@ def _find_violations_and_score(design: Design,
         otherwise assume no constraints changed that do not involve `domain`
     :param violation_set_old:
         :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed
-    :param never_increase_score:
-        See _violations_of_constraints for explanation of this parameter.
     :param iteration:
         Current iteration number; useful for debugging (e.g., conditional breakpoints).
     :return:
@@ -1406,7 +1442,8 @@ def _find_violations_and_score(design: Design,
     """
 
     violation_set: nc.ViolationSet = _violations_of_constraints(
-        design, params.constraints, never_increase_score, domains_changed, violation_set_old, iteration)
+        design, params.constraints, params.never_increase_score,
+        domains_changed, violation_set_old, iteration)
 
     # NOTE: this filters out the fixed domains,
     # but we keep them in violation_set for the sake of reports
@@ -1435,8 +1472,6 @@ def _log_constraint_summary(*, params: SearchParameters,
     all_constraints_header = '|'.join(
         f'{constraint.short_description}' for constraint in params.constraints)
     header = score_header + all_constraints_header
-    # logger.info('-' * len(header) + '\n')
-    logger.info(header)
 
     score_opt = violation_set_opt.total_score()
     score_new = violation_set_new.total_score()
@@ -1455,7 +1490,21 @@ def _log_constraint_summary(*, params: SearchParameters,
         all_constraints_strs.append(constraint_str)
     all_constraints_str = '|'.join(all_constraints_strs)
 
-    logger.info(score_str + all_constraints_str)
+    # logger.info(header + '\n' + score_str + all_constraints_str)
+
+    #TODO: use floatfmt per column to adjust decimal places
+    import tabulate as tb
+    tb.PRESERVE_WHITESPACE = True
+    row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
+                                                           for constraint in params.constraints]
+    iteration_str = f'{iteration:9}'
+    num_new_optimal_str = f'{num_new_optimal:6}'
+    score_opt_str = f'{score_opt :9.{dec_opt}f}'
+    score_new_str = f'{score_new :9.{dec_new}f}'
+    row2 = [iteration, num_new_optimal, score_opt_str, score_new_str] + all_constraints_strs  # type:ignore
+    table = [row1, row2]
+    table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
+    logger.info(table_str)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
@@ -1554,7 +1603,7 @@ def default_probability_of_keeping_change_function(params: SearchParameters) -> 
              the smallest :any:`Constraint.weight` for any :any:`Constraint` in `design`),
              and :math:`f(w_\\delta) = 0` otherwise.
     """
-    min_weight = min(constraint.weight for constraint in params.constraints)
+    min_weight = min((constraint.weight for constraint in params.constraints), default=0.0)
     epsilon_from_min_weight = min_weight / 1000000.0
 
     def keep_change_only_if_no_worse(score_delta: float) -> float:
@@ -1666,7 +1715,7 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: nc
 {indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
                          'when set to False\n'
                          'see https://github.com/UC-Davis-molecular-computing/dsd/issues/134\n'
-                         if not report_only_violations else '')
+                                                                                                                                                                                                                                                                                                if not report_only_violations else '')
     return summary
 
 
