@@ -1958,11 +1958,39 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
                                      )
 
     def all_domains_in_tree(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains in the same subdomain tree as this domain (including itself)
+        """
         domains = self._get_all_domains_from_parent()
         domains.extend(self._get_all_domains_from_this_subtree())
         return domains
 
+    def all_domains_intersecting(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains intersecting this one, meaning those domains in the subtree rooted
+            at this domain (including itself), plus any ancestors of this domain.
+        """
+        domains = self.ancestors()
+        domains.extend(self._get_all_domains_from_this_subtree())
+        return domains
+
+    def ancestors(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains that are ancestors of this one, NOT including this domain
+        """
+        ancestor = self.parent
+        all_ancestors = []
+        while ancestor is not None:
+            all_ancestors.append(ancestor)
+            ancestor = ancestor.parent
+        return all_ancestors
+
     def _get_all_domains_from_parent(self) -> List["Domain"]:
+        # note that this gets "sibling/cousin" domains as well
+        # call _ancestors to get only ancestors
         domains = []
 
         parent = self.parent
@@ -1975,6 +2003,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
     def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) \
             -> List["Domain"]:
+        # includes itself
         domains = [self]
         for sd in self._subdomains:
             if sd != excluded_subdomain:
@@ -2398,7 +2427,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
-        # XXX: moved this check to start of search_for_dna_sequences to allow subdomain graphs to be
+        # XXX: moved this check to Design constructor to allow subdomain graphs to be
         # constructed gradually while building up the design
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
@@ -2460,9 +2489,19 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
         return self._all_intersecting_domains
 
     def _compute_all_intersecting_domains(self) -> None:
+        # Check that each base in the sequence is assigned by exactly one independent subdomain.
+        # We normally wait until the Design constructor to check for this to raise an exception,
+        # but here we just check to see whether to bother computing self._all_intersecting_domains.
+        for d in cast(List[Domain], self.domains):
+            try:
+                d._check_acyclic_subdomain_graph()  # noqa
+                d._check_subdomain_graph_is_uniquely_assignable()  # noqa
+            except ValueError:
+                return
+
         self._all_intersecting_domains = []
         for direct_domain in self.domains:
-            for domain_in_tree in direct_domain.all_domains_in_tree():
+            for domain_in_tree in direct_domain.all_domains_intersecting():
                 if domain_in_tree not in self._all_intersecting_domains:
                     self._all_intersecting_domains.append(domain_in_tree)
 
