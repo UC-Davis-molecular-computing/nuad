@@ -1359,6 +1359,8 @@ class Part(ABC):
 
     @abstractmethod
     def individual_parts(self) -> Union[Tuple[Domain, ...], Tuple[Strand, ...]]:
+        # if Part represents a tuple, e.g., StrandPair or DomainPair, then returns tuple of
+        # individual domains/strands
         pass
 
 
@@ -1427,6 +1429,19 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     accessible via :py:data:`Domain.starred_sequence`.
     """
 
+    weight: float = 1.0
+    """
+    Weight to apply before picking domain at random to change when re-assigning DNA sequences during search.
+    Should only be changed for independent domains. (those with :data:`Domain.dependent` set to False)
+    
+    Normally a domain's probability of being changed is proportional to the total score of violations it
+    causes, but that total score is first multiplied by :data:`Domain.weight`. This is useful,
+    for instance, to weight a domain lower when it has many subdomains that intersect many strands,
+    for example if a domain represents an M13 strand. It may be more efficient to pick such a domain
+    less often since changing it will change many strands in the design and, when the design gets
+    close to optimized, this will likely cause the score to go up.
+    """
+
     fixed: bool = False
     """
     Whether this :any:`Domain`'s DNA sequence is fixed, i.e., cannot be changed by the
@@ -1482,7 +1497,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
     def __init__(self, name: str, pool: Optional[DomainPool] = None, sequence: Optional[str] = None,
                  fixed: bool = False, label: Optional[DomainLabel] = None, dependent: bool = False,
-                 subdomains: Optional[List["Domain"]] = None) -> None:
+                 subdomains: Optional[List["Domain"]] = None, weight: Optional[float] = None) -> None:
         if subdomains is None:
             subdomains = []
         self._name = name
@@ -1515,6 +1530,13 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         # Set parent field for all subdomains.
         for subdomain in self._subdomains:
             subdomain.parent = self
+
+        if self.dependent and weight is not None:
+            raise ValueError(f'cannot set Domain.weight when Domain.dependent is True, '
+                             f'since dependent domains cannot be picked to change in the search, '
+                             f'which is the probability that DOmain.weight affects')
+        if weight is not None:
+            self.weight = weight
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1936,11 +1958,39 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
                                      )
 
     def all_domains_in_tree(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains in the same subdomain tree as this domain (including itself)
+        """
         domains = self._get_all_domains_from_parent()
         domains.extend(self._get_all_domains_from_this_subtree())
         return domains
 
+    def all_domains_intersecting(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains intersecting this one, meaning those domains in the subtree rooted
+            at this domain (including itself), plus any ancestors of this domain.
+        """
+        domains = self.ancestors()
+        domains.extend(self._get_all_domains_from_this_subtree())
+        return domains
+
+    def ancestors(self) -> List["Domain"]:
+        """
+        :return:
+            list of all domains that are ancestors of this one, NOT including this domain
+        """
+        ancestor = self.parent
+        all_ancestors = []
+        while ancestor is not None:
+            all_ancestors.append(ancestor)
+            ancestor = ancestor.parent
+        return all_ancestors
+
     def _get_all_domains_from_parent(self) -> List["Domain"]:
+        # note that this gets "sibling/cousin" domains as well
+        # call _ancestors to get only ancestors
         domains = []
 
         parent = self.parent
@@ -1953,6 +2003,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
     def _get_all_domains_from_this_subtree(self, excluded_subdomain: Optional['Domain'] = None) \
             -> List["Domain"]:
+        # includes itself
         domains = [self]
         for sd in self._subdomains:
             if sd != excluded_subdomain:
@@ -1986,13 +2037,27 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 
         return False
 
+    def independent_source(self) -> Domain:
+        """
+        Like :meth:`independent_ancestor_or_descendent`,
+        but returns this Domain if it is already independent.
+
+        :return:
+            the independent :any:`Domain` that this domain depends on,
+            which is *itself* if it is already independent
+        """
+        if self.dependent:
+            return self.independent_ancestor_or_descendent()
+        else:
+            return self
+
     def independent_ancestor_or_descendent(self) -> Domain:
         """
-        Find the indepdent ancestor or descendent of this dependent :any:`Domain`.
+        Find the independent ancestor or descendent of this dependent :any:`Domain`.
         Raises exception if this is not a dependent :any:`Domain`.
 
         :return:
-            The indepdent ancestor or descendent of this :any:`Domain`.
+            The independent ancestor or descendent of this :any:`Domain`.
         """
         if not self.dependent:
             raise ValueError('cannot call independent_ancestor_or_descendent on non-dependent Domain'
@@ -2009,6 +2074,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         independent_descendent = self._independent_descendent()
         if independent_descendent is None:
             raise ValueError(f'could not find an independent ancestor or descendent of domain {self.name}')
+        return independent_descendent
 
     def _independent_descendent(self) -> Optional[Domain]:
         if not self.dependent:
@@ -2042,7 +2108,9 @@ def domains_not_substrings_of_each_other_constraint(
     :param weight:
         weight to assign to constraint
     :param min_length:
-        minimum length substring to check
+        minimum length substring to check.
+        For instance if `min_length` is 4, then having two domains with sequences AAAA and CAAAAC would
+        violate this constraint, but domains with sequences AAA and CAAAC would not.
     :param pairs:
         pairs of domains to check (by default all pairs of unequal domains are compared)
     :return:
@@ -2328,6 +2396,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         """
+        self._all_intersecting_domains = None
         self.group = group
         self._name = name
         if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
@@ -2358,7 +2427,7 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
-        # XXX: moved this check to start of search_for_dna_sequences to allow subdomain graphs to be
+        # XXX: moved this check to Design constructor to allow subdomain graphs to be
         # constructed gradually while building up the design
         # Check that each base in the sequence is assigned by exactly one
         # independent subdomain.
@@ -2412,6 +2481,40 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
         """
         self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
+        self._compute_all_intersecting_domains()
+
+    def all_intersecting_domains(self) -> List[Domain]:
+        if self._all_intersecting_domains is None:
+            self._compute_all_intersecting_domains()
+        return self._all_intersecting_domains
+
+    def _compute_all_intersecting_domains(self) -> None:
+        # Check that each base in the sequence is assigned by exactly one independent subdomain.
+        # We normally wait until the Design constructor to check for this to raise an exception,
+        # but here we just check to see whether to bother computing self._all_intersecting_domains.
+        for d in cast(List[Domain], self.domains):
+            try:
+                d._check_acyclic_subdomain_graph()  # noqa
+                d._check_subdomain_graph_is_uniquely_assignable()  # noqa
+            except ValueError:
+                return
+
+        self._all_intersecting_domains = []
+        for direct_domain in self.domains:
+            for domain_in_tree in direct_domain.all_domains_intersecting():
+                if domain_in_tree not in self._all_intersecting_domains:
+                    self._all_intersecting_domains.append(domain_in_tree)
+
+    def intersects_domain(self, domain: Domain) -> bool:
+        """
+        :param domain:
+            domain to test for intersection
+        :return:
+            whether this strand intersects `domain`, which is true if either `domain` is in the list
+            :data:`Strand.domains`, or if any of those domains have `domain` in their hierarchical tree
+            as a subdomain or an ancestor
+        """
+        return domain in self.all_intersecting_domains()
 
     def __hash__(self) -> int:
         return self._hash_domain_names_concatenated
