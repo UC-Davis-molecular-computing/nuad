@@ -41,7 +41,7 @@ To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](htt
 
 ### Installing nuad
 
-To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK and ViennaRNA separately (see below).
+To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK and ViennaRNA separately (see [instructions below](#installing-nupack-and-viennarna)).
 
 - pip
   
