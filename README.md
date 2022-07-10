@@ -84,15 +84,15 @@ To install nuad, you can either install it using pip (the slightly simpler optio
 
 ### Installing NUPACK and ViennaRNA
 
-1. Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). (If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.)
+Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). (If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.)
 
-   If installing on Windows, you must first install [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within WSL. After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
+If installing on Windows, you must first install [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within WSL. After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
 
-   To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
+To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
 
-   To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
+To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
 
-2. Test NUPACK and ViennaRNA are available from within nuad by typing `python` at the command line, then typing `import nuad`. It should import without errors:
+Test NUPACK and ViennaRNA are available from within nuad by typing `python` at the command line, then typing `import nuad`. It should import without errors:
 
     ```python
     $ python
@@ -103,7 +103,7 @@ To install nuad, you can either install it using pip (the slightly simpler optio
     >>>
     ```
 
-    To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
+To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
 
     ```python
     >>> import nuad.vienna_nupack as nv
