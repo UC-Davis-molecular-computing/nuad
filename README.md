@@ -37,7 +37,7 @@ nuad requires Python version 3.7 or higher. Currently, although it can be instal
 
 nuad uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download), which must be installed separately (see below for link to installation instructions). While it is technically possible to use nuad without them, most of the pre-packaged constraints require them.
 
-To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
+To use NUPACK on Windows, you must use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
 ### Installing nuad
 
@@ -50,8 +50,6 @@ To install nuad, you can either install it using pip (the slightly simpler optio
   ```
   pip install nuad
   ```
-
-  In Windows, this must be the [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) command line, since NUPACK cannot be installed on Windows except through WSL. 
 
 - git
 
