@@ -9,6 +9,8 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 * [Overview](#overview)
 * [API documentation](#api-documentation)
 * [Installation](#installation)
+  * [Installing nuad](#installing-nuad)
+  * [Installing NUPACK and ViennaRNA](#installing-nupack-and-viennarna)
 * [Data model](#data-model)
 * [Constraint evaluations must be pure functions of their inputs](#constraint-evaluations-must-be-pure-functions-of-their-inputs)
 * [Examples](#examples)
@@ -37,44 +39,48 @@ nuad uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.
 
 To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
-To install nuad, you can either install it using A. pip (the slightly simpler option) or B. cloning the git repository.
+### Installing nuad
 
-A. pip. At the command line (WSL for Windows, not the Powershell prompt), type
+To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK and ViennaRNA separately (see below).
 
-   ```
-   pip install nuad
-   ```
+- pip
+  
+  At the command line (WSL for Windows, not the Powershell prompt), type
 
-   In Windows, this must be the [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) command line, since NUPACK cannot be installed on Windows except through WSL. 
+  ```
+  pip install nuad
+  ```
 
-B. git. 
+  In Windows, this must be the [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) command line, since NUPACK cannot be installed on Windows except through WSL. 
 
-   1. Download the git repo, by one of two methods:
-       - Install [git](https://git-scm.com/downloads) if necessary, then type 
+- git
+
+  1. Download the git repo, by one of two methods:
+      - Install [git](https://git-scm.com/downloads) if necessary, then type 
     
-           ```git clone https://github.com/UC-Davis-molecular-computing/nuad.git``` 
+          ```git clone https://github.com/UC-Davis-molecular-computing/nuad.git``` 
     
-         at the command line, or
-       - on the page `https://github.com/UC-Davis-molecular-computing/nuad`, click on Code &rarr; Download Zip:
+        at the command line, or
+      - on the page `https://github.com/UC-Davis-molecular-computing/nuad`, click on Code &rarr; Download Zip:
 
-         ![](images/screenshot-download-zip.png)
+        ![](images/screenshot-download-zip.png)
 
-         and then unzip somewhere on your file system.
+        and then unzip somewhere on your file system.
 
-   2. Add the directory `nuad` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/nuad` represents the path to the `nuad` directory:
+  2. Add the directory `nuad` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/nuad` represents the path to the `nuad` directory:
 
-       ```
-       export PYTHONPATH="${PYTHONPATH}:/path/to/nuad"
-       ```
+      ```
+      export PYTHONPATH="${PYTHONPATH}:/path/to/nuad"
+      ```
 
 
-   3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
+  3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
 
-       ```
-       pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
-       ``` 
+      ```
+      pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
+      ``` 
     
-       at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
+      at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
 
 ### Installing NUPACK and ViennaRNA
 
