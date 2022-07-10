@@ -2092,8 +2092,7 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
 def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
         min_length: int = 0,
-        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
-        -> DomainPairConstraint:
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -2109,7 +2108,8 @@ def domains_not_substrings_of_each_other_constraint(
         For instance if `min_length` is 4, then having two domains with sequences AAAA and CAAAAC would
         violate this constraint, but domains with sequences AAA and CAAAC would not.
     :param pairs:
-        pairs of domains to check (by default all pairs of unequal domains are compared)
+        pairs of domains to check.
+        By default all pairs of unequal domains are compared unless both are fixed.
     :return:
         a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
         (in particular, if they are equal length, then they are not the same domain)
