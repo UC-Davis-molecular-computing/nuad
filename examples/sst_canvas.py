@@ -132,7 +132,8 @@ def create_design(width: int, height: int) -> nc.Design:
     domain_pool_10 = nc.DomainPool(f'length-10_domains', 10, numpy_constraints=numpy_constraints)
     domain_pool_11 = nc.DomainPool(f'length-11_domains', 11, numpy_constraints=numpy_constraints)
 
-    tiles = []
+    design = nc.Design()
+
     for x in range(width):
         for y in range(height):
             # domains are named after the strand for which they are on the bottom,
@@ -166,9 +167,8 @@ def create_design(width: int, height: int) -> nc.Design:
             w_domain_name = f'we_{x}_{y}'
             n_domain_name = f'ns_{x - 1}_{y}*'
             e_domain_name = f'we_{x}_{y + 1}*'
-            tile = nc.Strand(domain_names=[s_domain_name, w_domain_name, n_domain_name, e_domain_name],
-                             name=f't_{x}_{y}')
-            tiles.append(tile)
+            tile = design.add_strand(
+                domain_names=[s_domain_name, w_domain_name, n_domain_name, e_domain_name], name=f't_{x}_{y}')
 
             if (x + y) % 2 == 0:
                 outer_pool = domain_pool_11
@@ -187,7 +187,6 @@ def create_design(width: int, height: int) -> nc.Design:
             if not w_domain.has_pool():
                 w_domain.pool = inner_pool
 
-    design = nc.Design(strands=tiles)
     return design
 
 

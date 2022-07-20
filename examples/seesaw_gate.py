@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 # Test ComplexConstraint evaluate
 import nuad.constraints as nc
@@ -44,6 +44,8 @@ toehold_domain_contraints = [
 ]
 TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool('toehold_domain_pool', 5)
 
+design = nc.Design()
+
 
 #  s2       S2          T    s1      S1
 # [==--=============--=====--==-=============>
@@ -52,7 +54,7 @@ def seesaw_signal_strand(gate1: int, gate2: int) -> nc.Strand:
     d1_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}'
     d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}'
     d2_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}'
-    s: nc.Strand = nc.Strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f'signal {gate1} {gate2}')
+    s: nc.Strand = design.add_strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f'signal {gate1} {gate2}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
@@ -67,7 +69,7 @@ def seesaw_signal_strand(gate1: int, gate2: int) -> nc.Strand:
 def gate_base_strand(gate: int) -> nc.Strand:
     d = f'{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
     d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
-    s: nc.Strand = nc.Strand(
+    s: nc.Strand = design.add_strand(
         [TOEHOLD_COMPLEMENT, d, d_sub, TOEHOLD_COMPLEMENT], name=f'gate {gate}')
     s.domains[0].pool = TOEHOLD_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
@@ -81,7 +83,7 @@ def gate_base_strand(gate: int) -> nc.Strand:
 def waste_strand(gate: int) -> nc.Strand:
     d = f'{SIGNAL_DOMAIN_PREFIX}{gate}'
     d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}'
-    s: nc.Strand = nc.Strand([d_sub, d], name=f'waste {gate}')
+    s: nc.Strand = design.add_strand([d_sub, d], name=f'waste {gate}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     return s
@@ -95,7 +97,7 @@ def threshold_base_strand(gate1: int, gate2: int) -> nc.Strand:
     d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}{COMPLEMENT_SUFFIX}'
     d2_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}{COMPLEMENT_SUFFIX}'
 
-    s: nc.Strand = nc.Strand(
+    s: nc.Strand = design.add_strand(
         [d1_sub, TOEHOLD_COMPLEMENT, d2, d2_sub], name=f'threshold {gate1} {gate2}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
 
@@ -113,7 +115,7 @@ def reporter_base_strand(gate) -> nc.Strand:
     d = f'{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
     d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
 
-    s: nc.Strand = nc.Strand(
+    s: nc.Strand = design.add_strand(
         [TOEHOLD_COMPLEMENT, d, d_sub], name=f'reporter {gate}')
     s.domains[0].pool = TOEHOLD_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
@@ -219,8 +221,8 @@ strands = [
 #                         |   |      |
 #                INTERIOR_TO_STRAND  DANGLE_5P
 #        T*         S5*      s5*   T*
-g_5_s_5_6_complex = (signal_5_6_strand, gate_5_base_strand)
-g_5_s_5_7_complex = (signal_5_7_strand, gate_5_base_strand)
+g_5_s_5_6_complex = nc.Complex(signal_5_6_strand, gate_5_base_strand)
+g_5_s_5_7_complex = nc.Complex(signal_5_7_strand, gate_5_base_strand)
 
 g_5_s_5_6_nonimplicit_base_pairs = [(signal_5_6_toehold_addr, gate_5_bound_toehold_3p_addr)]
 g_5_s_5_6_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
@@ -255,7 +257,7 @@ g_5_s_5_6_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
 #                        |              |   |
 #                       INTERIOR_TO_STRAND  DANGLE_3P
 #                      T*         S5*      s5*   T*
-g_5_s_2_5_complex = (signal_2_5_strand, gate_5_base_strand)
+g_5_s_2_5_complex = nc.Complex(signal_2_5_strand, gate_5_base_strand)
 g_5_s_2_5_nonimplicit_base_pairs = [(signal_2_5_toehold_addr, gate_5_bound_toehold_5p_addr)]
 g_5_s_2_5_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[g_5_s_2_5_complex],
@@ -292,7 +294,7 @@ waste_5_strand = waste_strand(5)
 #                         |   |
 #        INTERIOR_TO_STRAND   BLUNT_END
 #  s2*   T*        S5*       s5*
-t_2_5_w_5_complex = (waste_5_strand, threshold_2_5_base_strand)
+t_2_5_w_5_complex = nc.Complex(waste_5_strand, threshold_2_5_base_strand)
 t_2_5_w_5_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[t_2_5_w_5_complex])
 
@@ -323,7 +325,7 @@ t_2_5_w_5_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
 # INTERIOR_TO_STRAND     INTERIOR_TO_STRAND BLUNT_END
 #                s2*   T*        S5*       s5*
 
-waste_2_5_complex = (signal_2_5_strand, threshold_2_5_base_strand)
+waste_2_5_complex = nc.Complex(signal_2_5_strand, threshold_2_5_base_strand)
 waste_2_5_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[waste_2_5_complex])
 
@@ -349,7 +351,7 @@ waste_2_5_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
 #                     |   |
 #    INTERIOR_TO_STRAND   BLUNT_END
 #    T*        S6*       s6*
-reporter_6_complex = (waste_6_strand, reporter_6_base_strand)
+reporter_6_complex = nc.Complex(waste_6_strand, reporter_6_base_strand)
 reporter_6_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[reporter_6_complex])
 
@@ -376,16 +378,16 @@ reporter_6_complex_constraint = nc.nupack_complex_base_pair_probability_constrai
 #                         |              |   |
 #                        INTERIOR_TO_STRAND  BLUNT_END
 #                       T*        S6*       s6*
-f_waste_6_complex = (signal_5_6_strand, reporter_6_base_strand)
+f_waste_6_complex = nc.Complex(signal_5_6_strand, reporter_6_base_strand)
 f_waste_6_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
     strand_complexes=[f_waste_6_complex])
 
 
-def four_g_constraint_evaluate(seq: str, strand: Optional[nc.Strand]):
-    if 'GGGG' in seq:
-        return 1000
-    else:
-        return 0
+def four_g_constraint_evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:
+    seq = seqs[0]
+    score = 1000 if 'GGGG' in seq else 0
+    violation_str = "" if 'GGGG' not in strand.sequence() else "** violation**"
+    return score, f"{strand.name}: {strand.sequence()}{violation_str}"
 
 
 def four_g_constraint_summary(strand: nc.Strand):
@@ -396,11 +398,10 @@ def four_g_constraint_summary(strand: nc.Strand):
 four_g_constraint = nc.StrandConstraint(description="4GConstraint",
                                         short_description="4GConstraint",
                                         evaluate=four_g_constraint_evaluate,
-                                        strands=tuple(strands),
-                                        summary=four_g_constraint_summary)
+                                        strands=tuple(strands), )
 
 # Constraints
-complex_constraints = [
+constraints = [
     g_5_s_5_6_complex_constraint,
     g_5_s_2_5_complex_constraint,
     t_2_5_w_5_complex_constraint,
@@ -408,11 +409,13 @@ complex_constraints = [
     reporter_6_complex_constraint,
     f_waste_6_complex_constraint,
 ]
+constraints.append(four_g_constraint)
 
-seesaw_design = nc.Design(strands=strands, constraints=complex_constraints + [four_g_constraint])
+seesaw_design = nc.Design(strands=strands)
 
 params = ns.SearchParameters(  # weigh_violations_equally=True,
-    report_delay=0.0,
+    constraints=constraints,
+    # report_delay=0.0,
     out_directory='output/seesaw_gate',
     report_only_violations=False, )
 

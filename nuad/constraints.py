@@ -2299,6 +2299,17 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
 @dataclass
 class Complex(Part, Generic[StrandLabel, DomainLabel]):
     strands: Tuple[Strand, ...]
+    """The strands in this complex."""
+
+    def __init__(self, *args: Strand) -> None:
+        """
+        Creates a complex of strands given as arguments, e.g., ``Complex(strand1, strand2)`` creates
+        a 2-strand complex.
+        """
+        for strand in args:
+            if not isinstance(strand, Strand):
+                raise TypeError(f'must pass Strands to constructor for complex, not {strand}')
+        self.strands = tuple(args)
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
