@@ -1347,6 +1347,24 @@ def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys:
 
 class Part(ABC):
 
+    def __eq__(self, other: Part) -> bool:
+        return type(self) == type(other) and self.name == other.name
+
+    # Remember to set subclass __hash__ equal to this implementation; see here:
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    def __hash__(self) -> int:
+        return hash(self.key())
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def key(self) -> str:
+        # used as key in dictionary
+        pass
+
     @staticmethod
     @abstractmethod
     def name_of_part_type(self) -> str:
@@ -1372,9 +1390,21 @@ class DomainPair(Part, Generic[DomainLabel]):
     domain1: Domain
     domain2: Domain
 
+    def __post_init__(self) -> None:
+        # make this symmetric so make dict lookups work
+        if self.domain1.name > self.domain2.name:
+            self.domain1, self.domain2 = self.domain2, self.domain1
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     @property
     def name(self) -> str:
         return f'{self.domain1.name}, {self.domain2.name}'
+
+    def key(self) -> str:
+        return f'DomainPair[{self.domain1.name}, {self.domain2.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1389,7 +1419,7 @@ class DomainPair(Part, Generic[DomainLabel]):
 
 
 @dataclass
-class Domain(JSONSerializable, Part, Generic[DomainLabel]):
+class Domain(Part, JSONSerializable, Generic[DomainLabel]):
     """
     Represents a contiguous substring of the DNA sequence of a :any:`Strand`, which is intended
     to be either single-stranded, or to bind fully to the Watson-Crick complement of the :any:`Domain`.
@@ -1542,6 +1572,16 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     def name_of_part_type(self) -> str:
         return 'domain'
 
+    def key(self) -> str:
+        return f'Domain({self.name})'
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
+    def __repr__(self) -> str:
+        return self._name
+
     def individual_parts(self) -> Tuple[Domain, ...]:
         return self,
 
@@ -1602,17 +1642,6 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         domain: Domain[DomainLabel] = Domain(
             name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
-
-    def __hash__(self) -> int:
-        return hash(self._name)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Domain):
-            return False
-        return self._name == other._name
-
-    def __repr__(self) -> str:
-        return self._name
 
     @property
     def name(self) -> str:
@@ -2089,14 +2118,10 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         return None
 
 
-_domains_interned: Dict[str, Domain] = {}
-
-
 def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
         min_length: int = 0,
-        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
-        -> DomainPairConstraint:
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -2112,7 +2137,8 @@ def domains_not_substrings_of_each_other_constraint(
         For instance if `min_length` is 4, then having two domains with sequences AAAA and CAAAAC would
         violate this constraint, but domains with sequences AAA and CAAAC would not.
     :param pairs:
-        pairs of domains to check (by default all pairs of unequal domains are compared)
+        pairs of domains to check.
+        By default all pairs of unequal domains are compared unless both are fixed.
     :return:
         a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
         (in particular, if they are equal length, then they are not the same domain)
@@ -2242,9 +2268,21 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
     strand1: Strand
     strand2: Strand
 
+    def __post_init__(self) -> None:
+        # make this symmetric so make dict lookups work
+        if self.strand1.name > self.strand2.name:
+            self.strand1, self.strand2 = self.strand2, self.strand1
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     @property
     def name(self) -> str:
         return f'{self.strand1.name}, {self.strand2.name}'
+
+    def key(self) -> str:
+        return f'StrandPair[{self.strand1.name}, {self.strand2.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -2261,10 +2299,29 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
 @dataclass
 class Complex(Part, Generic[StrandLabel, DomainLabel]):
     strands: Tuple[Strand, ...]
+    """The strands in this complex."""
+
+    def __init__(self, *args: Strand) -> None:
+        """
+        Creates a complex of strands given as arguments, e.g., ``Complex(strand1, strand2)`` creates
+        a 2-strand complex.
+        """
+        for strand in args:
+            if not isinstance(strand, Strand):
+                raise TypeError(f'must pass Strands to constructor for complex, not {strand}')
+        self.strands = tuple(args)
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
 
     @property
     def name(self) -> str:
-        return ', '.join(strand.name for strand in self.strands)
+        strand_names = ', '.join(strand.name for strand in self.strands)
+        return f'Complex[{strand_names}]'
+
+    def key(self) -> str:
+        return f'Complex[{self.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -2288,7 +2345,7 @@ class Complex(Part, Generic[StrandLabel, DomainLabel]):
 
 
 @dataclass
-class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
+class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """Represents a DNA strand, made of several :any:`Domain`'s. """
 
     domains: List[Domain[DomainLabel]]
@@ -2358,7 +2415,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
     """
 
     def __init__(self,
-                 domain_names: Optional[List[str]] = None,
                  domains: Optional[List[Domain[DomainLabel]]] = None,
                  starred_domain_indices: Optional[Iterable[int]] = None,
                  group: str = default_strand_group,
@@ -2367,25 +2423,14 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
                  idt: Optional[IDTFields] = None,
                  ) -> None:
         """
-        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects
-        via parameter `domains`, or by giving names via parameter `domain_names`.
-        If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as global variables;
-        no two :any:`Domain`'s with the same name will be created, and subsequent uses of the same
-        name will refer to the same :any:`Domain` object.
+        A :any:`Strand` can be created only by listing explicit :any:`Domain` objects
+        via parameter `domains`. To specify a :any:`Strand` by giving domain *names*, see the method
+        :meth:`Design.add_strand`.
 
-        :param domain_names:
-            Names of the :any:`Domain`'s on this :any:`Strand`.
-            Mutually exclusive with :py:data:`Strand.domains` and :py:data:`Strand.starred_domain_indices`.
         :param domains:
-            Dictionary mapping each :any:`Domain` on this :any:`Strand` to the Boolean value indicating
-            whether it is a starred :any:`Domain`.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.starred_domain_indices`.
+            list of :any:`Domain`'s on this :any:`Strand`
         :param starred_domain_indices:
             Indices of :any:`Domain`'s in `domains` that are starred.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.domains`.
         :param group:
             name of group of this :any:`Strand`.
         :param name:
@@ -2399,33 +2444,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
         self._all_intersecting_domains = None
         self.group = group
         self._name = name
-        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
-                (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
-            raise ValueError('exactly one of domain_names or '
-                             'domains and starred_domain_indices must be non-None\n'
-                             f'domain_names: {domain_names}\n'
-                             f'domains: {domains}\n'
-                             f'starred_domain_indices: {starred_domain_indices}')
-
-        elif domain_names is not None:
-            domains = []
-            starred_domain_indices = OrderedSet()
-            for idx, domain_name in enumerate(domain_names):
-                is_starred = domain_name.endswith('*')
-                if is_starred:
-                    domain_name = domain_name[:-1]
-
-                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
-                domain: Domain
-                if domain_name not in _domains_interned:
-                    domain = Domain(name=domain_name)
-                    _domains_interned[domain_name] = domain
-                else:
-                    domain = _domains_interned[domain_name]
-
-                domains.append(domain)
-                if is_starred:
-                    starred_domain_indices.add(idx)
 
         # XXX: moved this check to Design constructor to allow subdomain graphs to be
         # constructed gradually while building up the design
@@ -2449,6 +2467,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
     @staticmethod
     def name_of_part_type(self) -> str:
         return 'strand'
+
+    def key(self) -> str:
+        return f'Strand({self._hash_domain_names_concatenated})'
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
 
     def individual_parts(self) -> Tuple[Strand, ...]:
         return self,
@@ -2515,14 +2540,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             as a subdomain or an ancestor
         """
         return domain in self.all_intersecting_domains()
-
-    def __hash__(self) -> int:
-        return self._hash_domain_names_concatenated
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Strand):
-            return False
-        return self._domain_names_concatenated == other._domain_names_concatenated
 
     def length(self) -> int:
         """
@@ -2985,6 +3002,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     strands: List[Strand[StrandLabel, DomainLabel]]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
+    _domains_interned: Dict[str, Domain]
+
     #################################################
     # derived fields, so not specified in constructor
 
@@ -3016,7 +3035,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    def __init__(self, strands: Iterable[Strand]) -> None:
+    def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
@@ -3025,6 +3044,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
+        self._domains_interned = {}
 
     def compute_derived_fields(self) -> None:
         """
@@ -3182,6 +3202,108 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             Design.assign_modifications_to_strands(strands, strands_json, all_mods)
 
         return Design(strands=strands)
+
+    def add_strand(self,
+                   domain_names: Optional[List[str]] = None,
+                   domains: Optional[List[Domain[DomainLabel]]] = None,
+                   starred_domain_indices: Optional[Iterable[int]] = None,
+                   group: str = default_strand_group,
+                   name: Optional[str] = None,
+                   label: Optional[StrandLabel] = None,
+                   idt: Optional[IDTFields] = None,
+                   ) -> Strand:
+        """
+        This is an alternative way to create strands instead of calling the :any:`Strand` constructor
+        explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
+        to specify :any:`Domain`'s simply by giving a name.
+
+        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
+        `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
+        If `domain_names` is specified, then by convention those that end with a ``*`` are
+        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as variables
+        in a cache stored in the :any:`Design` object;
+        no two :any:`Domain`'s with the same name in this design will be created,
+        and subsequent uses of the same name will refer to the same :any:`Domain` object.
+
+        :param domain_names:
+            Names of the :any:`Domain`'s on this :any:`Strand`.
+            Mutually exclusive with :py:data:`Strand.domains` and :py:data:`Strand.starred_domain_indices`.
+        :param domains:
+            list of :any:`Domain`'s on this :any:`Strand`.
+            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
+            :py:data:`Strand.starred_domain_indices`.
+        :param starred_domain_indices:
+            Indices of :any:`Domain`'s in `domains` that are starred.
+            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
+            :py:data:`Strand.domains`.
+        :param group:
+            name of group of this :any:`Strand`.
+        :param name:
+            Name of this :any:`Strand`.
+        :param label:
+            Label to associate with this :any:`Strand`.
+        :param idt:
+            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
+            methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
+        :return:
+            the :any:`Strand` that is created
+        """
+        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
+                (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
+            raise ValueError('exactly one of domain_names or '
+                             'domains and starred_domain_indices must be non-None\n'
+                             f'domain_names: {domain_names}\n'
+                             f'domains: {domains}\n'
+                             f'starred_domain_indices: {starred_domain_indices}')
+
+        elif domain_names is not None:
+            domains = []
+            starred_domain_indices = OrderedSet()
+            for idx, domain_name in enumerate(domain_names):
+                is_starred = domain_name.endswith('*')
+                if is_starred:
+                    domain_name = domain_name[:-1]
+
+                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
+                domain: Domain
+                if domain_name not in self._domains_interned:
+                    domain = Domain(name=domain_name)
+                    self._domains_interned[domain_name] = domain
+                else:
+                    domain = self._domains_interned[domain_name]
+
+                domains.append(domain)
+                if is_starred:
+                    starred_domain_indices.add(idx)
+
+        domains_of_strand = list(domains)  # type: ignore
+        strand = Strand(domains=domains_of_strand,
+                        starred_domain_indices=starred_domain_indices,
+                        group=group,
+                        name=name,
+                        label=label,
+                        idt=idt)
+
+        for existing_strand in self.strands:
+            if strand.name == existing_strand.name:
+                raise ValueError(f'strand name {strand.name} already exists for this strand:\n'
+                                 f'  {existing_strand}\n'
+                                 f'so it cannot be used for the new strand\n'
+                                 f'  {strand}')
+        self.strands.append(strand)
+
+        for domain_in_strand in strand.domains:
+            domains_in_tree = domain_in_strand.all_domains_in_tree()
+            for domain in domains_in_tree:
+                if domain not in self.domains:
+                    self.domains.append(domain)
+                name = domain.name
+                if name in self.domains_by_name and domain is not self.domains_by_name[name]:
+                    raise ValueError(f'domain names must be unique, '
+                                     f'but I found two different domains with name {domain.name}')
+                self.domains_by_name[domain.name] = domain
+
+        return strand
 
     @staticmethod
     def assign_modifications_to_strands(strands: List[Strand], strand_jsons: List[dict],
@@ -3530,8 +3652,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
-        dsd_strands: List[Strand] = []
         strand_names: Set[str] = set()
+        design: Design[StrandLabel, DomainLabel] = Design()
         for group, sc_strands in sc_strand_groups.items():
             for sc_strand in sc_strands:
                 # do not include strands with the same name more than once
@@ -3543,13 +3665,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
                 domain_names: List[str] = [domain.name for domain in sc_strand.domains]
                 sequence = sc_strand.dna_sequence
-                dsd_strand: Strand[StrandLabel, DomainLabel] = Strand(domain_names=domain_names,
-                                                                      group=group,
-                                                                      name=sc_strand.name,
-                                                                      label=sc_strand.label)
+                nuad_strand: Strand[StrandLabel, DomainLabel] = design.add_strand(domain_names=domain_names,
+                                                                                  group=group,
+                                                                                  name=sc_strand.name,
+                                                                                  label=sc_strand.label)
                 # assign sequence
                 if sequence is not None:
-                    for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
+                    for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
                         domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
                         # take the WC complement first so the dsd Domain stores the "canonical" sequence
@@ -3562,17 +3684,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                 dsd_domain.set_sequence(domain_sequence)
 
                 # set domain labels
-                for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
+                for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
                     if dsd_domain.label is None:
                         dsd_domain.label = sc_domain.label
                     elif sc_domain.label is not None and warn_existing_domain_labels:
                         logger.warning(f'warning; dsd domain already has label {dsd_domain.label}; '
                                        f'skipping assignment of scadnano label {sc_domain.label}')
 
-                dsd_strands.append(dsd_strand)
-                strand_names.add(dsd_strand.name)
+                strand_names.add(nuad_strand.name)
 
-        design: Design[StrandLabel, DomainLabel] = Design(strands=dsd_strands)
+        design.compute_derived_fields()
+
         return design
 
     @staticmethod
@@ -3838,254 +3960,48 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 d._check_acyclic_subdomain_graph()  # noqa
                 d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
+    def check_names_unique(self) -> None:
+        # domain names already checked in compute_derived_fields()
+        self.check_strand_names_unique()
+        self.check_domain_pool_names_unique()
+
+    def check_strand_names_unique(self) -> None:
+        strands_by_name = {}
+        for strand in self.strands:
+            name = strand.name
+            if name in strands_by_name:
+                raise ValueError(f'found two strands with name {name}:\n'
+                                 f'  {strand}\n'
+                                 f'and\n'
+                                 f'  {strands_by_name[name]}')
+
+    def check_domain_pool_names_unique(self) -> None:
+        # self.domain_pools() already computed by compute_derived_fields()
+        domain_pools_by_name = {}
+        for pool in self.domain_pools():
+            name = pool.name
+            if name in domain_pools_by_name:
+                raise ValueError(f'found two DomainPools with name {name}:\n'
+                                 f'  {pool}\n'
+                                 f'and\n'
+                                 f'  {domain_pools_by_name[name]}')
+            else:
+                domain_pools_by_name[pool.name] = pool
+
 
 # represents a "Design Part", e.g., Strand, Tuple[Domain, Domain], etc... whatever portion of the Design
 # is checked by the constraint
+# NOTE: this is needed in addition to the abstract base class Part, because it allows mypy type checking
+# of the various different types of evaluate and evaluate_bulk functions. Otherwise they have more
+# abstract type signatures, and we can't write something like evaluate(strand: Strand)
+# Maybe if we eventually get rid of the parts and only pass in the sequences, this will not be needed.
 DesignPart = TypeVar('DesignPart',
                      Domain,
                      Strand,
                      DomainPair,
                      StrandPair,
                      Complex,
-                     # Iterable[Domain],
-                     # Iterable[Strand],
-                     # Iterable[Tuple[Domain, Domain]],
-                     # Iterable[Tuple[Strand, Strand]],
-                     # Iterable[Complex],
                      Design)
-
-
-@dataclass
-class Violation(Generic[DesignPart]):
-    # Represents a violation of a single :any:`Constraint` in a :any:`Design`. The "part" of the :any:`Design`
-    # that violated the constraint is generic type `DesignPart` (e.g., for :any:`StrandPairConstraint`,
-    # DesignPart = :any:`Pair` [:any:`Strand`]).
-
-    constraint: Constraint
-    # :any:`Constraint` that was violated to result in this :any:`Violation`.
-
-    part: DesignPart
-    # DesignPart that caused this violation
-
-    domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
-    # :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
-
-    summary: str
-
-    score: float
-
-    def __init__(self, constraint: Constraint, part: DesignPart, domains: Iterable[Domain],
-                 score: float, summary: str) -> None:
-        # :param constraint:
-        #     :any:`Constraint` that was violated to result in this
-        # :param domains:
-        #     :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
-        # :param score:
-        #     total "score" of this violation, typically something like an excess energy over a
-        #     threshold, squared, multiplied by the :data:`Constraint.weight`
-        object.__setattr__(self, 'constraint', constraint)
-        object.__setattr__(self, 'part', part)
-        domains_frozen = frozenset(domains)
-        object.__setattr__(self, 'domains', domains_frozen)
-        object.__setattr__(self, 'score', score)
-        object.__setattr__(self, 'summary', summary)
-
-    def __repr__(self) -> str:
-        return f'Violation({self.constraint.short_description}, score={self.score:.2f}, ' \
-               f'summary={self.summary})'
-
-    def __str__(self) -> str:
-        return repr(self)
-
-    # _Violation equality based on identity; different Violations in memory are considered different,
-    # even if all data between them matches. Don't create the same Violation twice!
-    def __hash__(self):
-        return super().__hash__()
-
-    def __eq__(self, other):
-        return self is other
-
-
-@dataclass
-class ViolationSet:
-    # Represents violations of :any:`Constraint`'s in a :any:`Design`.
-    #
-    # It is designed to be efficiently updateable when a single :any:`Domain` changes, to efficiently update
-    # only those violations of :any:`Constraint`'s that could have been affected by the changed :any:`Domain`.
-
-    violations_all: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violation`'s of it.
-
-    domain_to_violations: Dict[Domain, OrderedSet[Violation]]
-    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is blamed
-
-    violations_nonfixed: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violations`
-    # that are associated to non-fixed :any:`constraint.Domain`'s.
-
-    violations_fixed: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violations`
-    # that are associated to fixed :any:`constraint.Domain`'s.
-
-    num_checked: Dict[Constraint, int]
-
-    # number of instances of each :any:`Constraint` that were checked
-
-    def __init__(self) -> None:
-        self.violations_all = defaultdict(OrderedSet)
-        self.domain_to_violations = defaultdict(OrderedSet)
-        self.violations_nonfixed = defaultdict(OrderedSet)
-        self.violations_fixed = defaultdict(OrderedSet)
-        self.num_checked = defaultdict(int)
-
-    def __repr__(self):
-        lines = "\n  ".join(map(str, self.violations_all.values()))
-        return f'ViolationSet(\n  {lines})'
-
-    def __str__(self):
-        return repr(self)
-
-    def update(self, new_violations: Dict[Domain, OrderedSet[Violation]]) -> None:
-        # Update this :any:`ViolationSet` by merging in new violations from `new_violations`.
-        #
-        # :param new_violations: dict mapping each :any:`Domain` to the set of :any:`Violation`'s
-        #                        for which it is blamed
-        for domain, domain_violations in new_violations.items():
-            self.domain_to_violations[domain].update(domain_violations)
-            for violation in domain_violations:
-                self.violations_all[violation.constraint].add(violation)
-                if not violation.part.fixed:
-                    self.violations_nonfixed[violation.constraint].add(violation)
-                else:
-                    self.violations_fixed[violation.constraint].add(violation)
-
-    def clone(self) -> ViolationSet:
-        # Returns a deep-ish copy of this :any:`ViolationSet`.
-        # :py:data:`ViolationSet.all_violations` is a new list,
-        # but containing the same :any:`Violation`'s.
-        # :py:data:`ViolationSet.domain_to_violations` is a new dict,
-        # and each of its values is a new set, but each of the :any:`Domain`'s and :any:`Violation`'s
-        # is the same object as in the original :any:`ViolationSet`.
-        #
-        # This is required for efficiently processing :any:`Violation`'s from one search iteration to the
-        # next.
-        #
-        # :return: A deep-ish copy of this :any:`ViolationSet`.
-        domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
-        for domain, violations in domain_to_violations_deep_copy.items():
-            domain_to_violations_deep_copy[domain] = OrderedSet(violations)
-
-        violations_all_deep_copy = defaultdict(OrderedSet, self.violations_all)
-        for constraint, violations in violations_all_deep_copy.items():
-            violations_all_deep_copy[constraint] = OrderedSet(violations)
-
-        violations_nonfixed_deep_copy = defaultdict(OrderedSet, self.violations_nonfixed)
-        for constraint, violations in violations_nonfixed_deep_copy.items():
-            violations_nonfixed_deep_copy[constraint] = OrderedSet(violations)
-
-        violations_fixed_deep_copy = defaultdict(OrderedSet, self.violations_fixed)
-        for constraint, violations in violations_fixed_deep_copy.items():
-            violations_fixed_deep_copy[constraint] = OrderedSet(violations)
-
-        result = ViolationSet()
-        result.violations_all = violations_all_deep_copy
-        result.domain_to_violations = domain_to_violations_deep_copy
-        result.violations_nonfixed = violations_nonfixed_deep_copy
-        result.violations_fixed = violations_fixed_deep_copy
-
-        return result
-
-    def remove_violations_of_domain(self, domain: Domain) -> None:
-        # Removes any :any:`Violation`'s blamed on `domain`.
-        # :param domain: the :any:`Domain` whose :any:`Violation`'s should be removed
-
-        # XXX: need to make a copy of this set, since we are modifying the sets in place
-        # (values in self.domain_to_violations)
-        violations_of_domain = set(self.domain_to_violations[domain])
-
-        for violations in self.violations_all.values():
-            violations -= violations_of_domain
-        for violations in self.violations_nonfixed.values():
-            violations -= violations_of_domain
-        for violations in self.violations_fixed.values():
-            violations -= violations_of_domain
-
-        for violations_of_other_domain in self.domain_to_violations.values():
-            violations_of_other_domain -= violations_of_domain
-
-        assert len(self.domain_to_violations[domain]) == 0
-
-    def total_score(self) -> float:
-        """
-        :return: Total score of all violations.
-        """
-        return sum(violation.score
-                   for violations in self.violations_all.values()
-                   for violation in violations)
-
-    def total_score_nonfixed(self) -> float:
-        # :return:
-        #     Total score of all violations attributed to :any:`constraint.Domain`'s with
-        #     :any:`constraint.Domain.fixed` = False.
-        return sum(violation.score
-                   for violations in self.violations_nonfixed.values()
-                   for violation in violations)
-
-    def total_score_fixed(self) -> float:
-        # :return:
-        #     Total score of all violations attributed to :any:`constraint.Domain`'s with
-        #     :any:`constraint.Domain.fixed` = False.
-        return sum(violation.score
-                   for violations in self.violations_fixed.values()
-                   for violation in violations)
-
-    def score_of_constraint(self, constraint: Constraint) -> float:
-        """
-        :param constraint:
-            constraint to filter scores on
-        :return:
-            Total score of all violations due to `constraint`.
-        """
-        return sum(violation.score
-                   for violations in self.violations_all.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def score_of_constraint_nonfixed(self, constraint: Constraint) -> float:
-        # :param constraint:
-        #     constraint to filter scores on
-        # :return:
-        #     Total score of all nonfixed violations due to `constraint`.
-        return sum(violation.score
-                   for violations in self.violations_nonfixed.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def score_of_constraint_fixed(self, constraint: Constraint) -> float:
-        # :param constraint:
-        #     constraint to filter scores on
-        # :return:
-        #     Total score of all fixed violations due to `constraint`.
-        return sum(violation.score
-                   for violations in self.violations_fixed.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def num_violations(self) -> float:
-        # :return: Total number of violations.
-        return sum(len(violations) for violations in self.violations_all.values())
-
-    def num_violations_nonfixed(self) -> float:
-        # :return: Total number of nonfixed violations.
-        return sum(len(violations) for violations in self.violations_nonfixed.values())
-
-    def num_violations_fixed(self) -> float:
-        # :return: Total number of fixed violations.
-        return sum(len(violations) for violations in self.violations_fixed.values())
-
-    def has_nonfixed_violations(self) -> bool:
-        # :return: whether there are any nonfixed Violations in this ViolationSet
-        return self.num_violations_nonfixed() > 0
 
 
 @dataclass(frozen=True, eq=False)
@@ -4323,7 +4239,10 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
                            SingularConstraint[DomainPair]):
-    """Constraint that applies to a pair of :any:`Domain`'s."""
+    """Constraint that applies to a pair of :any:`Domain`'s.
+
+    These should be symmetric, meaning that the constraint will give the same evaluation whether its
+    evaluate method is given the pair (domain1, domain2), or the pair (domain2, domain1)."""
 
     @staticmethod
     def part_name() -> str:
@@ -4333,7 +4252,10 @@ class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
 @dataclass(frozen=True, eq=False)  # type: ignore
 class StrandPairConstraint(ConstraintWithStrandPairs[StrandPair],
                            SingularConstraint[StrandPair]):
-    """Constraint that applies to a pair of :any:`Strand`'s."""
+    """Constraint that applies to a pair of :any:`Strand`'s.
+
+    These should be symmetric, meaning that the constraint will give the same evaluation whether its
+    evaluate method is given the pair (strand1, strand2), or the pair (strand2, strand1)."""
 
     @staticmethod
     def part_name() -> str:
@@ -4976,10 +4898,9 @@ def rna_duplex_domain_pairs_constraint(
 
         for pair, energy in zip(domain_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
@@ -5354,10 +5275,9 @@ def rna_duplex_strand_pairs_constraint(
 
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
@@ -5456,10 +5376,9 @@ def rna_cofold_strand_pairs_constraint(
 
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
@@ -6855,7 +6774,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
+def _get_implicitly_bound_domain_addresses(strand_complex: Iterable[Strand],
                                            nonimplicit_base_pairs_domain_names: Optional[Set[str]] = None) \
         -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
@@ -6983,7 +6902,7 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-        strand_complex: Complex,
+        strand_complex: Iterable[Strand],
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
@@ -7001,8 +6920,8 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = Complex(tuple(
-        [_leafify_strand(strand, addr_translation_table) for strand in strand_complex]))
+    leafify_strand_complex = Complex(
+        *[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:

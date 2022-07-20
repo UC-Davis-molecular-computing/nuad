@@ -20,8 +20,8 @@ import logging
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, Any, \
-    Deque, TypeVar, Union
+from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, \
+    Deque, TypeVar, Union, Generic, Iterator, Any
 import statistics
 import textwrap
 import re
@@ -74,81 +74,6 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-def _violations_of_constraints(design: Design,
-                               constraints: [nc.Constraint],
-                               never_increase_score: bool,
-                               domains_changed: Optional[Iterable[Domain]],
-                               violation_set_old: Optional[nc.ViolationSet],
-                               iteration: int,
-                               ) -> nc.ViolationSet:
-    """
-    :param design:
-        The :any:`Design` for which to find DNA sequences.
-    :param constraints:
-        List of :any:`constraints.Constraint`'s to apply
-    :param domains_changed:
-        The :any:`Domain`'s that just changed; if None, then recalculate all constraints, otherwise assume no
-        constraints changed that do not involve a :any:`Domain` in `domains_changed`.
-    :param violation_set_old:
-        :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed.
-    :param never_increase_score:
-        Indicates whether the search algorithm is using an update rule that never increases the total score
-        of violations (i.e., it only goes downhill). If so we can optimize and stop this function early as
-        soon as we find that the violations discovered so far exceed the total score of the current optimal
-        solution. In later stages of the search, when the optimal solution so far has very few violated
-        constraints, this vastly speeds up the search by allowing most of the constraint checking to be
-        skipping for most choices of DNA sequences to `domain_changed`.
-    :param iteration:
-        Current iteration number; useful for debugging (e.g., conditional breakpoints).
-    :return:
-        dict mapping each :any:`Domain` to the list of constraints it violated
-    """
-
-    if iteration > 0:
-        pass  # to quiet PEP warnings
-
-    if not ((domains_changed is None and violation_set_old is None) or (
-            domains_changed is not None and violation_set_old is not None)):
-        raise ValueError('domains_changed and violation_set_old should both be None or both be not None; '
-                         f'domains_changed = {domains_changed}'
-                         f'violation_set_old = {violation_set_old}')
-
-    # remove violations involving domains_changed, since they might evaluate differently now
-    violation_set: nc.ViolationSet
-    if domains_changed is None:
-        violation_set = nc.ViolationSet()
-    else:
-        assert violation_set_old is not None
-        violation_set = violation_set_old.clone()  # Keep old in case no improvement
-        for domain_changed in domains_changed:
-            assert not domain_changed.fixed
-            violation_set.remove_violations_of_domain(domain_changed)
-
-    # find new violations of parts involving domains in domains_changed, and add them to violation_set
-    for constraint in constraints:
-        parts_to_check = find_parts_to_check(constraint, design, domains_changed)
-
-        current_score_gap = violation_set_old.total_score() - violation_set.total_score() \
-            if never_increase_score and violation_set_old is not None else None
-
-        violations, quit_early_in_func = _violations_of_constraint(
-            parts=parts_to_check, constraint=constraint, current_score_gap=current_score_gap,
-            domains_changed=domains_changed, design=design)
-        violation_set.update(violations)
-
-        parts_to_check_total = find_parts_to_check(constraint, design, None)
-        violation_set.num_checked[constraint] = len(parts_to_check_total)
-
-        quit_early = _quit_early(never_increase_score, violation_set, violation_set_old)
-        assert quit_early == quit_early_in_func
-        if quit_early:
-            return violation_set
-
-    return violation_set
-
-
-# optimization so we don't keep recomputing parts to check for each constraint,
-# only used when domains_changed is None, otherwise the parts to check depends on the domains that changed
 _parts_to_check_cache = {}
 
 
@@ -188,21 +113,23 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     return parts_to_check
 
 
+# XXX: important that this is absolute constant. Sometimes this is called for the total weight of all
+# violations, and sometimes just for the difference between old and new (the latter are smaller).
+# If using relative epsilon, then those can disagree and trigger the assert statement that
+# checks that _violations_of_constraints quit_early agrees with the subroutines it calls.
+_epsilon = 0.000001
+
+
 def _is_significantly_greater(x: float, y: float) -> bool:
-    # epsilon = min(abs(x), abs(y)) * 0.001
-    # XXX: important that this is absolute constant. Sometimes this is called for the total weight of all
-    # violations, and sometimes just for the difference between old and new (the latter are smaller).
-    # If using relative epsilon, then those can disagree and trigger the assert statement that
-    # checks that _violations_of_constraints quit_early agrees with the subroutines it calls.
-    epsilon = 0.001
-    return x > y + epsilon
+    return x > y + _epsilon
 
 
-def _quit_early(never_increase_score: bool,
-                violation_set: nc.ViolationSet,
-                violation_set_old: Optional[nc.ViolationSet]) -> bool:
-    return (never_increase_score and violation_set_old is not None
-            and _is_significantly_greater(violation_set.total_score(), violation_set_old.total_score()))
+def _is_significantly_less(x: float, y: float) -> bool:
+    return x < y - _epsilon
+
+
+def _is_significantly_different(x: float, y: float) -> bool:
+    return abs(x - y) > _epsilon
 
 
 def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
@@ -214,10 +141,10 @@ def _determine_domains_to_check(all_domains: Iterable[Domain],
                                 constraint: ConstraintWithDomains) -> Sequence[Domain]:
     """
     Determines domains to check in `all_domains`.
-    If `domains_changed` is None, then this is all that are not fixed if constraint.domains
+    If `domains_new` is None, then this is all that are not fixed if constraint.domains
     is None, otherwise it is constraint.domains.
-    If `domains_changed` is not None, then among those domains specified above,
-    it is just those in `domains_changed` that appear in `all_domains`.
+    If `domains_new` is not None, then among those domains specified above,
+    it is just those in `domains_new` that appear in `all_domains`.
     """
     # either all pairs, or just constraint.pairs if specified
     domains_to_check_if_domain_changed_none = all_domains \
@@ -266,7 +193,7 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     it is all pairs where one of the two is `domain_changed`.
     """
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
-    # all pairs of domains only to filter out most of them that don't intersect domains_changed
+    # all pairs of domains only to filter out most of them that don't intersect domains_new
     if domains_changed is None:
         # either all pairs, or just constraint.pairs if specified
         if constraint.pairs is not None:
@@ -279,7 +206,8 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
 
             pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
                               where=not_subdomain)
-            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs]
+            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs
+                                     if not (domain1.fixed and domain2.fixed)]
 
     else:
         # either all pairs, or just constraint.pairs if specified
@@ -313,7 +241,7 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
     Similar to _determine_domain_pairs_to_check but for strands.
     """
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
-    # all pairs of strands only to filter out most of them that don't intersect domains_changed
+    # all pairs of strands only to filter out most of them that don't intersect domains_new
     if domains_changed is None:
         # either all pairs, or just constraint.pairs if specified
         if constraint.pairs is not None:
@@ -336,8 +264,8 @@ def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
                                                if domain_changed in strand.domains]
                 for strand_with_domain_changed in strands_with_domain_changed:
                     for other_strand in all_strands:
-                        if strand_with_domain_changed is not other_strand or \
-                                constraint.check_strand_against_itself:
+                        if (strand_with_domain_changed is not other_strand or
+                                constraint.check_strand_against_itself):
                             strand_pairs_to_check.append(StrandPair(strand_with_domain_changed, other_strand))
 
     return strand_pairs_to_check
@@ -389,61 +317,6 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 
 
 _empty_frozen_set: FrozenSet = frozenset()
-
-
-def _violations_of_constraint(parts: Sequence[DesignPart],
-                              constraint: Constraint[DesignPart],
-                              current_score_gap: Optional[float],
-                              domains_changed: Optional[Iterable[Domain]] = None,
-                              design: Optional[Design] = None,  # only used with DesignConstraint
-                              ) -> Tuple[Dict[Domain, OrderedSet[nc.Violation]], bool]:
-    score_discovered_here: float = 0.0
-    quit_early = False
-
-    # measure violations of constraints and collect in list of triples (part, score, summary)
-    violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
-    if isinstance(constraint, SingularConstraint):
-        if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
-            for part in parts:
-                seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                score, summary = constraint.call_evaluate(seqs, part)
-                if score > 0.0:
-                    violating_parts_scores_summaries.append((part, score, summary))
-                    if current_score_gap is not None:
-                        score_discovered_here += score
-                        if _is_significantly_greater(score_discovered_here, current_score_gap):
-                            quit_early = True
-                            break
-        else:
-            raise NotImplementedError('TODO: implement parallelization')
-
-    elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
-        if isinstance(constraint, DesignConstraint):
-            violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_changed)
-        else:
-            # XXX: I don't understand the mypy error on the next line
-            violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
-
-        # we can't quit this function early,
-        # but we can let the caller know to stop evaluating constraints
-        total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
-        if current_score_gap is not None:
-            score_discovered_here += total_score
-            if _is_significantly_greater(score_discovered_here, current_score_gap):
-                quit_early = True
-    else:
-        raise AssertionError(f'constraint {constraint} of unrecognized type {constraint.__class__.__name__}')
-
-    # assign blame for violations to domains by looking up associated domains in each part
-    violations: Dict[Domain, OrderedSet[nc.Violation]] = defaultdict(OrderedSet)
-    for part, score, summary in violating_parts_scores_summaries:
-        domains = _independent_domains_in_part(part, exclude_fixed=False)
-        violation = nc.Violation(constraint=constraint, part=part, domains=domains,
-                                 score=score, summary=summary)
-        for domain in domains:
-            violations[domain].add(violation)
-
-    return violations, quit_early
 
 
 def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> List[Domain]:
@@ -502,7 +375,7 @@ def _sequences_fragile_format_output_to_file(design: Design,
 
 def _write_intermediate_files(*, design: nc.Design, params: SearchParameters, rng: numpy.random.Generator,
                               num_new_optimal: int, directories: _Directories,
-                              violation_set: nc.ViolationSet) -> None:
+                              eval_set: EvaluationSet) -> None:
     num_new_optimal_padded = f'{num_new_optimal}' if params.num_digits_update is None \
         else f'{num_new_optimal:0{params.num_digits_update}d}'
 
@@ -516,7 +389,7 @@ def _write_intermediate_files(*, design: nc.Design, params: SearchParameters, rn
                      num_new_optimal_padded=num_new_optimal_padded)
 
     _write_report(params=params, directories=directories,
-                  num_new_optimal_padded=num_new_optimal_padded, violation_set=violation_set)
+                  num_new_optimal_padded=num_new_optimal_padded, eval_set=eval_set)
 
 
 def _write_design(design: Design, params: SearchParameters, directories: _Directories,
@@ -551,12 +424,12 @@ def _write_sequences(design: Design, params: SearchParameters, directories: _Dir
 
 
 def _write_report(params: SearchParameters, directories: _Directories,
-                  num_new_optimal_padded: str, violation_set: nc.ViolationSet) -> None:
+                  num_new_optimal_padded: str, eval_set: EvaluationSet) -> None:
     content = f'''\
 Report on constraints
 =====================
 ''' + summary_of_constraints(params.constraints, params.report_only_violations,
-                             violation_set=violation_set)
+                             eval_set=eval_set)
 
     best_filename = directories.best_report_full_filename_noext()
     idx_filename = directories.indexed_report_full_filename_noext(num_new_optimal_padded) \
@@ -704,7 +577,7 @@ class _Directories:
 
 
 def _check_design(design: nc.Design) -> None:
-    # verify design is legal
+    # verify design is legal in senses not already checked
 
     for strand in design.strands:
         for domain in strand.domains:
@@ -801,7 +674,7 @@ class SearchParameters:
 
     info_log_file: bool = False
     """
-    By default, the text written to the screen through logger.info (on the logger instance used in
+    If True, the text written to the screen through logger.info (on the logger instance used in
     dsd.constraints) is written to the file log_info.log in the directory `out_directory`.
     """
 
@@ -880,6 +753,51 @@ class SearchParameters:
     log_time: bool = False
     """
     Whether to log the time taken per iteration to the screen.
+    """
+
+    scrolling_output: bool = True
+    r"""
+    If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
+    e.g.,
+    
+    .. code-block:: console
+    
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         0 |      0 |    2555.9 |    2545.9 |    118.2 |        2437.8 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         1 |      1 |    2545.9 |    2593.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         2 |      1 |    2545.9 |    2563.1 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         3 |      1 |    2545.9 |    2545.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         4 |      2 |    2545.0 |    2510.1 |    121.0 |        2423.9 |
+    
+    If False, then the screen output is updated in place:
+    
+    .. code-block:: console
+        
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |        27 |     14 |    2340.5 |    2320.5 |    109.6 |        2230.9 |
+
+    
+    This is done by printing the symbol '\r' (carriage return), which sets the print position
+    back to the start of the line. The terminal screen must be wide enough to handle the output or
+    this won't work. 
+    
+    The search also occassionally logs other things to the screen that may disrupt this a bit.
     """
 
     def __post_init__(self):
@@ -965,8 +883,6 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
         for flexibility.
 
     """
-    design.check_all_subdomain_graphs_acyclic()
-    design.check_all_subdomain_graphs_uniquely_assignable()
 
     if params.random_seed is not None:
         logger.info(f'using random seed of {params.random_seed}; '
@@ -976,6 +892,10 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
     # StrandPool that contains them.
     # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
     design.compute_derived_fields()
+
+    design.check_all_subdomain_graphs_acyclic()
+    design.check_all_subdomain_graphs_uniquely_assignable()
+    design.check_names_unique()
     _check_design(design)
 
     directories = _setup_directories(params)
@@ -1012,71 +932,59 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
             if rng_restart is not None:
                 rng = rng_restart
 
-        violation_set_opt, domains_opt, scores_opt = _find_violations_and_score(
-            design=design, params=params, iteration=-1)
+        eval_set = EvaluationSet(params.constraints, params.never_increase_score)
+        eval_set.evaluate_all(design)
 
         if not params.restart:
             # write initial sequences and report
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
-                                      directories=directories, violation_set=violation_set_opt)
-
-        # this helps with logging if we execute no iterations
-        violation_set_new = violation_set_opt
+                                      directories=directories, eval_set=eval_set)
 
         iteration = 0
-
         stopwatch = Stopwatch()
 
-        while not _done(iteration, params, violation_set_opt):
+        while not _done(iteration, params, eval_set):
             if params.log_time:
                 stopwatch.restart()
 
             _check_cpu_count(cpu_count)
 
-            domains_changed, original_sequences = _reassign_domains(domains_opt, scores_opt,
-                                                                    params.max_domains_to_change, rng)
+            domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            violation_set_new, domains_new, scores_new = _find_violations_and_score(
-                design=design, params=params, domains_changed=domains_changed,
-                violation_set_old=violation_set_opt, iteration=iteration)
+            eval_set.evaluate_new(design, domains_new=domains_new)
 
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
-            #                                       violation_set_new=violation_set_new,
-            #                                       violation_set_opt=violation_set_opt)
+            #                                       eval_set=eval_set)
 
-            _log_constraint_summary(params=params,
-                                    violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
+            _log_constraint_summary(params=params, eval_set=eval_set,
                                     iteration=iteration, num_new_optimal=num_new_optimal)
 
             # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
-            # score_delta = violation_set_new.total_score() - violation_set_opt.total_score()
-            score_delta = violation_set_new.total_score_nonfixed() - violation_set_opt.total_score_nonfixed()
+            score_delta = -eval_set.calculate_score_gap()
             prob_keep_change = params.probability_of_keeping_change(score_delta)
             keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
 
             if not keep_change:
-                _unassign_domains(domains_changed, original_sequences)
+                _unassign_domains(domains_new, original_sequences)
+                eval_set.reset_new()
             else:
                 # keep new sequence and update information about optimal solution so far
-                domains_opt = domains_new
-                scores_opt = scores_new
-                violation_set_opt = violation_set_new
+                eval_set.replace_with_new()
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
                     _write_intermediate_files(design=design, params=params, rng=rng,
                                               num_new_optimal=num_new_optimal, directories=directories,
-                                              violation_set=violation_set_opt)
+                                              eval_set=eval_set)
 
             iteration += 1
             if params.log_time:
                 stopwatch.stop()
                 _log_time(stopwatch)
 
-        _log_constraint_summary(params=params,
-                                violation_set_opt=violation_set_opt, violation_set_new=violation_set_new,
+        _log_constraint_summary(params=params, eval_set=eval_set,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
 
     finally:
@@ -1092,12 +1000,22 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
         nc.logger.removeHandler(directories.info_file_handler)  # noqa
 
 
-def _done(iteration: int, params: SearchParameters, violation_set_opt: nc.ViolationSet) -> bool:
-    keep_going = (
-            (violation_set_opt.total_score() > params.target_score if params.target_score is not None else
-             violation_set_opt.has_nonfixed_violations())
-            and (params.max_iterations is None or iteration < params.max_iterations))
-    return not keep_going
+def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
+    # unconditinoally stop when max_iterations is reached, if specified
+    if params.max_iterations is not None and iteration >= params.max_iterations:
+        return True
+
+    # otherwise if target_score is specified, check that current score is close to it
+    if params.target_score is not None:
+        if _is_significantly_greater(eval_set.total_score, params.target_score):
+            return False
+    else:
+        # otherwise just see if any violations remain that are not fixed
+        # (i.e., that might be correctable by changing domains; fixed violations are un-solvable)
+        if eval_set.has_nonfixed_violations():
+            return False
+
+    return True
 
 
 def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
@@ -1120,14 +1038,13 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
     :return:
         string describing a report of how well `design` does according to `constraints`
     """
-    violation_set: nc.ViolationSet = _violations_of_constraints(
-        design=design, constraints=constraints, never_increase_score=False,
-        domains_changed=None, violation_set_old=None, iteration=0)
+    evaluation_set = EvaluationSet(constraints, False)
+    evaluation_set.evaluate_all(design)
 
     content = f'''\
 Report on constraints
 =====================
-''' + summary_of_constraints(constraints, True, violation_set=violation_set)
+''' + summary_of_constraints(constraints, True, eval_set=evaluation_set)
 
     return content
 
@@ -1167,30 +1084,26 @@ def _setup_directories(params: SearchParameters) -> _Directories:
     return directories
 
 
-def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_domains_to_change: int,
+def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
                       rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
-    scores_weighted = [score * domain.weight for domain, score in zip(domains_opt, scores_opt)]
+    domains = list(eval_set.domain_to_score.keys())
+    scores_weighted = [score * domain.weight for domain, score in eval_set.domain_to_score.items()]
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
-    domains_changed: List[Domain] = list(rng.choice(a=domains_opt, p=probs_opt, replace=False,
+    domains_changed: List[Domain] = list(rng.choice(a=domains, p=probs_opt, replace=False,
                                                     size=num_domains_to_change))
-
-    # print(f'domains_changed: {domains_changed}')
 
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
 
-    # dependent domains also cannot be blamed, since their independent source should be blamed
+    # dependent domains also cannot be blamed, since their independent source should have been blamed
     assert all(not domain_changed.dependent for domain_changed in domains_changed)
 
     original_sequences: Dict[Domain, str] = {}
-
-    # # first re-assign independent domains
-    # independent_domains = [domain for domain in domains_changed if not domain.dependent]
 
     for domain in domains_changed:
         # set sequence of domain_changed to random new sequence from its DomainPool
@@ -1199,19 +1112,6 @@ def _reassign_domains(domains_opt: List[Domain], scores_opt: List[float], max_do
         original_sequences[domain] = previous_sequence
         new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
         domain.set_sequence(new_sequence)
-
-    # # then for each dependent domain, find the independent domain in its tree that can change it,
-    # # and re-assign that domain
-    # dependent_domains = [domain for domain in domains_changed if domain.dependent]
-    # for dependent_domain in dependent_domains:
-    #     independent_domain = dependent_domain.independent_ancestor_or_descendent()
-    #     assert independent_domain not in original_sequences
-    #     previous_sequence = independent_domain.sequence()
-    #     original_sequences[independent_domain] = previous_sequence
-    #     new_sequence = independent_domain.pool.generate_sequence(rng, previous_sequence)
-    #     independent_domain.set_sequence(new_sequence)
-    #     domains_changed.remove(dependent_domain)
-    #     domains_changed.append(independent_domain)
 
     return domains_changed, original_sequences
 
@@ -1225,30 +1125,44 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 # to think a new assignment was better than the optimal so far, but a mistake in score accounting
 # from quitting early meant we had simply stopped looking for violations too soon.
 def _double_check_violations_from_scratch(design: nc.Design, params: SearchParameters, iteration: int,
-                                          violation_set_new: nc.ViolationSet,
-                                          violation_set_opt: nc.ViolationSet):
-    violation_set_new_fs, domains_new_fs, scores_new_fs = _find_violations_and_score(
-        design=design, params=params, iteration=iteration)
-    # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
-    # the total score found on quitting early will be less than the total score if not.
-    # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
-    # import math
-    # if not math.isclose(violation_set_new.total_score(), violation_set_new_fs.total_score()):
-    # Instead, we check whether the total score lie on different sides of the opt total score, i.e.,
-    # they make different decisions about whether to change to the new assignment
-    if (violation_set_new_fs.total_score()
-        > violation_set_opt.total_score()
-        >= violation_set_new.total_score()) or \
-            (violation_set_new_fs.total_score()
-             <= violation_set_opt.total_score()
-             < violation_set_new.total_score()):
-        logger.warning(f'WARNING! There is a bug in nuad.')
-        logger.warning(f'total score opt = {violation_set_opt.total_score()}')
-        logger.warning(f'From scratch, we calculated score {violation_set_new_fs.total_score()}.')
-        logger.warning(f'Iteratively, we calculated score  {violation_set_new.total_score()}.')
-        logger.warning(f'This means the iterative search is saying something different about '
-                       f'quitting early than the full search. ')
-        logger.warning(f'This happened on iteration {iteration}.')
+                                          eval_set: EvaluationSet):
+    eval_set_from_scratch = EvaluationSet(params.constraints, params.never_increase_score)
+    eval_set_from_scratch.evaluate_all(design)
+    score_new = eval_set.total_score_new()
+    score_opt = eval_set.total_score
+    score_fs = eval_set_from_scratch.total_score
+
+    problem = False
+    if not params.never_increase_score:
+        if _is_significantly_different(score_fs, score_new):
+            problem = True
+    else:
+        # XXX: we shouldn't check that the actual scores are close if quit_early is enabled, because then
+        # the total score found on quitting early will be less than the total score if not.
+        # But uncomment this, while disabling quitting early, to test more precisely for "wrong total score".
+        # import math
+        # if not math.isclose(violation_set_new.total_score(), violation_set_new_fs.total_score()):
+        # Instead, we check whether the total score lie on different sides of the opt total score, i.e.,
+        # they make different decisions about whether to change to the new assignment
+        # if ((score_new
+        #      <= score_opt
+        #      < score_fs) or
+        #         (score_fs
+        #          <= score_opt
+        #          < score_new)):
+        if ((_is_significantly_less(score_new, score_opt)
+             and _is_significantly_less(score_opt, score_fs)) or
+                ((_is_significantly_less(score_fs, score_opt)
+                  and _is_significantly_less(score_opt, score_new)))):
+            problem = True
+    if problem:
+        logger.warning(f'''\
+WARNING! There is a bug in nuad.
+From scratch, we calculated score {score_fs}.
+The optimal score so far is       {score_opt}.
+Iteratively, we calculated score  {score_new}.
+This means the iterative search is saying something different about quitting early than the full search. '
+This happened on iteration {iteration}.''')
         sys.exit(-1)
 
 
@@ -1416,95 +1330,69 @@ def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
         time_last_n_calls_available = True
 
 
-def _find_violations_and_score(design: Design,
-                               params: SearchParameters,
-                               domains_changed: Optional[Iterable[Domain]] = None,
-                               violation_set_old: Optional[nc.ViolationSet] = None,
-                               iteration: int = -1) \
-        -> Tuple[nc.ViolationSet, List[Domain], List[float]]:
-    """
-    :param design:
-        :any:`Design` to evaluate
-    :param domains_changed:
-        The :any:`Domain` that just changed;
-        if None, then recalculate all constraints,
-        otherwise assume no constraints changed that do not involve `domain`
-    :param violation_set_old:
-        :any:`ViolationSet` to update, assuming `domain_changed` is the only :any:`Domain` that changed
-    :param iteration:
-        Current iteration number; useful for debugging (e.g., conditional breakpoints).
-    :return:
-        Tuple (violations, domains, scores)
-            `violations`: dict mapping each domain to list of constraints that they violated
-            `domains`:    list of :any:`Domain`'s that caused violations
-            `scores`:    list of scores for each :any:`Domain`, in same order the domains appear, giving
-                          the total score of :any:`Constraint`'s violated by the corresponding :any:`Domain`
-    """
-
-    violation_set: nc.ViolationSet = _violations_of_constraints(
-        design, params.constraints, params.never_increase_score,
-        domains_changed, violation_set_old, iteration)
-
-    # NOTE: this filters out the fixed domains,
-    # but we keep them in violation_set for the sake of reports
-    domain_to_score: Dict[Domain, float] = {
-        domain: sum(violation.score for violation in domain_violations)
-        for domain, domain_violations in violation_set.domain_to_violations.items()
-        if not domain.fixed
-    }
-    domains = list(domain_to_score.keys())
-    scores = list(domain_to_score.values())
-
-    return violation_set, domains, scores
-
-
-def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> Iterable[Any]:
+def _flatten(list_of_lists: Iterable[Iterable[T]]) -> Iterable[T]:
     #  Flatten one level of nesting
     return itertools.chain.from_iterable(list_of_lists)
 
 
+def _remove_first_lines_from_string(s: str, num_lines: int) -> str:
+    return '\n'.join(s.split('\n')[num_lines:])
+
+
 def _log_constraint_summary(*, params: SearchParameters,
-                            violation_set_opt: nc.ViolationSet,
-                            violation_set_new: nc.ViolationSet,
+                            eval_set: EvaluationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    score_header = '\niteration|updates|opt score||new score|'
-    all_constraints_header = '|'.join(
-        f'{constraint.short_description}' for constraint in params.constraints)
-    header = score_header + all_constraints_header
+    # If output is not scrolling, only print this once on first iteration.
+    if params.scrolling_output or iteration == 0:
+        row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
+                                                                    for constraint in params.constraints]
+        header = tabulate([row1], tablefmt='github')
+        print(header)
 
-    score_opt = violation_set_opt.total_score()
-    score_new = violation_set_new.total_score()
-    dec_opt = max(1, math.ceil(math.log(1 / score_opt, 10)) + 2) if score_opt > 0 else 1
-    dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
-    score_str = f'{iteration:9}|{num_new_optimal:7}|' \
-                f'{score_opt :9.{dec_opt}f}||' \
-                f'{score_new :9.{dec_new}f}|'  # \
+    def _dec(score: float) -> int:
+        # how many decimals after decimal point to use given the score
+        dec_opt = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        return dec_opt
+
+    score_opt = eval_set.total_score
+    score_new = eval_set.total_score_new()
+
+    dec_opt = _dec(score_opt)
+    dec_new = _dec(score_new)
 
     all_constraints_strs = []
     for constraint in params.constraints:
-        score = violation_set_new.score_of_constraint(constraint)
+        score = eval_set.score_of_constraint(constraint, True)
         length = len(constraint.short_description)
-        num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        num_decimals = _dec(score)
         constraint_str = f'{score:{length}.{num_decimals}f}'
+        # round further if this would exceed length
+        if len(constraint_str) > length:
+            excess = len(constraint_str) > length
+            num_decimals -= excess
+            if num_decimals < 0:
+                num_decimals = 0
+            constraint_str = f'{score:{length}.{num_decimals}f}'
         all_constraints_strs.append(constraint_str)
-    all_constraints_str = '|'.join(all_constraints_strs)
+    # all_constraints_str = '|'.join(all_constraints_strs)
 
     # logger.info(header + '\n' + score_str + all_constraints_str)
 
-    #TODO: use floatfmt per column to adjust decimal places
-    import tabulate as tb
-    tb.PRESERVE_WHITESPACE = True
+    # TODO: use floatfmt per column to adjust decimal places
     row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
-                                                           for constraint in params.constraints]
-    iteration_str = f'{iteration:9}'
-    num_new_optimal_str = f'{num_new_optimal:6}'
+                                                                for constraint in params.constraints]
+    # iteration_str = f'{iteration:9}'
+    # num_new_optimal_str = f'{num_new_optimal:6}'
     score_opt_str = f'{score_opt :9.{dec_opt}f}'
     score_new_str = f'{score_new :9.{dec_new}f}'
     row2 = [iteration, num_new_optimal, score_opt_str, score_new_str] + all_constraints_strs  # type:ignore
     table = [row1, row2]
     table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
-    logger.info(table_str)
+    table_str = _remove_first_lines_from_string(table_str, 2)
+    # logger.info(table_str)
+    line_end = '\n' if params.scrolling_output else '\r'
+    print(table_str, end=line_end)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
@@ -1536,11 +1424,12 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
     for domain in independent_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
-            skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                                f'That domain has a NON-FIXED sequence {domain.sequence()}, ' \
+            skip_nonfixed_msg = f'Skipping initial assignment of DNA sequence to domain {domain.name}. ' \
+                                f'That domain currently has a non-fixed sequence {domain.sequence()}, ' \
                                 f'which the search will attempt to replace.'
-            skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                             f'That domain has a FIXED sequence {domain.sequence()}.'
+            skip_fixed_msg = f'Skipping initial assignment of DNA sequence to domain {domain.name}. ' \
+                             f'That domain has a fixed sequence {domain.sequence()}, ' \
+                             f'and the search will not replace it.'
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True
@@ -1616,20 +1505,487 @@ def default_probability_of_keeping_change_function(params: SearchParameters) -> 
     # return keep_change_only_if_better
 
 
+K1 = TypeVar('K1')
+K2 = TypeVar('K2')
+V = TypeVar('V')
+
+
+# convenience methods for iterating over 2D dicts
+
+def keys_2d(dct: Dict[K1, Dict[K2, V]]) -> Iterator[Tuple[K1, K2]]:
+    for first_key in dct.keys():
+        for second_key in dct[first_key].keys():
+            yield first_key, second_key
+
+
+def values_2d(dct: Dict[K1, Dict[K2, V]]) -> Iterator[V]:
+    for first_key in dct.keys():
+        for value in dct[first_key].values():
+            yield value
+
+
+def items_2d(dct: Dict[K1, Dict[K2, V]]) -> Iterator[Tuple[Tuple[K1, K2], V]]:
+    for first_key in dct.keys():
+        for second_key, value in dct[first_key].items():
+            yield (first_key, second_key), value
+
+
+def key_exists_in_2d_dict(dct: Dict[K1, Dict[K2, Any]], key1: K1, key2: K2) -> bool:
+    # avoid using the brakcet [] operator (to avoid triggering the default dict behavior
+    if key1 not in dct.keys():
+        return False
+    return key2 in dct[key1][key2]
+
+
+@dataclass
+class EvaluationSet:
+    # Represents evaluations of :any:`Constraint`'s in a :any:`Design`.
+    #
+    # It is designed to be efficiently updateable when a single :any:`Domain` changes,
+    # to efficiently update only those evaluations of :any:`Constraint`'s that could have been
+    # affected by the changed :any:`Domain`.
+
+    constraints: List[Constraint]
+    # list of all constraints
+
+    evaluations: Dict[Constraint, Dict[nc.Part, Evaluation]]
+    # "2D dict" mapping each (Constraint, Part) to the list of all Evaluations of it.
+    # has keys for every (Constraint, Part) instance.
+
+    evaluations_new: Dict[Constraint, Dict[nc.Part, Evaluation]]
+    # "2D dict" mapping some Constraint, Part to the list of all new Evaluation's of it
+    # (after changing domain(s)).
+    # Unlike evaluations, only has keys for parts affected by the most recent domain changes.
+
+    domain_to_evaluations: Dict[Domain, List[Evaluation]]
+    # Dict mapping each Domain to the set of all Evaluations for which it is blamed
+
+    violations: Dict[Constraint, Dict[nc.Part, Evaluation]]
+    # "2D dict" mapping each (Constraint, Part) to the list of all violations of it.
+    # (evaluation that had a positive score)
+    # has keys for every Constraint
+    # only has keys for Parts that are violations
+
+    violations_new: Dict[Constraint, Dict[nc.Part, Evaluation]]
+    # "2D dict" mapping some Constraint, Part to the list of all new Evaluations of it
+    # (after changing domain(s)).
+    # Unlike violations, only has keys for parts affected by the most recent domain changes.
+
+    domain_to_evaluations: Dict[Domain, List[Evaluation]]
+    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
+
+    domain_to_evaluations_new: Dict[Domain, List[Evaluation]]
+
+    domain_to_violations: Dict[Domain, List[Evaluation]]
+    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
+
+    domain_to_violations_new: Dict[Domain, List[Evaluation]]
+
+    domain_to_score: Dict[Domain, float]
+
+    domain_to_score_new: Dict[Domain, float]
+
+    total_score: float
+    # sum of scores of all evalutions
+
+    total_score_nonfixed: float
+    # for evaluations blaming Domains with Domain.fixed = False
+
+    total_score_fixed: float
+    # for evaluations blaming Domains with Domain.fixed = True
+
+    num_evaluations: int
+    num_evaluations_fixed: int
+    num_evaluations_nonfixed: int
+
+    num_violations: int
+    num_violations_fixed: int
+    num_violations_nonfixed: int
+
+    def __init__(self, constraints: Iterable[Constraint], never_increase_score: bool) -> None:
+        self.constraints = list(constraints)
+        self.never_increase_score = never_increase_score
+        self.reset_all()
+
+    def __repr__(self):
+        all_evals: List[Evaluation] = [evaluation
+                                       for part_to_eval in self.evaluations.values()
+                                       for evaluation in part_to_eval.values()]
+        lines = "\n  ".join(map(str, all_evals))
+        return f'EvaluationSet(\n  {lines})'
+
+    def __str__(self):
+        return repr(self)
+
+    def reset_all(self) -> None:
+        self.evaluations = {constraint: {} for constraint in self.constraints}
+        self.violations = {constraint: {} for constraint in self.constraints}
+        self.domain_to_evaluations = defaultdict(list)
+        self.domain_to_violations = defaultdict(list)
+        self.domain_to_score = defaultdict(float)
+        self.reset_new()
+
+    def reset_new(self) -> None:
+        self.evaluations_new = {constraint: {} for constraint in self.constraints}
+        self.violations_new = {constraint: {} for constraint in self.constraints}
+        self.domain_to_evaluations_new = defaultdict(list)
+        self.domain_to_violations_new = defaultdict(list)
+        self.domain_to_score_new = defaultdict(float)
+
+    def evaluate_all(self, design: Design) -> None:
+        # called on all parts of the design and sets self.evaluations
+        self.reset_all()
+        for constraint in self.constraints:
+            self.evaluate_constraint(constraint, design, None, None)
+        self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
+        self.update_scores_and_counts()
+        # _assert_violations_are_accurate(self.evaluations, self.violations)
+
+    def evaluate_new(self, design: Design, domains_new: List[Domain]) -> None:
+        # called only on changed parts of the design and sets self.evaluations_new
+        # does quit early optimization since this is only called when comparing to an existing set of evals
+        self.reset_new()
+        score_gap = None
+        if self.never_increase_score:
+            score_gap = self.calculate_initial_score_gap(design, domains_new)
+        for constraint in self.constraints:
+            score_gap = self.evaluate_constraint(constraint, design, score_gap, domains_new)
+            if score_gap is not None and _is_significantly_greater(0.0, score_gap):
+                break
+        self.domain_to_score_new = EvaluationSet.sum_domain_scores(self.domain_to_violations_new)
+
+    @staticmethod
+    def sum_domain_scores(domain_to_violations: Dict[Domain, List[Evaluation]]) -> Dict[Domain, float]:
+        # NOTE: this filters out the fixed domains,
+        # but we keep them in eval_set for the sake of reports
+        domain_to_score = {
+            domain: sum(violation.score for violation in domain_violations)
+            for domain, domain_violations in domain_to_violations.items()
+            if not domain.fixed
+        }
+        return domain_to_score
+
+    def calculate_score_gap(self, fixed: Optional[bool] = None) -> Optional[float]:
+        # fixed is None (all violations), True (fixed violations), or False (nonfixed violations)
+        # total score of evaluations - total score of new evaluations
+        assert len(self.evaluations) > 0
+        total_gap = 0.0
+        for ((constraint, part), eval_new) in items_2d(self.evaluations_new):
+            eval_old = self.evaluations[constraint][part]
+            assert eval_old.part.fixed == eval_new.part.fixed
+            assert eval_old.violated == (eval_old.score > 0)
+            assert eval_new.violated == (eval_new.score > 0)
+            if fixed is None or eval_old.part.fixed == fixed:
+                total_gap += eval_old.score - eval_new.score
+        return total_gap
+
+    def calculate_initial_score_gap(self, design: Design, domains_new: List[Domain]) -> float:
+        # before evaluations_new is populated, we need to calculate the total score of evaluations
+        # on parts affected by domains_new, which is the score gap assuming all new evaluations come up 0
+        score_gap = 0.0
+        for constraint in self.constraints:
+            parts = find_parts_to_check(constraint, design, domains_new)
+            for part in parts:
+                ev = self.evaluations[constraint][part]
+                score_gap += ev.score
+        return score_gap
+
+    def evaluate_constraint(self,
+                            constraint: Constraint[DesignPart],
+                            design: Design,  # only used with DesignConstraint
+                            score_gap: Optional[float],
+                            domains_new: Optional[Iterable[Domain]],
+                            ) -> float:
+        # returns score gap = score(old evals) - score(new evals);
+        # if gap > 0, then new evals haven't added up to
+        assert ((score_gap is None and domains_new is None) or
+                (score_gap is not None and domains_new is not None))
+
+        parts = find_parts_to_check(constraint, design, domains_new)
+
+        # measure violations of constraints and collect in list of triples (part, score, summary)
+        violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
+        if isinstance(constraint, SingularConstraint):
+            if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
+                for part in parts:
+                    seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
+                    score, summary = constraint.call_evaluate(seqs, part)
+                    violating_parts_scores_summaries.append((part, score, summary))
+                    if score > 0.0:
+                        if score_gap is not None:
+                            score_gap -= score
+                            if _is_significantly_greater(0.0, score_gap):
+                                break
+            else:
+                raise NotImplementedError('TODO: implement parallelization')
+
+        elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
+            if isinstance(constraint, DesignConstraint):
+                violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_new)
+            else:
+                # XXX: I don't understand the mypy error on the next line
+                violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
+
+            # we can't quit this function early,
+            # but we can let the caller know to stop evaluating constraints
+            total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
+            if score_gap is not None:
+                score_gap -= total_score
+        else:
+            raise AssertionError(
+                f'constraint {constraint} of unrecognized type {constraint.__class__.__name__}')
+
+        # assign blame for violations to domains by looking up associated domains in each part
+        evals_of_constraint = self.evaluations[constraint]
+        viols_of_constraint = self.violations[constraint]
+        domain_to_evals = self.domain_to_evaluations
+        domain_to_viols = self.domain_to_violations
+        if domains_new is not None:
+            evals_of_constraint = self.evaluations_new[constraint]
+            viols_of_constraint = self.violations_new[constraint]
+            domain_to_evals = self.domain_to_evaluations_new
+            domain_to_viols = self.domain_to_violations_new
+
+        for part, score, summary in violating_parts_scores_summaries:
+            domains = _independent_domains_in_part(part, exclude_fixed=False)
+            evaluation = Evaluation(constraint=constraint, part=part, domains=domains,
+                                    score=score, summary=summary, violated=score > 0)
+
+            evals_of_constraint[part] = evaluation
+            for domain in domains:
+                domain_to_evals[domain].append(evaluation)
+
+            if evaluation.violated:
+                viols_of_constraint[part] = evaluation
+                for domain in domains:
+                    domain_to_viols[domain].append(evaluation)
+
+        return score_gap
+
+    def replace_with_new(self) -> None:
+        # uses Evaluations in self.evaluations_new to replace equivalent ones in self.evalautions
+        # same for violations
+
+        # IMPORTANT: update scores before we start to modify the EvaluationSet
+        self.total_score = self.total_score_new()
+        self.total_score_fixed = self.total_score_new(True)
+        self.total_score_nonfixed = self.total_score_new(False)
+
+        # update all evaluations
+        for (constraint, part), evaluation in items_2d(self.evaluations_new):
+            # CONSIDER updating everything in this loop by looking up eval.violated
+            self.evaluations[constraint][part] = evaluation
+
+            # update dict mapping domain to list of evals/violations for which it is blamed
+            for domain in evaluation.domains:
+                self.domain_to_evaluations[domain] = self.domain_to_evaluations_new[domain]
+                self.domain_to_violations[domain] = self.domain_to_violations_new[domain]
+
+            viols_by_part = self.violations[constraint]
+            if evaluation.violated:
+                # if was not a violation before, increment total violations
+                if part not in viols_by_part:
+                    self.num_violations += 1
+                    if evaluation.part.fixed:
+                        self.num_violations_fixed += 1
+                    else:
+                        self.num_violations_nonfixed += 1
+                # add it to violations, or replace existing violation
+                viols_by_part[part] = evaluation
+            elif not evaluation.violated and part in viols_by_part.keys():
+                # otherwise remove violation if one was there from old EvaluationSet,
+                # and decrement total violations
+                del viols_by_part[part]
+                self.num_violations -= 1
+                if evaluation.part.fixed:
+                    self.num_violations_fixed -= 1
+                else:
+                    self.num_violations_nonfixed -= 1
+
+        self.reset_new()
+
+        _assert_violations_are_accurate(self.evaluations, self.violations)
+
+    def update_scores_and_counts(self) -> None:
+        """
+        :return: Total score of all evaluations.
+        """
+        self.total_score = self.total_score_fixed = self.total_score_nonfixed = 0.0
+        self.num_evaluations = self.num_evaluations_nonfixed = self.num_evaluations_fixed = 0
+        self.num_violations = self.num_violations_nonfixed = self.num_violations_fixed = 0
+
+        # count evaluations
+        for evaluation in values_2d(self.evaluations):
+            self.num_evaluations += 1
+            if evaluation.part.fixed:
+                self.num_evaluations_fixed += 1
+            else:
+                self.num_evaluations_nonfixed += 1
+
+        # count violations and score
+        for violation in values_2d(self.violations):
+            self.total_score += violation.score
+            self.num_violations += 1
+            if violation.part.fixed:
+                self.total_score_fixed += violation.score
+                self.num_violations_fixed += 1
+            else:
+                self.total_score_nonfixed += violation.score
+                self.num_violations_nonfixed += 1
+
+    def total_score_new(self, fixed: Optional[bool] = None) -> float:
+        # return total score of all evaluations, or only fixed, or only nonfixed
+        if fixed is None:
+            total_score_old = self.total_score
+        elif fixed is True:
+            total_score_old = self.total_score_fixed
+        elif fixed is False:
+            total_score_old = self.total_score_nonfixed
+        else:
+            raise AssertionError(f'fixed should be None, True, or False, but is {fixed}')
+
+        total_score_new = total_score_old - self.calculate_score_gap(fixed)
+        return total_score_new
+
+    def score_of_constraint(self, constraint: Constraint, violations: bool) -> float:
+        # :param constraint:
+        #     constraint to filter scores on
+        # :return:
+        #     Total score of all evaluations due to `constraint`.
+        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations))
+
+    def score_of_constraint_nonfixed(self, constraint: Constraint, violations: bool) -> float:
+        # :param constraint:
+        #     constraint to filter scores on
+        # :return:
+        #     Total score of all nonfixed evaluations due to `constraint`.
+        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations)
+                   if not evaluation.part.fixed)
+
+    def score_of_constraint_fixed(self, constraint: Constraint, violations: bool) -> float:
+        # :param constraint:
+        #     constraint to filter scores on
+        # :return:
+        #     Total score of all fixed violations due to `constraint`.
+        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations)
+                   if evaluation.part.fixed)
+
+    def has_nonfixed_evaluations(self) -> bool:
+        # :return: whether there are any nonfixed Evaluations in this EvaluationSet
+        return self.num_evaluations_nonfixed > 0
+
+    def has_nonfixed_violations(self) -> bool:
+        # :return: whether there are any nonfixed Evaluations in this EvaluationSet
+        return self.num_violations_nonfixed > 0
+
+    def evaluations_of_constraint(self, constraint: Constraint, violations: bool) -> List[Evaluation]:
+        dct = self.violations[constraint] if violations else self.evaluations[constraint]
+        return list(dct.values())
+
+    def evaluations_nonfixed_of_constraint(self, constraint: Constraint,
+                                           violations: bool) -> List[Evaluation]:
+        return [ev for ev in self.evaluations_of_constraint(constraint, violations) if not ev.part.fixed]
+
+    def evaluations_fixed_of_constraint(self, constraint: Constraint, violations: bool) -> List[Evaluation]:
+        return [ev for ev in self.evaluations_of_constraint(constraint, violations) if ev.part.fixed]
+
+    def num_evaluations_of(self, constraint: Constraint) -> int:
+        return len(self.evaluations[constraint])
+
+    def num_violations_of(self, constraint: Constraint) -> int:
+        return len(self.violations[constraint])
+
+
+def _assert_violations_are_accurate(evaluations: Dict[Constraint, Dict[nc.Part, Evaluation]],
+                                    violations: Dict[Constraint, Dict[nc.Part, Evaluation]]) -> None:
+    # go through all violations and ensure the violations in it are all in evaluations
+    for (constraint, part), viol in items_2d(violations):
+        assert constraint in evaluations.keys()
+        evals_by_part = evaluations[constraint]
+        assert part in evals_by_part.keys()
+        ev = evals_by_part[part]
+        assert viol == ev
+        assert viol.violated  # also assert that they really are violated
+
+    # now go in reverse and ensure the keys in evaluations not in violations are all not violated
+    for (constraint, part), ev in items_2d(evaluations):
+        if part in violations[constraint].keys():
+            viol = violations[constraint][part]
+            assert viol == ev
+            assert ev.violated
+        else:
+            assert not ev.violated
+
+
+@dataclass(frozen=True)
+class Evaluation(Generic[DesignPart]):
+    # Represents a violation of a single :any:`Constraint` in a :any:`Design`.
+    # The "part" of the :any:`Design` that was evaluated for the constraint is generic type `DesignPart`
+    # (e.g., for :any:`StrandPairConstraint`, DesignPart = :any:`Pair` [:any:`Strand`]).
+
+    constraint: Constraint
+    # :any:`Constraint` that was evaluated to result in this :any:`Evaluation`.
+
+    violated: bool
+    # whether the :any:`Constraint` was violated last time it was evaluated
+
+    part: DesignPart
+    # DesignPart that caused this violation
+
+    domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
+    # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
+
+    summary: str
+
+    score: float
+
+    def __init__(self, constraint: Constraint, violated: bool, part: DesignPart, domains: Iterable[Domain],
+                 score: float, summary: str) -> None:
+        # :param constraint:
+        #     :any:`Constraint` that was violated to result in this
+        # :param domains:
+        #     :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
+        # :param score:
+        #     total "score" of this violation, typically something like an excess energy over a
+        #     threshold, squared, multiplied by the :data:`Constraint.weight`
+        object.__setattr__(self, 'constraint', constraint)
+        object.__setattr__(self, 'violated', violated)
+        object.__setattr__(self, 'part', part)
+        domains_frozen = frozenset(domains)
+        object.__setattr__(self, 'domains', domains_frozen)
+        object.__setattr__(self, 'score', score)
+        object.__setattr__(self, 'summary', summary)
+
+    def __repr__(self) -> str:
+        return f'Evaluation({self.constraint.short_description}, score={self.score:.2f}, ' \
+               f'summary={self.summary}, violated={self.violated})'
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    # Evaluation equality based on identity; different Evaluations in memory are considered different,
+    # even if all data between them matches. Don't create the same Evaluation twice!
+    def __hash__(self):
+        return super().__hash__()
+
+    def __eq__(self, other):
+        return self is other
+
+
 ####################################################################################
 # report generating functions
 
 def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
-                           violation_set: nc.ViolationSet) -> str:
+                           eval_set: EvaluationSet) -> str:
     summaries: List[str] = []
 
     # other constraints
     for constraint in constraints:
-        summary = summary_of_constraint(constraint, report_only_violations, violation_set)
+        summary = summary_of_constraint(constraint, report_only_violations, eval_set)
         summaries.append(summary)
 
-    score = violation_set.total_score()
-    score_unfixed = violation_set.total_score_nonfixed()
+    score = eval_set.total_score
+    score_unfixed = eval_set.total_score_nonfixed
     score_total_summary = f'total score of constraint violations: {score:.2f}'
     score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
@@ -1641,34 +1997,35 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
 
 
 def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
-                          violation_set: nc.ViolationSet) -> str:
+                          evaluation_set: EvaluationSet) -> str:
     if isinstance(constraint, (DomainConstraint, StrandConstraint,
                                DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
                                DomainsConstraint, StrandsConstraint,
                                DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
         summaries = []
+        num_evals = evaluation_set.num_evaluations_of(constraint)
+        num_viols = evaluation_set.num_violations_of(constraint)
         num_violations = 0
-        num_checks = violation_set.num_checked[constraint]
         part_type_name = constraint.part_name()
 
-        violations_nonfixed = violation_set.violations_nonfixed[constraint]
-        violations_fixed = violation_set.violations_fixed[constraint]
+        evals_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint, report_only_violations)
+        evals_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint, report_only_violations)
 
-        some_fixed_violations = len(violations_fixed) > 0
+        some_fixed_evals = len(evals_fixed) > 0
 
-        for violations, header_name in [(violations_nonfixed, f"unfixed {part_type_name}s"),
-                                        (violations_fixed, f"fixed {part_type_name}s")]:
-            if len(violations) == 0:
+        for evals, header_name in [(evals_nonfixed, f"unfixed {part_type_name}s"),
+                                   (evals_fixed, f"fixed {part_type_name}s")]:
+            if len(evals) == 0:
                 continue
 
-            max_part_name_length = max(len(violation.part.name) for violation in violations)
-            num_violations += len(violations)
+            max_part_name_length = max(len(violation.part.name) for violation in evals)
+            num_violations += len(evals)
 
             lines_and_scores: List[Tuple[str, float]] = []
-            for violation in violations:
-                line = f'{part_type_name} {violation.part.name:{max_part_name_length}}: ' \
-                       f'{violation.summary};  score: {violation.score:.2f}'
-                lines_and_scores.append((line, violation.score))
+            for ev in evals:
+                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
+                       f'{ev.summary};  score: {ev.score:.2f}'
+                lines_and_scores.append((line, ev.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
 
@@ -1676,29 +2033,31 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
             content = '\n'.join(lines)
 
             # only put header to distinguish fixed from unfixed violations if there are some fixed
-            full_header = _small_header(header_name, "=") if some_fixed_violations else ''
+            full_header = _small_header(header_name, "=") if some_fixed_evals else ''
             summary = full_header + f'\n{content}\n'
             summaries.append(summary)
 
+        if report_only_violations and num_violations != num_viols:
+            assert num_violations == num_viols
+
         content = ''.join(summaries)
         report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_violations, num_checks=num_checks)
+                                  num_violations=num_viols, num_evaluations=num_evals)
 
     elif isinstance(constraint, DesignConstraint):
         raise NotImplementedError()
     else:
         content = f'skipping summary of constraint {constraint.description}; ' \
                   f'unrecognized type {type(constraint)}'
-        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_checks=0)
+        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_evaluations=0)
 
-    summary = add_header_to_content_of_summary(report, violation_set, report_only_violations)
+    summary = add_header_to_content_of_summary(report, evaluation_set)
     return summary
 
 
-def add_header_to_content_of_summary(report: ConstraintReport, violation_set: nc.ViolationSet,
-                                     report_only_violations: bool) -> str:
-    score = violation_set.score_of_constraint(report.constraint)
-    score_unfixed = violation_set.score_of_constraint_nonfixed(report.constraint)
+def add_header_to_content_of_summary(report: ConstraintReport, eval_set: EvaluationSet) -> str:
+    score = eval_set.score_of_constraint(report.constraint, True)
+    score_unfixed = eval_set.score_of_constraint_nonfixed(report.constraint, True)
 
     if score != score_unfixed:
         summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
@@ -1706,16 +2065,15 @@ def add_header_to_content_of_summary(report: ConstraintReport, violation_set: nc
         summary_score_unfixed = None
 
     indented_content = textwrap.indent(report.content, '  ')
+
     summary = f'''
 **{"*" * len(report.constraint.description)}
 * {report.constraint.description}
-* checks:     {report.num_checks}
-* violations: {report.num_violations}
+# evaluations: {report.num_evaluations}
+* violations:  {report.num_violations}
 * score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
-{indented_content}''' + ('\nThe option "report_only_violations" is currently being ignored '
-                         'when set to False\n'
-                         'see https://github.com/UC-Davis-molecular-computing/dsd/issues/134\n'
-                                                                                                                                                                                                                                                                                                if not report_only_violations else '')
+{indented_content}'''
+
     return summary
 
 
@@ -1733,7 +2091,7 @@ class ConstraintReport:
     constraint: Optional['Constraint']
     """
     The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
-    at the time the :py:meth:`Constraint.generate_summary` function is defined. If so it will be
+    at the time the :meth:`Constraint.generate_summary` function is defined. If so it will be
     automatically inserted by the report generating code."""
 
     content: str
@@ -1747,7 +2105,7 @@ class ConstraintReport:
     violated the constraint.
     """
 
-    num_checks: int
+    num_evaluations: int
     """
     Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
     were checked against the constraint.

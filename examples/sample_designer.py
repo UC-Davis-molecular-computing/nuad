@@ -74,13 +74,12 @@ def main() -> None:
     #               |    w4*          s4*
     #               \===========--==========]
 
-    strand0: nc.Strand[str] = nc.Strand(['s1', 'w1', 'n1', 'e1'], name='strand 0')
-    strand1: nc.Strand[str] = nc.Strand(['s2', 'w2', 'n2', 'e2'], name='strand 1')
-    strand2: nc.Strand[None] = nc.Strand(['n2*', 'e1*', 'n3*', 'e3*'], name='strand 2')
-    strand3: nc.Strand[str] = nc.Strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
-    strands = [strand0, strand1, strand2, strand3]
+    initial_design = nc.Design()
 
-    initial_design = nc.Design(strands)
+    strand0: nc.Strand[str] = initial_design.add_strand(['s1', 'w1', 'n1', 'e1'], name='strand 0')
+    strand1: nc.Strand[str] = initial_design.add_strand(['s2', 'w2', 'n2', 'e2'], name='strand 1')
+    strand2: nc.Strand[None] = initial_design.add_strand(['n2*', 'e1*', 'n3*', 'e3*'], name='strand 2')
+    strand3: nc.Strand[str] = initial_design.add_strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
 
     if args.initial_design_filename is not None:
         with open(args.initial_design_filename, 'r') as file:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from math import ceil, floor
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 import itertools
 
 import nuad.search as ns  # type: ignore
@@ -36,11 +36,12 @@ SUBDOMAIN_SS_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_SS_POOL',
                                                  SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
 SUBDOMAIN_S_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_S_POOL', EXTENDED_TOEHOLD_LENGTH)
 TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    'TOEHOLD_DOMAIN_POOL', TOEHOLD_LENGTH, [three_letter_code_constraint])
+    name='TOEHOLD_DOMAIN_POOL', length=TOEHOLD_LENGTH, numpy_constraints=[three_letter_code_constraint])
 
 SIGNAL_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    'SIGNAL_DOMAIN_POOL', SIGNAL_DOMAIN_LENGTH,
-    [three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint, no_gggg_constraint])
+    name='SIGNAL_DOMAIN_POOL', length=SIGNAL_DOMAIN_LENGTH,
+    numpy_constraints=[three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint,
+                       no_gggg_constraint])
 
 # Alias
 dc_complex_constraint = nc.nupack_complex_base_pair_probability_constraint
@@ -257,7 +258,7 @@ def reporter_bottom_strand(gate) -> nc.Strand:
 
 
 def input_gate_complex_constraint(
-        input_gate_complexes: List[Tuple[nc.Strand, nc.Strand]]) -> nc.ComplexConstraint:
+        input_gate_complexes: List[nc.Complex]) -> nc.ComplexConstraint:
     """Returns a input:gate complex constraint
 
     .. code-block:: none
@@ -295,16 +296,14 @@ def input_gate_complex_constraint(
     addr_t = template_top_strand.address_of_first_domain_occurence('T')
     addr_t_star = template_bot_strand.address_of_first_domain_occurence('T*')
     return dc_complex_constraint(
-        strand_complexes=cast(
-            List[Tuple[nc.Strand, ...]],
-            input_gate_complexes),
+        strand_complexes=input_gate_complexes,
         nonimplicit_base_pairs=[(addr_t, addr_t_star)],
         description="input:gate Complex",
         short_description="input:gate")
 
 
 def gate_output_complex_constraint(
-        gate_output_complexes: List[Tuple[nc.Strand, ...]],
+        gate_output_complexes: List[nc.Complex],
         base_pair_prob_by_type: Optional[Dict[nc.BasePairType, float]] = None,
         description: str = 'gate:output') -> nc.ComplexConstraint:
     """Returns a gate:output complex constraint
@@ -431,25 +430,20 @@ def strand_substring_constraint(
                 return True
         return False
 
-    def evaluate(seq: str, strand: Optional[nc.Strand]):
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:
+        seq = seqs[0]
         if violated(seq):
-            return 100
+            violation_str = '** violation**'
+            score = 100
         else:
-            return 0
-
-    def summary(strand: nc.Strand):
-        violation_str: str
-        if violated(strand.sequence()):
             violation_str = ''
-        else:
-            violation_str = "** violation**"
-        return f"{strand.name}: {strand.sequence()}{violation_str}"
+            score = 0
+        return score, f"{strand.name}: {strand.sequence()}{violation_str}"
 
     return nc.StrandConstraint(description="Strand Substring Constraint",
                                short_description="Strand Substring Constraint",
                                evaluate=evaluate,
-                               strands=tuple(strands),
-                               summary=summary)
+                               strands=tuple(strands))
 
 
 @dataclass
@@ -635,25 +629,27 @@ class SeesawCircuit:
     def _add_input_gate_complex_constraint(self) -> None:
         """Adds input:gate complexes to self.constraint
         """
-        input_gate_complexes = []
+        input_gate_strands = []
         for (input_, gate), s in self.signal_strands.items():
             if gate in self.gate_base_strands:
                 g = self.gate_base_strands[gate]
-                input_gate_complexes.append((s, g))
+                input_gate_strands.append((s, g))
 
+        input_gate_complexes = [nc.Complex(*strands) for strands in input_gate_strands]
         self.constraints.append(
-            input_gate_complex_constraint(
-                input_gate_complexes))
+            input_gate_complex_constraint(input_gate_complexes))
 
     def _add_gate_output_complex_constriant(self) -> None:
         """Adds gate:output complexes to self.constraint
         """
-        gate_output_complexes: List[Tuple[nc.Strand, ...]] = []
+        gate_output_strands: List[Tuple[nc.Strand, ...]] = []
 
         for (gate, _), s in self.signal_strands.items():
             if gate in self.gate_base_strands:
                 g = self.gate_base_strands[gate]
-                gate_output_complexes.append((s, g))
+                gate_output_strands.append((s, g))
+
+        gate_output_complexes = [nc.Complex(*strands) for strands in gate_output_strands]
 
         self.constraints.append(
             gate_output_complex_constraint(
@@ -664,13 +660,15 @@ class SeesawCircuit:
     def _add_gate_fuel_complex_constriant(self) -> None:
         """Adds gate:fuel complexes to self.constraint
         """
-        gate_output_complexes: List[Tuple[nc.Strand, ...]] = []
+        gate_output_strands: List[Tuple[nc.Strand, ...]] = []
 
         for gate in self.fuel_strands:
             if gate in self.fuel_strands:
                 f = self.fuel_strands[gate]
                 g = self.gate_base_strands[gate]
-                gate_output_complexes.append((f, g))
+                gate_output_strands.append((f, g))
+
+        gate_output_complexes = [nc.Complex(*strands) for strands in gate_output_strands]
 
         # TODO: Make it so that only specific base pairs have lower threshold (such as base index 1)
         #       which is an A that can bind to any T but it doesn't matter which.
@@ -698,10 +696,12 @@ class SeesawCircuit:
               16                      35
              s2*   T*        S5*       s5*
         """
-        threshold_complexes: List[Tuple[nc.Strand, ...]] = []
+        threshold_strands: List[Tuple[nc.Strand, ...]] = []
         for (_, gate), thres_bottom_strand in self.threshold_bottom_strands.items():
             waste_strand = self.threshold_top_strands[gate]
-            threshold_complexes.append((waste_strand, thres_bottom_strand))
+            threshold_strands.append((waste_strand, thres_bottom_strand))
+
+        threshold_complexes = [nc.Complex(*strands) for strands in threshold_strands]
 
         self.constraints.append(
             dc_complex_constraint(
@@ -727,11 +727,13 @@ class SeesawCircuit:
                             36                       55
                            s2*   T*        S5*       s5*
         """
-        threshold_waste_complexes: List[Tuple[nc.Strand, ...]] = []
+        threshold_waste_strands: List[Tuple[nc.Strand, ...]] = []
         for (input_, gate), thres_bottom_strand in self.threshold_bottom_strands.items():
             sig_strand = self.signal_strands[(input_, gate)]
-            threshold_waste_complexes.append(
+            threshold_waste_strands.append(
                 (sig_strand, thres_bottom_strand))
+
+        threshold_waste_complexes = [nc.Complex(*strands) for strands in threshold_waste_strands]
 
         self.constraints.append(
             dc_complex_constraint(
@@ -755,10 +757,12 @@ class SeesawCircuit:
                                    33
                T*        S6*       s6*
         """
-        reporter_complexes: List[Tuple[nc.Strand, ...]] = []
+        reporter_strands: List[Tuple[nc.Strand, ...]] = []
         for (_, gate), reporter_bottom_strand_ in self.reporter_bottom_strands.items():
             waste_strand = self.reporter_top_strands[gate]
-            reporter_complexes.append((waste_strand, reporter_bottom_strand_))
+            reporter_strands.append((waste_strand, reporter_bottom_strand_))
+
+        reporter_complexes = [nc.Complex(*strands) for strands in reporter_strands]
 
         self.constraints.append(
             dc_complex_constraint(
@@ -783,11 +787,13 @@ class SeesawCircuit:
                                                       53
                                   T*        S6*       s6*
         """
-        reporter_waste_complexes: List[Tuple[nc.Strand, ...]] = []
+        reporter_waste_strands: List[Tuple[nc.Strand, ...]] = []
         for (input_, gate), reporter_bottom_strand_ in self.reporter_bottom_strands.items():
             signal_strand_ = self.signal_strands[(input_, gate)]
-            reporter_waste_complexes.append(
+            reporter_waste_strands.append(
                 (signal_strand_, reporter_bottom_strand_))
+
+        reporter_waste_complexes = [nc.Complex(*strands) for strands in reporter_waste_strands]
 
         self.constraints.append(
             dc_complex_constraint(
@@ -928,11 +934,12 @@ def main() -> None:
     constraints: List[nc.Constraint] = [base_difference_constraint(recognition_domains),
                                         strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS)]
     constraints.extend(seesaw_circuit.constraints)  # make mypy happy about the generics with List
-    design = nc.Design(strands=strands, constraints=constraints)
-    params = ns.SearchParameters(out_directory='output/square_root_circuit',
+    design = nc.Design(strands=strands)
+    params = ns.SearchParameters(constraints=constraints,
+                                 out_directory='output/square_root_circuit',
                                  # weigh_violations_equally=True,
-                                 # restart=True,
-                                 report_delay=0.0)
+                                 # restart=True
+                                 )
 
     ns.search_for_dna_sequences(design, params)
 
