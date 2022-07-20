@@ -1350,10 +1350,9 @@ def _log_constraint_summary(*, params: SearchParameters,
         header = tabulate([row1], tablefmt='github')
         print(header)
 
-    def _dec(score: float) -> int:
+    def _dec(score_: float) -> int:
         # how many decimals after decimal point to use given the score
-        dec_opt = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
-        return dec_opt
+        return max(1, math.ceil(math.log(1 / score_, 10)) + 2) if score_ > 0 else 1
 
     score_opt = eval_set.total_score
     score_new = eval_set.total_score_new()
