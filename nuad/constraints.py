@@ -1347,6 +1347,24 @@ def mandatory_field(ret_type: Type, json_map: Dict, main_key: str, *legacy_keys:
 
 class Part(ABC):
 
+    def __eq__(self, other: Part) -> bool:
+        return type(self) == type(other) and self.name == other.name
+
+    # Remember to set subclass __hash__ equal to this implementation; see here:
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    def __hash__(self) -> int:
+        return hash(self.key())
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def key(self) -> str:
+        # used as key in dictionary
+        pass
+
     @staticmethod
     @abstractmethod
     def name_of_part_type(self) -> str:
@@ -1372,9 +1390,21 @@ class DomainPair(Part, Generic[DomainLabel]):
     domain1: Domain
     domain2: Domain
 
+    def __post_init__(self) -> None:
+        # make this symmetric so make dict lookups work
+        if self.domain1.name > self.domain2.name:
+            self.domain1, self.domain2 = self.domain2, self.domain1
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     @property
     def name(self) -> str:
         return f'{self.domain1.name}, {self.domain2.name}'
+
+    def key(self) -> str:
+        return f'DomainPair[{self.domain1.name}, {self.domain2.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1389,7 +1419,7 @@ class DomainPair(Part, Generic[DomainLabel]):
 
 
 @dataclass
-class Domain(JSONSerializable, Part, Generic[DomainLabel]):
+class Domain(Part, JSONSerializable, Generic[DomainLabel]):
     """
     Represents a contiguous substring of the DNA sequence of a :any:`Strand`, which is intended
     to be either single-stranded, or to bind fully to the Watson-Crick complement of the :any:`Domain`.
@@ -1542,6 +1572,16 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
     def name_of_part_type(self) -> str:
         return 'domain'
 
+    def key(self) -> str:
+        return f'Domain({self.name})'
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
+    def __repr__(self) -> str:
+        return self._name
+
     def individual_parts(self) -> Tuple[Domain, ...]:
         return self,
 
@@ -1602,17 +1642,6 @@ class Domain(JSONSerializable, Part, Generic[DomainLabel]):
         domain: Domain[DomainLabel] = Domain(
             name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
-
-    def __hash__(self) -> int:
-        return hash(self._name)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Domain):
-            return False
-        return self._name == other._name
-
-    def __repr__(self) -> str:
-        return self._name
 
     @property
     def name(self) -> str:
@@ -2242,9 +2271,21 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
     strand1: Strand
     strand2: Strand
 
+    def __post_init__(self) -> None:
+        # make this symmetric so make dict lookups work
+        if self.strand1.name > self.strand2.name:
+            self.strand1, self.strand2 = self.strand2, self.strand1
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     @property
     def name(self) -> str:
         return f'{self.strand1.name}, {self.strand2.name}'
+
+    def key(self) -> str:
+        return f'StrandPair[{self.strand1.name}, {self.strand2.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -2262,9 +2303,17 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel]):
 class Complex(Part, Generic[StrandLabel, DomainLabel]):
     strands: Tuple[Strand, ...]
 
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     @property
     def name(self) -> str:
-        return ', '.join(strand.name for strand in self.strands)
+        strand_names = ', '.join(strand.name for strand in self.strands)
+        return f'Complex[{strand_names}]'
+
+    def key(self) -> str:
+        return f'Complex[{self.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -2288,7 +2337,7 @@ class Complex(Part, Generic[StrandLabel, DomainLabel]):
 
 
 @dataclass
-class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
+class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """Represents a DNA strand, made of several :any:`Domain`'s. """
 
     domains: List[Domain[DomainLabel]]
@@ -2450,6 +2499,13 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
     def name_of_part_type(self) -> str:
         return 'strand'
 
+    def key(self) -> str:
+        return f'Strand({self._hash_domain_names_concatenated})'
+
+    # needed to avoid unhashable type error; see
+    # https://docs.python.org/3/reference/datamodel.html#object.__hash__
+    __hash__ = Part.__hash__
+
     def individual_parts(self) -> Tuple[Strand, ...]:
         return self,
 
@@ -2515,14 +2571,6 @@ class Strand(JSONSerializable, Generic[StrandLabel, DomainLabel], Part):
             as a subdomain or an ancestor
         """
         return domain in self.all_intersecting_domains()
-
-    def __hash__(self) -> int:
-        return self._hash_domain_names_concatenated
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Strand):
-            return False
-        return self._domain_names_concatenated == other._domain_names_concatenated
 
     def length(self) -> int:
         """
@@ -3869,251 +3917,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
 # represents a "Design Part", e.g., Strand, Tuple[Domain, Domain], etc... whatever portion of the Design
 # is checked by the constraint
+# NOTE: this is needed in addition to the abstract base class Part, because it allows mypy type checking
+# of the various different types of evaluate and evaluate_bulk functions. Otherwise they have more
+# abstract type signatures, and we can't write something like evaluate(strand: Strand)
+# Maybe if we eventually get rid of the parts and only pass in the sequences, this will not be needed.
 DesignPart = TypeVar('DesignPart',
                      Domain,
                      Strand,
                      DomainPair,
                      StrandPair,
                      Complex,
-                     # Iterable[Domain],
-                     # Iterable[Strand],
-                     # Iterable[Tuple[Domain, Domain]],
-                     # Iterable[Tuple[Strand, Strand]],
-                     # Iterable[Complex],
                      Design)
-
-
-@dataclass
-class Violation(Generic[DesignPart]):
-    # Represents a violation of a single :any:`Constraint` in a :any:`Design`. The "part" of the :any:`Design`
-    # that violated the constraint is generic type `DesignPart` (e.g., for :any:`StrandPairConstraint`,
-    # DesignPart = :any:`Pair` [:any:`Strand`]).
-
-    constraint: Constraint
-    # :any:`Constraint` that was violated to result in this :any:`Violation`.
-
-    part: DesignPart
-    # DesignPart that caused this violation
-
-    domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
-    # :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
-
-    summary: str
-
-    score: float
-
-    def __init__(self, constraint: Constraint, part: DesignPart, domains: Iterable[Domain],
-                 score: float, summary: str) -> None:
-        # :param constraint:
-        #     :any:`Constraint` that was violated to result in this
-        # :param domains:
-        #     :any:`Domain`'s that were involved in violating :py:data:`Violation.constraint`
-        # :param score:
-        #     total "score" of this violation, typically something like an excess energy over a
-        #     threshold, squared, multiplied by the :data:`Constraint.weight`
-        object.__setattr__(self, 'constraint', constraint)
-        object.__setattr__(self, 'part', part)
-        domains_frozen = frozenset(domains)
-        object.__setattr__(self, 'domains', domains_frozen)
-        object.__setattr__(self, 'score', score)
-        object.__setattr__(self, 'summary', summary)
-
-    def __repr__(self) -> str:
-        return f'Violation({self.constraint.short_description}, score={self.score:.2f}, ' \
-               f'summary={self.summary})'
-
-    def __str__(self) -> str:
-        return repr(self)
-
-    # _Violation equality based on identity; different Violations in memory are considered different,
-    # even if all data between them matches. Don't create the same Violation twice!
-    def __hash__(self):
-        return super().__hash__()
-
-    def __eq__(self, other):
-        return self is other
-
-
-@dataclass
-class ViolationSet:
-    # Represents violations of :any:`Constraint`'s in a :any:`Design`.
-    #
-    # It is designed to be efficiently updateable when a single :any:`Domain` changes, to efficiently update
-    # only those violations of :any:`Constraint`'s that could have been affected by the changed :any:`Domain`.
-
-    violations_all: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violation`'s of it.
-
-    domain_to_violations: Dict[Domain, OrderedSet[Violation]]
-    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Violation`'s for which it is blamed
-
-    violations_nonfixed: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violations`
-    # that are associated to non-fixed :any:`constraint.Domain`'s.
-
-    violations_fixed: Dict[Constraint, OrderedSet[Violation]]
-    # Dict mapping each :any:`Constraint` to the set of all :any:`Violations`
-    # that are associated to fixed :any:`constraint.Domain`'s.
-
-    num_checked: Dict[Constraint, int]
-
-    # number of instances of each :any:`Constraint` that were checked
-
-    def __init__(self) -> None:
-        self.violations_all = defaultdict(OrderedSet)
-        self.domain_to_violations = defaultdict(OrderedSet)
-        self.violations_nonfixed = defaultdict(OrderedSet)
-        self.violations_fixed = defaultdict(OrderedSet)
-        self.num_checked = defaultdict(int)
-
-    def __repr__(self):
-        lines = "\n  ".join(map(str, self.violations_all.values()))
-        return f'ViolationSet(\n  {lines})'
-
-    def __str__(self):
-        return repr(self)
-
-    def update(self, new_violations: Dict[Domain, OrderedSet[Violation]]) -> None:
-        # Update this :any:`ViolationSet` by merging in new violations from `new_violations`.
-        #
-        # :param new_violations: dict mapping each :any:`Domain` to the set of :any:`Violation`'s
-        #                        for which it is blamed
-        for domain, domain_violations in new_violations.items():
-            self.domain_to_violations[domain].update(domain_violations)
-            for violation in domain_violations:
-                self.violations_all[violation.constraint].add(violation)
-                if not violation.part.fixed:
-                    self.violations_nonfixed[violation.constraint].add(violation)
-                else:
-                    self.violations_fixed[violation.constraint].add(violation)
-
-    def clone(self) -> ViolationSet:
-        # Returns a deep-ish copy of this :any:`ViolationSet`.
-        # :py:data:`ViolationSet.all_violations` is a new list,
-        # but containing the same :any:`Violation`'s.
-        # :py:data:`ViolationSet.domain_to_violations` is a new dict,
-        # and each of its values is a new set, but each of the :any:`Domain`'s and :any:`Violation`'s
-        # is the same object as in the original :any:`ViolationSet`.
-        #
-        # This is required for efficiently processing :any:`Violation`'s from one search iteration to the
-        # next.
-        #
-        # :return: A deep-ish copy of this :any:`ViolationSet`.
-        domain_to_violations_deep_copy = defaultdict(OrderedSet, self.domain_to_violations)
-        for domain, violations in domain_to_violations_deep_copy.items():
-            domain_to_violations_deep_copy[domain] = OrderedSet(violations)
-
-        violations_all_deep_copy = defaultdict(OrderedSet, self.violations_all)
-        for constraint, violations in violations_all_deep_copy.items():
-            violations_all_deep_copy[constraint] = OrderedSet(violations)
-
-        violations_nonfixed_deep_copy = defaultdict(OrderedSet, self.violations_nonfixed)
-        for constraint, violations in violations_nonfixed_deep_copy.items():
-            violations_nonfixed_deep_copy[constraint] = OrderedSet(violations)
-
-        violations_fixed_deep_copy = defaultdict(OrderedSet, self.violations_fixed)
-        for constraint, violations in violations_fixed_deep_copy.items():
-            violations_fixed_deep_copy[constraint] = OrderedSet(violations)
-
-        result = ViolationSet()
-        result.violations_all = violations_all_deep_copy
-        result.domain_to_violations = domain_to_violations_deep_copy
-        result.violations_nonfixed = violations_nonfixed_deep_copy
-        result.violations_fixed = violations_fixed_deep_copy
-
-        return result
-
-    def remove_violations_of_domain(self, domain: Domain) -> None:
-        # Removes any :any:`Violation`'s blamed on `domain`.
-        # :param domain: the :any:`Domain` whose :any:`Violation`'s should be removed
-
-        # XXX: need to make a copy of this set, since we are modifying the sets in place
-        # (values in self.domain_to_violations)
-        violations_of_domain = set(self.domain_to_violations[domain])
-
-        for violations in self.violations_all.values():
-            violations -= violations_of_domain
-        for violations in self.violations_nonfixed.values():
-            violations -= violations_of_domain
-        for violations in self.violations_fixed.values():
-            violations -= violations_of_domain
-
-        for violations_of_other_domain in self.domain_to_violations.values():
-            violations_of_other_domain -= violations_of_domain
-
-        assert len(self.domain_to_violations[domain]) == 0
-
-    def total_score(self) -> float:
-        """
-        :return: Total score of all violations.
-        """
-        return sum(violation.score
-                   for violations in self.violations_all.values()
-                   for violation in violations)
-
-    def total_score_nonfixed(self) -> float:
-        # :return:
-        #     Total score of all violations attributed to :any:`constraint.Domain`'s with
-        #     :any:`constraint.Domain.fixed` = False.
-        return sum(violation.score
-                   for violations in self.violations_nonfixed.values()
-                   for violation in violations)
-
-    def total_score_fixed(self) -> float:
-        # :return:
-        #     Total score of all violations attributed to :any:`constraint.Domain`'s with
-        #     :any:`constraint.Domain.fixed` = False.
-        return sum(violation.score
-                   for violations in self.violations_fixed.values()
-                   for violation in violations)
-
-    def score_of_constraint(self, constraint: Constraint) -> float:
-        """
-        :param constraint:
-            constraint to filter scores on
-        :return:
-            Total score of all violations due to `constraint`.
-        """
-        return sum(violation.score
-                   for violations in self.violations_all.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def score_of_constraint_nonfixed(self, constraint: Constraint) -> float:
-        # :param constraint:
-        #     constraint to filter scores on
-        # :return:
-        #     Total score of all nonfixed violations due to `constraint`.
-        return sum(violation.score
-                   for violations in self.violations_nonfixed.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def score_of_constraint_fixed(self, constraint: Constraint) -> float:
-        # :param constraint:
-        #     constraint to filter scores on
-        # :return:
-        #     Total score of all fixed violations due to `constraint`.
-        return sum(violation.score
-                   for violations in self.violations_fixed.values()
-                   for violation in violations
-                   if violation.constraint == constraint)
-
-    def num_violations(self) -> float:
-        # :return: Total number of violations.
-        return sum(len(violations) for violations in self.violations_all.values())
-
-    def num_violations_nonfixed(self) -> float:
-        # :return: Total number of nonfixed violations.
-        return sum(len(violations) for violations in self.violations_nonfixed.values())
-
-    def num_violations_fixed(self) -> float:
-        # :return: Total number of fixed violations.
-        return sum(len(violations) for violations in self.violations_fixed.values())
-
-    def has_nonfixed_violations(self) -> bool:
-        # :return: whether there are any nonfixed Violations in this ViolationSet
-        return self.num_violations_nonfixed() > 0
 
 
 @dataclass(frozen=True, eq=False)
@@ -4351,7 +4165,10 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
 @dataclass(frozen=True, eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
                            SingularConstraint[DomainPair]):
-    """Constraint that applies to a pair of :any:`Domain`'s."""
+    """Constraint that applies to a pair of :any:`Domain`'s.
+
+    These should be symmetric, meaning that the constraint will give the same evaluation whether its
+    evaluate method is given the pair (domain1, domain2), or the pair (domain2, domain1)."""
 
     @staticmethod
     def part_name() -> str:
@@ -4361,7 +4178,10 @@ class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
 @dataclass(frozen=True, eq=False)  # type: ignore
 class StrandPairConstraint(ConstraintWithStrandPairs[StrandPair],
                            SingularConstraint[StrandPair]):
-    """Constraint that applies to a pair of :any:`Strand`'s."""
+    """Constraint that applies to a pair of :any:`Strand`'s.
+
+    These should be symmetric, meaning that the constraint will give the same evaluation whether its
+    evaluate method is given the pair (strand1, strand2), or the pair (strand2, strand1)."""
 
     @staticmethod
     def part_name() -> str:
@@ -5004,10 +4824,9 @@ def rna_duplex_domain_pairs_constraint(
 
         for pair, energy in zip(domain_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
@@ -5382,10 +5201,9 @@ def rna_duplex_strand_pairs_constraint(
 
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
@@ -5484,10 +5302,9 @@ def rna_cofold_strand_pairs_constraint(
 
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            if excess > 0.0:
-                summary = f'{energy:6.2f} kcal/mol'
-                pair_score_summary = (pair, excess, summary)
-                pairs_scores_summaries.append(pair_score_summary)
+            summary = f'{energy:6.2f} kcal/mol'
+            pair_score_summary = (pair, excess, summary)
+            pairs_scores_summaries.append(pair_score_summary)
         return pairs_scores_summaries
 
     pairs_tuple = None
