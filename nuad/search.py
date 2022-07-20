@@ -760,30 +760,44 @@ class SearchParameters:
     If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
     e.g.,
     
-    .. code-block::
+    .. code-block:: console
     
-        |-------------|----------|-------------|-------------|------------|-----------------|
-        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
-        |-------------|----------|-------------|-------------|------------|-----------------|
-        |           0 |        0 |      2555.9 |      2545.9 |      118.2 |          2437.8 |
-        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
-        |-------------|----------|-------------|-------------|------------|-----------------|
-        |           1 |        1 |      2545.9 |        2593 |      120.2 |          2425.6 |
-        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
-        |-------------|----------|-------------|-------------|------------|-----------------|
-        |           2 |        1 |      2545.9 |      2563.1 |      120.2 |          2425.6 |
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         0 |      0 |    2555.9 |    2545.9 |    118.2 |        2437.8 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         1 |      1 |    2545.9 |    2593.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         2 |      1 |    2545.9 |    2563.1 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         3 |      1 |    2545.9 |    2545.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         4 |      2 |    2545.0 |    2510.1 |    121.0 |        2423.9 |
     
     If False, then the screen output is updated in place:
     
-    .. code-block::
-    
-        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
-        |-------------|----------|-------------|-------------|------------|-----------------|
-        |          21 |       12 |      2350.2 |      2350.3 |      110.9 |          2239.2 |
+    .. code-block:: console
+        
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |        27 |     14 |    2340.5 |    2320.5 |    109.6 |        2230.9 |
+
     
     This is done by printing the symbol '\r' (carriage return), which sets the print position
     back to the start of the line. The terminal screen must be wide enough to handle the output or
     this won't work. 
+    
+    The search also occassionally logs other things to the screen that may disrupt this a bit.
     """
 
     def __post_init__(self):
