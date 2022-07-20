@@ -6920,8 +6920,8 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = Complex(tuple(
-        [_leafify_strand(strand, addr_translation_table) for strand in strand_complex]))
+    leafify_strand_complex = Complex(
+        *[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:
