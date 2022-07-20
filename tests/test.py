@@ -16,12 +16,6 @@ from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_
 _domain_pools: Dict[int, DomainPool] = {}
 
 
-def clear_domains_interned() -> None:
-    """Clear interned domains.
-    """
-    constraints._domains_interned.clear()
-
-
 def assign_domain_pool_of_length(length: int) -> DomainPool:
     """Returns a DomainPool of given size
 
@@ -38,7 +32,7 @@ def assign_domain_pool_of_length(length: int) -> DomainPool:
         return new_domain_pool
 
 
-def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Strand:
+def construct_strand(design: Design, domain_names: List[str], domain_lengths: List[int]) -> Strand:
     """Constructs a strand with given domain names and domain lengths.
 
     :param domain_names: Names of the domain on the strand
@@ -55,7 +49,7 @@ def construct_strand(domain_names: List[str], domain_lengths: List[int]) -> Stra
                          f'domain_names contained {len(domain_names)} names '
                          f'but domain_lengths contained {len(domain_lengths)} '
                          f'lengths')
-    s: Strand = Strand(domain_names)
+    s: Strand = design.add_strand(domain_names=domain_names)
     for (i, length) in enumerate(domain_lengths):
         s.domains[i].pool = assign_domain_pool_of_length(length)
     s.compute_derived_fields()
@@ -93,19 +87,19 @@ class TestIntersectingDomains(unittest.TestCase):
         self.assertEqual(1, len(s1.domains))
         self.assertEqual(a, s1.domains[0])
 
-        s2 = Strand(domains=[b,C], starred_domain_indices=[])
+        s2 = Strand(domains=[b, C], starred_domain_indices=[])
         self.assertEqual(2, len(s2.domains))
         self.assertEqual(b, s2.domains[0])
         self.assertEqual(C, s2.domains[1])
 
-        s3 = Strand(domains=[E,F,g,h], starred_domain_indices=[])
+        s3 = Strand(domains=[E, F, g, h], starred_domain_indices=[])
         self.assertEqual(4, len(s3.domains))
         self.assertEqual(E, s3.domains[0])
         self.assertEqual(F, s3.domains[1])
         self.assertEqual(g, s3.domains[2])
         self.assertEqual(h, s3.domains[3])
 
-        s4 = Strand(domains=[E,F,C], starred_domain_indices=[])
+        s4 = Strand(domains=[E, F, C], starred_domain_indices=[])
         self.assertEqual(3, len(s4.domains))
         self.assertEqual(E, s4.domains[0])
         self.assertEqual(F, s4.domains[1])
@@ -116,7 +110,7 @@ class TestIntersectingDomains(unittest.TestCase):
                 self.assertTrue(s.intersects_domain(domain))
 
         # these strands do not hit every domain
-        s5 = Strand(domains=[b,g], starred_domain_indices=[])
+        s5 = Strand(domains=[b, g], starred_domain_indices=[])
         self.assertEqual(2, len(s5.domains))
         self.assertEqual(b, s5.domains[0])
         self.assertEqual(g, s5.domains[1])
@@ -211,8 +205,8 @@ class TestSampleSubstrings(unittest.TestCase):
 
 class TestModifyDesignAfterCreated(unittest.TestCase):
     def setUp(self) -> None:
-        strand = nc.Strand(domain_names=['x', 'y'])
-        self.design = nc.Design(strands=[strand])
+        self.design = nc.Design()
+        self.design.add_strand(domain_names=['x', 'y'])
 
     def add_domain(self):
         strand = self.design.strands[0]
@@ -286,12 +280,11 @@ class TestExportDNASequences(unittest.TestCase):
 
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.IDTFields(scale='100nm', purification='PAGE')
-        strands = [
-            nc.Strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt),
-            nc.Strand(domain_names=['d', 'c*', 'e', 'f'], name='s1'),
-        ]
-        design = nc.Design(strands)
-        #        a      b       c       d       e           f
+        design = nc.Design()
+        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt)
+        design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
+
+        #        a       b       c       d       e           f
         seqs = ['AACG', 'CCGT', 'GGTA', 'TTAC', 'AAAACCCC', 'AAAAGGGG']
         # s0: AACG-ACGG-GGTA-GTAA
         # s1: TTAC-TACC-AAAACCCC-AAAAGGGG
@@ -319,13 +312,11 @@ class TestExportDNASequences(unittest.TestCase):
         for plate_type in [sc.PlateType.wells96, sc.PlateType.wells384]:
             filename = f'test_excel_export_{plate_type.num_wells_per_plate()}.xls'
 
-            strands = []
+            design = nc.Design()
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
                 idt = nc.IDTFields()
-                strand = nc.Strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
+                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
                 strand.domains[0].set_fixed_sequence('T' * strand_len)
-                strands.append(strand)
-            design = nc.Design(strands=strands)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
 
@@ -355,8 +346,8 @@ class TestNumpyConstraints(unittest.TestCase):
 
 class TestInsertDomains(unittest.TestCase):
     def setUp(self) -> None:
-        strands = [nc.Strand(domain_names=['a', 'b*', 'c', 'd*'])]
-        self.design = nc.Design(strands)
+        self.design = Design()
+        self.design.add_strand(domain_names=['a', 'b*', 'c', 'd*'])
         self.strand = self.design.strands[0]
 
     def test_no_insertion(self) -> None:
@@ -402,8 +393,6 @@ class TestInsertDomains(unittest.TestCase):
 
 
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
-    def setUp(self) -> None:
-        clear_domains_interned()
 
     def test_adjacent_to_exterior_base_pair_on_length_2_domain(self) -> None:
         """Test that base pair on domain of length two is properly classified as
@@ -420,8 +409,9 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
           [=============--==>
                  b*       a*
         """
-        top_strand = construct_strand(['a', 'b'], [2, 13])
-        bot_strand = construct_strand(['b*', 'a*'], [13, 2])
+        design = Design()
+        top_strand = construct_strand(design, ['a', 'b'], [2, 13])
+        bot_strand = construct_strand(design, ['b*', 'a*'], [13, 2])
 
         top_a = top_strand.address_of_domain(0)
 
@@ -602,8 +592,9 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                             |   |      |
                INTERIOR_TO_STRAND      DANGLE_5P
         """
-        output_strand = construct_strand(['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
-        gate_base_strand = construct_strand(['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
+        design = Design()
+        output_strand = construct_strand(design, ['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
+        gate_base_strand = construct_strand(design, ['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
         gate_output_complex = [output_strand, gate_base_strand]
 
         output_t = output_strand.address_of_domain(2)
@@ -653,8 +644,9 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                                         |   |
                        INTERIOR_TO_STRAND   BLUNT_END
         """
-        waste_strand = construct_strand(['sg', 'Sg'], [2, 13])
-        threshold_base_strand = construct_strand(['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
+        design = Design()
+        waste_strand = construct_strand(design, ['sg', 'Sg'], [2, 13])
+        threshold_base_strand = construct_strand(design, ['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
         threshold_complex = [waste_strand, threshold_base_strand]
 
         expected = set([
@@ -753,8 +745,9 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                                 |   |
                INTERIOR_TO_STRAND   BLUNT_END
         """
-        waste_strand = construct_strand(['so', 'So'], [2, 13])
-        reporter_base_strand = construct_strand(['T*', 'So*', 'so*'], [5, 13, 2])
+        design = Design()
+        waste_strand = construct_strand(design, ['so', 'So'], [2, 13])
+        reporter_base_strand = construct_strand(design, ['T*', 'So*', 'so*'], [5, 13, 2])
         reporter_complex = [waste_strand, reporter_base_strand]
 
         expected = set([
@@ -795,8 +788,9 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
                                     |              |   |
                                    INTERIOR_TO_STRAND  BLUNT_END
         """
-        output_strand = construct_strand(['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
-        reporter_base_strand = construct_strand(['T*', 'So*', 'so*'], [5, 13, 2])
+        design = Design()
+        output_strand = construct_strand(design, ['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
+        reporter_base_strand = construct_strand(design, ['T*', 'So*', 'so*'], [5, 13, 2])
         reporter_waste_complex = [output_strand, reporter_base_strand]
 
         expected = set([
@@ -819,8 +813,8 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
 
 class TestStrandDomainAddress(unittest.TestCase):
     def setUp(self):
-        clear_domains_interned()
-        self.strand = construct_strand(['a', 'b', 'c'], [10, 20, 30])
+        design = Design()
+        self.strand = construct_strand(design, ['a', 'b', 'c'], [10, 20, 30])
         self.addr = StrandDomainAddress(self.strand, 1)
 
     def test_init(self):

@@ -2118,14 +2118,10 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
         return None
 
 
-_domains_interned: Dict[str, Domain] = {}
-
-
 def domains_not_substrings_of_each_other_constraint(
         check_complements: bool = True, short_description: str = 'dom neq', weight: float = 1.0,
         min_length: int = 0,
-        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) \
-        -> DomainPairConstraint:
+        pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None) -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
@@ -2141,7 +2137,8 @@ def domains_not_substrings_of_each_other_constraint(
         For instance if `min_length` is 4, then having two domains with sequences AAAA and CAAAAC would
         violate this constraint, but domains with sequences AAA and CAAAC would not.
     :param pairs:
-        pairs of domains to check (by default all pairs of unequal domains are compared)
+        pairs of domains to check.
+        By default all pairs of unequal domains are compared unless both are fixed.
     :return:
         a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
         (in particular, if they are equal length, then they are not the same domain)
@@ -2407,7 +2404,6 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """
 
     def __init__(self,
-                 domain_names: Optional[List[str]] = None,
                  domains: Optional[List[Domain[DomainLabel]]] = None,
                  starred_domain_indices: Optional[Iterable[int]] = None,
                  group: str = default_strand_group,
@@ -2416,25 +2412,14 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
                  idt: Optional[IDTFields] = None,
                  ) -> None:
         """
-        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects
-        via parameter `domains`, or by giving names via parameter `domain_names`.
-        If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as global variables;
-        no two :any:`Domain`'s with the same name will be created, and subsequent uses of the same
-        name will refer to the same :any:`Domain` object.
+        A :any:`Strand` can be created only by listing explicit :any:`Domain` objects
+        via parameter `domains`. To specify a :any:`Strand` by giving domain *names*, see the method
+        :meth:`Design.add_strand`.
 
-        :param domain_names:
-            Names of the :any:`Domain`'s on this :any:`Strand`.
-            Mutually exclusive with :py:data:`Strand.domains` and :py:data:`Strand.starred_domain_indices`.
         :param domains:
-            Dictionary mapping each :any:`Domain` on this :any:`Strand` to the Boolean value indicating
-            whether it is a starred :any:`Domain`.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.starred_domain_indices`.
+            list of :any:`Domain`'s on this :any:`Strand`
         :param starred_domain_indices:
             Indices of :any:`Domain`'s in `domains` that are starred.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.domains`.
         :param group:
             name of group of this :any:`Strand`.
         :param name:
@@ -2448,33 +2433,6 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         self._all_intersecting_domains = None
         self.group = group
         self._name = name
-        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
-                (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
-            raise ValueError('exactly one of domain_names or '
-                             'domains and starred_domain_indices must be non-None\n'
-                             f'domain_names: {domain_names}\n'
-                             f'domains: {domains}\n'
-                             f'starred_domain_indices: {starred_domain_indices}')
-
-        elif domain_names is not None:
-            domains = []
-            starred_domain_indices = OrderedSet()
-            for idx, domain_name in enumerate(domain_names):
-                is_starred = domain_name.endswith('*')
-                if is_starred:
-                    domain_name = domain_name[:-1]
-
-                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
-                domain: Domain
-                if domain_name not in _domains_interned:
-                    domain = Domain(name=domain_name)
-                    _domains_interned[domain_name] = domain
-                else:
-                    domain = _domains_interned[domain_name]
-
-                domains.append(domain)
-                if is_starred:
-                    starred_domain_indices.add(idx)
 
         # XXX: moved this check to Design constructor to allow subdomain graphs to be
         # constructed gradually while building up the design
@@ -3033,6 +2991,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     strands: List[Strand[StrandLabel, DomainLabel]]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
+    _domains_interned: Dict[str, Domain]
+
     #################################################
     # derived fields, so not specified in constructor
 
@@ -3064,7 +3024,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    def __init__(self, strands: Iterable[Strand]) -> None:
+    def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
@@ -3073,6 +3033,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
+        self._domains_interned = {}
 
     def compute_derived_fields(self) -> None:
         """
@@ -3230,6 +3191,108 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             Design.assign_modifications_to_strands(strands, strands_json, all_mods)
 
         return Design(strands=strands)
+
+    def add_strand(self,
+                   domain_names: Optional[List[str]] = None,
+                   domains: Optional[List[Domain[DomainLabel]]] = None,
+                   starred_domain_indices: Optional[Iterable[int]] = None,
+                   group: str = default_strand_group,
+                   name: Optional[str] = None,
+                   label: Optional[StrandLabel] = None,
+                   idt: Optional[IDTFields] = None,
+                   ) -> Strand:
+        """
+        This is an alternative way to create strands instead of calling the :any:`Strand` constructor
+        explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
+        to specify :any:`Domain`'s simply by giving a name.
+
+        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
+        `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
+        If `domain_names` is specified, then by convention those that end with a ``*`` are
+        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as variables
+        in a cache stored in the :any:`Design` object;
+        no two :any:`Domain`'s with the same name in this design will be created,
+        and subsequent uses of the same name will refer to the same :any:`Domain` object.
+
+        :param domain_names:
+            Names of the :any:`Domain`'s on this :any:`Strand`.
+            Mutually exclusive with :py:data:`Strand.domains` and :py:data:`Strand.starred_domain_indices`.
+        :param domains:
+            list of :any:`Domain`'s on this :any:`Strand`.
+            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
+            :py:data:`Strand.starred_domain_indices`.
+        :param starred_domain_indices:
+            Indices of :any:`Domain`'s in `domains` that are starred.
+            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
+            :py:data:`Strand.domains`.
+        :param group:
+            name of group of this :any:`Strand`.
+        :param name:
+            Name of this :any:`Strand`.
+        :param label:
+            Label to associate with this :any:`Strand`.
+        :param idt:
+            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
+            methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
+        :return:
+            the :any:`Strand` that is created
+        """
+        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
+                (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
+            raise ValueError('exactly one of domain_names or '
+                             'domains and starred_domain_indices must be non-None\n'
+                             f'domain_names: {domain_names}\n'
+                             f'domains: {domains}\n'
+                             f'starred_domain_indices: {starred_domain_indices}')
+
+        elif domain_names is not None:
+            domains = []
+            starred_domain_indices = OrderedSet()
+            for idx, domain_name in enumerate(domain_names):
+                is_starred = domain_name.endswith('*')
+                if is_starred:
+                    domain_name = domain_name[:-1]
+
+                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
+                domain: Domain
+                if domain_name not in self._domains_interned:
+                    domain = Domain(name=domain_name)
+                    self._domains_interned[domain_name] = domain
+                else:
+                    domain = self._domains_interned[domain_name]
+
+                domains.append(domain)
+                if is_starred:
+                    starred_domain_indices.add(idx)
+
+        domains_of_strand = list(domains)  # type: ignore
+        strand = Strand(domains=domains_of_strand,
+                        starred_domain_indices=starred_domain_indices,
+                        group=group,
+                        name=name,
+                        label=label,
+                        idt=idt)
+
+        for existing_strand in self.strands:
+            if strand.name == existing_strand.name:
+                raise ValueError(f'strand name {strand.name} already exists for this strand:\n'
+                                 f'  {existing_strand}\n'
+                                 f'so it cannot be used for the new strand\n'
+                                 f'  {strand}')
+        self.strands.append(strand)
+
+        for domain_in_strand in strand.domains:
+            domains_in_tree = domain_in_strand.all_domains_in_tree()
+            for domain in domains_in_tree:
+                if domain not in self.domains:
+                    self.domains.append(domain)
+                name = domain.name
+                if name in self.domains_by_name and domain is not self.domains_by_name[name]:
+                    raise ValueError(f'domain names must be unique, '
+                                     f'but I found two different domains with name {domain.name}')
+                self.domains_by_name[domain.name] = domain
+
+        return strand
 
     @staticmethod
     def assign_modifications_to_strands(strands: List[Strand], strand_jsons: List[dict],
@@ -3578,8 +3641,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
-        dsd_strands: List[Strand] = []
         strand_names: Set[str] = set()
+        design: Design[StrandLabel, DomainLabel] = Design()
         for group, sc_strands in sc_strand_groups.items():
             for sc_strand in sc_strands:
                 # do not include strands with the same name more than once
@@ -3591,13 +3654,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
                 domain_names: List[str] = [domain.name for domain in sc_strand.domains]
                 sequence = sc_strand.dna_sequence
-                dsd_strand: Strand[StrandLabel, DomainLabel] = Strand(domain_names=domain_names,
-                                                                      group=group,
-                                                                      name=sc_strand.name,
-                                                                      label=sc_strand.label)
+                nuad_strand: Strand[StrandLabel, DomainLabel] = design.add_strand(domain_names=domain_names,
+                                                                                  group=group,
+                                                                                  name=sc_strand.name,
+                                                                                  label=sc_strand.label)
                 # assign sequence
                 if sequence is not None:
-                    for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
+                    for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
                         domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
                         # take the WC complement first so the dsd Domain stores the "canonical" sequence
@@ -3610,17 +3673,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                 dsd_domain.set_sequence(domain_sequence)
 
                 # set domain labels
-                for dsd_domain, sc_domain in zip(dsd_strand.domains, sc_strand.domains):
+                for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
                     if dsd_domain.label is None:
                         dsd_domain.label = sc_domain.label
                     elif sc_domain.label is not None and warn_existing_domain_labels:
                         logger.warning(f'warning; dsd domain already has label {dsd_domain.label}; '
                                        f'skipping assignment of scadnano label {sc_domain.label}')
 
-                dsd_strands.append(dsd_strand)
-                strand_names.add(dsd_strand.name)
+                strand_names.add(nuad_strand.name)
 
-        design: Design[StrandLabel, DomainLabel] = Design(strands=dsd_strands)
+        design.compute_derived_fields()
+
         return design
 
     @staticmethod
@@ -6700,7 +6763,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
+def _get_implicitly_bound_domain_addresses(strand_complex: Iterable[Strand],
                                            nonimplicit_base_pairs_domain_names: Optional[Set[str]] = None) \
         -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
@@ -6828,7 +6891,7 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-        strand_complex: Complex,
+        strand_complex: Iterable[Strand],
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 

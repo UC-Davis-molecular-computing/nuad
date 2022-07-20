@@ -206,7 +206,8 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
 
             pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
                               where=not_subdomain)
-            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs]
+            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs
+                                     if not (domain1.fixed and domain2.fixed)]
 
     else:
         # either all pairs, or just constraint.pairs if specified
@@ -673,7 +674,7 @@ class SearchParameters:
 
     info_log_file: bool = False
     """
-    By default, the text written to the screen through logger.info (on the logger instance used in
+    If True, the text written to the screen through logger.info (on the logger instance used in
     dsd.constraints) is written to the file log_info.log in the directory `out_directory`.
     """
 
@@ -752,6 +753,51 @@ class SearchParameters:
     log_time: bool = False
     """
     Whether to log the time taken per iteration to the screen.
+    """
+
+    scrolling_output: bool = True
+    r"""
+    If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
+    e.g.,
+    
+    .. code-block:: console
+    
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         0 |      0 |    2555.9 |    2545.9 |    118.2 |        2437.8 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         1 |      1 |    2545.9 |    2593.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         2 |      1 |    2545.9 |    2563.1 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         3 |      1 |    2545.9 |    2545.0 |    120.2 |        2425.6 |
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |         4 |      2 |    2545.0 |    2510.1 |    121.0 |        2423.9 |
+    
+    If False, then the screen output is updated in place:
+    
+    .. code-block:: console
+        
+        $ python sst_canvas.py
+        using random seed of 1; use this same seed to reproduce this run
+        number of processes in system: 4
+        |-----------|--------|-----------|-----------|----------|---------------|
+        | iteration | update | opt score | new score | StrandSS | StrandPairRNA |
+        |        27 |     14 |    2340.5 |    2320.5 |    109.6 |        2230.9 |
+
+    
+    This is done by printing the symbol '\r' (carriage return), which sets the print position
+    back to the start of the line. The terminal screen must be wide enough to handle the output or
+    this won't work. 
+    
+    The search also occassionally logs other things to the screen that may disrupt this a bit.
     """
 
     def __post_init__(self):
@@ -1289,37 +1335,51 @@ def _flatten(list_of_lists: Iterable[Iterable[T]]) -> Iterable[T]:
     return itertools.chain.from_iterable(list_of_lists)
 
 
+def _remove_first_lines_from_string(s: str, num_lines: int) -> str:
+    return '\n'.join(s.split('\n')[num_lines:])
+
+
 def _log_constraint_summary(*, params: SearchParameters,
                             eval_set: EvaluationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    # score_header = '\niteration|updates|opt score||new score|'
-    # all_constraints_header = '|'.join(
-    #     f'{constraint.short_description}' for constraint in params.constraints)
-    # header = score_header + all_constraints_header
+    # If output is not scrolling, only print this once on first iteration.
+    if params.scrolling_output or iteration == 0:
+        row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
+                                                                    for constraint in params.constraints]
+        header = tabulate([row1], tablefmt='github')
+        print(header)
+
+    def _dec(score: float) -> int:
+        # how many decimals after decimal point to use given the score
+        dec_opt = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        return dec_opt
 
     score_opt = eval_set.total_score
     score_new = eval_set.total_score_new()
-    dec_opt = max(1, math.ceil(math.log(1 / score_opt, 10)) + 2) if score_opt > 0 else 1
-    dec_new = max(1, math.ceil(math.log(1 / score_new, 10)) + 2) if score_new > 0 else 1
-    # score_str = f'{iteration:9}|{num_new_optimal:7}|' \
-    #             f'{score_opt :9.{dec_opt}f}||' \
-    #             f'{score_new :9.{dec_new}f}|'  # \
+
+    dec_opt = _dec(score_opt)
+    dec_new = _dec(score_new)
 
     all_constraints_strs = []
     for constraint in params.constraints:
         score = eval_set.score_of_constraint(constraint, True)
         length = len(constraint.short_description)
-        num_decimals = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
+        num_decimals = _dec(score)
         constraint_str = f'{score:{length}.{num_decimals}f}'
+        # round further if this would exceed length
+        if len(constraint_str) > length:
+            excess = len(constraint_str) > length
+            num_decimals -= excess
+            if num_decimals < 0:
+                num_decimals = 0
+            constraint_str = f'{score:{length}.{num_decimals}f}'
         all_constraints_strs.append(constraint_str)
     # all_constraints_str = '|'.join(all_constraints_strs)
 
     # logger.info(header + '\n' + score_str + all_constraints_str)
 
     # TODO: use floatfmt per column to adjust decimal places
-    import tabulate as tb
-    tb.PRESERVE_WHITESPACE = True
     row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
                                                                 for constraint in params.constraints]
     # iteration_str = f'{iteration:9}'
@@ -1329,7 +1389,10 @@ def _log_constraint_summary(*, params: SearchParameters,
     row2 = [iteration, num_new_optimal, score_opt_str, score_new_str] + all_constraints_strs  # type:ignore
     table = [row1, row2]
     table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
-    logger.info(table_str)
+    table_str = _remove_first_lines_from_string(table_str, 2)
+    # logger.info(table_str)
+    line_end = '\n' if params.scrolling_output else '\r'
+    print(table_str, end=line_end)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
@@ -1361,11 +1424,12 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
     for domain in independent_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
-            skip_nonfixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                                f'That domain has a NON-FIXED sequence {domain.sequence()}, ' \
+            skip_nonfixed_msg = f'Skipping initial assignment of DNA sequence to domain {domain.name}. ' \
+                                f'That domain currently has a non-fixed sequence {domain.sequence()}, ' \
                                 f'which the search will attempt to replace.'
-            skip_fixed_msg = f'Skipping assignment of DNA sequence to domain {domain.name}. ' \
-                             f'That domain has a FIXED sequence {domain.sequence()}.'
+            skip_fixed_msg = f'Skipping initial assignment of DNA sequence to domain {domain.name}. ' \
+                             f'That domain has a fixed sequence {domain.sequence()}, ' \
+                             f'and the search will not replace it.'
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True

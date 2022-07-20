@@ -55,22 +55,22 @@ def main() -> None:
     # num_strands = 100
     # num_strands = 355
 
+    design = nc.Design()
     #                     si         wi         ni         ei
     # strand i is    [----------|----------|----------|---------->
-    strands = [nc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
+    for i in range(num_strands):
+        design.add_strand([f's{i}', f'w{i}', f'n{i}', f'e{i}'])
 
     some_fixed = False
     # some_fixed = True
     if some_fixed:
         # fix all domains of strand 0 and one domain of strand 1
-        for domain in strands[0].domains:
+        for domain in design.strands[0].domains:
             domain.set_fixed_sequence('ACGTACGTAC')
-        strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
+        design.strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
 
     parallel = False
     # parallel = True
-
-    design = nc.Design(strands)
 
     numpy_constraints: List[NumpyConstraint] = [
         nc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
@@ -107,14 +107,14 @@ def main() -> None:
                                    )
 
     if some_fixed:
-        for strand in strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
+        for strand in design.strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
             for domain in strand.domains[:2]:
                 if domain.name != 's1':  # skip for s1 since that domain is fixed
                     domain.pool = domain_pool_10
             for domain in strand.domains[2:]:
                 domain.pool = domain_pool_11
     else:
-        for strand in strands:
+        for strand in design.strands:
             for domain in strand.domains[:2]:
                 domain.pool = domain_pool_10
             for domain in strand.domains[2:]:
@@ -122,7 +122,7 @@ def main() -> None:
 
     # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
     # so that we know the domain lengths
-    strand_complexes = [nc.Complex((strand,)) for i, strand in enumerate(strands[2:])]
+    strand_complexes = [nc.Complex((strand,)) for i, strand in enumerate(design.strands[2:])]
     strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
@@ -167,6 +167,7 @@ def main() -> None:
         save_report_for_all_updates=True,
         save_design_for_all_updates=True,
         force_overwrite=True,
+        scrolling_output=False,
         # report_only_violations=False,
     )
     ns.search_for_dna_sequences(design, params)
