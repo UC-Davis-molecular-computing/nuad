@@ -1109,15 +1109,15 @@ def _double_check_violations_from_scratch(design: nc.Design, params: SearchParam
                 ((_is_significantly_less(score_fs, score_opt)
                   and _is_significantly_less(score_opt, score_new)))):
             problem = True
-        if problem:
-            logger.warning(f'''\
+    if problem:
+        logger.warning(f'''\
 WARNING! There is a bug in nuad.
 From scratch, we calculated score {score_fs}.
 The optimal score so far is       {score_opt}.
 Iteratively, we calculated score  {score_new}.
 This means the iterative search is saying something different about quitting early than the full search. '
 This happened on iteration {iteration}.''')
-            sys.exit(-1)
+        sys.exit(-1)
 
 
 def script_name_no_ext() -> str:
