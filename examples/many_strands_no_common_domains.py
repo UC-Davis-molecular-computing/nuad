@@ -48,19 +48,19 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    # num_strands = 2
+    # num_strands = 3
     # num_strands = 5
     # num_strands = 10
-    # num_strands = 50
-    num_strands = 100
+    num_strands = 50
+    # num_strands = 100
     # num_strands = 355
 
     #                     si         wi         ni         ei
     # strand i is    [----------|----------|----------|---------->
     strands = [nc.Strand([f's{i}', f'w{i}', f'n{i}', f'e{i}']) for i in range(num_strands)]
 
-    # some_fixed = False
-    some_fixed = True
+    some_fixed = False
+    # some_fixed = True
     if some_fixed:
         # fix all domains of strand 0 and one domain of strand 1
         for domain in strands[0].domains:
@@ -142,16 +142,20 @@ def main() -> None:
     strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
 
+    strand_individual_ss_constraint2 = nc.nupack_strand_complex_free_energy_constraint(
+        threshold=-1.0, temperature=52, short_description='StrandSS2', parallel=parallel)
+
     strand_pair_nupack_constraint = nc.nupack_strand_pairs_constraint(
         threshold=3.0, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
         strand_individual_ss_constraint,
+        # strand_individual_ss_constraint2,
+        strand_pairs_rna_duplex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_duplex_constraint,
-        strand_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
         # nc.domains_not_substrings_of_each_other_constraint(),
     ],
@@ -163,6 +167,7 @@ def main() -> None:
         save_report_for_all_updates=True,
         save_design_for_all_updates=True,
         force_overwrite=True,
+        # report_only_violations=False,
     )
     ns.search_for_dna_sequences(design, params)
 
