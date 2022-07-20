@@ -6763,7 +6763,7 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 """
 
 
-def _get_implicitly_bound_domain_addresses(strand_complex: Complex,
+def _get_implicitly_bound_domain_addresses(strand_complex: Iterable[Strand],
                                            nonimplicit_base_pairs_domain_names: Optional[Set[str]] = None) \
         -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
@@ -6891,7 +6891,7 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-        strand_complex: Complex,
+        strand_complex: Iterable[Strand],
         nonimplicit_base_pairs: Iterable[BoundDomains] = None) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
