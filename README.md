@@ -9,6 +9,8 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 * [Overview](#overview)
 * [API documentation](#api-documentation)
 * [Installation](#installation)
+  * [Installing nuad](#installing-nuad)
+  * [Installing NUPACK and ViennaRNA](#installing-nupack-and-viennarna)
 * [Data model](#data-model)
 * [Constraint evaluations must be pure functions of their inputs](#constraint-evaluations-must-be-pure-functions-of-their-inputs)
 * [Examples](#examples)
@@ -31,47 +33,66 @@ The API documentation is on readthedocs: https://nuad.readthedocs.io/
 
 
 ## Installation
-nuad requires Python version 3.7 or higher. Currently, it cannot be installed using pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
+nuad requires Python version 3.7 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on two pieces of software that are not installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
 
 nuad uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download), which must be installed separately (see below for link to installation instructions). While it is technically possible to use nuad without them, most of the pre-packaged constraints require them.
 
-To use NUPACK on Windows, you should use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
+To use NUPACK on Windows, you must use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
-To install nuad:
+### Installing nuad
 
-1. Download the git repo, by one of two methods:
-    - Install [git](https://git-scm.com/downloads) if necessary, then type 
+To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK and ViennaRNA separately (see [instructions below](#installing-nupack-and-viennarna)).
+
+- pip
+  
+  At the command line (WSL for Windows, not the Powershell prompt), type
+
+  ```
+  pip install nuad
+  ```
+
+- git
+
+  1. Download the git repo, by one of two methods:
+      - Install [git](https://git-scm.com/downloads) if necessary, then type 
     
-        ```git clone https://github.com/UC-Davis-molecular-computing/nuad.git``` 
+          ```git clone https://github.com/UC-Davis-molecular-computing/nuad.git``` 
     
-      at the command line, or
-    - on the page `https://github.com/UC-Davis-molecular-computing/nuad`, click on Code &rarr; Download Zip:
+        at the command line, or
+      - on the page `https://github.com/UC-Davis-molecular-computing/nuad`, click on Code &rarr; Download Zip:
 
-      ![](images/screenshot-download-zip.png)
+        ![](images/screenshot-download-zip.png)
 
-      and then unzip somewhere on your file system.
+        and then unzip somewhere on your file system.
 
-2. Add the directory `nuad` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/nuad` represents the path to the `nuad` directory:
+  2. Add the directory `nuad` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/nuad` represents the path to the `nuad` directory:
 
-    ```
-    export PYTHONPATH="${PYTHONPATH}:/path/to/nuad"
-    ```
+      ```
+      export PYTHONPATH="${PYTHONPATH}:/path/to/nuad"
+      ```
 
 
-3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
+  3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
 
-    ```
-    pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
-    ``` 
+      ```
+      pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
+      ``` 
     
-    at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
+      at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
 
-4. Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). (If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.) If installing on Windows, you must first install [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), and then install NUPACK and ViennaRNA from within WSL. After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
+### Installing NUPACK and ViennaRNA
 
-    To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
-    To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
+Recall that if you are using Windows, you must do all installation through [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) (Windows subsystem for Linux).
 
-5. Test NUPACK and ViennaRNA are available from within nuad by typing `python` at the command line, then typing `import nuad`. It should import without errors:
+Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.
+
+After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
+
+To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
+
+To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
+
+Test NUPACK and ViennaRNA are available from within nuad by typing `python` at the command line, then typing `import nuad`. It should import without errors:
 
     ```python
     $ python
@@ -82,7 +103,7 @@ To install nuad:
     >>>
     ```
 
-    To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
+To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
 
     ```python
     >>> import nuad.vienna_nupack as nv
