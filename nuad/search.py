@@ -755,6 +755,37 @@ class SearchParameters:
     Whether to log the time taken per iteration to the screen.
     """
 
+    scrolling_output: bool = True
+    r"""
+    If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
+    e.g.,
+    
+    .. code-block::
+    
+        |-------------|----------|-------------|-------------|------------|-----------------|
+        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
+        |-------------|----------|-------------|-------------|------------|-----------------|
+        |           0 |        0 |      2555.9 |      2545.9 |      118.2 |          2437.8 |
+        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
+        |-------------|----------|-------------|-------------|------------|-----------------|
+        |           1 |        1 |      2545.9 |        2593 |      120.2 |          2425.6 |
+        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
+        |-------------|----------|-------------|-------------|------------|-----------------|
+        |           2 |        1 |      2545.9 |      2563.1 |      120.2 |          2425.6 |
+    
+    If False, then the screen output is updated in place:
+    
+    .. code-block::
+    
+        | iteration   | update   | opt score   | new score   | StrandSS   | StrandPairRNA   |
+        |-------------|----------|-------------|-------------|------------|-----------------|
+        |          21 |       12 |      2350.2 |      2350.3 |      110.9 |          2239.2 |
+    
+    This is done by printing the symbol '\r' (carriage return), which sets the print position
+    back to the start of the line. The terminal screen must be wide enough to handle the output or
+    this won't work. 
+    """
+
     def __post_init__(self):
         self._check_constraint_types()
 
@@ -1289,23 +1320,21 @@ def _flatten(list_of_lists: Iterable[Iterable[T]]) -> Iterable[T]:
     #  Flatten one level of nesting
     return itertools.chain.from_iterable(list_of_lists)
 
+
 def _remove_first_lines_from_string(s: str, num_lines: int) -> str:
     return '\n'.join(s.split('\n')[num_lines:])
 
-def _log_constraint_summary_header(*, params: SearchParameters):
-    row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
-                                                                for constraint in params.constraints]
-    table = tabulate([], headers=row1, tablefmt='github')
-    print(table)
 
 def _log_constraint_summary(*, params: SearchParameters,
                             eval_set: EvaluationSet,
                             iteration: int,
                             num_new_optimal: int) -> None:
-    # score_header = '\niteration|updates|opt score||new score|'
-    # all_constraints_header = '|'.join(
-    #     f'{constraint.short_description}' for constraint in params.constraints)
-    # header = score_header + all_constraints_header
+    # If output is not scrolling, only print this once on first iteration.
+    if params.scrolling_output or iteration == 0:
+        row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
+                                                                    for constraint in params.constraints]
+        header = tabulate([row1], tablefmt='github')
+        print(header)
 
     def _dec(score: float) -> int:
         # how many decimals after decimal point to use given the score
@@ -1344,15 +1373,12 @@ def _log_constraint_summary(*, params: SearchParameters,
     score_opt_str = f'{score_opt :9.{dec_opt}f}'
     score_new_str = f'{score_new :9.{dec_new}f}'
     row2 = [iteration, num_new_optimal, score_opt_str, score_new_str] + all_constraints_strs  # type:ignore
-    table = [row2]
-    # table = [row2]
-    table_str = tabulate(table, headers=row1, tablefmt='github', numalign='right', stralign='right')
-    # print(table_str)
+    table = [row1, row2]
+    table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
     table_str = _remove_first_lines_from_string(table_str, 2)
     # logger.info(table_str)
-    print(table_str, end='\r')
-
-
+    line_end = '\n' if params.scrolling_output else '\r'
+    print(table_str, end=line_end)
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,

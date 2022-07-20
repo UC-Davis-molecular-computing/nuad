@@ -3265,8 +3265,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                 if is_starred:
                     starred_domain_indices.add(idx)
 
-        domains = list(domains)  # type: ignore
-        strand = Strand(domains=domains,
+        domains_of_strand = list(domains)  # type: ignore
+        strand = Strand(domains=domains_of_strand,
                         starred_domain_indices=starred_domain_indices,
                         group=group,
                         name=name,
@@ -3280,6 +3280,17 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                  f'so it cannot be used for the new strand\n'
                                  f'  {strand}')
         self.strands.append(strand)
+
+        for domain_in_strand in strand.domains:
+            domains_in_tree = domain_in_strand.all_domains_in_tree()
+            for domain in domains_in_tree:
+                if domain not in self.domains:
+                    self.domains.append(domain)
+                name = domain.name
+                if name in self.domains_by_name and domain is not self.domains_by_name[name]:
+                    raise ValueError(f'domain names must be unique, '
+                                     f'but I found two different domains with name {domain.name}')
+                self.domains_by_name[domain.name] = domain
 
         return strand
 

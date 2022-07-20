@@ -286,12 +286,11 @@ class TestExportDNASequences(unittest.TestCase):
 
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.IDTFields(scale='100nm', purification='PAGE')
-        strands = [
-            nc.Strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt),
-            nc.Strand(domain_names=['d', 'c*', 'e', 'f'], name='s1'),
-        ]
-        design = nc.Design(strands)
-        #        a      b       c       d       e           f
+        design = nc.Design()
+        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt)
+        design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
+
+        #        a       b       c       d       e           f
         seqs = ['AACG', 'CCGT', 'GGTA', 'TTAC', 'AAAACCCC', 'AAAAGGGG']
         # s0: AACG-ACGG-GGTA-GTAA
         # s1: TTAC-TACC-AAAACCCC-AAAAGGGG
