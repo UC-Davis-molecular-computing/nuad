@@ -4457,9 +4457,10 @@ def nupack_domain_complex_free_energy_constraint(
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         parallel: bool = False,
-        description: Optional[str] = None,
+        description: str = 'NUPACK secondary structure of domain exceeds {threshold} kcal/mol',
         short_description: str = 'strand_ss_nupack',
-        domains: Optional[Iterable[Domain]] = None) -> DomainConstraint:
+        domains: Optional[Iterable[Domain]] = None,
+        format_description: bool = True) -> DomainConstraint:
     """
     Returns constraint that checks individual :any:`Domain`'s for excessive interaction using
     NUPACK's pfunc.
@@ -4501,8 +4502,22 @@ def nupack_domain_complex_free_energy_constraint(
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
-    if description is None:
-        description = f'NUPACK secondary structure of domain exceeds {threshold} kcal/mol'
+    if format_description:
+        try:
+            description = description.format(threshold=threshold,
+                                            temperature=temperature,
+                                            sodium=sodium,
+                                            magnesium=magnesium,
+                                            weight=weight,
+                                            parallel=parallel,
+                                            short_description=short_description,
+                                            domains=domains)
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
 
     if domains is not None:
         domains = tuple(domains)
@@ -4524,9 +4539,10 @@ def nupack_strand_complex_free_energy_constraint(
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
         parallel: bool = False,
-        description: Optional[str] = None,
+        description: str = 'NUPACK secondary structure of strand exceeds {threshold} kcal/mol',
         short_description: str = 'strand_ss_nupack',
-        strands: Optional[Iterable[Strand]] = None) -> StrandConstraint:
+        strands: Optional[Iterable[Strand]] = None,
+        format_description: bool = True) -> StrandConstraint:
     """
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
     NUPACK's pfunc.
@@ -4568,8 +4584,22 @@ def nupack_strand_complex_free_energy_constraint(
         excess = threshold - energy
         return max(0.0, excess), f'{energy:6.2f} kcal/mol'
 
-    if description is None:
-        description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
+    if format_description:
+        try:
+            description = description.format(threshold=threshold,
+                                            temperature=temperature,
+                                            sodium=sodium,
+                                            magnesium=magnesium,
+                                            weight=weight,
+                                            parallel=parallel,
+                                            short_description=short_description,
+                                            strands=strands)
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
 
     if strands is not None:
         strands = tuple(strands)
@@ -4594,6 +4624,7 @@ def nupack_domain_pair_constraint(
         description: Optional[str] = None,
         short_description: str = 'dom_pair_nupack',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
+        format_description: bool = True
 ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -4640,6 +4671,24 @@ def nupack_domain_pair_constraint(
         else:
             raise ValueError(f'threshold = {threshold} must be one of float or dict, '
                              f'but it is {type(threshold)}')
+
+    if format_description:
+        try:
+            description = description.format(threshold=threshold,
+                                            temperature=temperature,
+                                            sodium=sodium,
+                                            magnesium=magnesium,
+                                            weight=weight,
+                                            parallel=parallel,
+                                            short_description=short_description,
+                                            pairs=pairs)
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
+
 
     def binding_closure(seq_pair: Tuple[str, str]) -> float:
         return dv.binding(seq_pair[0], seq_pair[1], temperature=temperature,
@@ -4712,10 +4761,11 @@ def nupack_strand_pairs_constraint(
         magnesium: float = dv.default_magnesium,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
-        description: Optional[str] = None,
+        description: str = 'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol',
         short_description: str = 'strand_pair_nupack',
         parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+        format_description: bool = True
 ) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -4751,8 +4801,23 @@ def nupack_strand_pairs_constraint(
     """
     _check_nupack_installed()
 
-    if description is None:
-        description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+    if format_description:
+        try:
+            description = description.format(threshold=threshold,
+                                            temperature=temperature,
+                                            sodium=sodium,
+                                            magnesium=magnesium,
+                                            weight=weight,
+                                            parallel=parallel,
+                                            short_description=short_description,
+                                            pairs=pairs)
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
+
 
     def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Tuple[float, str]:
         seq1, seq2 = seqs
@@ -4857,10 +4922,11 @@ def rna_duplex_domain_pairs_constraint(
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: Optional[str] = None,
+        description: str = 'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol',
         short_description: str = 'rna_dup_dom_pairs',
         pairs: Optional[Iterable[Tuple[Domain, Domain]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+        format_description: bool = True) \
         -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -4888,8 +4954,23 @@ def rna_duplex_domain_pairs_constraint(
     """
     _check_vienna_rna_installed()
 
-    if description is None:
-        description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
+    if format_description:
+        try:
+            description = description.format(
+                threshold=threshold,
+                temperature=temperature,
+                weight=weight,
+                short_description=short_description,
+                pairs=pairs,
+                parameters_filename=parameters_filename
+            )
+        except KeyError as e:
+            print(f"In parsing the description, I couldn't find key {e}; if you didn't intend to use formatting in" + 
+                " your description, set the parameter format_description to False, or avoid using curly braces {}" +
+                " in your description.")
+        except ValueError as e:
+            print(f'I tried parsing the description and it failed; to avoid this warning, please set the parameter format_description to False, or avoid using curly braces {{}} in your description. (ValueError: {e}.)')
+
 
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
         sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
@@ -5148,7 +5229,8 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Optional[Iterable[Strand]] = None,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = dv.default_vienna_rna_parameter_filename) \
+        parameters_filename: str = dv.default_vienna_rna_parameter_filename,
+        format_descriptions: bool = True) \
         -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -5198,6 +5280,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         strands=strands,
         pairs=pairs,
         parameters_filename=parameters_filename,
+        format_descriptions=format_descriptions
     )
 
 
@@ -5333,7 +5416,7 @@ def rna_cofold_strand_pairs_constraint(
         temperature: float = dv.default_temperature,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = default_score_transfer_function,
-        description: Optional[str] = None,
+        description: str = 'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol',
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
@@ -5367,8 +5450,16 @@ def rna_cofold_strand_pairs_constraint(
     """
     _check_vienna_rna_installed()
 
-    if description is None:
-        description = f'RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol'
+    description = description.format(
+        threshold=threshold,
+        temperature=temperature,
+        weight=weight,
+        description=description,
+        short_description=short_description,
+        parallel=parallel,
+        pairs=pairs,
+        parameters_filename=parameters_filename
+    )
 
     num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
