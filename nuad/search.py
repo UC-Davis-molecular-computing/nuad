@@ -1974,8 +1974,6 @@ def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
             summaries.append(summary)
 
         if report_only_violations and num_violations != num_viols:
-            print(f'{num_violations=}')
-            print(f'{num_viols=}')
             assert num_violations == num_viols
 
         content = ''.join(summaries)
