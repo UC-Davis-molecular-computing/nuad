@@ -954,6 +954,7 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
             # evaluate constraints on new Design with domain_to_change's new sequence
             eval_set.evaluate_new(design, domains_new=domains_new)
 
+            # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
             #                                       eval_set=eval_set)
 
@@ -1018,7 +1019,8 @@ def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> 
     return True
 
 
-def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
+def create_report(design: nc.Design, constraints: Iterable[Constraint],
+                  report_only_violations: bool = False) -> str:
     """
     Returns string containing report of how well `design` does according to `constraints`, assuming
     `design` has sequences assigned to it, for example, if it was read using
@@ -1035,6 +1037,8 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
     :param constraints:
         the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param report_only_violations:
+        if True, lists only violations of constraints
     :return:
         string describing a report of how well `design` does according to `constraints`
     """
@@ -1044,7 +1048,7 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
     content = f'''\
 Report on constraints
 =====================
-''' + summary_of_constraints(constraints, True, eval_set=evaluation_set)
+''' + summary_of_constraints(constraints, report_only_violations, eval_set=evaluation_set)
 
     return content
 
