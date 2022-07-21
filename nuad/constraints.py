@@ -1511,7 +1511,7 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
 
     length: Optional[int] = None
     """
-    Length of this domain. If None, then the method :meth:`Domain.length` asks :data:`Domain.pool`
+    Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
     for the length. However, a :any:`Domain` with :data:`Domain.dependent` set to True has no
     :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
     """
@@ -1873,7 +1873,7 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
         if self._sequence is None:
-            raise ValueError('no DNA sequence has been assigned to this Domain')
+            raise ValueError(f'no DNA sequence has been assigned to Domain {self}')
         if self._starred_sequence is None:
             raise AssertionError('_starred_sequence should be set to non-None if _sequence is not None. '
                                  'Something went wrong in the logic of dsd.')
@@ -2878,6 +2878,20 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
             starred_domain_indices_at_least_idx).union(starred_domain_indices_at_least_idx_inc).union(
             new_starred_idx)
 
+    def set_fixed_sequence(self, seq: str) -> None:
+        """
+        Sets each domain of this :any:`Strand` to have a substring of `seq`, such that
+        the entire strand has the sequence `seq`. All :any:`Domain`'s in this strand will be fixed
+        after doing this. (And if any of them are already fixed it will raise an error.)
+
+        :param seq:
+            sequence to assign to this :any:`Strand`
+        """
+        idx = 0
+        for domain in self.domains:
+            substring = seq[idx: idx + domain.get_length()]
+            domain.set_fixed_sequence(substring)
+            idx += domain.get_length()
 
 def remove_duplicates(lst: Iterable[T]) -> List[T]:
     """
@@ -4234,6 +4248,13 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     Whether to check a strand against itself when checking all pairs of :any:`Strand`'s in the :any:`Design`. 
     Only used if :data:`ConstraintWithStrandPairs.pairs` is not specified, otherwise it is ignored.
     """
+
+    domain_to_strand_pair: Dict[Domain, List[StrandPair]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError('TODO: store StrandPair object, not tuples of strands, and '
+                                  'pre process to calculate domain_to_strand_pair to save time in '
+                                  '_determine_strand_pairs_to_check')
 
 
 @dataclass(frozen=True, eq=False)  # type: ignore
