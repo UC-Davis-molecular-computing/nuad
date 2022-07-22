@@ -165,7 +165,7 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
 
     # If we want sufficiently many sequences, then it's simpler to just generate all sequences
     # of that length and choose a random subset of size num_seqs.
-    if num_random_seqs >= max_possible / 4:
+    if num_random_seqs >= max_possible // 4:
         all_seqs = make_array_with_all_dna_seqs(length=length, bases=bases)
         # https://stackoverflow.com/a/27815343/5339430
         idxs = rng.choice(all_seqs.shape[0], num_random_seqs, replace=False)
