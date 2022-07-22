@@ -669,9 +669,6 @@ class SearchParameters:
 
     report_only_violations: bool = True
     """
-    NOTE: due to a recent change in how the search is conducted, setting this parameter to False is not
-    currently supported. 
-    
     If True, does not give report on each constraint that was satisfied; only reports violations
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     """
@@ -1018,9 +1015,6 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint],
 
     The report is the same format as written to the reports generated when calling
     :meth:`search_for_dna_sequences`.
-    Unfortunately this means it suffers the limitation that it currently only prints a summary
-    for *violations* of constraints;
-    see https://github.com/UC-Davis-molecular-computing/dsd/issues/134
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
