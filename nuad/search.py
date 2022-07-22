@@ -78,17 +78,24 @@ _parts_to_check_cache = {}
 
 
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
-                        domains_changed: Optional[Sequence[Domain]]) -> Sequence[nc.DesignPart]:
-    cache_key = (constraint, id(design))
-    if domains_changed is None and cache_key in _parts_to_check_cache:
-        return _parts_to_check_cache[cache_key]
+                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[nc.DesignPart]:
 
     if domains_changed is not None:
-        domains_changed_full: OrderedSet[Domain] = OrderedSet()
+        domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
             domains_in_tree = domain.all_domains_in_tree()
-            domains_changed_full.update(domains_in_tree)
-        domains_changed = list(domains_changed_full)
+            if len(domains_in_tree) == 1:
+                # no need to add if the "tree" is just this domain
+                assert domains_in_tree[0].name == domain.name
+            else:
+                domains_changed_full.update(domains_in_tree)
+        if len(domains_changed_full) > len(domains_changed):
+            domains_changed = tuple(domains_changed_full)
+
+
+    cache_key = (constraint, design, domains_changed)
+    if cache_key in _parts_to_check_cache:
+        return _parts_to_check_cache[cache_key]
 
     parts_to_check: Sequence[nc.DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
@@ -106,8 +113,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     else:
         raise NotImplementedError()
 
-    if domains_changed is None:
-        _parts_to_check_cache[cache_key] = parts_to_check
+    _parts_to_check_cache[cache_key] = parts_to_check
 
     return parts_to_check
 
@@ -136,7 +142,7 @@ def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
 
 
 def _determine_domains_to_check(design: Design,
-                                domains_changed: Optional[Iterable[Domain]],
+                                domains_changed: Optional[Tuple[Domain]],
                                 constraint: ConstraintWithDomains) -> Sequence[Domain]:
     """
     Determines domains to check in `all_domains`.
@@ -158,7 +164,7 @@ def _determine_domains_to_check(design: Design,
 
 
 def _determine_strands_to_check(design: Design,
-                                domains_changed: Optional[Iterable[Domain]],
+                                domains_changed: Optional[Tuple[Domain]],
                                 constraint: ConstraintWithStrands) -> Sequence[Strand]:
     """
     Similar to _determine_domains_to_check but for strands.
@@ -182,7 +188,7 @@ def _determine_strands_to_check(design: Design,
 
 
 def _determine_domain_pairs_to_check(design: Design,
-                                     domains_changed: Optional[Sequence[Domain]],
+                                     domains_changed: Optional[Tuple[Domain]],
                                      constraint: ConstraintWithDomainPairs) -> Sequence[DomainPair]:
     """
     Determines domain pairs to check between domains in `all_domains`.
@@ -232,7 +238,7 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
 
 
 def _determine_strand_pairs_to_check(design: Design,
-                                     domains_changed: Optional[Sequence[Domain]],
+                                     domains_changed: Optional[Tuple[Domain]],
                                      constraint: ConstraintWithStrandPairs) -> Sequence[StrandPair]:
     # Similar to _determine_domain_pairs_to_check but for strands.
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
@@ -249,10 +255,11 @@ def _determine_strand_pairs_to_check(design: Design,
             assert constraint.domain_to_strand_pairs is not None
             if len(domains_changed) == 1:
                 # let's not bother creating an intermediate set if it would only be updated once
+                print('# domains changed = 1')
                 domain = domains_changed[0]
-                pairs_with_domain = constraint.domain_to_strand_pairs[domain]
-                strand_pairs_to_check = tuple(pairs_with_domain)
+                strand_pairs_to_check = constraint.domain_to_strand_pairs[domain]
             else:
+                print(f'# domains changed = {len(domains_changed)}')
                 strand_pairs_to_check_set: OrderedSet = OrderedSet()
                 for domain in domains_changed:
                     pairs_with_domain = constraint.domain_to_strand_pairs[domain]
@@ -1084,7 +1091,7 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 
 
 def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
-                      rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
+                      rng: np.random.Generator) -> Tuple[Tuple[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
     domains = list(eval_set.domain_to_score.keys())
@@ -1093,8 +1100,8 @@ def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
-    domains_changed: List[Domain] = list(rng.choice(a=domains, p=probs_opt, replace=False,
-                                                    size=num_domains_to_change))
+    domains_changed: Tuple[Domain] = tuple(rng.choice(a=domains, p=probs_opt, replace=False,
+                                                      size=num_domains_to_change))
 
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
@@ -1639,7 +1646,7 @@ class EvaluationSet:
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Sequence[Domain]) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain]) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1677,7 +1684,7 @@ class EvaluationSet:
                 total_gap += eval_old.score - eval_new.score
         return total_gap
 
-    def calculate_initial_score_gap(self, design: Design, domains_new: Sequence[Domain]) -> float:
+    def calculate_initial_score_gap(self, design: Design, domains_new: Tuple[Domain]) -> float:
         # before evaluations_new is populated, we need to calculate the total score of evaluations
         # on parts affected by domains_new, which is the score gap assuming all new evaluations come up 0
         score_gap = 0.0
@@ -1692,7 +1699,7 @@ class EvaluationSet:
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
                             score_gap: Optional[float],
-                            domains_new: Optional[Sequence[Domain]],
+                            domains_new: Optional[Tuple[Domain]],
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to

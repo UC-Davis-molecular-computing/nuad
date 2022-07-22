@@ -4362,8 +4362,9 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
             for pair in strand_pairs:
                 for strand in pair:
                     for domain in strand.domains:
-                        existing_strand_pairs = domain_to_strand_pairs_list[domain]
-                        existing_strand_pairs.append(pair)
+                        for domain_in_tree in domain.all_domains_in_tree():
+                            existing_strand_pairs = domain_to_strand_pairs_list[domain_in_tree]
+                            existing_strand_pairs.append(pair)
             domain_to_strand_pairs = {domain: tuple(strand_pairs)
                                       for domain, strand_pairs in domain_to_strand_pairs_list.items()}
             object.__setattr__(self, 'domain_to_strand_pairs', domain_to_strand_pairs)
