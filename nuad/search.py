@@ -26,6 +26,7 @@ import statistics
 import textwrap
 import re
 import datetime
+from functools import lru_cache
 
 from tabulate import tabulate
 import numpy.random
@@ -74,17 +75,11 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-_parts_to_check_cache = {}
-
-
+# This function takes a lot of time if we don't cache results; but there's not too many different
+# combinations of inputs so it's worth it to maintain a cache.
+@lru_cache()
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
                         domains_changed: Optional[Tuple[Domain]]) -> Sequence[nc.DesignPart]:
-    # constraint and design should already use ID-based hashing,
-    # but just saving a bit of time avoiding extra hash() calls
-    cache_key = (id(constraint), id(design), domains_changed)
-    if cache_key in _parts_to_check_cache:
-        return _parts_to_check_cache[cache_key]
-
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -112,8 +107,6 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
         parts_to_check = []  # not used when checking DesignConstraint
     else:
         raise NotImplementedError()
-
-    _parts_to_check_cache[cache_key] = parts_to_check
 
     return parts_to_check
 
