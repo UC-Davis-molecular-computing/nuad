@@ -1976,7 +1976,7 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
     score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
     summary = (f'total evaluations: {eval_set.num_evaluations}\n'
-               f'total violations: {eval_set.num_violations}'
+               f'total violations: {eval_set.num_violations}\n'
                + score_total_summary + '\n'
                + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
                + '\n'.join(summaries))
