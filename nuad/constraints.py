@@ -2301,7 +2301,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """
 
     def __init__(self,
-                 domains: Optional[List[Domain[DomainLabel]]] = None,
+                 domains: Optional[Iterable[Domain[DomainLabel]]] = None,
                  starred_domain_indices: Optional[Iterable[int]] = None,
                  group: str = default_strand_group,
                  name: Optional[str] = None,
@@ -2629,11 +2629,11 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
         return all(domain.fixed for domain in self.domains)
 
-    def unfixed_domains(self) -> List[Domain[DomainLabel]]:
+    def unfixed_domains(self) -> Tuple[Domain[DomainLabel]]:
         """
         :return: all :any:`Domain`'s in this :any:`Strand` where :py:data:`Domain.fixed` is False
         """
-        return [domain for domain in self.domains if not domain.fixed]
+        return tuple(domain for domain in self.domains if not domain.fixed)
 
     @property
     def name(self) -> str:
@@ -4035,7 +4035,9 @@ DesignPart = TypeVar('DesignPart',
                      Design)
 
 
-@dataclass(frozen=True, eq=False)
+# eq=False gives us the default object.__hash__ id-based hashing
+# needs to be on all classes in the hierarchy for this to work
+@dataclass(eq=False)
 class Constraint(Generic[DesignPart], ABC):
     """
     Abstract base class of all "soft" constraints to apply when running
@@ -4061,6 +4063,8 @@ class Constraint(Generic[DesignPart], ABC):
     or
     :any:`DesignConstraint`.
     """
+
+    __hash__ = super(object).__hash__
 
     description: str
     """
@@ -4111,7 +4115,7 @@ def _raise_unreachable():
     raise AssertionError('This should be unreachable')
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate: Callable[[Tuple[str, ...], Optional[DesignPart]],
                        Tuple[float, str]] = lambda _: _raise_unreachable()
@@ -4174,7 +4178,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         return score, summary
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate_bulk: Callable[[Sequence[DesignPart]],
                             List[Tuple[DesignPart, float, str]]] = lambda _: _raise_unreachable()
@@ -4195,7 +4199,7 @@ _no_summary_string = "No summary for this constraint. " \
                      '"summary" when creating the Constraint.'
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ConstraintWithDomains(Generic[DesignPart]):  # noqa
     domains: Optional[Tuple[Domain, ...]] = None
     """
@@ -4203,7 +4207,7 @@ class ConstraintWithDomains(Generic[DesignPart]):  # noqa
     """
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ConstraintWithStrands(Generic[DesignPart]):  # noqa
     strands: Optional[Tuple[Strand, ...]] = None
     """
@@ -4211,7 +4215,7 @@ class ConstraintWithStrands(Generic[DesignPart]):  # noqa
     """
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class DomainConstraint(ConstraintWithDomains[Domain], SingularConstraint[Domain]):
     """Constraint that applies to a single :any:`Domain`."""
 
@@ -4225,7 +4229,7 @@ class DomainConstraint(ConstraintWithDomains[Domain], SingularConstraint[Domain]
         return 'domain'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class StrandConstraint(ConstraintWithStrands[Strand], SingularConstraint[Strand]):
     """Constraint that applies to a single :any:`Strand`."""
 
@@ -4239,7 +4243,12 @@ class StrandConstraint(ConstraintWithStrands[Strand], SingularConstraint[Strand]
         return 'strand'
 
 
-@dataclass(frozen=True, eq=False)
+# check all pairs of domains unless one is an ancestor of another in a subdomain tree
+def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
+    return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
+
+
+@dataclass(eq=False)
 class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     domain_pairs: Optional[Tuple[DomainPair, ...]] = None
     """
@@ -4260,59 +4269,12 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     Only used if :data:`ConstraintWithDomainPairs.pairs` is not specified, otherwise it is ignored.
     """
 
-    domain_to_domain_pairs: Optional[Dict[Domain, Tuple[DomainPair]]] = field(default=None, init=False,
-                                                                              hash=False, compare=False)
-    """
-    Maps domains in `pairs` to the set of :any:`DomainPair`'s in which they appear.
-
-    Derived field computed from :data:`ConstraintWithDomainPairs.pairs` if it is specified. 
-    """
-
-    _cached_all_domain_pairs_with_domain: Dict[Tuple[Design, Domain], Tuple[DomainPair, ...]] = \
-        field(init=False, hash=False, compare=False)
-
-    # this is a hack for efficiency. When the user doesn't specify `pairs`, then the set of all pairs
-    # of domains where one is the changed domain is calculcated, which takes some time and is wasteful
-    # to re-calculate every time search._determine_domain_pairs_to_check is called since it doesn't
-    # change during the course of a search.
-    # But different designs might use the same constraint, so we store it per-design (and per-domain) here.
-
     def __post_init__(self, pairs: Optional[Iterable[Tuple[Strand, Strand]]]) -> None:
         domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
         object.__setattr__(self, 'domain_pairs', domain_pairs)
 
-        if pairs is not None:
-            domain_to_domain_pairs_list = defaultdict(list)
-            for pair in domain_pairs:
-                for domain in pair:
-                    existing_strand_pairs = domain_to_domain_pairs_list[domain]
-                    existing_strand_pairs.append(pair)
-            domain_to_domain_pairs = {domain: tuple(domain_pairs)
-                                      for domain, domain_pairs in domain_to_domain_pairs_list.items()}
-            object.__setattr__(self, 'domain_to_domain_pairs', domain_to_domain_pairs)
 
-        object.__setattr__(self, '_cached_all_domain_pairs_with_domain', {})
-
-    def all_pairs_with_domain(self, design: Design, domain: Domain) -> Tuple[DomainPair, ...]:
-        if (design, domain) in self._cached_all_domain_pairs_with_domain:
-            return self._cached_all_domain_pairs_with_domain[(design, domain)]
-
-        pairs = []
-        for other_domain in design.domains:
-            if domain is not other_domain or self.check_domain_against_itself:
-                if not_subdomain(domain, other_domain):
-                    pairs.append(DomainPair(domain, other_domain))
-        pairs = tuple(pairs)
-        self._cached_all_domain_pairs_with_domain[(design, domain)] = pairs
-        return pairs
-
-
-# check all pairs of domains unless one is an ancestor of another in a subdomain tree
-def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
-    return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
-
-
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     strand_pairs: Optional[Tuple[StrandPair, ...]] = None
     """
@@ -4333,23 +4295,6 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     Only used if :data:`ConstraintWithStrandPairs.pairs` is not specified, otherwise it is ignored.
     """
 
-    domain_to_strand_pairs: Optional[Dict[Domain, Tuple[StrandPair]]] = field(default=None,
-                                                                              hash=False, compare=False)
-    """
-    Maps domains appearing in strands in `pairs` to the set of :any:`StrandPair`'s in which they appear.
-    
-    Derived field computed from :data:`ConstraintWithStrandPairs.pairs` if it is specified. 
-    """
-
-    _cached_all_strand_pairs_with_domain: Dict[Tuple[Design, Domain], Tuple[StrandPair, ...]] = \
-        field(init=False, hash=False, compare=False)
-
-    # this is a hack for efficiency. When the user doesn't specify `pairs`, then the set of all pairs of
-    # strands where at least one has the changed domain is calculcated, which takes some time and is wasteful
-    # to re-calculate every time search._determine_domain_pairs_to_check is called since it doesn't
-    # change during the course of a search.
-    # But different designs might use the same constraint, so we store it per-design (and per-domain) here.
-
     # TODO: implement more efficient hash function for constraints; currently it probably uses pairs;
     #   or it may be simplest just to remove the frozen and eq from annotation and use default id-based hash
 
@@ -4357,36 +4302,8 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
         strand_pairs = None if pairs is None else tuple(StrandPair(s1, s2) for s1, s2 in pairs)
         object.__setattr__(self, 'strand_pairs', strand_pairs)
 
-        if pairs is not None:
-            domain_to_strand_pairs_list = defaultdict(list)
-            for pair in strand_pairs:
-                for strand in pair:
-                    for domain in strand.domains:
-                        for domain_in_tree in domain.all_domains_in_tree():
-                            existing_strand_pairs = domain_to_strand_pairs_list[domain_in_tree]
-                            existing_strand_pairs.append(pair)
-            domain_to_strand_pairs = {domain: tuple(strand_pairs)
-                                      for domain, strand_pairs in domain_to_strand_pairs_list.items()}
-            object.__setattr__(self, 'domain_to_strand_pairs', domain_to_strand_pairs)
 
-        object.__setattr__(self, '_cached_all_strand_pairs_with_domain', {})
-
-    def all_pairs_with_domain(self, design: Design, domain: Domain) -> Tuple[StrandPair, ...]:
-        if (design, domain) in self._cached_all_strand_pairs_with_domain:
-            return self._cached_all_strand_pairs_with_domain[(design, domain)]
-
-        pairs = []
-        strands_with_domain = [strand for strand in design.strands if domain in strand.domains]
-        for strand_with_domain_changed in strands_with_domain:
-            for other_strand in design.strands:
-                if (strand_with_domain_changed is not other_strand or self.check_strand_against_itself):
-                    pairs.append(StrandPair(strand_with_domain_changed, other_strand))
-        pairs = tuple(pairs)
-        self._cached_all_strand_pairs_with_domain[(design, domain)] = pairs
-        return pairs
-
-
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
                            SingularConstraint[DomainPair]):
     """Constraint that applies to a pair of :any:`Domain`'s.
@@ -4399,7 +4316,7 @@ class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair],
         return 'domain pair'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class StrandPairConstraint(ConstraintWithStrandPairs[StrandPair],
                            SingularConstraint[StrandPair]):
     """Constraint that applies to a pair of :any:`Strand`'s.
@@ -4412,7 +4329,7 @@ class StrandPairConstraint(ConstraintWithStrandPairs[StrandPair],
         return 'strand pair'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class DomainsConstraint(ConstraintWithDomains[Domain], BulkConstraint[Domain]):
     """
     Constraint that applies to a several :any:`Domain`'s.
@@ -4432,7 +4349,7 @@ class DomainsConstraint(ConstraintWithDomains[Domain], BulkConstraint[Domain]):
         return 'domain'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class StrandsConstraint(ConstraintWithStrands[Strand], BulkConstraint[Strand]):
     """
     Constraint that applies to a several :any:`Strand`'s.
@@ -4452,7 +4369,7 @@ class StrandsConstraint(ConstraintWithStrands[Strand], BulkConstraint[Strand]):
         return 'strand'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class DomainPairsConstraint(ConstraintWithDomainPairs[DomainPair], BulkConstraint[DomainPair]):
     """
     Similar to :any:`DomainsConstraint` but operates on a specified list of pairs of :any:`Domain`'s.
@@ -4463,7 +4380,7 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[DomainPair], BulkConstrain
         return 'domain pair'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class StrandPairsConstraint(ConstraintWithStrandPairs[StrandPair], BulkConstraint[StrandPair]):
     """
     Similar to :any:`StrandsConstraint` but operates on a specified list of pairs of :any:`Strand`'s.
@@ -4474,7 +4391,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[StrandPair], BulkConstrain
         return 'strand pair'
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class DesignConstraint(Constraint[Design]):
     """
     Constraint that applies to the entire :any:`Design`. This is used for any :any:`Constraint` that
@@ -5587,7 +5504,7 @@ def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
 #########################################################################################
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     complexes: Tuple[Complex, ...] = ()
     """
@@ -5595,7 +5512,7 @@ class ConstraintWithComplexes(Constraint[DesignPart], Generic[DesignPart]):  # n
     """
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class ComplexConstraint(ConstraintWithComplexes[Complex], SingularConstraint[Complex]):
     """
     Constraint that applies to a complex (tuple of :any:`Strand`'s).
@@ -5624,7 +5541,7 @@ def _alter_scores_by_transfer(sets_excesses: List[Tuple[OrderedSet[Domain], floa
     return sets_weights
 
 
-@dataclass(frozen=True, eq=False)  # type: ignore
+@dataclass(eq=False)  # type: ignore
 class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]], BulkConstraint[Complex]):
     """
     Similar to :any:`ComplexConstraint` but operates on a specified list of complexes

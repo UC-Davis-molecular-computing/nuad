@@ -79,6 +79,11 @@ _parts_to_check_cache = {}
 
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
                         domains_changed: Optional[Tuple[Domain]]) -> Sequence[nc.DesignPart]:
+    # constraint and design should already use ID-based hashing,
+    # but just saving a bit of time avoiding extra hash() calls
+    cache_key = (id(constraint), id(design), domains_changed)
+    if cache_key in _parts_to_check_cache:
+        return _parts_to_check_cache[cache_key]
 
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
@@ -91,11 +96,6 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
                 domains_changed_full.update(domains_in_tree)
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
-
-
-    cache_key = (constraint, design, domains_changed)
-    if cache_key in _parts_to_check_cache:
-        return _parts_to_check_cache[cache_key]
 
     parts_to_check: Sequence[nc.DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
@@ -189,7 +189,7 @@ def _determine_strands_to_check(design: Design,
 
 def _determine_domain_pairs_to_check(design: Design,
                                      domains_changed: Optional[Tuple[Domain]],
-                                     constraint: ConstraintWithDomainPairs) -> Sequence[DomainPair]:
+                                     constraint: ConstraintWithDomainPairs) -> Tuple[DomainPair]:
     """
     Determines domain pairs to check between domains in `all_domains`.
     If `domain_changed` is None, then this is all pairs where they are not both fixed if constraint.pairs
@@ -213,22 +213,17 @@ def _determine_domain_pairs_to_check(design: Design,
     else:
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
-            assert constraint.domain_to_domain_pairs is not None
-            if len(domains_changed) == 1:
-                # let's not bother creating an intermediate set if it would only be updated once
-                domain = domains_changed[0]
-                pairs_with_domain = constraint.domain_to_domain_pairs[domain]
-                domain_pairs_to_check = tuple(pairs_with_domain)
-            else:
-                domain_pairs_to_check_set: OrderedSet = OrderedSet()
-                for domain in domains_changed:
-                    pairs_with_domain = constraint.domain_to_domain_pairs[domain]
-                    domain_pairs_to_check_set.update(pairs_with_domain)
-                domain_pairs_to_check = tuple(domain_pairs_to_check_set)
+            domain_pairs_to_check = tuple(DomainPair(domain1, domain2)
+                                          for domain1, domain2 in constraint.domain_pairs
+                                          if domain1 in domains_changed or domain2 in domains_changed)
         else:
-            domain_pairs_to_check = tuple()
+            domain_pairs_to_check = []
             for domain_changed in domains_changed:
-                domain_pairs_to_check += constraint.all_pairs_with_domain(design, domain_changed)
+                for other_domain in design.domains:
+                    if domain_changed is not other_domain or constraint.check_domain_against_itself:
+                        if nc.not_subdomain(domain_changed, other_domain):
+                            domain_pairs_to_check.append(DomainPair(domain_changed, other_domain))
+            domain_pairs_to_check = tuple(domain_pairs_to_check)
 
     return domain_pairs_to_check
 
@@ -239,7 +234,7 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
 
 def _determine_strand_pairs_to_check(design: Design,
                                      domains_changed: Optional[Tuple[Domain]],
-                                     constraint: ConstraintWithStrandPairs) -> Sequence[StrandPair]:
+                                     constraint: ConstraintWithStrandPairs) -> Tuple[StrandPair]:
     # Similar to _determine_domain_pairs_to_check but for strands.
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
     # all pairs of strands only to filter out most of them that don't intersect domains_new
@@ -251,24 +246,23 @@ def _determine_strand_pairs_to_check(design: Design,
             pairs = all_pairs(design.strands, with_replacement=constraint.check_strand_against_itself)
             strand_pairs_to_check = tuple(StrandPair(strand1, strand2) for strand1, strand2 in pairs)
     else:
+        strand_pairs_to_check = []
         if constraint.strand_pairs is not None:
-            assert constraint.domain_to_strand_pairs is not None
-            if len(domains_changed) == 1:
-                # let's not bother creating an intermediate set if it would only be updated once
-                print('# domains changed = 1')
-                domain = domains_changed[0]
-                strand_pairs_to_check = constraint.domain_to_strand_pairs[domain]
-            else:
-                print(f'# domains changed = {len(domains_changed)}')
-                strand_pairs_to_check_set: OrderedSet = OrderedSet()
-                for domain in domains_changed:
-                    pairs_with_domain = constraint.domain_to_strand_pairs[domain]
-                    strand_pairs_to_check_set.update(pairs_with_domain)
-                strand_pairs_to_check = tuple(strand_pairs_to_check_set)
+            for pair in constraint.strand_pairs:
+                for domain_changed in domains_changed:
+                    if domain_changed in pair.strand1.domains or domain_changed in pair.strand2.domains:
+                        strand_pairs_to_check.append(pair)
+                        break  # ensure we don't add the same strand pair twice
         else:
-            strand_pairs_to_check = tuple()
             for domain_changed in domains_changed:
-                strand_pairs_to_check += constraint.all_pairs_with_domain(design, domain_changed)
+                strands_with_domain_changed = [strand for strand in design.strands
+                                               if domain_changed in strand.domains]
+                for strand_with_domain_changed in strands_with_domain_changed:
+                    for other_strand in design.strands:
+                        if (strand_with_domain_changed is not other_strand or
+                                constraint.check_strand_against_itself):
+                            strand_pairs_to_check.append(StrandPair(strand_with_domain_changed, other_strand))
+        strand_pairs_to_check = tuple(strand_pairs_to_check)
 
     return strand_pairs_to_check
 
@@ -321,7 +315,7 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> List[Domain]:
+def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Tuple[Domain]:
     """
     :param part:
         DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
@@ -337,9 +331,9 @@ def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Li
     if isinstance(part, Domain):
         domains = [part] if not (exclude_fixed and part.fixed) else []
     elif isinstance(part, Strand):
-        domains = part.domains if not exclude_fixed else part.unfixed_domains()
+        domains = part.domains if not exclude_fixed else list(part.unfixed_domains())
     elif isinstance(part, DomainPair):
-        domains = list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
+        domains = [domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed)]
     elif isinstance(part, (StrandPair, Complex)):
         domains_per_strand = [strand.domains if not exclude_fixed else strand.unfixed_domains()
                               for strand in part.individual_parts()]
@@ -351,13 +345,13 @@ def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Li
 
     # Convert direct domains to independent domains.
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
-    independent_domains: List[Domain] = []
+    independent_domains = []
     for domain in domains:
         independent_domain = domain.independent_source()
         if independent_domain not in independent_domains:
             independent_domains.append(independent_domain)
 
-    return independent_domains
+    return tuple(independent_domains)
 
 
 T = TypeVar('T')
