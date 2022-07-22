@@ -51,8 +51,8 @@ def main() -> None:
     # num_strands = 3
     # num_strands = 5
     # num_strands = 10
-    num_strands = 50
-    # num_strands = 100
+    # num_strands = 50
+    num_strands = 100
     # num_strands = 355
 
     design = nc.Design()
@@ -150,7 +150,7 @@ def main() -> None:
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
-        strand_individual_ss_constraint,
+        # strand_individual_ss_constraint,
         # strand_individual_ss_constraint2,
         strand_pairs_rna_duplex_constraint,
         # strand_pair_nupack_constraint,

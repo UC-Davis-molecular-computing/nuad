@@ -26,6 +26,7 @@ import statistics
 import textwrap
 import re
 import datetime
+from functools import lru_cache
 
 from tabulate import tabulate
 import numpy.random
@@ -74,41 +75,38 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-_parts_to_check_cache = {}
-
-
+# This function takes a lot of time if we don't cache results; but there's not too many different
+# combinations of inputs so it's worth it to maintain a cache.
+@lru_cache()
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
-                        domains_changed: Optional[Iterable[Domain]]) -> Sequence[nc.DesignPart]:
-    cache_key = (constraint, id(design))
-    if domains_changed is None and cache_key in _parts_to_check_cache:
-        return _parts_to_check_cache[cache_key]
-
+                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[nc.DesignPart]:
     if domains_changed is not None:
-        domains_changed_full: OrderedSet[Domain] = OrderedSet()
+        domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
             domains_in_tree = domain.all_domains_in_tree()
-            domains_changed_full.update(domains_in_tree)
-        domains_changed = list(domains_changed_full)
-        # = OrderedSet(domain.all_domains_in_tree() for domain in )
+            if len(domains_in_tree) == 1:
+                # no need to add if the "tree" is just this domain
+                assert domains_in_tree[0].name == domain.name
+            else:
+                domains_changed_full.update(domains_in_tree)
+        if len(domains_changed_full) > len(domains_changed):
+            domains_changed = tuple(domains_changed_full)
 
     parts_to_check: Sequence[nc.DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
-        parts_to_check = _determine_domains_to_check(design.domains, domains_changed, constraint)
+        parts_to_check = _determine_domains_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrands):
-        parts_to_check = _determine_strands_to_check(design.strands, domains_changed, constraint)
+        parts_to_check = _determine_strands_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithDomainPairs):
-        parts_to_check = _determine_domain_pairs_to_check(design.domains, domains_changed, constraint)
+        parts_to_check = _determine_domain_pairs_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrandPairs):
-        parts_to_check = _determine_strand_pairs_to_check(design.strands, domains_changed, constraint)
+        parts_to_check = _determine_strand_pairs_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithComplexes):
         parts_to_check = _determine_complexes_to_check(domains_changed, constraint)
     elif isinstance(constraint, nc.DesignConstraint):
         parts_to_check = []  # not used when checking DesignConstraint
     else:
         raise NotImplementedError()
-
-    if domains_changed is None:
-        _parts_to_check_cache[cache_key] = parts_to_check
 
     return parts_to_check
 
@@ -136,8 +134,8 @@ def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
     return not (pair[0].fixed and pair[1].fixed)
 
 
-def _determine_domains_to_check(all_domains: Iterable[Domain],
-                                domains_changed: Optional[Iterable[Domain]],
+def _determine_domains_to_check(design: Design,
+                                domains_changed: Optional[Tuple[Domain]],
                                 constraint: ConstraintWithDomains) -> Sequence[Domain]:
     """
     Determines domains to check in `all_domains`.
@@ -147,7 +145,7 @@ def _determine_domains_to_check(all_domains: Iterable[Domain],
     it is just those in `domains_new` that appear in `all_domains`.
     """
     # either all pairs, or just constraint.pairs if specified
-    domains_to_check_if_domain_changed_none = all_domains \
+    domains_to_check_if_domain_changed_none = design.domains \
         if constraint.domains is None else constraint.domains
 
     # filter out those not containing domain_change if specified
@@ -158,14 +156,14 @@ def _determine_domains_to_check(all_domains: Iterable[Domain],
     return domains_to_check
 
 
-def _determine_strands_to_check(all_strands: Iterable[Strand],
-                                domains_changed: Optional[Iterable[Domain]],
+def _determine_strands_to_check(design: Design,
+                                domains_changed: Optional[Tuple[Domain]],
                                 constraint: ConstraintWithStrands) -> Sequence[Strand]:
     """
     Similar to _determine_domains_to_check but for strands.
     """
     # either all pairs, or just constraint.pairs if specified
-    strands_to_check_if_domain_changed_none = all_strands \
+    strands_to_check_if_domain_changed_none = design.strands \
         if constraint.strands is None else constraint.strands
 
     # filter out those not containing domain_change if specified
@@ -182,9 +180,9 @@ def _determine_strands_to_check(all_strands: Iterable[Strand],
     return strands_to_check
 
 
-def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
-                                     domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithDomainPairs) -> Sequence[DomainPair]:
+def _determine_domain_pairs_to_check(design: Design,
+                                     domains_changed: Optional[Tuple[Domain]],
+                                     constraint: ConstraintWithDomainPairs) -> Tuple[DomainPair]:
     """
     Determines domain pairs to check between domains in `all_domains`.
     If `domain_changed` is None, then this is all pairs where they are not both fixed if constraint.pairs
@@ -196,36 +194,29 @@ def _determine_domain_pairs_to_check(all_domains: Iterable[Domain],
     # all pairs of domains only to filter out most of them that don't intersect domains_new
     if domains_changed is None:
         # either all pairs, or just constraint.pairs if specified
-        if constraint.pairs is not None:
-            domain_pairs_to_check: List[DomainPair] = \
-                [DomainPair(domain1, domain2) for domain1, domain2 in constraint.pairs]
+        if constraint.domain_pairs is not None:
+            domain_pairs_to_check = tuple(DomainPair(domain1, domain2)
+                                          for domain1, domain2 in constraint.domain_pairs)
         else:
-            # check all pairs of domains unless one is an ancestor of another in a subdomain tree
-            def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
-                return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
-
-            pairs = all_pairs(all_domains, with_replacement=constraint.check_domain_against_itself,
-                              where=not_subdomain)
-            domain_pairs_to_check = [DomainPair(domain1, domain2) for domain1, domain2 in pairs
-                                     if not (domain1.fixed and domain2.fixed)]
+            pairs = all_pairs(design.domains, with_replacement=constraint.check_domain_against_itself,
+                              where=nc.not_subdomain)
+            domain_pairs_to_check = tuple(DomainPair(domain1, domain2) for domain1, domain2 in pairs
+                                          if not (domain1.fixed and domain2.fixed))
 
     else:
-        # either all pairs, or just constraint.pairs if specified
-        if constraint.pairs is not None:
-            domain_pairs_to_check: List[DomainPair] = \
-                [DomainPair(domain1, domain2) for domain1, domain2 in constraint.pairs
-                 if domain1 in domains_changed or domain2 in domains_changed]
+        # either all pairs, or just constraint.domain_pairs if specified
+        if constraint.domain_pairs is not None:
+            domain_pairs_to_check = tuple(DomainPair(domain1, domain2)
+                                          for domain1, domain2 in constraint.domain_pairs
+                                          if domain1 in domains_changed or domain2 in domains_changed)
         else:
-            # check all pairs of domains unless one is an ancestor of another in a subdomain tree
-            def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
-                return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
-
             domain_pairs_to_check = []
             for domain_changed in domains_changed:
-                for other_domain in all_domains:
+                for other_domain in design.domains:
                     if domain_changed is not other_domain or constraint.check_domain_against_itself:
-                        if not_subdomain(domain_changed, other_domain):
+                        if nc.not_subdomain(domain_changed, other_domain):
                             domain_pairs_to_check.append(DomainPair(domain_changed, other_domain))
+            domain_pairs_to_check = tuple(domain_pairs_to_check)
 
     return domain_pairs_to_check
 
@@ -234,39 +225,37 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
     return not (pair[0].fixed and pair[1].fixed)
 
 
-def _determine_strand_pairs_to_check(all_strands: Iterable[Strand],
-                                     domains_changed: Optional[Iterable[Domain]],
-                                     constraint: ConstraintWithStrandPairs) -> Sequence[StrandPair]:
-    """
-    Similar to _determine_domain_pairs_to_check but for strands.
-    """
+def _determine_strand_pairs_to_check(design: Design,
+                                     domains_changed: Optional[Tuple[Domain]],
+                                     constraint: ConstraintWithStrandPairs) -> Tuple[StrandPair]:
+    # Similar to _determine_domain_pairs_to_check but for strands.
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
     # all pairs of strands only to filter out most of them that don't intersect domains_new
     if domains_changed is None:
-        # either all pairs, or just constraint.pairs if specified
-        if constraint.pairs is not None:
-            strand_pairs_to_check: List[StrandPair] = \
-                [StrandPair(strand1, strand2) for strand1, strand2 in constraint.pairs]
+        # either all pairs, or just constraint.strand_pairs if specified
+        if constraint.strand_pairs is not None:
+            strand_pairs_to_check = constraint.strand_pairs
         else:
-            pairs = all_pairs(all_strands, with_replacement=constraint.check_strand_against_itself)
-            strand_pairs_to_check = [StrandPair(strand1, strand2) for strand1, strand2 in pairs]
+            pairs = all_pairs(design.strands, with_replacement=constraint.check_strand_against_itself)
+            strand_pairs_to_check = tuple(StrandPair(strand1, strand2) for strand1, strand2 in pairs)
     else:
         strand_pairs_to_check = []
-        if constraint.pairs is not None:
-            for strand1, strand2 in constraint.pairs:
+        if constraint.strand_pairs is not None:
+            for pair in constraint.strand_pairs:
                 for domain_changed in domains_changed:
-                    if domain_changed in strand1.domains or domain_changed in strand2.domains:
-                        strand_pairs_to_check.append(StrandPair(strand1, strand2))
+                    if domain_changed in pair.strand1.domains or domain_changed in pair.strand2.domains:
+                        strand_pairs_to_check.append(pair)
                         break  # ensure we don't add the same strand pair twice
         else:
             for domain_changed in domains_changed:
-                strands_with_domain_changed = [strand for strand in all_strands
+                strands_with_domain_changed = [strand for strand in design.strands
                                                if domain_changed in strand.domains]
                 for strand_with_domain_changed in strands_with_domain_changed:
-                    for other_strand in all_strands:
+                    for other_strand in design.strands:
                         if (strand_with_domain_changed is not other_strand or
                                 constraint.check_strand_against_itself):
                             strand_pairs_to_check.append(StrandPair(strand_with_domain_changed, other_strand))
+        strand_pairs_to_check = tuple(strand_pairs_to_check)
 
     return strand_pairs_to_check
 
@@ -319,7 +308,7 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> List[Domain]:
+def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Tuple[Domain]:
     """
     :param part:
         DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
@@ -335,9 +324,9 @@ def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Li
     if isinstance(part, Domain):
         domains = [part] if not (exclude_fixed and part.fixed) else []
     elif isinstance(part, Strand):
-        domains = part.domains if not exclude_fixed else part.unfixed_domains()
+        domains = part.domains if not exclude_fixed else list(part.unfixed_domains())
     elif isinstance(part, DomainPair):
-        domains = list(domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed))
+        domains = [domain for domain in part.individual_parts() if not (exclude_fixed and domain.fixed)]
     elif isinstance(part, (StrandPair, Complex)):
         domains_per_strand = [strand.domains if not exclude_fixed else strand.unfixed_domains()
                               for strand in part.individual_parts()]
@@ -349,13 +338,13 @@ def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Li
 
     # Convert direct domains to independent domains.
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
-    independent_domains: List[Domain] = []
+    independent_domains = []
     for domain in domains:
         independent_domain = domain.independent_source()
         if independent_domain not in independent_domains:
             independent_domains.append(independent_domain)
 
-    return independent_domains
+    return tuple(independent_domains)
 
 
 T = TypeVar('T')
@@ -954,6 +943,7 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
             # evaluate constraints on new Design with domain_to_change's new sequence
             eval_set.evaluate_new(design, domains_new=domains_new)
 
+            # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
             #                                       eval_set=eval_set)
 
@@ -1018,7 +1008,8 @@ def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> 
     return True
 
 
-def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
+def create_report(design: nc.Design, constraints: Iterable[Constraint],
+                  report_only_violations: bool = False) -> str:
     """
     Returns string containing report of how well `design` does according to `constraints`, assuming
     `design` has sequences assigned to it, for example, if it was read using
@@ -1035,6 +1026,8 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
     :param constraints:
         the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param report_only_violations:
+        if True, lists only violations of constraints
     :return:
         string describing a report of how well `design` does according to `constraints`
     """
@@ -1044,7 +1037,7 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint]) -> str:
     content = f'''\
 Report on constraints
 =====================
-''' + summary_of_constraints(constraints, True, eval_set=evaluation_set)
+''' + summary_of_constraints(constraints, report_only_violations, eval_set=evaluation_set)
 
     return content
 
@@ -1085,7 +1078,7 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 
 
 def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
-                      rng: np.random.Generator) -> Tuple[List[Domain], Dict[Domain, str]]:
+                      rng: np.random.Generator) -> Tuple[Tuple[Domain], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
     domains = list(eval_set.domain_to_score.keys())
@@ -1094,8 +1087,8 @@ def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
-    domains_changed: List[Domain] = list(rng.choice(a=domains, p=probs_opt, replace=False,
-                                                    size=num_domains_to_change))
+    domains_changed: Tuple[Domain] = tuple(rng.choice(a=domains, p=probs_opt, replace=False,
+                                                      size=num_domains_to_change))
 
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
@@ -1350,10 +1343,9 @@ def _log_constraint_summary(*, params: SearchParameters,
         header = tabulate([row1], tablefmt='github')
         print(header)
 
-    def _dec(score: float) -> int:
+    def _dec(score_: float) -> int:
         # how many decimals after decimal point to use given the score
-        dec_opt = max(1, math.ceil(math.log(1 / score, 10)) + 2) if score > 0 else 1
-        return dec_opt
+        return max(1, math.ceil(math.log(1 / score_, 10)) + 2) if score_ > 0 else 1
 
     score_opt = eval_set.total_score
     score_new = eval_set.total_score_new()
@@ -1641,7 +1633,7 @@ class EvaluationSet:
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: List[Domain]) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain]) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1679,7 +1671,7 @@ class EvaluationSet:
                 total_gap += eval_old.score - eval_new.score
         return total_gap
 
-    def calculate_initial_score_gap(self, design: Design, domains_new: List[Domain]) -> float:
+    def calculate_initial_score_gap(self, design: Design, domains_new: Tuple[Domain]) -> float:
         # before evaluations_new is populated, we need to calculate the total score of evaluations
         # on parts affected by domains_new, which is the score gap assuming all new evaluations come up 0
         score_gap = 0.0
@@ -1694,7 +1686,7 @@ class EvaluationSet:
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
                             score_gap: Optional[float],
-                            domains_new: Optional[Iterable[Domain]],
+                            domains_new: Optional[Tuple[Domain]],
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
@@ -1989,7 +1981,9 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
     score_total_summary = f'total score of constraint violations: {score:.2f}'
     score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
-    summary = (score_total_summary + '\n'
+    summary = (f'total evaluations: {eval_set.num_evaluations}\n'
+               f'total violations: {eval_set.num_violations}'
+               + score_total_summary + '\n'
                + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
                + '\n'.join(summaries))
 
@@ -2069,7 +2063,7 @@ def add_header_to_content_of_summary(report: ConstraintReport, eval_set: Evaluat
     summary = f'''
 **{"*" * len(report.constraint.description)}
 * {report.constraint.description}
-# evaluations: {report.num_evaluations}
+* evaluations: {report.num_evaluations}
 * violations:  {report.num_violations}
 * score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
 {indented_content}'''
