@@ -3738,7 +3738,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
 
     def assign_sequences_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
-                                            ignored_strands: Iterable[Strand] = ()) -> None:
+                                            ignored_strands: Iterable[Strand] = (),
+                                            overwrite: bool = False) -> None:
         """
         Assigns sequences from this :any:`Design` into `sc_design`.
 
@@ -3752,6 +3753,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             a scadnano design.
         :param ignored_strands:
             strands in the scadnano design that are to be ignored by the sequence designer.
+        :param overwrite:
+            if True, overwrites existing sequences; otherwise gives an error if an existing sequence
+            disagrees with the newly assigned sequence
         """
 
         # filter out ignored strands
@@ -3770,9 +3774,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         for sc_strand in sc_strands_to_include:
             domain_names = [domain.name for domain in sc_strand.domains]
-            if sc_strand.dna_sequence is None:
+            if sc_strand.dna_sequence is None or overwrite:
                 assert None not in domain_names
-                self._assign_to_strand_with_no_sequence(sc_strand, sc_design)
+                self._assign_to_strand_with_without_checking_existing_sequence(sc_strand, sc_design)
             elif None not in domain_names:
                 self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
             else:
@@ -3857,9 +3861,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                      f'{sc_strand.modifications_int[offset]}')
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
-    def _assign_to_strand_with_no_sequence(self,
-                                           sc_strand: sc.Strand[StrandLabel, DomainLabel],
-                                           sc_design: sc.Design[StrandLabel, DomainLabel]) -> None:
+    def _assign_to_strand_with_without_checking_existing_sequence(
+            self,
+            sc_strand: sc.Strand[StrandLabel, DomainLabel],
+            sc_design: sc.Design[StrandLabel, DomainLabel]
+    ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
             raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
@@ -3881,8 +3887,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             domain_sequence = dsd_domain.concrete_sequence(starred)
             sequence_list.append(domain_sequence)
         strand_sequence = ''.join(sequence_list)
-        sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False,
-                             check_length=True)
+        sc_strand.set_dna_sequence(strand_sequence)
 
     @staticmethod
     def _assign_to_strand_with_partial_sequence(sc_strand: sc.Strand[StrandLabel, DomainLabel],
