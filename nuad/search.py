@@ -61,11 +61,11 @@ import nuad.constraints as nc
 from nuad.stopwatch import Stopwatch
 
 
-def new_process_pool(cpu_count: int) -> pathos.multiprocessing.Pool:
-    return pathos.multiprocessing.Pool(processes=cpu_count)
+def new_process_pool(cpu_count: int) -> pathos.pools.ProcessPool:
+    return pathos.pools.ProcessPool(processes=cpu_count)
 
 
-_process_pool: pathos.multiprocessing.Pool = new_process_pool(nc.cpu_count())
+_process_pool: Optional[pathos.pools.ProcessPool] = None
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
@@ -79,7 +79,7 @@ def default_output_directory() -> str:
 # combinations of inputs so it's worth it to maintain a cache.
 @lru_cache()
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
-                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[nc.DesignPart]:
+                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[DesignPart]:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -92,7 +92,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
-    parts_to_check: Sequence[nc.DesignPart]
+    parts_to_check: Sequence[DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
         parts_to_check = _determine_domains_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrands):
@@ -308,7 +308,7 @@ def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: Li
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-def _independent_domains_in_part(part: nc.DesignPart, exclude_fixed: bool) -> Tuple[Domain]:
+def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> Tuple[Domain]:
     """
     :param part:
         DesignPart (e.g., :any:`Strand`, :any:`Domani`, Tuple[:any:`Strand`, :any:`Strand`])
@@ -414,11 +414,8 @@ def _write_sequences(design: Design, params: SearchParameters, directories: _Dir
 
 def _write_report(params: SearchParameters, directories: _Directories,
                   num_new_optimal_padded: str, eval_set: EvaluationSet) -> None:
-    content = f'''\
-Report on constraints
-=====================
-''' + summary_of_constraints(params.constraints, params.report_only_violations,
-                             eval_set=eval_set)
+    content = summary_of_constraints(params.constraints, params.report_only_violations,
+                                     eval_set=eval_set)
 
     best_filename = directories.best_report_full_filename_noext()
     idx_filename = directories.indexed_report_full_filename_noext(num_new_optimal_padded) \
@@ -977,8 +974,10 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
     finally:
         # if sys.platform != 'win32':
         #     _pfunc_killall()
-        _process_pool.close()  # noqa
-        _process_pool.terminate()
+        global _process_pool
+        if _process_pool is not None:
+            _process_pool.close()  # noqa
+            _process_pool.terminate()
 
     if directories.debug_file_handler is not None:
         nc.logger.removeHandler(directories.debug_file_handler)  # noqa
@@ -1028,10 +1027,7 @@ def create_report(design: nc.Design, constraints: Iterable[Constraint],
     evaluation_set = EvaluationSet(constraints, False)
     evaluation_set.evaluate_all(design)
 
-    content = f'''\
-Report on constraints
-=====================
-''' + summary_of_constraints(constraints, report_only_violations, eval_set=evaluation_set)
+    content = summary_of_constraints(constraints, report_only_violations, eval_set=evaluation_set)
 
     return content
 
@@ -1044,8 +1040,9 @@ def _check_cpu_count(cpu_count: int) -> None:
                     f'\nallocating new ThreadPool')
         cpu_count = nc.cpu_count()
         global _process_pool
-        _process_pool.close()
-        _process_pool.terminate()
+        if _process_pool is not None:
+            _process_pool.close()
+            _process_pool.terminate()
         _process_pool = new_process_pool(cpu_count)
 
 
@@ -1272,25 +1269,26 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
     return max_index
 
 
-def _pfunc_killall() -> None:
-    import subprocess
-    delim = '#'
-    logger.warning('\n' + delim * 79)
-    logger.warning('# attempting to kill all pfunc processes with `killall pfunc Pfunc`')
-    command = ['killall', 'pfunc', 'Pfunc']
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    output, error = process.communicate()
-    if output is None:
-        output = 'None'
-    if error is None:
-        error = 'None'
-    output_str = output.decode() if isinstance(output, bytes) else output
-    error_str = error.decode() if isinstance(error, bytes) else error
-    output_str = textwrap.indent(output_str, delim + '   ')
-    error_str = textwrap.indent(error_str, delim + '   ')
-    logger.warning(f'{delim} output from killall command:\n{output_str}')
-    logger.warning(f'{delim} error from killall command:\n{error_str}')
-    logger.warning('#' * 79)
+# keeping this code around in case we want it for killing parallel processes if necessary
+# def _pfunc_killall() -> None:
+#     import subprocess
+#     delim = '#'
+#     logger.warning('\n' + delim * 79)
+#     logger.warning('# attempting to kill all pfunc processes with `killall pfunc Pfunc`')
+#     command = ['killall', 'pfunc', 'Pfunc']
+#     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+#     output, error = process.communicate()
+#     if output is None:
+#         output = 'None'
+#     if error is None:
+#         error = 'None'
+#     output_str = output.decode() if isinstance(output, bytes) else output
+#     error_str = error.decode() if isinstance(error, bytes) else error
+#     output_str = textwrap.indent(output_str, delim + '   ')
+#     error_str = textwrap.indent(error_str, delim + '   ')
+#     logger.warning(f'{delim} output from killall command:\n{output_str}')
+#     logger.warning(f'{delim} error from killall command:\n{error_str}')
+#     logger.warning('#' * 79)
 
 
 n_in_last_n_calls = 50
@@ -1981,6 +1979,192 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
                + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
                + '\n'.join(summaries))
 
+    return f'''\
+Report on constraints
+=====================
+''' + summary
+
+
+@dataclass
+class ConstraintReport(Generic[DesignPart]):
+    """
+    Represents a report on how well a design did on a constraint.
+    """
+
+    constraint: nc.Constraint[DesignPart]
+    """
+    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
+    at the time the :meth:`Constraint.generate_summary` function is defined. If so it will be
+    automatically inserted by the report generating code."""
+
+    content: str
+    """
+    Summary of constraint information on the :any:`Design`.
+    """
+
+    num_violations: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    violated the constraint.
+    """
+
+    num_evaluations: int
+    """
+    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
+    were checked against the constraint.
+    """
+
+    score: float
+    score_nonfixed: float
+    score_fixed: float
+
+    evaluations: List[Evaluation]
+    evaluations_nonfixed: List[Evaluation]
+    evaluations_fixed: List[Evaluation]
+
+    report_only_violations: bool
+
+    def __init__(self, constraint: nc.Constraint[DesignPart],
+                 evaluation_set: EvaluationSet, report_only_violations: bool) -> None:
+
+        if not isinstance(constraint, (DomainConstraint, StrandConstraint,
+                                       DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
+                                       DomainsConstraint, StrandsConstraint,
+                                       DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint,
+                                       DesignConstraint)):
+            raise NotImplementedError(f'unrecognized type {type(constraint)}')
+
+        self.report_only_violations = report_only_violations
+        self.evaluations = evaluation_set.evaluations_of_constraint(constraint,
+                                                                    violations=report_only_violations)
+        self.num_evaluations = evaluation_set.num_evaluations_of(constraint)
+        self.num_violations = evaluation_set.num_violations_of(constraint)
+        self.score = evaluation_set.score_of_constraint(constraint, True)
+        self.score_nonfixed = evaluation_set.score_of_constraint_nonfixed(constraint, True)
+        self.score_fixed = evaluation_set.score_of_constraint_fixed(constraint, True)
+
+        self.evaluations_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint,
+                                                                                      report_only_violations)
+        self.evaluations_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint,
+                                                                                report_only_violations)
+
+    def header(self) -> str:
+
+        if self.score != self.score_nonfixed:
+            summary_score_unfixed = f'\n* unfixed score of violations: {self.score_nonfixed:.2f}'
+        else:
+            summary_score_unfixed = None
+
+        summary_unfixed_content = "" if summary_score_unfixed is None else summary_score_unfixed
+        summary = f'''
+        **{"*" * len(self.constraint.description)}
+        * {self.constraint.description}
+        * evaluations: {self.num_evaluations}
+        * violations:  {self.num_violations}
+        * score of violations: {self.score:.2f}{summary_unfixed_content}'''
+
+        return summary
+
+    def content_no_header(self) -> str:
+        part_type_name = self.constraint.part_name()
+        some_fixed_evals = len(self.evaluations_fixed) > 0
+
+        summaries = []
+        num_violations_counted = 0
+        for evals, header_name in [(self.evaluations_nonfixed, f"unfixed {part_type_name}s"),
+                                   (self.evaluations_fixed, f"fixed {part_type_name}s")]:
+            if len(evals) == 0:
+                continue
+
+            max_part_name_length = max(len(violation.part.name) for violation in evals)
+            num_violations_counted += len(evals)
+
+            lines_and_scores: List[Tuple[str, float]] = []
+            for ev in evals:
+                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
+                       f'{ev.summary};  score: {ev.score:.2f}'
+                lines_and_scores.append((line, ev.score))
+
+            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+
+            lines = (line for line, _ in lines_and_scores)
+            content = '\n'.join(lines)
+
+            # only put header to distinguish fixed from unfixed violations if there are some fixed
+            full_header = _small_header(header_name, "=") if some_fixed_evals else ''
+            summary = full_header + f'\n{content}\n'
+            summaries.append(summary)
+
+        if self.report_only_violations:
+            assert num_violations_counted == self.num_violations
+        else:
+            assert num_violations_counted == self.num_evaluations
+
+        return '\n'.join(summaries)
+
+    def content(self) -> str:
+        content_no_header = self.content_no_header()
+        indented_content = textwrap.indent(content_no_header, '  ')
+        return content_no_header + '\n' + indented_content
+
+
+def report_on_constraint(constraint: Constraint[DesignPart], report_only_violations: bool,
+                         evaluation_set: EvaluationSet) -> ConstraintReport[DesignPart]:
+    if isinstance(constraint, DesignConstraint):
+        raise NotImplementedError()
+    if isinstance(constraint, (DomainConstraint, StrandConstraint,
+                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
+                               DomainsConstraint, StrandsConstraint,
+                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
+        summaries = []
+        num_evaluations = evaluation_set.num_evaluations_of(constraint)
+        num_violations = evaluation_set.num_violations_of(constraint)
+        num_violations_counted = 0
+        part_type_name = constraint.part_name()
+
+        evals_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint, report_only_violations)
+        evals_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint, report_only_violations)
+
+        some_fixed_evals = len(evals_fixed) > 0
+
+        for evals, header_name in [(evals_nonfixed, f"unfixed {part_type_name}s"),
+                                   (evals_fixed, f"fixed {part_type_name}s")]:
+            if len(evals) == 0:
+                continue
+
+            max_part_name_length = max(len(violation.part.name) for violation in evals)
+            num_violations_counted += len(evals)
+
+            lines_and_scores: List[Tuple[str, float]] = []
+            for ev in evals:
+                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
+                       f'{ev.summary};  score: {ev.score:.2f}'
+                lines_and_scores.append((line, ev.score))
+
+            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+
+            lines = (line for line, _ in lines_and_scores)
+            content = '\n'.join(lines)
+
+            # only put header to distinguish fixed from unfixed violations if there are some fixed
+            full_header = _small_header(header_name, "=") if some_fixed_evals else ''
+            summary = full_header + f'\n{content}\n'
+            summaries.append(summary)
+
+        if report_only_violations and num_violations_counted != num_violations:
+            assert num_violations_counted == num_violations
+
+        content = ''.join(summaries)
+        report = ConstraintReport[DesignPart](constraint=constraint, content=content,
+                                              num_violations=num_violations, num_evaluations=num_evaluations,
+                                              evaluations=list(evaluation_set.evaluations.values()))
+
+    else:
+        content = f'unrecognized type {type(constraint)}'
+        raise NotImplementedError(content)
+        # report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_evaluations=0)
+
+    summary = add_header_to_content_of_summary(report, evaluation_set)
     return summary
 
 
@@ -2068,33 +2252,3 @@ def add_header_to_content_of_summary(report: ConstraintReport, eval_set: Evaluat
 def _small_header(header: str, delim: str) -> str:
     width = len(header)
     return f'\n{header}\n{delim * width}'
-
-
-@dataclass
-class ConstraintReport:
-    """
-    Represents a report on how well a design did on a constraint.
-    """
-
-    constraint: Optional['Constraint']
-    """
-    The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
-    at the time the :meth:`Constraint.generate_summary` function is defined. If so it will be
-    automatically inserted by the report generating code."""
-
-    content: str
-    """
-    Summary of constraint information on the :any:`Design`.
-    """
-
-    num_violations: int
-    """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
-    violated the constraint.
-    """
-
-    num_evaluations: int
-    """
-    Total number of "parts" of the :any:`Design` (e.g., :any:`Strand`'s, pairs of :any:`Domain`'s) that
-    were checked against the constraint.
-    """
