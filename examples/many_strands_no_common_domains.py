@@ -139,19 +139,15 @@ def main() -> None:
     strand_pairs_rna_duplex_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0, temperature=52, short_description='StrandPairRNA', parallel=parallel)
 
-    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
+    strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
 
-    strand_individual_ss_constraint2 = nc.nupack_strand_complex_free_energy_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandSS2', parallel=parallel)
-
-    strand_pair_nupack_constraint = nc.nupack_strand_pairs_constraint(
+    strand_pair_nupack_constraint = nc.nupack_strand_pair_constraint(
         threshold=3.0, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
-        # strand_individual_ss_constraint,
-        # strand_individual_ss_constraint2,
+        strand_individual_ss_constraint,
         strand_pairs_rna_duplex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
@@ -163,11 +159,12 @@ def main() -> None:
         restart=args.restart,
         random_seed=random_seed,
         max_iterations=None,
-        save_sequences_for_all_updates=True,
-        save_report_for_all_updates=True,
-        save_design_for_all_updates=True,
+        # save_sequences_for_all_updates=True,
+        # save_report_for_all_updates=True,
+        # save_design_for_all_updates=True,
         force_overwrite=True,
-        scrolling_output=False,
+        # log_time=True,
+        # scrolling_output=False,
         # report_only_violations=False,
     )
     ns.search_for_dna_sequences(design, params)

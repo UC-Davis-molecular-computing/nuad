@@ -206,7 +206,7 @@ class Thresholds:
 
 
 def create_constraints(design: nc.Design, thresholds: Thresholds) -> List[nc.Constraint]:
-    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
+    strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
         threshold=thresholds.tile_ss, temperature=thresholds.temperature, short_description='StrandSS')
 
     # This reduces the number of times we have to create these sets from quadratic to linear

@@ -22,6 +22,7 @@ import enum
 import os
 import math
 import json
+from decimal import Decimal
 from typing import List, Set, Optional, Dict, Callable, Iterable, Tuple, Union, Collection, TypeVar, Any, \
     cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
 from dataclasses import dataclass, field, InitVar
@@ -32,7 +33,9 @@ import logging
 from multiprocessing.pool import ThreadPool
 from numbers import Number
 from enum import Enum, auto, unique
+import functools
 
+import pint
 import numpy as np  # noqa
 from ordered_set import OrderedSet
 
@@ -42,6 +45,10 @@ import nuad.vienna_nupack as nv
 import nuad.np as nn
 import nuad.modifications as nm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
+
+from pint import UnitRegistry
+
+ureg = UnitRegistry()
 
 # need typing_extensions package prior to Python 3.8 to get Protocol object
 try:
@@ -2113,7 +2120,7 @@ def domains_not_substrings_of_each_other_constraint(
 
     # def evaluate(s1: str, s2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
     def evaluate(seqs: Tuple[str, ...],
-                 domains: Optional[Tuple[Domain, Domain]]) -> Tuple[float, str]:  # noqa
+                 domains: Optional[Tuple[Domain, Domain]]) -> Result:  # noqa
         s1, s2 = seqs
         if len(s1) > len(s2):
             s1, s2 = s2, s1
@@ -2135,7 +2142,8 @@ def domains_not_substrings_of_each_other_constraint(
                 else:
                     summary = msg
                 score += 1.0
-        return score, summary
+
+        return Result(excess=score, summary=summary)
 
     return DomainPairConstraint(description='domains not substrings of each other',
                                 short_description=short_description,
@@ -2252,14 +2260,16 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     """Hash value of _domain_names_concatenated; cached for efficiency."""
 
     idt: Optional[IDTFields] = None
-    """Fields used when ordering strands from the synthesis company IDT 
+    """
+    Fields used when ordering strands from the synthesis company IDT 
     (Integrated DNA Technologies, Coralville, IA). If present (i.e., not equal to :const:`None`)
     then the method :py:meth:`Design.write_idt_bulk_input_file` can be called to automatically
     generate an text file for ordering strands in test tubes: 
     https://www.idtdna.com/site/order/oligoentry,
     as can the method :py:meth:`Design.write_idt_plate_excel_file` for writing a Microsoft Excel 
     file that can be uploaded to IDT's website for describing DNA sequences to be ordered in 96-well
-    or 384-well plates."""
+    or 384-well plates.
+    """
 
     _name: Optional[str] = None
     """Optional name of strand."""
@@ -3146,6 +3156,34 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             dct[nm.design_modifications_key] = mods_dict
 
         return dct
+
+    def write_design_file(self, directory: str = '.', filename: Optional[str] = None,
+                          extension: str = 'json') -> None:
+        """
+        Write text file representing this :any:`Design`,
+        suitable for reading by the scadnano web interface,
+        with the output file having the same name as the running script but with ``.py`` changed to
+        :attr:`default_scadnano_file_extension`,
+        unless `filename` is explicitly specified.
+        For instance, if the script is named ``my_design.py``,
+        then the design will be written to ``my_design.json``.
+        If `extension` is specified (but `filename` is not), then the design will be written to
+        ``my_design.<extension>``
+
+        The string written is that returned by :meth:`Design.to_json`.
+
+        :param directory:
+            directory in which to put file (default: current working directory)
+        :param filename:
+            filename (default: name of script with ``.py`` replaced by
+            ``.sc``).
+            Mutually exclusive with `extension`
+        :param extension:
+            extension for filename (default: ``.sc``)
+            Mutually exclusive with `filename`
+        """
+        content = self.to_json()
+        sc.write_file_same_name_as_running_python_script(content, extension, directory, filename)
 
     @staticmethod
     def from_design_file(filename: str,
@@ -4120,10 +4158,143 @@ def _raise_unreachable():
     raise AssertionError('This should be unreachable')
 
 
+@dataclass
+class Result(Generic[DesignPart]):
+    """
+    A :any:`Result` is returned from the function :data:`SingularConstraint.evaluate`, and a list of
+    :any:`Result`'s is returned from the function :data:`BulkConstraint.evaluate_bulk`, describing the
+    result of evaluating the constraint on the design "part".
+
+    A :any:`Result` must have an "excess" and "summary" specified.
+
+    Optionally one may also specify a "value", which helps in graphically displaying the results of
+    evaluating constraints using the function :meth:`display_report`.
+
+    For example, if the constraint checks that the NUPACK complex free energy of a strand is at least
+    -2.5 kcal/mol, and a strand has energy -3.4 kcal/mol, then the following are sensible values for
+    these fields:
+
+    - ``value`` = ``-3.4``  or  ``"-3.4 kcal/mol"``  or  ``pint.Quantity(Decimal(-3.4), "kcal/mol")``
+    - ``excess`` = ``-0.9``
+    - ``summary`` = ``"-3.4 kcal/mol"``
+    """
+
+    excess: float
+    """
+    The excess is a nonnegative value that is turned into a score, and the search minimizes the total score 
+    of all constraint evaluations. Setting this to 0 (or a negative value) means the constraint 
+    is satisfied, and setting it to a positive value means the constraint is violated. The interpretation
+    is that the larger `excess` is, the more the constraint is violated.
+    
+    For example, a common value for excess is the amount by which the NUPACK complex free energy exceeds
+    a threshold.
+    """
+
+    summary: str = ''
+    """
+    This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
+    strand, pair of domains, pair of strands).
+    """
+
+    value: Optional[pint.Quantity[Decimal]] = None
+    """
+    If this is a "numeric" constraint, i.e., checking some number such as the complex free energy of a 
+    strand and comparing it to a threshold, this is the "raw" value. It is optional, but if specified,
+    then the raw values can be plotted in a Jupyter notebook by the function :meth:`display_report`.
+    
+    If a ``float``, then no units are assumed. If it is a ``str``, then it is assumed that it can be 
+    passed to the constructor pint.Quantity and interpreted as a value with units, e.g., the string
+    "-3.4 kcal/mol".
+    """
+
+    score: float = field(init=False)
+    """
+    Set by the search algorithm based on :data:`Result.excess` as well as other data such as the 
+    constraint's weight and the :data:`SearchParameters.score_transfer_function`.
+    """
+
+    part: DesignPart = field(init=False)
+    """
+    Set by the search algorithm based on the part that was evaluated.
+    """
+
+    def __init__(self,
+                 excess: float,
+                 summary: Optional[str] = None,
+                 value: Optional[Union[float, str, pint.Quantity[Decimal]]] = None) -> None:
+        self.excess = excess
+        if summary is None:
+            if value is None:
+                raise ValueError('at least one of value or summary must be specified')
+            self.summary = str(value)
+        else:
+            self.summary = summary
+        if value is not None:
+            self.value = parse_and_normalize_quantity(value)
+
+        self.score = 0.0
+        self.part = None  # type:ignore
+
+
+def parse_and_normalize_quantity(quantity: Union[float, int, str, pint.Quantity]) \
+        -> pint.Quantity[Decimal]:
+    if isinstance(quantity, (str, float, int)):
+        quantity = ureg(quantity)
+    quantity = normalize_quantity(quantity)
+    return quantity
+
+
+def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity[Decimal]:
+    # Convenient constructor for units, eg, :code:`Q_(5.0, 'nM')`.
+    # Ensures that the quantity is a Decimal.
+    if isinstance(qty, Decimal):
+        return ureg.Quantity(qty, unit)
+    else:
+        # we convert to string to avoid floating-point weirdness. For example
+        # ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
+        #   -2.100000000000000088817841970012523233890533447265625 kilocalorie / mole,
+        # but ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
+        #   -2.1 kilocalorie / mole,
+        qty_str = str(qty)
+        return ureg.Quantity(Decimal(qty_str), unit)
+
+
+def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Quantity[Decimal]:
+    """
+    Normalize `quantity` so that it has a Decimal madnitude,
+    is "compact" if specified (uses units within the correct "3 orders of magnitude":
+    https://pint.readthedocs.io/en/0.18/tutorial.html#simplifying-units)
+    and eliminate trailing zeros.
+
+    :param quantity:
+        a pint Quantity[Decimal]
+    :param compact:
+        whether to change units to make compact (within correct 3 orders of magnitude, e.g.,
+        30 kg instead of 30,000 g)
+    :return:
+        `quantity` normalized to be compact and without trailing zeros.
+    """
+    if not isinstance(quantity.magnitude, Decimal):
+        quantity = Q_(quantity.magnitude, quantity.units)
+    if compact:
+        quantity = quantity.to_compact()
+    mag_int = quantity.magnitude.to_integral()
+    if mag_int == quantity.magnitude:
+        # can be represented exactly as integer, so return that;
+        # quantity.magnitude.normalize() would use scientific notation in this case, which we don't want
+        quantity = Q_(mag_int, quantity.units)
+    else:
+        # is not exact integer, so normalize will return normal float literal such as 10.2
+        # and not scientific notation like it would for an integer
+        mag_norm = quantity.magnitude.normalize()
+        quantity = Q_(mag_norm, quantity.units)
+    return quantity
+
+
 @dataclass(eq=False)
 class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate: Callable[[Tuple[str, ...], Optional[DesignPart]],
-                       Tuple[float, str]] = lambda _: _raise_unreachable()
+                       Result[DesignPart]] = lambda _: _raise_unreachable()
     """
     Essentially a wrapper for a function that evaluates the :any:`Constraint`. 
     It takes as input a tuple of DNA sequences 
@@ -4131,11 +4302,14 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     :any:`Domain`, :any:`Strand`, :any:`DomainPair`, :any:`StrandPair`, or :any:`Complex`
     (the latter being an alias for arbitrary-length tuple of :any:`Strand`'s).
 
-    The second argument will be None if :data:`Constraint.parallel` is True (since it's more expensive
-    to serialize the :any:`Domain` and :any:`Strand` objects than strings for passing data to processes
-    executing in parallel). Thus, if the :any:`Constraint` needs to use more data about the :any:`Part`
-    than just its DNA sequence, by accessing the second argument, :data:`Constraint.parallel` should be set
-    to False.
+    The second argument will be None if :data:`SingularConstraint.parallel` is True 
+    (since it's more expensive to serialize the :any:`Domain` and :any:`Strand` objects than strings for 
+    passing data to processes executing in parallel).
+     
+    Thus, if the :any:`Constraint` needs to use more data about the :any:`Part` than just its DNA sequence, 
+    by accessing the second argument, :data:`Constraint.parallel` should be set to False.
+    
+    It should return a :any:`Result` object.
     """
 
     parallel: bool = False
@@ -4156,7 +4330,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-    def call_evaluate(self, seqs: Tuple[str, ...], part: Optional[DesignPart]) -> Tuple[float, str]:
+    def call_evaluate(self, seqs: Tuple[str, ...], part: Optional[DesignPart]) -> Result[DesignPart]:
         """
         Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
         supplied in constructor.
@@ -4176,27 +4350,28 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             `excess` might be the difference 1.5 between the energy and the threshold,
             and `summary` might be the string "-2.5 kcal/mol".
         """
-        excess, summary = (self.evaluate)(seqs, part)  # noqa
-        if excess < 0.0:
-            excess = 0.0
-        score = self.weight * self.score_transfer_function(excess)
-        return score, summary
+        result = (self.evaluate)(seqs, part)  # noqa
+        if result.excess < 0.0:
+            result.excess = 0.0
+        result.score = self.weight * self.score_transfer_function(result.excess)
+        result.part = part
+        return result
 
 
 @dataclass(eq=False)
 class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate_bulk: Callable[[Sequence[DesignPart]],
-                            List[Tuple[DesignPart, float, str]]] = lambda _: _raise_unreachable()
+                            List[Result]] = lambda _: _raise_unreachable()
 
-    def call_evaluate_bulk(self, parts: Sequence[DesignPart]) -> List[Tuple[DesignPart, float, str]]:
-        results: List[Tuple[DesignPart, float, str]] = (self.evaluate_bulk)(parts)  # noqa
-        results_with_scores_transferred_and_weighted: List[Tuple[DesignPart, float, str]] = []
-        for part, excess, summary in results:
-            if excess < 0.0:
-                excess = 0.0
-            score = self.weight * self.score_transfer_function(excess)
-            results_with_scores_transferred_and_weighted.append((part, score, summary))
-        return results_with_scores_transferred_and_weighted
+    def call_evaluate_bulk(self, parts: Sequence[DesignPart]) -> List[Result]:
+        results: List[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
+        # apply weight and transfer scores
+        for result, part in zip(results, parts):
+            if result.excess < 0.0:
+                result.excess = 0.0
+            result.score = self.weight * self.score_transfer_function(result.excess)
+            result.part = part
+        return results
 
 
 _no_summary_string = "No summary for this constraint. " \
@@ -4429,15 +4604,15 @@ class DesignConstraint(Constraint[Design]):
             raise ValueError('_evaluate_design should be specified in a DesignConstraint')
 
     def call_evaluate_design(self, design: Design, domains_changed: Iterable[Domain]) \
-            -> List[Tuple[DesignPart, float, str]]:
+            -> List[Result]:
         results = (self._evaluate_bulk)(design, domains_changed)  # noqa
-        results_with_scores_transferred_and_weighted = []
-        for part, excess, summary in results:
-            if excess < 0.0:
-                excess = 0.0
-            weighted_score = self.weight * self.score_transfer_function(excess)
-            results_with_scores_transferred_and_weighted.append((part, weighted_score, summary))
-        return results_with_scores_transferred_and_weighted
+        # apply weight and transfer scores
+        for result in zip(results):
+            if result.excess < 0.0:
+                result.excess = 0.0
+            result.score = self.weight * self.score_transfer_function(result.excess)
+            result.part = design
+        return results
 
     @staticmethod
     def part_name() -> str:
@@ -4567,11 +4742,12 @@ def nupack_domain_complex_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Result:
         sequence = seqs[0]
         energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        excess = threshold - energy
-        return max(0.0, excess), f'{energy:6.2f} kcal/mol'
+        excess = max(0.0, threshold - energy)
+        value = f'{energy:6.2f} kcal/mol'
+        return Result(excess=excess, value=value)
 
     if description is None:
         description = f'NUPACK secondary structure of domain exceeds {threshold} kcal/mol'
@@ -4588,7 +4764,7 @@ def nupack_domain_complex_free_energy_constraint(
                             domains=domains)
 
 
-def nupack_strand_complex_free_energy_constraint(
+def nupack_strand_free_energy_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
@@ -4601,7 +4777,8 @@ def nupack_strand_complex_free_energy_constraint(
         strands: Optional[Iterable[Strand]] = None) -> StrandConstraint:
     """
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
-    NUPACK's pfunc.
+    NUPACK's pfunc. This is the so-called "complex free energy":
+    https://docs.nupack.org/definitions/#complex-free-energy
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -4634,14 +4811,15 @@ def nupack_strand_complex_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Result:
         sequence = seqs[0]
         energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
-        excess = threshold - energy
-        return max(0.0, excess), f'{energy:6.2f} kcal/mol'
+        excess = max(0.0, threshold - energy)
+        value = f'{energy:6.2f} kcal/mol'
+        return Result(excess=excess, value=value)
 
     if description is None:
-        description = f'NUPACK secondary structure of strand exceeds {threshold} kcal/mol'
+        description = f'strand NUPACK energy >= {threshold} kcal/mol at {temperature}C'
 
     if strands is not None:
         strands = tuple(strands)
@@ -4718,7 +4896,7 @@ def nupack_domain_pair_constraint(
                           sodium=sodium, magnesium=magnesium)
 
     # def evaluate(seq1: str, seq2: str, domain1: Optional[Domain], domain2: Optional[Domain]) -> float:
-    def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[DomainPair]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[DomainPair]) -> Result:
         seq1, seq2 = seqs
         name_pairs = [(None, None)] * 4
         if domain_pair is not None:
@@ -4761,9 +4939,10 @@ def nupack_domain_pair_constraint(
                               for (name1, name2), energy in zip(name_pairs, energies)]
         lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
         lines = [line for line, _ in lines_and_energies]
-        msg = '\n  ' + '\n  '.join(lines)
+        summary = '\n  ' + '\n  '.join(lines)
 
-        return max(0.0, max_excess), msg
+        max_excess = max(0.0, max_excess)
+        return Result(excess=max_excess, summary=summary, value=max_excess)
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -4777,7 +4956,93 @@ def nupack_domain_pair_constraint(
                                 pairs=pairs)
 
 
-def nupack_strand_pairs_constraint(
+def nupack_strand_pair_constraint_by_number_matching_domains(
+        thresholds: Dict[int, float],
+        temperature: float = nv.default_temperature,
+        sodium: float = nv.default_sodium,
+        magnesium: float = nv.default_magnesium,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Optional[Dict[int, str]] = None,
+        short_descriptions: Optional[Dict[int, str]] = None,
+        parallel: bool = False,
+        strands: Optional[Iterable[Strand]] = None,
+        pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
+) -> List[StrandPairConstraint]:
+    """
+    Convenience function for creating many constraints as returned by
+    :meth:`nupack_strand_pair_constraint`, one for each threshold specified in parameter `thresholds`,
+    based on number of matching (complementary) domains between pairs of strands.
+
+    Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
+
+    Exactly one of `strands` or `pairs` must be specified. If `strands`, then all pairs of strands
+    (including a strand with itself) will be checked; otherwise only those pairs in `pairs` will be checked.
+
+    It is also common to set different thresholds according to the lengths of the strands.
+    This can be done by calling :meth:`strand_pairs_by_lengths` to separate first by lengths
+    in a dict mapping length pairs to strand pairs,
+    then calling this function once for each (key, value) in that dict, giving the value
+    (which is a list of pairs of strands) as the `pairs` parameter to this function.
+
+    Args:
+        thresholds: Energy thresholds in kcal/mol. If `k` domains are complementary between the strands,
+                    then use threshold `thresholds[k]`.
+        temperature: Temperature in Celsius.
+        sodium: concentration of Na+ in molar
+        magnesium: concentration of Mg++ in molar
+        weight: How much to weigh this :any:`Constraint`.
+        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        descriptions: Long descriptions of constraint suitable for putting into constraint report.
+        short_descriptions: Short descriptions of constraint suitable for logging to stdout.
+        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
+                 Mutually exclusive with `pairs`.
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
+               including each strand with itself.
+               Mutually exclusive with `strands`.
+
+    Returns:
+        list of constraints, one per threshold in `thresholds`
+    """
+    # ignoring the type error due to this issue: https://github.com/python/mypy/issues/1484
+    # Seems functools.partial with keyword arguments isn't supported well in mypy
+    nupack_strand_pair_constraint_partial: _StrandPairsConstraintCreator = \
+        functools.partial(nupack_strand_pair_constraint, sodium=sodium, magnesium=magnesium)  # type: ignore
+
+    if descriptions is None:
+        descriptions = {
+            num_matching: _pair_default_description('strand', 'NUPACK', threshold, temperature) +
+                          f'\nfor strands with {num_matching} complementary '
+                          f'{"domain" if num_matching==1 else "domains"}'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f'NUPACKpair{num_matching}comp'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    return _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator=nupack_strand_pair_constraint_partial,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+    )
+
+
+def _pair_default_description(part_name: str, func_name: str, threshold: float, temperature: float) -> str:
+    return f'{part_name} pair {func_name} energy >= {threshold} kcal/mol at {temperature}C'
+
+
+def nupack_strand_pair_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
@@ -4791,7 +5056,7 @@ def nupack_strand_pairs_constraint(
 ) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    NUPACK's pfunc executable.
+    NUPACK's pfunc function.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -4824,13 +5089,14 @@ def nupack_strand_pairs_constraint(
     _check_nupack_installed()
 
     if description is None:
-        description = f'NUPACK binding energy of strand pair exceeds {threshold} kcal/mol'
+        description = _pair_default_description('strand', 'NUPACK', threshold, temperature)
 
-    def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str, ...], _: Optional[StrandPair]) -> Result:
         seq1, seq2 = seqs
         energy = nv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
-        excess = threshold - energy
-        return max(0.0, excess), f'{energy:6.2f} kcal/mol'
+        excess = max(0.0, threshold - energy)
+        value = f'{energy:6.2f} kcal/mol'
+        return Result(excess=excess, value=value)
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -4842,12 +5108,12 @@ def nupack_strand_pairs_constraint(
                                 parallel=parallel,
                                 pairs=pairs,
                                 evaluate=evaluate,
-                                # summary=summary
                                 )
 
 
-def chunker(sequence: Sequence[T], chunk_length: Optional[int] = None, num_chunks: Optional[int] = None) -> \
-        List[List[T]]:
+def chunker(sequence: Sequence[T],
+            chunk_length: Optional[int] = None,
+            num_chunks: Optional[int] = None) -> List[List[T]]:
     """
     Collect data into fixed-length chunks or blocks, e.g., chunker('ABCDEFG', 3) --> ABC DEF G
 
@@ -4961,19 +5227,18 @@ def rna_duplex_domain_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = f'RNAduplex energy for some domain pairs exceeds {threshold} kcal/mol'
+        description = _pair_default_description('domain', 'RNAduplex', threshold, temperature)
 
-    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Tuple[DomainPair, float, str]]:
+    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
         sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
-        pairs_scores_summaries: List[Tuple[DomainPair, float, str]] = []
         energies = nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
+        results = []
         for pair, energy in zip(domain_pairs, energies):
             excess = threshold - energy
-            summary = f'{energy:6.2f} kcal/mol'
-            pair_score_summary = (pair, excess, summary)
-            pairs_scores_summaries.append(pair_score_summary)
-        return pairs_scores_summaries
+            value = f'{energy:6.2f} kcal/mol'
+            results.append(Result(excess=excess, value=value))
+        return results
 
     pairs_tuple = None
     if pairs is not None:
@@ -4985,19 +5250,6 @@ def rna_duplex_domain_pairs_constraint(
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
-
-
-# def _normalize_threshold_as_dict(threshold: Union[float, Dict[int, float]],
-#                                  keys: Iterable[int]) -> Dict[int, float]:
-#     # normalize threshold to be a dict with keys `keys` if it is not already, mapping all of the keys
-#     # to its float value if it is a float
-#     if isinstance(threshold, float):
-#         thresholds: Dict[int, float] = {}
-#         for num_comp_domains in keys:
-#             thresholds[num_comp_domains] = threshold
-#         return thresholds
-#     else:
-#         return threshold
 
 
 def _populate_strand_list_and_pairs(strands: Optional[Iterable[Strand]],
@@ -5090,29 +5342,36 @@ def strand_pairs_by_number_matching_domains(*, strands: Optional[Iterable[Strand
     return strand_pairs
 
 
-class _StrandPairsConstraintCreator(Protocol):
+SPC = TypeVar('SPC',
+              StrandPairConstraint,
+              StrandPairsConstraint)
+
+
+class _StrandPairsConstraintCreator(Protocol[SPC]):
     # Used to specify type of function that
+    #   nupack_strand_pair_constraint
+    # or
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
-    # and
+    #   and
     #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
-    # both are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
+    # are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
     # The Protocol class seems to be available in the typing module, even though the above
     # documentation seems to indicate it is only in typing_extensions?
-    def __call__(self,
+    def __call__(self, *,
                  threshold: float,
                  temperature: float = nv.default_temperature,
                  weight: float = 1.0,
                  score_transfer_function: Callable[[float], float] = default_score_transfer_function,
                  description: Optional[str] = None,
-                 short_description: str = 'rna_dup_strand_pairs',
+                 short_description: str,
                  parallel: bool = False,
                  pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-                 parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-                 ) -> StrandPairsConstraint: ...
+                 ) -> SPC: ...
 
 
 def _strand_pairs_constraints_by_number_matching_domains(
-        constraint_creator: _StrandPairsConstraintCreator,
+        *,
+        constraint_creator: _StrandPairsConstraintCreator[SPC],
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
@@ -5122,12 +5381,12 @@ def _strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Optional[Iterable[Strand]] = None,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-):
+) -> List[SPC]:
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
     # and
     #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+
     if strands is None and pairs is None:
         raise ValueError('exactly one of strands or pairs must be specified, but neither is')
     elif strands is not None and pairs is not None:
@@ -5139,29 +5398,22 @@ def _strand_pairs_constraints_by_number_matching_domains(
 
     pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
     keys = set(pairs_by_matching_domains.keys())
-    if thresholds is not None:
-        thres_keys = set(thresholds.keys())
-        if keys != thres_keys:
-            raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
-                             'which is the set of integers representing the number of matching domains '
-                             'across all pairs of Strands in the parameter pairs, '
-                             f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
+    thres_keys = set(thresholds.keys())
+    if keys != thres_keys:
+        raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
+                         'which is the set of integers representing the number of matching domains '
+                         'across all pairs of Strands in the parameter pairs, '
+                         f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
 
-    constraints: List[StrandPairsConstraint] = []
+    constraints: List[SPC] = []
 
     for num_matching_domains, threshold in thresholds.items():
         pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
 
-        if descriptions is None or num_matching_domains not in descriptions:
-            description = f'RNAduplex energy for pairs strand with {num_matching_domains} ' \
-                          f'matching domains exceeds {threshold} kcal/mol at {temperature} C'
-        else:
-            description = descriptions[num_matching_domains]
-
-        if short_descriptions is None or num_matching_domains not in short_descriptions:
-            short_description = f'RNADup{num_matching_domains}Comp'
-        else:
-            short_description = short_descriptions[num_matching_domains]
+        description = None if descriptions is None \
+            else descriptions.get(num_matching_domains)
+        short_description = None if short_descriptions is None \
+            else short_descriptions.get(num_matching_domains)
 
         constraint = constraint_creator(
             threshold=threshold,
@@ -5172,7 +5424,6 @@ def _strand_pairs_constraints_by_number_matching_domains(
             short_description=short_description,
             parallel=parallel,
             pairs=pairs_with_matching_domains,
-            parameters_filename=parameters_filename,
         )
         constraints.append(constraint)
 
@@ -5180,6 +5431,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
 
 
 def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
+        *,
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
@@ -5189,14 +5441,24 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Optional[Iterable[Strand]] = None,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
-        -> List[StrandPairsConstraint]:
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> List[StrandPairsConstraint]:
     """
     Similar to :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
     but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
     """
+    rna_cofold_with_parameters_filename: _StrandPairsConstraintCreator = \
+        functools.partial(rna_cofold_strand_pairs_constraint,  # type:ignore
+                          parameters_filename=parameters_filename)
+    if descriptions is None:
+        descriptions = {
+            num_matching: _pair_default_description('strand', 'RNAcofold', threshold, temperature) +
+                          f'\nfor strands with {num_matching} complementary '
+                          f'{"domain" if num_matching==1 else "domains"}'
+            for num_matching, threshold in thresholds.items()
+        }
     return _strand_pairs_constraints_by_number_matching_domains(
-        rna_cofold_strand_pairs_constraint,
+        constraint_creator=rna_cofold_with_parameters_filename,
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -5206,11 +5468,11 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
-        parameters_filename=parameters_filename,
     )
 
 
 def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
+        *,
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
@@ -5220,8 +5482,8 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Optional[Iterable[Strand]] = None,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
-        -> List[StrandPairsConstraint]:
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
     :meth:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
@@ -5258,8 +5520,26 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     Returns:
         list of constraints, one per threshold in `thresholds`
     """
+    rna_duplex_with_parameters_filename: _StrandPairsConstraintCreator = \
+        functools.partial(rna_duplex_strand_pairs_constraint,  # type:ignore
+                          parameters_filename=parameters_filename)
+
+    if descriptions is None:
+        descriptions = {
+            num_matching: _pair_default_description('strand', 'RNAduplex', threshold, temperature) +
+                          f'\nfor strands with {num_matching} complementary '
+                          f'{"domain" if num_matching==1 else "domains"}'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f'RNAdup{num_matching}comp'
+            for num_matching, threshold in thresholds.items()
+        }
+
     return _strand_pairs_constraints_by_number_matching_domains(
-        rna_duplex_strand_pairs_constraint,
+        constraint_creator=rna_duplex_with_parameters_filename,
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -5269,11 +5549,11 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
-        parameters_filename=parameters_filename,
     )
 
 
 def rna_duplex_strand_pairs_constraint(
+        *,
         threshold: float,
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
@@ -5282,8 +5562,8 @@ def rna_duplex_strand_pairs_constraint(
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
-        -> StrandPairsConstraint:
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     Vienna RNA's RNAduplex executable.
@@ -5319,8 +5599,7 @@ def rna_duplex_strand_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = f'RNAduplex energy for some strand pairs exceeds ' \
-                      f'{threshold} kcal/mol at {temperature} C'
+        description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
     num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
 
@@ -5340,17 +5619,21 @@ def rna_duplex_strand_pairs_constraint(
             energies = calculate_energies_unparallel(sequence_pairs)
         return energies
 
-    def evaluate(strand_pairs: Iterable[StrandPair]) -> List[Tuple[StrandPair, float, str]]:
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
-        pairs_scores_summaries: List[Tuple[StrandPair, float, str]] = []
 
+        for pair, energy in zip(sequence_pairs, energies):
+            if energy > 100:
+                print(f'energy = {energy};  pair = {pair}')
+
+        results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            summary = f'{energy:6.2f} kcal/mol'
-            pair_score_summary = (pair, excess, summary)
-            pairs_scores_summaries.append(pair_score_summary)
-        return pairs_scores_summaries
+            value = f'{energy:6.2f} kcal/mol'
+            result = Result(excess=excess, value=value)
+            results.append(result)
+        return results
 
     pairs_tuple = None
     if pairs is not None:
@@ -5360,7 +5643,7 @@ def rna_duplex_strand_pairs_constraint(
                                  short_description=short_description,
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate,
+                                 evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
 
 
@@ -5382,6 +5665,7 @@ def energy_excess_domains(energy: float,
 
 
 def rna_cofold_strand_pairs_constraint(
+        *,
         threshold: float,
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
@@ -5390,8 +5674,8 @@ def rna_cofold_strand_pairs_constraint(
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
         pairs: Optional[Iterable[Tuple[Strand, Strand]]] = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
-        -> StrandPairsConstraint:
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
     Vienna RNA's RNAduplex executable.
@@ -5441,17 +5725,16 @@ def rna_cofold_strand_pairs_constraint(
             energies = calculate_energies_unparallel(sequence_pairs)
         return energies
 
-    def evaluate(strand_pairs: Iterable[StrandPair]) -> List[Tuple[StrandPair, float, str]]:
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
-        pairs_scores_summaries: List[Tuple[StrandPair, float, str]] = []
 
+        results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            summary = f'{energy:6.2f} kcal/mol'
-            pair_score_summary = (pair, excess, summary)
-            pairs_scores_summaries.append(pair_score_summary)
-        return pairs_scores_summaries
+            value = f'{energy:6.2f} kcal/mol'
+            results.append(Result(excess=excess, value=value))
+        return results
 
     pairs_tuple = None
     if pairs is not None:
@@ -5461,7 +5744,7 @@ def rna_cofold_strand_pairs_constraint(
                                  short_description=short_description,
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate,
+                                 evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
 
 
@@ -7356,7 +7639,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
     if description is None:
         description = 'Base pair probability of complex'
 
-    def evaluate(seqs: Tuple[str, ...], strand_complex_: Complex) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str, ...], strand_complex_: Complex) -> Result:
         assert len(seqs) == len(strand_complex)
         bps = _violation_base_pairs(strand_complex_)
         err_sq = 0.0
@@ -7379,7 +7662,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
                     f'\t{i},{j}: {math.floor(100 * p)}% '
                     f'(<{round(100 * base_type_probability_threshold[t])}% [{t}])')
             summary = '\n'.join(summary_list)
-        return err_sq, summary
+
+        return Result(excess=err_sq, summary=summary, value=err_sq)
 
     def _violation_base_pairs(strand_complex_: Complex) -> List[_BasePair]:
         nupack_complex_result = nv.nupack_complex_base_pair_probabilities(strand_complex_,
