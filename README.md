@@ -53,6 +53,8 @@ To install nuad, you can either install it using pip (the slightly simpler optio
 
 - git
 
+  This method has more steps, but it might be preferable if you want to use a new feature that is not on the main branch: the package installed by the pip instructions above will install the version currently on the main branch.
+
   1. Download the git repo, by one of two methods:
       - Install [git](https://git-scm.com/downloads) if necessary, then type 
     
@@ -88,30 +90,30 @@ Install NUPACK (version 4) and ViennaRNA following their installation instructio
 
 After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
 
-To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`.
+<!-- To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`. -->
 
-To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line.
+<!-- To test that ViennaRNA is installed correctly, type `RNAduplex` at the command line. -->
 
-Test NUPACK and ViennaRNA are available from within nuad by typing `python` at the command line, then typing `import nuad`. It should import without errors:
+Type `python` at the command line, then type `import nuad`. It should import without errors:
 
-    ```python
-    $ python
-    Python 3.7.5 (default, Nov  7 2019, 10:50:52)
-    [GCC 8.3.0] on linux
-    Type "help", "copyright", "credits" or "license" for more information.
-    >>> import nuad
-    >>>
-    ```
+```python
+$ python
+Python 3.7.5 (default, Nov  7 2019, 10:50:52)
+[GCC 8.3.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import nuad
+>>>
+```
 
-To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then only a subset of the following will succeed):
+To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then this will fail):
 
-    ```python
-    >>> import nuad.vienna_nupack as nv
-    >>> nv.pfunc('GCGCGCGCGC')  # test NUPACK 4
-    -1.9079766874655928
-    >>> nv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
-    [-15.7]
-    ```
+```python
+>>> import nuad.vienna_nupack as nv
+>>> nv.pfunc('GCGCGCGCGC')  # test NUPACK 4
+-1.9079766874655928
+>>> nv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
+[-15.7]
+```
 
 ## Data model
 nuad allows one to go from a design with abstract "domains", such as `a`, `a*`, `b`, `b*`, to concrete DNA sequences, for example, 

@@ -19,7 +19,7 @@ def main():
         for domain in strand.domains:
             domain.pool = domain_pool
     params = ns.SearchParameters(
-        constraints=[nc.nupack_strand_complex_free_energy_constraint(
+        constraints=[nc.nupack_strand_free_energy_constraint(
             threshold=-1.5, temperature=52, short_description='StrandSS', parallel=False)],
         out_directory='output/hamming_dist_test',
         # weigh_violations_equally=True

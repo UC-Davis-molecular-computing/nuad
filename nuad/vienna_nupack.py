@@ -250,6 +250,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
+                        max_energy: float = 0.0,
                         # cache: bool = True,
                         cache: bool = False,  # off until I implement LRU queue to bound cache size
                         ) -> List[float]:
@@ -268,6 +269,13 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
         temperature in Celsius
     :param parameters_filename:
         name of parameters file for NUPACK
+    :param max_energy:
+        This is the maximum energy possible to assign. If RNAduplex reports any energies larger than this,
+        they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        base pairs between them (e.g., CCCC and TTTT), in which case RNAduplex assigns a free energy
+        of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        than all the rest.
     :param cache:
         Whether to cache results to save on number of sequences to give to RNAduplex.
     :return:
@@ -327,6 +335,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # put calculated energies into list to return alongside cached energies
     assert len(idxs_to_calculate) == len(energies_to_calculate)
     for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
+        energy = min(energy, max_energy)
         energies[i] = energy
         if cache:
             # clear out oldest cache key if _rna_duplex_queue is full

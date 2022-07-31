@@ -28,6 +28,16 @@ import re
 import datetime
 from functools import lru_cache
 
+try:
+    from typing import Literal
+except ImportError:
+    try:
+        from typing_extensions import Literal
+    except ImportError as err:
+        print('If you are using Python prior to version 3.8, you need to install the typing_extensions\n'
+              'package in order to use nuad. Exiting.')
+        sys.exit(-1)
+
 from tabulate import tabulate
 import numpy.random
 from ordered_set import OrderedSet
@@ -106,7 +116,9 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     elif isinstance(constraint, nc.DesignConstraint):
         parts_to_check = []  # not used when checking DesignConstraint
     else:
-        raise NotImplementedError()
+        raise AssertionError('should be unreachable; type of constraint not recognized:\n'
+                             f'type(constraint) = {type(constraint)}\n'
+                             f'constraint = {constraint}')
 
     return parts_to_check
 
@@ -970,6 +982,7 @@ def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> Non
 
         _log_constraint_summary(params=params, eval_set=eval_set,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
+        print()
 
     finally:
         # if sys.platform != 'win32':
@@ -1002,34 +1015,6 @@ def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> 
             return False
 
     return True
-
-
-def create_report(design: nc.Design, constraints: Iterable[Constraint],
-                  report_only_violations: bool = False) -> str:
-    """
-    Returns string containing report of how well `design` does according to `constraints`, assuming
-    `design` has sequences assigned to it, for example, if it was read using
-    :meth:`constraints.Design.from_design_file`
-    from a design.json file writte as part of a call to :meth:`search_for_dna_sequences`.
-
-    The report is the same format as written to the reports generated when calling
-    :meth:`search_for_dna_sequences`.
-
-    :param design:
-        the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
-    :param constraints:
-        the list of :any:`constraints.Constraint`'s to evaluate in the report
-    :param report_only_violations:
-        if True, lists only violations of constraints
-    :return:
-        string describing a report of how well `design` does according to `constraints`
-    """
-    evaluation_set = EvaluationSet(constraints, False)
-    evaluation_set.evaluate_all(design)
-
-    content = summary_of_constraints(constraints, report_only_violations, eval_set=evaluation_set)
-
-    return content
 
 
 def _check_cpu_count(cpu_count: int) -> None:
@@ -1307,11 +1292,11 @@ def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
             med_time = statistics.median(time_last_n_calls)
             content += f' median: {med_time:.1f} ms |'
         content_width = len(content)
-        logger.info('-' * content_width + '\n' + content)
+        logger.info('\n' + ('-' * content_width) + '\n' + content)
     else:
         # skip appending first time, since it is much larger and skews the average
         content = f'| time for first call: {stopwatch.milliseconds_str()} ms |'
-        logger.info('-' * len(content) + '\n' + content)
+        logger.info('\n' + ('-' * len(content)) + '\n' + content)
         time_last_n_calls_available = True
 
 
@@ -1375,8 +1360,8 @@ def _log_constraint_summary(*, params: SearchParameters,
     table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
     table_str = _remove_first_lines_from_string(table_str, 2)
     # logger.info(table_str)
-    line_end = '\n' if params.scrolling_output else '\r'
-    print(table_str, end=line_end)
+    first_newline = '\n' if params.scrolling_output else '\r'
+    print(first_newline + table_str, end='')
 
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
@@ -1688,16 +1673,16 @@ class EvaluationSet:
         parts = find_parts_to_check(constraint, design, domains_new)
 
         # measure violations of constraints and collect in list of triples (part, score, summary)
-        violating_parts_scores_summaries: List[Tuple[DesignPart, float, str]] = []
+        results: List[nc.Result] = []
         if isinstance(constraint, SingularConstraint):
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
                 for part in parts:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                    score, summary = constraint.call_evaluate(seqs, part)
-                    violating_parts_scores_summaries.append((part, score, summary))
-                    if score > 0.0:
+                    result = constraint.call_evaluate(seqs, part)
+                    results.append(result)
+                    if result.score > 0.0:
                         if score_gap is not None:
-                            score_gap -= score
+                            score_gap -= result.score
                             if _is_significantly_greater(0.0, score_gap):
                                 break
             else:
@@ -1705,14 +1690,14 @@ class EvaluationSet:
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
-                violating_parts_scores_summaries = constraint.call_evaluate_design(design, domains_new)
+                results = constraint.call_evaluate_design(design, domains_new)
             else:
                 # XXX: I don't understand the mypy error on the next line
-                violating_parts_scores_summaries = constraint.call_evaluate_bulk(parts)  # type: ignore
+                results = constraint.call_evaluate_bulk(parts)  # type: ignore
 
             # we can't quit this function early,
             # but we can let the caller know to stop evaluating constraints
-            total_score = sum(score for _, score, _ in violating_parts_scores_summaries)
+            total_score = sum(result.score for result in results)
             if score_gap is not None:
                 score_gap -= total_score
         else:
@@ -1730,17 +1715,18 @@ class EvaluationSet:
             domain_to_evals = self.domain_to_evaluations_new
             domain_to_viols = self.domain_to_violations_new
 
-        for part, score, summary in violating_parts_scores_summaries:
-            domains = _independent_domains_in_part(part, exclude_fixed=False)
-            evaluation = Evaluation(constraint=constraint, part=part, domains=domains,
-                                    score=score, summary=summary, violated=score > 0)
+        for result in results:
+            domains = _independent_domains_in_part(result.part, exclude_fixed=False)
+            evaluation = Evaluation(constraint=constraint, part=result.part, domains=domains,
+                                    score=result.score, summary=result.summary, violated=result.score > 0,
+                                    result=result)
 
-            evals_of_constraint[part] = evaluation
+            evals_of_constraint[result.part] = evaluation
             for domain in domains:
                 domain_to_evals[domain].append(evaluation)
 
             if evaluation.violated:
-                viols_of_constraint[part] = evaluation
+                viols_of_constraint[result.part] = evaluation
                 for domain in domains:
                     domain_to_viols[domain].append(evaluation)
 
@@ -1901,7 +1887,7 @@ def _assert_violations_are_accurate(evaluations: Dict[Constraint, Dict[nc.Part, 
             assert not ev.violated
 
 
-@dataclass(frozen=True)
+@dataclass
 class Evaluation(Generic[DesignPart]):
     # Represents a violation of a single :any:`Constraint` in a :any:`Design`.
     # The "part" of the :any:`Design` that was evaluated for the constraint is generic type `DesignPart`
@@ -1923,8 +1909,10 @@ class Evaluation(Generic[DesignPart]):
 
     score: float
 
+    result: nc.Result
+
     def __init__(self, constraint: Constraint, violated: bool, part: DesignPart, domains: Iterable[Domain],
-                 score: float, summary: str) -> None:
+                 score: float, summary: str, result: nc.Result) -> None:
         # :param constraint:
         #     :any:`Constraint` that was violated to result in this
         # :param domains:
@@ -1932,13 +1920,22 @@ class Evaluation(Generic[DesignPart]):
         # :param score:
         #     total "score" of this violation, typically something like an excess energy over a
         #     threshold, squared, multiplied by the :data:`Constraint.weight`
-        object.__setattr__(self, 'constraint', constraint)
-        object.__setattr__(self, 'violated', violated)
-        object.__setattr__(self, 'part', part)
-        domains_frozen = frozenset(domains)
-        object.__setattr__(self, 'domains', domains_frozen)
-        object.__setattr__(self, 'score', score)
-        object.__setattr__(self, 'summary', summary)
+        self.constraint = constraint
+        self.violated = violated
+        self.part = part
+        self.domains = frozenset(domains)
+        self.score = score
+        self.summary = summary
+        self.result = result
+
+        # object.__setattr__(self, 'constraint', constraint)
+        # object.__setattr__(self, 'violated', violated)
+        # object.__setattr__(self, 'part', part)
+        # domains_frozen = frozenset(domains)
+        # object.__setattr__(self, 'domains', domains_frozen)
+        # object.__setattr__(self, 'score', score)
+        # object.__setattr__(self, 'summary', summary)
+        # object.__setattr__(self, 'result', result)
 
     def __repr__(self) -> str:
         return f'Evaluation({self.constraint.short_description}, score={self.score:.2f}, ' \
@@ -1959,13 +1956,106 @@ class Evaluation(Generic[DesignPart]):
 ####################################################################################
 # report generating functions
 
+
+def create_constraints_report(design: nc.Design, constraints: Iterable[Constraint],
+                              report_only_violations: bool = False,
+                              include_only_with_values: bool = False) -> ConstraintsReport:
+    """
+    Returns :any:`ConstraintsReport`, where its :data:`ConstraintsReport.reports` field has one
+    :any:`ConstraintReport` for each :any:`Constraint` in `constraints`,
+    indicating how well `design` does according to `constraints`, assuming
+    `design` has sequences assigned to it, for example, if it was read using
+    :meth:`constraints.Design.from_design_file`
+    from a design.json file written as part of a call to :meth:`search_for_dna_sequences`.
+
+    The report contains the same information as written in the return value of
+    :meth:`summary_of_constraints`, but in a more structred format using :any:`ConstraintReport` objects
+    rather than just text. (:meth:`summary_of_constraints` calls the method :meth:`ConstraintReport.content`
+    on each :any:`ConstraintReport` object).
+
+    :param design:
+        the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
+    :param constraints:
+        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param report_only_violations:
+        if True, lists only violations of constraints
+    :param include_only_with_values:
+        if True, lists only violations of constraints
+    :return:
+        :any:`ConstraintsReport` describing a report of how well `design` does
+        according to `constraints`
+    """
+    eval_set = EvaluationSet(constraints, False)
+    eval_set.evaluate_all(design)
+
+    reports = [ConstraintReport(constraint, eval_set, report_only_violations) for constraint in constraints]
+
+    constraints_report = ConstraintsReport(reports=reports,
+                                           total_score=eval_set.total_score,
+                                           total_score_fixed=eval_set.total_score_fixed,
+                                           total_score_nonfixed=eval_set.total_score_nonfixed,
+                                           num_evaluations=eval_set.num_evaluations,
+                                           num_violations=eval_set.num_violations,
+                                           )
+    if include_only_with_values:
+        constraints_report.filter_no_values()
+
+    return constraints_report
+
+
+def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
+                       report_only_violations: bool = False) -> str:
+    """
+    Returns text string containing report of how well `design` does according to `constraints`, assuming
+    `design` has sequences assigned to it, for example, if it was read using
+    :meth:`constraints.Design.from_design_file`
+    from a design.json file written as part of a call to :meth:`search_for_dna_sequences`.
+
+    The report is the same format as written to the reports generated when calling
+    :meth:`search_for_dna_sequences`.
+
+    :param design:
+        the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
+    :param constraints:
+        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param report_only_violations:
+        if True, lists only violations of constraints
+    :return:
+        string describing a report of how well `design` does according to `constraints`
+    """
+    constraints_report = create_constraints_report(design, constraints, report_only_violations)
+
+    summaries = [report.content() for report in constraints_report.reports]
+
+    score = constraints_report.total_score
+    score_unfixed = constraints_report.total_score_nonfixed
+    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
+
+    summary = (f'total evaluations: {constraints_report.num_evaluations}\n'
+               f'total violations: {constraints_report.num_violations}\n'
+               + score_total_summary + '\n'
+               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+               + '\n\n'.join(summaries))
+
+    return f'''\
+Report on constraints
+=====================
+''' + summary
+
+
+# does essentially the same thing as create_text_report, but is used internally in the search
+# assuming we already have an evaluation set with constraints evaluated; maybe there's an elegant
+# way to share code, but currently ConstraintsReport does not contain the EvaluationSet that is
+# used to populate it.
 def summary_of_constraints(constraints: Iterable[Constraint], report_only_violations: bool,
                            eval_set: EvaluationSet) -> str:
     summaries: List[str] = []
 
     # other constraints
     for constraint in constraints:
-        summary = summary_of_constraint(constraint, report_only_violations, eval_set)
+        report = ConstraintReport(constraint, eval_set, report_only_violations)
+        summary = report.content()
         summaries.append(summary)
 
     score = eval_set.total_score
@@ -1977,12 +2067,208 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
                f'total violations: {eval_set.num_violations}\n'
                + score_total_summary + '\n'
                + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
-               + '\n'.join(summaries))
+               + '\n\n'.join(summaries))
 
     return f'''\
 Report on constraints
 =====================
 ''' + summary
+
+
+@dataclass
+class DisplayOptions:
+    """
+    Options for displaying graphical report in form of histogram of :data:`Report.value` for each
+    constraint evaluation.
+    """
+
+    bins: int = 10
+    """Number of bins for histogram in report."""
+
+
+def _value_from_constraint_dict(dct: Union[V, Dict[Union[str, Constraint], V]],
+                                constraint: Constraint, default_value: V, klass: type) -> V:
+    # if dct is of type the value we want to return, just return it
+    if isinstance(dct, klass):
+        return dct
+
+    # otherwise look up value in dictionary
+    assert isinstance(dct, dict)
+    value = default_value
+    if constraint in dct:
+        value = dct[constraint]
+    elif constraint.short_description in dct:
+        value = dct[constraint.short_description]
+    elif constraint.description in dct:
+        value = dct[constraint.description]
+    return value
+
+
+_default_num_bins = 10
+
+
+def display_report(design: nc.Design, constraints: Iterable[Constraint],
+                   report_only_violations: bool = False,
+                   layout: Literal['horz', 'vert'] = 'vert',
+                   xlims: Union[Optional[Tuple[float, float]],
+                                Dict[Union[str, Constraint], Optional[Tuple[float, float]]]] = None,
+                   yscale: Literal['log', 'linear', 'symlog'] = 'linear',
+                   bins: Union[int, Dict[Union[str, Constraint], int]] = _default_num_bins) -> None:
+    """
+    When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
+    :meth:`create_report`) and displays its data graphically in the notebook using matplotlib.
+
+    :param design:
+        the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
+    :param constraints:
+        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param report_only_violations:
+        if True, lists only violations of constraints
+    :param layout:
+        layout of plots. If 'horz', they will be laid out horizontally, which is smaller if you have several
+        constraints, but might make it more useful for compare results of different choices of sequences
+        if you call :meth:`display_report` repeatedly for different sequences
+    :param xlims:
+        If specified, is either a single pair of floats to use as the argument to matplotlib.pyplot.xlim:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.xlim.html
+        or to specify different xlim values for different constraints, can be a
+        dict mapping :any:`Constraint` (or for conveience, string in the fields
+        :data:`Constraint.short_description` or :data:`Constraint.description`) to an xlim pair of floats.
+    :param yscale:
+        same as argument `value` to matplotlib.pyplot.yscale:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html
+    :param bins:
+        same as argument `bins` to matplotlib.pyplot.hist:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html
+        Can either be a single int to apply to all charts, or a dict mapping a constraint to an int,
+        with the same rules as `xlims`
+    """
+    import matplotlib.pyplot as plt
+
+    if xlims is None:
+        xlims = {}
+
+    assert layout in ['horz', 'vert']
+    constraints_report = create_constraints_report(design, constraints, report_only_violations,
+                                                   include_only_with_values=True)
+
+    num_figs = len(constraints_report.reports)
+
+    for i, report in enumerate(constraints_report.reports):
+        quantities = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
+        if len(quantities) == 0:
+            # print(f'skipping constraint "{report.constraint.description}" since its evaluations have no values')
+            continue
+
+        # convert pint.Quantity to unitless magnitude to avoid UnitStrippedWarning when calling py.hist
+        values = [q.magnitude for q in quantities]
+
+        if layout == 'horz':
+            plt.subplot(1, num_figs, i + 1)
+        weights = np.ones(len(values)) / len(values) if yscale == 'linear' else None
+        # the histogram of the data
+        # weights is to display as percentage: https://stackoverflow.com/a/51477080
+
+        num_bins = _value_from_constraint_dict(bins, report.constraint, _default_num_bins, int)
+        _, __, ___ = plt.hist(values, num_bins, density=True, facecolor='g', alpha=0.75, weights=weights, )
+
+        plt.yscale(yscale)
+        if yscale == 'linear':
+            from matplotlib.ticker import PercentFormatter
+            plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
+
+        # see if user set custom x limits for this constraint
+        # not sure why getting mypy error on next line
+        xlim = _value_from_constraint_dict(xlims, report.constraint, None, tuple)  # type:ignore
+        if xlim != (-1, -1):
+            plt.xlim(xlim)
+
+        # label x-axis with units (e.g., kilocalorie / mole)
+        unit = str(quantities[0].units)
+        plt.xlabel(unit)
+
+        plt.title(report.constraint.description)
+
+        if layout == 'vert':
+            plt.show()
+
+    if layout == 'horz':
+        plt.tight_layout(rect=(0, 0, max(1, num_figs), 1))
+        plt.show()
+
+
+@dataclass
+class ConstraintsReport:
+    "Represents a report on how well a design did on all constraints."
+
+    reports: List[ConstraintReport]
+    """Has one :any:`ConstraintReport` per :any:`Constraint` evaluated."""
+
+    num_evaluations: int
+    """Total number of evaluations of all :any:`Constraint`'s."""
+
+    num_violations: int
+    """Total number of evaluations of all :any:`Constraint`'s that were violated."""
+
+    total_score: float
+    """
+    Total "score" of evaluations of all :any:`Constraint`'s (the score is what the search done by 
+    :meth:`search_for_dna_sequences` is trying to minimize).
+    """
+
+    total_score_nonfixed: float
+    """
+    Total "score" of evaluations of all :any:`Constraint`'s that are not "fixed".
+    
+    It should obey
+    :data:`ConstraintsReport.total_score` == :data:`ConstraintsReport.total_score_nonfixed` + 
+    :data:`ConstraintsReport.total_score_fixed`
+    """
+
+    total_score_fixed: float
+    """
+    Total "score" of evaluations of all :any:`Constraint`'s that are "fixed", meaning that 
+    all domains involved in the evaluation of the constraint have :data:`Domain.fixed` == True,
+    so the search will not change the sequences of those domains (so it is not possible to satisfy 
+    the constraint for that evaluation).
+    
+    It should obey
+    :data:`ConstraintsReport.total_score` == :data:`ConstraintsReport.total_score_nonfixed` + 
+    :data:`ConstraintsReport.total_score_fixed`
+    """
+
+    def filter_no_values(self) -> None:
+        """
+        Removes any reports on constraints that have no values. This is useful for plotting numeric
+        constraints without having non-numeric constraints (such "domains_not_substrings") in the way.
+        """
+        reports_with_values = []
+        score_removed = 0
+        score_nonfixed_removed = 0
+        score_fixed_removed = 0
+        num_evals_removed = 0
+        num_viols_removed = 0
+        for report in self.reports:
+            if has_values(report):
+                reports_with_values.append(report)
+            else:
+                score_removed += report.score
+                score_nonfixed_removed += report.score_nonfixed
+                score_fixed_removed += report.score_fixed
+                num_evals_removed += report.num_evaluations
+                num_viols_removed += report.num_violations
+
+        self.reports = reports_with_values
+        self.total_score -= score_removed
+        self.total_score_nonfixed -= score_nonfixed_removed
+        self.total_score_fixed -= score_fixed_removed
+
+
+def has_values(report: ConstraintReport) -> bool:
+    for ev in report.evaluations:
+        if ev.result.value is not None:
+            return True
+    return False
 
 
 @dataclass
@@ -1996,11 +2282,6 @@ class ConstraintReport(Generic[DesignPart]):
     The :any:`Constraint` to report on. This can be None if the :any:`Constraint` object is not available
     at the time the :meth:`Constraint.generate_summary` function is defined. If so it will be
     automatically inserted by the report generating code."""
-
-    content: str
-    """
-    Summary of constraint information on the :any:`Design`.
-    """
 
     num_violations: int
     """
@@ -2034,6 +2315,7 @@ class ConstraintReport(Generic[DesignPart]):
                                        DesignConstraint)):
             raise NotImplementedError(f'unrecognized type {type(constraint)}')
 
+        self.constraint = constraint
         self.report_only_violations = report_only_violations
         self.evaluations = evaluation_set.evaluations_of_constraint(constraint,
                                                                     violations=report_only_violations)
@@ -2049,19 +2331,18 @@ class ConstraintReport(Generic[DesignPart]):
                                                                                 report_only_violations)
 
     def header(self) -> str:
-
         if self.score != self.score_nonfixed:
             summary_score_unfixed = f'\n* unfixed score of violations: {self.score_nonfixed:.2f}'
         else:
             summary_score_unfixed = None
 
         summary_unfixed_content = "" if summary_score_unfixed is None else summary_score_unfixed
-        summary = f'''
-        **{"*" * len(self.constraint.description)}
-        * {self.constraint.description}
-        * evaluations: {self.num_evaluations}
-        * violations:  {self.num_violations}
-        * score of violations: {self.score:.2f}{summary_unfixed_content}'''
+        summary = f'''\
+**{"*" * len(self.constraint.description)}
+* {self.constraint.description}
+* evaluations: {self.num_evaluations}
+* violations:  {self.num_violations}
+* score of violations: {self.score:.2f}{summary_unfixed_content}'''
 
         return summary
 
@@ -2103,150 +2384,10 @@ class ConstraintReport(Generic[DesignPart]):
         return '\n'.join(summaries)
 
     def content(self) -> str:
+        header = self.header()
         content_no_header = self.content_no_header()
         indented_content = textwrap.indent(content_no_header, '  ')
-        return content_no_header + '\n' + indented_content
-
-
-def report_on_constraint(constraint: Constraint[DesignPart], report_only_violations: bool,
-                         evaluation_set: EvaluationSet) -> ConstraintReport[DesignPart]:
-    if isinstance(constraint, DesignConstraint):
-        raise NotImplementedError()
-    if isinstance(constraint, (DomainConstraint, StrandConstraint,
-                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
-                               DomainsConstraint, StrandsConstraint,
-                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
-        summaries = []
-        num_evaluations = evaluation_set.num_evaluations_of(constraint)
-        num_violations = evaluation_set.num_violations_of(constraint)
-        num_violations_counted = 0
-        part_type_name = constraint.part_name()
-
-        evals_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint, report_only_violations)
-        evals_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint, report_only_violations)
-
-        some_fixed_evals = len(evals_fixed) > 0
-
-        for evals, header_name in [(evals_nonfixed, f"unfixed {part_type_name}s"),
-                                   (evals_fixed, f"fixed {part_type_name}s")]:
-            if len(evals) == 0:
-                continue
-
-            max_part_name_length = max(len(violation.part.name) for violation in evals)
-            num_violations_counted += len(evals)
-
-            lines_and_scores: List[Tuple[str, float]] = []
-            for ev in evals:
-                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
-                       f'{ev.summary};  score: {ev.score:.2f}'
-                lines_and_scores.append((line, ev.score))
-
-            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
-
-            lines = (line for line, _ in lines_and_scores)
-            content = '\n'.join(lines)
-
-            # only put header to distinguish fixed from unfixed violations if there are some fixed
-            full_header = _small_header(header_name, "=") if some_fixed_evals else ''
-            summary = full_header + f'\n{content}\n'
-            summaries.append(summary)
-
-        if report_only_violations and num_violations_counted != num_violations:
-            assert num_violations_counted == num_violations
-
-        content = ''.join(summaries)
-        report = ConstraintReport[DesignPart](constraint=constraint, content=content,
-                                              num_violations=num_violations, num_evaluations=num_evaluations,
-                                              evaluations=list(evaluation_set.evaluations.values()))
-
-    else:
-        content = f'unrecognized type {type(constraint)}'
-        raise NotImplementedError(content)
-        # report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_evaluations=0)
-
-    summary = add_header_to_content_of_summary(report, evaluation_set)
-    return summary
-
-
-def summary_of_constraint(constraint: Constraint, report_only_violations: bool,
-                          evaluation_set: EvaluationSet) -> str:
-    if isinstance(constraint, (DomainConstraint, StrandConstraint,
-                               DomainPairConstraint, StrandPairConstraint, ComplexConstraint,
-                               DomainsConstraint, StrandsConstraint,
-                               DomainPairsConstraint, StrandPairsConstraint, ComplexesConstraint)):
-        summaries = []
-        num_evals = evaluation_set.num_evaluations_of(constraint)
-        num_viols = evaluation_set.num_violations_of(constraint)
-        num_violations = 0
-        part_type_name = constraint.part_name()
-
-        evals_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint, report_only_violations)
-        evals_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint, report_only_violations)
-
-        some_fixed_evals = len(evals_fixed) > 0
-
-        for evals, header_name in [(evals_nonfixed, f"unfixed {part_type_name}s"),
-                                   (evals_fixed, f"fixed {part_type_name}s")]:
-            if len(evals) == 0:
-                continue
-
-            max_part_name_length = max(len(violation.part.name) for violation in evals)
-            num_violations += len(evals)
-
-            lines_and_scores: List[Tuple[str, float]] = []
-            for ev in evals:
-                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
-                       f'{ev.summary};  score: {ev.score:.2f}'
-                lines_and_scores.append((line, ev.score))
-
-            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
-
-            lines = (line for line, _ in lines_and_scores)
-            content = '\n'.join(lines)
-
-            # only put header to distinguish fixed from unfixed violations if there are some fixed
-            full_header = _small_header(header_name, "=") if some_fixed_evals else ''
-            summary = full_header + f'\n{content}\n'
-            summaries.append(summary)
-
-        if report_only_violations and num_violations != num_viols:
-            assert num_violations == num_viols
-
-        content = ''.join(summaries)
-        report = ConstraintReport(constraint=constraint, content=content,
-                                  num_violations=num_viols, num_evaluations=num_evals)
-
-    elif isinstance(constraint, DesignConstraint):
-        raise NotImplementedError()
-    else:
-        content = f'skipping summary of constraint {constraint.description}; ' \
-                  f'unrecognized type {type(constraint)}'
-        report = ConstraintReport(constraint=constraint, content=content, num_violations=0, num_evaluations=0)
-
-    summary = add_header_to_content_of_summary(report, evaluation_set)
-    return summary
-
-
-def add_header_to_content_of_summary(report: ConstraintReport, eval_set: EvaluationSet) -> str:
-    score = eval_set.score_of_constraint(report.constraint, True)
-    score_unfixed = eval_set.score_of_constraint_nonfixed(report.constraint, True)
-
-    if score != score_unfixed:
-        summary_score_unfixed = f'\n* unfixed score of violations: {score_unfixed:.2f}'
-    else:
-        summary_score_unfixed = None
-
-    indented_content = textwrap.indent(report.content, '  ')
-
-    summary = f'''
-**{"*" * len(report.constraint.description)}
-* {report.constraint.description}
-* evaluations: {report.num_evaluations}
-* violations:  {report.num_violations}
-* score of violations: {score:.2f}{"" if summary_score_unfixed is None else summary_score_unfixed}
-{indented_content}'''
-
-    return summary
+        return header + '\n' + indented_content
 
 
 def _small_header(header: str, delim: str) -> str:
