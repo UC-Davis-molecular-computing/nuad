@@ -4265,6 +4265,7 @@ def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Q
     is "compact" if specified (uses units within the correct "3 orders of magnitude":
     https://pint.readthedocs.io/en/0.18/tutorial.html#simplifying-units)
     and eliminate trailing zeros.
+
     :param quantity:
         a pint Quantity[Decimal]
     :param compact:
@@ -4308,7 +4309,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     Thus, if the :any:`Constraint` needs to use more data about the :any:`Part` than just its DNA sequence, 
     by accessing the second argument, :data:`Constraint.parallel` should be set to False.
     
-    It should return a :any:`Report` object.
+    It should return a :any:`Result` object.
     """
 
     parallel: bool = False
