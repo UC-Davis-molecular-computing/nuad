@@ -121,7 +121,7 @@ def main() -> None:
         threshold=-7.0, temperature=52, short_description='StrandPairCompl',
         pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
     )
-    strand_individual_ss_constraint = nc.nupack_strand_complex_free_energy_constraint(
+    strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='StrandSS')
 
     params = ns.SearchParameters(
