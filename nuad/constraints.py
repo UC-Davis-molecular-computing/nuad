@@ -4744,7 +4744,7 @@ def nupack_domain_complex_free_energy_constraint(
 
     def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Result:
         sequence = seqs[0]
-        energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
+        energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
         value = f'{energy:6.2f} kcal/mol'
         return Result(excess=excess, value=value)
@@ -4813,7 +4813,7 @@ def nupack_strand_free_energy_constraint(
 
     def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Result:
         sequence = seqs[0]
-        energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
+        energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
         value = f'{energy:6.2f} kcal/mol'
         return Result(excess=excess, value=value)
@@ -4932,7 +4932,7 @@ def nupack_domain_pair_constraint(
 
         max_excess = max(excesses)
 
-        max_name_length = max(len(name) for name in _flatten(name_pairs))
+        max_name_length = max(len(name) for name in flatten(name_pairs))
         lines_and_energies = [(f'{name1:{max_name_length}}, '
                                f'{name2:{max_name_length}}: '
                                f' {energy:6.2f} kcal/mol', energy)
@@ -5601,22 +5601,18 @@ def rna_duplex_strand_pairs_constraint(
     if description is None:
         description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
-    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
+    num_cores = max(cpu_count(), 1)
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_threads)
+    thread_pool = ThreadPool(processes=num_cores)
 
-    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        return nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if parallel and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+        if parallel:
+            energies = nv.rna_duplex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
+                                                       parameters_filename)
         else:
-            energies = calculate_energies_unparallel(sequence_pairs)
+            energies = nv.rna_duplex_multiple(seq_pairs, logger, temperature, parameters_filename)
         return energies
 
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
@@ -5720,7 +5716,7 @@ def rna_cofold_strand_pairs_constraint(
         if parallel and len(sequence_pairs) > 1:
             lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
             lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
+            energies = flatten(lists_of_energies)
         else:
             energies = calculate_energies_unparallel(sequence_pairs)
         return energies
@@ -5782,9 +5778,9 @@ def _all_pairs_domain_sequences_complements_names_from_domains(
     return sequence_pairs, names, domains
 
 
-def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
+def flatten(list_of_lists: Iterable[Iterable[T]]) -> Tuple[T]:
     #  Flatten one level of nesting
-    return list(itertools.chain.from_iterable(list_of_lists))
+    return tuple(itertools.chain.from_iterable(list_of_lists))
 
 
 #########################################################################################

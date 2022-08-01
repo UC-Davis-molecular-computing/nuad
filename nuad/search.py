@@ -88,8 +88,8 @@ def default_output_directory() -> str:
 # This function takes a lot of time if we don't cache results; but there's not too many different
 # combinations of inputs so it's worth it to maintain a cache.
 @lru_cache()
-def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
-                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[DesignPart]:
+def find_parts_to_check(constraint: nc.Constraint[DesignPart], design: nc.Design,
+                        domains_changed: Optional[Tuple[Domain]]) -> Tuple[DesignPart, ...]:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -102,7 +102,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
-    parts_to_check: Sequence[DesignPart]
+    parts_to_check: Tuple[DesignPart, ...]
     if isinstance(constraint, ConstraintWithDomains):
         parts_to_check = _determine_domains_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrands):
@@ -114,7 +114,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     elif isinstance(constraint, ConstraintWithComplexes):
         parts_to_check = _determine_complexes_to_check(domains_changed, constraint)
     elif isinstance(constraint, nc.DesignConstraint):
-        parts_to_check = []  # not used when checking DesignConstraint
+        parts_to_check = tuple()  # not used when checking DesignConstraint
     else:
         raise AssertionError('should be unreachable; type of constraint not recognized:\n'
                              f'type(constraint) = {type(constraint)}\n'
@@ -148,7 +148,7 @@ def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
 
 def _determine_domains_to_check(design: Design,
                                 domains_changed: Optional[Tuple[Domain]],
-                                constraint: ConstraintWithDomains) -> Sequence[Domain]:
+                                constraint: ConstraintWithDomains) -> Tuple[Domain, ...]:
     """
     Determines domains to check in `all_domains`.
     If `domains_new` is None, then this is all that are not fixed if constraint.domains
@@ -157,20 +157,20 @@ def _determine_domains_to_check(design: Design,
     it is just those in `domains_new` that appear in `all_domains`.
     """
     # either all pairs, or just constraint.pairs if specified
-    domains_to_check_if_domain_changed_none = design.domains \
+    domains_to_check_if_domain_changed_none = tuple(design.domains) \
         if constraint.domains is None else constraint.domains
 
     # filter out those not containing domain_change if specified
-    domains_to_check = list(domains_to_check_if_domain_changed_none) if domains_changed is None \
-        else [domain for domain in domains_to_check_if_domain_changed_none
-              if domain in domains_changed]
+    domains_to_check = tuple(domains_to_check_if_domain_changed_none) if domains_changed is None \
+        else tuple(domain for domain in domains_to_check_if_domain_changed_none
+                   if domain in domains_changed)
 
     return domains_to_check
 
 
 def _determine_strands_to_check(design: Design,
                                 domains_changed: Optional[Tuple[Domain]],
-                                constraint: ConstraintWithStrands) -> Sequence[Strand]:
+                                constraint: ConstraintWithStrands) -> Tuple[Strand, ...]:
     """
     Similar to _determine_domains_to_check but for strands.
     """
@@ -189,7 +189,7 @@ def _determine_strands_to_check(design: Design,
                     strands_to_check.append(strand)
                     break
 
-    return strands_to_check
+    return tuple(strands_to_check)
 
 
 def _determine_domain_pairs_to_check(design: Design,
@@ -1659,6 +1659,37 @@ class EvaluationSet:
                 score_gap += ev.score
         return score_gap
 
+    @staticmethod
+    def evaluate_singular_constraint_parallel(constraint: SingularConstraint[DesignPart],
+                                              parts: Tuple[nc.DesignPart, ...],
+                                              score_gap: float) \
+            -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
+        if len(parts) == 0:
+            return tuple()
+
+        num_cpus = nc.cpu_count()
+
+        parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
+
+        def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
+            partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
+            for part in partz:
+                seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
+                score, summary = constraint.call_evaluate(seqs, part)
+                partz_scores_summaries.append((part, score, summary))
+            return partz_scores_summaries
+
+        global _process_pool
+        if _process_pool is None:
+            _process_pool = new_process_pool(num_cpus)
+
+        lists_of_violating_parts_scores_summaries = _process_pool.map(call_evaluate_sequential, parts_chunks)
+        parts_scores_summaries = [elt
+                                  for elts in lists_of_violating_parts_scores_summaries
+                                  for elt in elts]
+
+        return parts_scores_summaries, score_gap
+
     def evaluate_constraint(self,
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
@@ -1667,8 +1698,8 @@ class EvaluationSet:
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
-        assert ((score_gap is None and domains_new is None) or
-                (score_gap is not None and domains_new is not None))
+        if score_gap is not None:
+            assert domains_new is not None  # ensure we are only using score gap when doing new evaluation
 
         parts = find_parts_to_check(constraint, design, domains_new)
 
@@ -1686,7 +1717,8 @@ class EvaluationSet:
                             if _is_significantly_greater(0.0, score_gap):
                                 break
             else:
-                raise NotImplementedError('TODO: implement parallelization')
+                violating_parts_scores_summaries, score_gap = \
+                    EvaluationSet.evaluate_singular_constraint_parallel(constraint, parts, score_gap)
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
@@ -2199,7 +2231,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
 
 @dataclass
 class ConstraintsReport:
-    "Represents a report on how well a design did on all constraints."
+    """Represents a report on how well a design did on all constraints."""
 
     reports: List[ConstraintReport]
     """Has one :any:`ConstraintReport` per :any:`Constraint` evaluated."""
