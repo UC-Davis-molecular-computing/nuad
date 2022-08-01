@@ -164,7 +164,7 @@ def main() -> None:
         # save_design_for_all_updates=True,
         force_overwrite=True,
         # log_time=True,
-        scrolling_output=False,
+        # scrolling_output=False,
         # report_only_violations=False,
     )
     ns.search_for_dna_sequences(design, params)

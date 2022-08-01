@@ -1318,7 +1318,10 @@ def _log_constraint_summary(*, params: SearchParameters,
         row1 = ['iteration', 'update', 'opt score', 'new score'] + [f'{constraint.short_description}'
                                                                     for constraint in params.constraints]
         header = tabulate([row1], tablefmt='github')
+        if params.scrolling_output and iteration > 0:
+            print()
         print(header)
+
 
     def _dec(score_: float) -> int:
         # how many decimals after decimal point to use given the score
@@ -1360,7 +1363,7 @@ def _log_constraint_summary(*, params: SearchParameters,
     table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
     table_str = _remove_first_lines_from_string(table_str, 2)
     # logger.info(table_str)
-    first_newline = '\n' if params.scrolling_output else '\r'
+    first_newline = '' if params.scrolling_output else '\r'
     print(first_newline + table_str, end='')
 
 
