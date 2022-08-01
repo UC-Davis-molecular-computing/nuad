@@ -20,7 +20,7 @@ import logging
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, Sequence, FrozenSet, Optional, Dict, Callable, Iterable, \
+from typing import List, Tuple, FrozenSet, Optional, Dict, Callable, Iterable, \
     Deque, TypeVar, Union, Generic, Iterator, Any
 import statistics
 import textwrap
