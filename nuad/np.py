@@ -12,7 +12,7 @@ Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
 
 from __future__ import annotations
 
-from typing import Tuple, List, Collection, Optional, Union, Sequence, Dict, Iterable
+from typing import Tuple, List, Collection, Sequence, Dict, Iterable
 from dataclasses import dataclass
 import math
 import itertools as it
@@ -36,7 +36,7 @@ def idx2seq(idx: int, length: int) -> str:
     return ''.join(seq)
 
 
-def seq2arr(seq: str, base2bits_local: Optional[Dict[str, int]] = None) -> np.ndarray:
+def seq2arr(seq: str, base2bits_local: Dict[str, int] | None = None) -> np.ndarray:
     """Convert seq (string with DNA alphabet) to numpy array with integers 0,1,2,3."""
     if base2bits_local is None:
         base2bits_local = base2bits
@@ -395,18 +395,16 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
 
 # https://stackoverflow.com/a/59328647/5339430
-def random_choice_noreplace(l: np.ndarray, n_sample: int, num_draw: int,
+def random_choice_noreplace(lst: np.ndarray, n_sample: int, num_draw: int,
                             rng: np.random.Generator) -> np.ndarray:
-    '''
-    l: 1-D array or list
-    n_sample: sample size for each draw
-    num_draw: number of draws
+    # lst: 1-D array or list
+    # n_sample: sample size for each draw
+    # num_draw: number of draws
 
-    Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
-    '''
-    l = np.array(l)
-    random_array_floats = rng.random((num_draw, len(l)))
-    return l[np.argpartition(random_array_floats, n_sample - 1, axis=-1)[:, :n_sample]]
+    # Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
+    lst = np.array(lst)
+    random_array_floats = rng.random((num_draw, len(lst)))
+    return lst[np.argpartition(random_array_floats, n_sample - 1, axis=-1)[:, :n_sample]]
 
 
 # @lru_cache(maxsize=10000000)
@@ -673,15 +671,15 @@ class DNASeqList:
     """Random number generator to use."""
 
     def __init__(self,
-                 length: Optional[int] = None,
-                 num_random_seqs: Optional[int] = None,
+                 length: int | None = None,
+                 num_random_seqs: int | None = None,
                  shuffle: bool = False,
                  alphabet: Collection[str] = ('A', 'C', 'G', 'T'),
-                 seqs: Optional[Sequence[str]] = None,
+                 seqs: Sequence[str] | None = None,
                  seqarr: np.ndarray = None,
-                 filename: Optional[str] = None,
+                 filename: str | None = None,
                  rng: np.random.Generator = default_rng,
-                 hamming_distance_from_sequence: Optional[Tuple[int, str]] = None):
+                 hamming_distance_from_sequence: Tuple[int, str] | None = None):
         """
         Creates a set of DNA sequences, all of the same length.
 
@@ -784,6 +782,8 @@ class DNASeqList:
 
         :param num:
             number of sequences to sample
+        :param rng:
+            random number generator to use
         :param replace:
             whether to sample with replacement
         :return:
@@ -889,7 +889,7 @@ class DNASeqList:
         self.seqarr = self.seqarr[indices]
         self._update_size()
 
-    def __getitem__(self, slice_: Union[int, slice]) -> Union[str, List[str]]:
+    def __getitem__(self, slice_: int | slice) -> str | List[str]:
         if isinstance(slice_, int):
             return self.get_seq_str(slice_)
         elif isinstance(slice_, slice):
@@ -953,7 +953,7 @@ class DNASeqList:
         # print(f'times in each iteration: {times}')
         return distance_map
 
-    def sublist(self, start: int, end: Optional[int] = None) -> DNASeqList:
+    def sublist(self, start: int, end: int | None = None) -> DNASeqList:
         """Return sublist of DNASeqList from `start`, inclusive, to `end`, exclusive.
 
         If `end` is not specified, goes until the end of the list."""
@@ -1091,7 +1091,7 @@ class DNASeqList:
         """Removes any sticky ends with 4 G's or C's in a row (a quadruplex)."""
         return self.filter_substring(['GGGG', 'CCCC'])
 
-    def index(self, sequence: Union[str, np.ndarray]) -> int:
+    def index(self, sequence: str | np.ndarray) -> int:
         # finds index of sequence in (rows of) self.seqarr
         # raises IndexError if not present
         # taken from https://stackoverflow.com/questions/40382384/finding-a-matching-row-in-a-numpy-matrix
@@ -1104,7 +1104,7 @@ class DNASeqList:
         return int(first_index)
 
 
-def create_toeplitz(seqlen: int, sublen: int, indices: Optional[Sequence[int]] = None) -> np.ndarray:
+def create_toeplitz(seqlen: int, sublen: int, indices: Sequence[int] | None = None) -> np.ndarray:
     """Creates a toeplitz matrix, useful for finding subsequences.
 
     `seqlen` is length of larger sequence; `sublen` is length of substring we're checking for.
@@ -1223,7 +1223,7 @@ def hash_ndarray(arr: np.ndarray) -> int:
 
 
 CACHE_WC = False
-_calculate_wc_energies_cache: Optional[np.ndarray] = None
+_calculate_wc_energies_cache: np.ndarray | None = None
 _calculate_wc_energies_cache_hash: int = 0
 
 
@@ -1254,7 +1254,7 @@ def wc_arr(seqarr: np.ndarray) -> np.ndarray:
 
 def prefilter_length_10_11(low_dg: float, high_dg: float, temperature: float, end_gc: bool,
                            convert_to_list: bool = True) \
-        -> Union[Tuple[List[str], List[str]], Tuple[DNASeqList, DNASeqList]]:
+        -> Tuple[List[str], List[str]] | Tuple[DNASeqList, DNASeqList]:
     """Return sequences of length 10 and 11 with wc energies between given values."""
     s10: DNASeqList = DNASeqList(length=10)
     s11: DNASeqList = DNASeqList(length=11)
