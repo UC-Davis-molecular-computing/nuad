@@ -9,7 +9,6 @@ The main functions are
 that is much faster than calling :meth:`pfunc` on the same pair of strands).
 """  # noqa
 
-import collections
 import math
 import itertools
 import os
@@ -19,7 +18,7 @@ import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
 from pathos.pools import ProcessPool
-from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
+from typing import Sequence, Union, Tuple, List, Optional, Iterable
 
 import numpy as np
 
