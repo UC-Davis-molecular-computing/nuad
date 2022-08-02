@@ -89,7 +89,7 @@ def default_output_directory() -> str:
 # combinations of inputs so it's worth it to maintain a cache.
 @lru_cache()
 def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
-                        domains_changed: Optional[Tuple[Domain]]) -> Sequence[DesignPart]:
+                        domains_changed: Optional[Tuple[Domain]]) -> Tuple[DesignPart]:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -102,7 +102,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
-    parts_to_check: Sequence[DesignPart]
+    parts_to_check: Tuple[DesignPart]
     if isinstance(constraint, ConstraintWithDomains):
         parts_to_check = _determine_domains_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrands):
@@ -114,7 +114,7 @@ def find_parts_to_check(constraint: nc.Constraint, design: nc.Design,
     elif isinstance(constraint, ConstraintWithComplexes):
         parts_to_check = _determine_complexes_to_check(domains_changed, constraint)
     elif isinstance(constraint, nc.DesignConstraint):
-        parts_to_check = []  # not used when checking DesignConstraint
+        parts_to_check = tuple()  # not used when checking DesignConstraint
     else:
         raise AssertionError('should be unreachable; type of constraint not recognized:\n'
                              f'type(constraint) = {type(constraint)}\n'
@@ -148,7 +148,7 @@ def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
 
 def _determine_domains_to_check(design: Design,
                                 domains_changed: Optional[Tuple[Domain]],
-                                constraint: ConstraintWithDomains) -> Sequence[Domain]:
+                                constraint: ConstraintWithDomains) -> Tuple[Domain]:
     """
     Determines domains to check in `all_domains`.
     If `domains_new` is None, then this is all that are not fixed if constraint.domains
@@ -161,16 +161,16 @@ def _determine_domains_to_check(design: Design,
         if constraint.domains is None else constraint.domains
 
     # filter out those not containing domain_change if specified
-    domains_to_check = list(domains_to_check_if_domain_changed_none) if domains_changed is None \
-        else [domain for domain in domains_to_check_if_domain_changed_none
-              if domain in domains_changed]
+    domains_to_check = tuple(domains_to_check_if_domain_changed_none) if domains_changed is None \
+        else tuple(domain for domain in domains_to_check_if_domain_changed_none
+                   if domain in domains_changed)
 
     return domains_to_check
 
 
 def _determine_strands_to_check(design: Design,
                                 domains_changed: Optional[Tuple[Domain]],
-                                constraint: ConstraintWithStrands) -> Sequence[Strand]:
+                                constraint: ConstraintWithStrands) -> Tuple[Strand]:
     """
     Similar to _determine_domains_to_check but for strands.
     """
@@ -179,9 +179,9 @@ def _determine_strands_to_check(design: Design,
         if constraint.strands is None else constraint.strands
 
     # filter out those not containing domain_change if specified
-    strands_to_check: List[Strand] = []
+    strands_to_check = []
     if domains_changed is None:
-        strands_to_check = list(strands_to_check_if_domain_changed_none)
+        strands_to_check = tuple(strands_to_check_if_domain_changed_none)
     else:
         for strand in strands_to_check_if_domain_changed_none:
             for domain_changed in domains_changed:
@@ -189,7 +189,7 @@ def _determine_strands_to_check(design: Design,
                     strands_to_check.append(strand)
                     break
 
-    return strands_to_check
+    return tuple(strands_to_check)
 
 
 def _determine_domain_pairs_to_check(design: Design,
@@ -2075,24 +2075,18 @@ Report on constraints
 ''' + summary
 
 
-@dataclass
-class DisplayOptions:
-    """
-    Options for displaying graphical report in form of histogram of :data:`Report.value` for each
-    constraint evaluation.
-    """
-
-    bins: int = 10
-    """Number of bins for histogram in report."""
-
-
 def _value_from_constraint_dict(dct: Union[V, Dict[Union[str, Constraint], V]],
                                 constraint: Constraint, default_value: V, klass: type) -> V:
+    # useful for many parameters in display_report,
+    # where they can either be a single value to use for all constraints,
+    # or dict mapping a constraint key (or its short_description or description)
+    # to a value to use for that constraint.
+
     # if dct is of type the value we want to return, just return it
     if isinstance(dct, klass):
         return dct
 
-    # otherwise look up value in dictionary
+    # otherwise look up value in dictionary, trying various keys associated to the constraint
     assert isinstance(dct, dict)
     value = default_value
     if constraint in dct:
@@ -2105,6 +2099,7 @@ def _value_from_constraint_dict(dct: Union[V, Dict[Union[str, Constraint], V]],
 
 
 _default_num_bins = 10
+_default_yscale = 'linear'
 
 
 def display_report(design: nc.Design, constraints: Iterable[Constraint],
@@ -2112,7 +2107,11 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                    layout: Literal['horz', 'vert'] = 'vert',
                    xlims: Union[Optional[Tuple[float, float]],
                                 Dict[Union[str, Constraint], Optional[Tuple[float, float]]]] = None,
-                   yscale: Literal['log', 'linear', 'symlog'] = 'linear',
+                   ylims: Union[Optional[Tuple[float, float]],
+                                Dict[Union[str, Constraint], Optional[Tuple[float, float]]]] = None,
+                   yscales: Union[Literal['log', 'linear', 'symlog'],
+                                  Dict[Union[str, Constraint],
+                                       Literal['log', 'linear', 'symlog']]] = _default_yscale,
                    bins: Union[int, Dict[Union[str, Constraint], int]] = _default_num_bins) -> None:
     """
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
@@ -2127,26 +2126,40 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     :param layout:
         layout of plots. If 'horz', they will be laid out horizontally, which is smaller if you have several
         constraints, but might make it more useful for compare results of different choices of sequences
-        if you call :meth:`display_report` repeatedly for different sequences
+        if you call :meth:`display_report` repeatedly for different sequences assigned to `design`
     :param xlims:
         If specified, is either a single pair of floats to use as the argument to matplotlib.pyplot.xlim:
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.xlim.html
         or to specify different xlim values for different constraints, can be a
         dict mapping :any:`Constraint` (or for conveience, string in the fields
         :data:`Constraint.short_description` or :data:`Constraint.description`) to an xlim pair of floats.
-    :param yscale:
+    :param ylims:
+        Same as parameter `xlims` but for argument to matplotlib.pyplot.ylim:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.xlim.html
+        Can either be a single value to apply to all charts,
+        or a dict mapping a constraint to a value,
+        with the same rules as `xlims`.
+        Also, rather than being a pair of floats, it can be a single float (or the dict can map constraints
+        to single floats), which is then given as the parameter `top` of matplotlib.pyplot.ylim.
+    :param yscales:
         same as argument `value` to matplotlib.pyplot.yscale:
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html
+        Can either be a single value to apply to all charts,
+        or a dict mapping a constraint to a value,
+        with the same rules as `xlims`
     :param bins:
         same as argument `bins` to matplotlib.pyplot.hist:
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.yscale.html
-        Can either be a single int to apply to all charts, or a dict mapping a constraint to an int,
+        Can either be a single value to apply to all charts,
+        or a dict mapping a constraint to a value,
         with the same rules as `xlims`
     """
     import matplotlib.pyplot as plt
 
     if xlims is None:
         xlims = {}
+    if ylims is None:
+        ylims = {}
 
     assert layout in ['horz', 'vert']
     constraints_report = create_constraints_report(design, constraints, report_only_violations,
@@ -2163,6 +2176,8 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         # convert pint.Quantity to unitless magnitude to avoid UnitStrippedWarning when calling py.hist
         values = [q.magnitude for q in quantities]
 
+        yscale = _value_from_constraint_dict(yscales, report.constraint, _default_yscale, str)  # type: ignore
+
         if layout == 'horz':
             plt.subplot(1, num_figs, i + 1)
         weights = np.ones(len(values)) / len(values) if yscale == 'linear' else None
@@ -2172,16 +2187,28 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         num_bins = _value_from_constraint_dict(bins, report.constraint, _default_num_bins, int)
         _, __, ___ = plt.hist(values, num_bins, density=True, facecolor='g', alpha=0.75, weights=weights, )
 
-        plt.yscale(yscale)
         if yscale == 'linear':
             from matplotlib.ticker import PercentFormatter
             plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
+        plt.yscale(yscale)
+        # if yscale == 'symlog':
+        #     linthresh = 0.0001
+        #     plt.yscale(yscale, linthresh=linthresh)
+        # else:
+        #     plt.yscale(yscale)
 
         # see if user set custom x limits for this constraint
         # not sure why getting mypy error on next line
         xlim = _value_from_constraint_dict(xlims, report.constraint, None, tuple)  # type:ignore
-        if xlim != (-1, -1):
+        if xlim is not None:
             plt.xlim(xlim)
+
+        if isinstance(ylims, (int, float)):
+            plt.ylim(top=ylims)
+        else:
+            ylim = _value_from_constraint_dict(ylims, report.constraint, None, tuple)  # type:ignore
+            if ylim is not None:
+                plt.ylim(ylim)
 
         # label x-axis with units (e.g., kilocalorie / mole)
         unit = str(quantities[0].units)
