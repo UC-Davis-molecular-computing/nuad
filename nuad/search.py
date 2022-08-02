@@ -20,8 +20,8 @@ import logging
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, FrozenSet, Optional, Dict, Callable, Iterable, \
-    Deque, TypeVar, Union, Generic, Iterator, Any
+from typing import List, Tuple, FrozenSet, Dict, Callable, Iterable, \
+    Deque, TypeVar, Generic, Iterator, Any
 import statistics
 import textwrap
 import re
@@ -75,7 +75,7 @@ def new_process_pool(cpu_count: int) -> pathos.pools.ProcessPool:
     return pathos.pools.ProcessPool(processes=cpu_count)
 
 
-_process_pool: Optional[pathos.pools.ProcessPool] = None
+_process_pool: None | pathos.pools.ProcessPool = None
 
 log_names_of_domains_and_strands_checked = False
 pprint_indent = 4
@@ -89,7 +89,7 @@ def default_output_directory() -> str:
 # combinations of inputs so it's worth it to maintain a cache.
 @lru_cache()
 def find_parts_to_check(constraint: nc.Constraint[DesignPart], design: nc.Design,
-                        domains_changed: Optional[Tuple[Domain]]) -> Tuple[DesignPart, ...]:
+                        domains_changed: None | Tuple[Domain]) -> Tuple[DesignPart, ...]:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -147,7 +147,7 @@ def _at_least_one_domain_unfixed(pair: Tuple[Domain, Domain]) -> bool:
 
 
 def _determine_domains_to_check(design: Design,
-                                domains_changed: Optional[Tuple[Domain]],
+                                domains_changed: None | Tuple[Domain],
                                 constraint: ConstraintWithDomains) -> Tuple[Domain, ...]:
     """
     Determines domains to check in `all_domains`.
@@ -169,7 +169,7 @@ def _determine_domains_to_check(design: Design,
 
 
 def _determine_strands_to_check(design: Design,
-                                domains_changed: Optional[Tuple[Domain]],
+                                domains_changed: None | Tuple[Domain],
                                 constraint: ConstraintWithStrands) -> Tuple[Strand, ...]:
     """
     Similar to _determine_domains_to_check but for strands.
@@ -193,7 +193,7 @@ def _determine_strands_to_check(design: Design,
 
 
 def _determine_domain_pairs_to_check(design: Design,
-                                     domains_changed: Optional[Tuple[Domain]],
+                                     domains_changed: None | Tuple[Domain],
                                      constraint: ConstraintWithDomainPairs) -> Tuple[DomainPair, ...]:
     """
     Determines domain pairs to check between domains in `all_domains`.
@@ -238,7 +238,7 @@ def _at_least_one_strand_unfixed(pair: Tuple[Strand, Strand]) -> bool:
 
 
 def _determine_strand_pairs_to_check(design: Design,
-                                     domains_changed: Optional[Tuple[Domain]],
+                                     domains_changed: None | Tuple[Domain],
                                      constraint: ConstraintWithStrandPairs) -> Tuple[StrandPair, ...]:
     # Similar to _determine_domain_pairs_to_check but for strands.
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
@@ -272,7 +272,7 @@ def _determine_strand_pairs_to_check(design: Design,
     return strand_pairs_to_check
 
 
-def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
+def _determine_complexes_to_check(domains_changed: Iterable[Domain] | None,
                                   constraint: ConstraintWithComplexes) -> Tuple[Complex, ...]:
     """
     Similar to _determine_domain_pairs_to_check but for complexes.
@@ -298,7 +298,7 @@ def _determine_complexes_to_check(domains_changed: Optional[Iterable[Domain]],
         return tuple(complexes_to_check)
 
 
-def _strands_containing_domains(domains: Optional[Iterable[Domain]], strands: List[Strand]) -> List[Strand]:
+def _strands_containing_domains(domains: Iterable[Domain] | None, strands: List[Strand]) -> List[Strand]:
     """
     :param domains:
         :any:`Domain`'s to check for, or None to return all of `strands`
@@ -362,7 +362,7 @@ def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> Tuple
 T = TypeVar('T')
 
 
-def remove_none_from_list(lst: Iterable[Optional[T]]) -> List[T]:
+def remove_none_from_list(lst: Iterable[T | None]) -> List[T]:
     return [elt for elt in lst if elt is not None]
 
 
@@ -436,7 +436,7 @@ def _write_report(params: SearchParameters, directories: _Directories,
 
 
 def _write_text_intermediate_and_final_files(content: str, best_filename: str,
-                                             idx_filename: Optional[str]) -> None:
+                                             idx_filename: str | None) -> None:
     with open(best_filename, 'w') as file:
         file.write(content)
     if idx_filename is not None:
@@ -507,8 +507,8 @@ class _Directories:
     sequences_filename_no_ext: str = field(init=False, default='sequences')
     report_filename_no_ext: str = field(init=False, default='report')
 
-    debug_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
-    info_file_handler: Optional[logging.FileHandler] = field(init=False, default=None)
+    debug_file_handler: logging.FileHandler | None = field(init=False, default=None)
+    info_file_handler: logging.FileHandler | None = field(init=False, default=None)
 
     def all_subdirectories(self, params: SearchParameters) -> List[str]:
         result = []
@@ -538,7 +538,7 @@ class _Directories:
             nc.logger.addHandler(self.info_file_handler)
 
     @staticmethod
-    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: Union[int, str],
+    def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int | str,
                                     ext: str) -> str:
         relative_filename = f'{filename_no_ext}-{idx}.{ext}'
         full_filename = os.path.join(directory, relative_filename)
@@ -549,16 +549,16 @@ class _Directories:
         full_filename = os.path.join(self.out, relative_filename)
         return full_filename
 
-    def indexed_design_full_filename_noext(self, idx: Union[int, str]) -> str:
+    def indexed_design_full_filename_noext(self, idx: int | str) -> str:
         return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx, 'json')
 
-    def indexed_rng_full_filename_noext(self, idx: Union[int, str]) -> str:
+    def indexed_rng_full_filename_noext(self, idx: int | str) -> str:
         return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx, 'json')
 
-    def indexed_sequences_full_filename_noext(self, idx: Union[int, str]) -> str:
+    def indexed_sequences_full_filename_noext(self, idx: int | str) -> str:
         return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx, 'txt')
 
-    def indexed_report_full_filename_noext(self, idx: Union[int, str]) -> str:
+    def indexed_report_full_filename_noext(self, idx: int | str) -> str:
         return self.indexed_full_filename_noext(self.report_filename_no_ext, self.report, idx, 'txt')
 
     def best_design_full_filename_noext(self) -> str:
@@ -609,7 +609,7 @@ class SearchParameters:
     List of :any:`constraints.Constraint`'s to apply to the :any:`Design`.
     """
 
-    probability_of_keeping_change: Optional[Callable[[float], float]] = None
+    probability_of_keeping_change: Callable[[float], float] | None = None
     """
     Function giving the probability of keeping a change in one
     :any:`Domain`'s DNA sequence, if the new sequence affects the total score of all violated
@@ -618,13 +618,13 @@ class SearchParameters:
     behavior if this parameter is not specified.
     """
 
-    random_seed: Optional[int] = None
+    random_seed: int | None = None
     """
     Integer given as a random seed to the numpy random number generator, used for
     all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
     """
 
-    never_increase_score: Optional[bool] = None
+    never_increase_score: bool | None = None
     """
     If specified and True, then it is assumed that the function
     probability_of_keeping_change returns 0 for any negative value of `score_delta` (i.e., the search
@@ -639,7 +639,7 @@ class SearchParameters:
     goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
     """
 
-    out_directory: Optional[str] = None
+    out_directory: str | None = None
     """
     Directory in which to write output files (report on constraint violations and DNA sequences)
     whenever a new optimal sequence assignment is found.
@@ -682,12 +682,12 @@ class SearchParameters:
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     """
 
-    max_iterations: Optional[int] = None
+    max_iterations: int | None = None
     """
     Maximum number of iterations of search to perform.
     """
 
-    target_score: Optional[float] = None
+    target_score: float | None = None
     """
     Total violation score to attempt to obtain. A score of 0.0 represents that all constraints 
     are satisfied. Often a search can get very close to score 0.0 quickly, but take a very long time
@@ -703,7 +703,7 @@ class SearchParameters:
     that they violated.
     """
 
-    num_digits_update: Optional[int] = None
+    num_digits_update: int | None = None
     """
     Number of digits to use when writing update number in filenames. By default,
     they will be written using just enough digits for each integer,
@@ -1322,7 +1322,6 @@ def _log_constraint_summary(*, params: SearchParameters,
             print()
         print(header)
 
-
     def _dec(score_: float) -> int:
         # how many decimals after decimal point to use given the score
         return max(1, math.ceil(math.log(1 / score_, 10)) + 2) if score_ > 0 else 1
@@ -1637,7 +1636,7 @@ class EvaluationSet:
         }
         return domain_to_score
 
-    def calculate_score_gap(self, fixed: Optional[bool] = None) -> Optional[float]:
+    def calculate_score_gap(self, fixed: bool | None = None) -> float | None:
         # fixed is None (all violations), True (fixed violations), or False (nonfixed violations)
         # total score of evaluations - total score of new evaluations
         assert len(self.evaluations) > 0
@@ -1696,8 +1695,8 @@ class EvaluationSet:
     def evaluate_constraint(self,
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
-                            score_gap: Optional[float],
-                            domains_new: Optional[Tuple[Domain]],
+                            score_gap: float | None,
+                            domains_new: Tuple[Domain] | None,
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
@@ -1838,7 +1837,7 @@ class EvaluationSet:
                 self.total_score_nonfixed += violation.score
                 self.num_violations_nonfixed += 1
 
-    def total_score_new(self, fixed: Optional[bool] = None) -> float:
+    def total_score_new(self, fixed: bool | None = None) -> float:
         # return total score of all evaluations, or only fixed, or only nonfixed
         if fixed is None:
             total_score_old = self.total_score
@@ -2111,7 +2110,7 @@ Report on constraints
 ''' + summary
 
 
-def _value_from_constraint_dict(dct: Union[V, Dict[Union[str, Constraint], V]],
+def _value_from_constraint_dict(dct: V | Dict[str | Constraint, V],
                                 constraint: Constraint, default_value: V, klass: type) -> V:
     # useful for many parameters in display_report,
     # where they can either be a single value to use for all constraints,
@@ -2141,14 +2140,14 @@ _default_yscale = 'linear'
 def display_report(design: nc.Design, constraints: Iterable[Constraint],
                    report_only_violations: bool = False,
                    layout: Literal['horz', 'vert'] = 'vert',
-                   xlims: Union[Optional[Tuple[float, float]],
-                                Dict[Union[str, Constraint], Optional[Tuple[float, float]]]] = None,
-                   ylims: Union[Optional[Tuple[float, float]],
-                                Dict[Union[str, Constraint], Optional[Tuple[float, float]]]] = None,
-                   yscales: Union[Literal['log', 'linear', 'symlog'],
-                                  Dict[Union[str, Constraint],
-                                       Literal['log', 'linear', 'symlog']]] = _default_yscale,
-                   bins: Union[int, Dict[Union[str, Constraint], int]] = _default_num_bins) -> None:
+                   xlims: None | Tuple[float, float] |
+                          Dict[str | Constraint, None | Tuple[float, float]] = None,
+                   ylims: None | Tuple[float, float] |
+                          Dict[str | Constraint, None | Tuple[float, float]] = None,
+                   yscales: Literal['log', 'linear', 'symlog'] |
+                            Dict[str | Constraint,
+                                 Literal['log', 'linear', 'symlog']] = _default_yscale,
+                   bins: int | Dict[str | Constraint, int] = _default_num_bins) -> None:
     """
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
     :meth:`create_report`) and displays its data graphically in the notebook using matplotlib.

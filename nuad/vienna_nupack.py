@@ -9,6 +9,8 @@ The main functions are
 that is much faster than calling :meth:`pfunc` on the same pair of strands).
 """  # noqa
 
+from __future__ import annotations
+
 import math
 import itertools
 import os
@@ -18,7 +20,7 @@ import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
 from pathos.pools import ProcessPool
-from typing import Sequence, Union, Tuple, List, Optional, Iterable
+from typing import Sequence, Tuple, List, Iterable
 
 import numpy as np
 
@@ -64,7 +66,7 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     return adjust * (num_seqs - 1)
 
 
-def pfunc(seqs: Union[str, Tuple[str, ...]],
+def pfunc(seqs: str | Tuple[str, ...],
           temperature: float = default_temperature,
           sodium: float = default_sodium,
           magnesium: float = default_magnesium,
@@ -131,13 +133,13 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     return dg
 
 
-def tupleize(seqs: Union[str, Iterable[str]]) -> Tuple[str, ...]:
+def tupleize(seqs: str | Iterable[str]) -> Tuple[str, ...]:
     return (seqs,) if isinstance(seqs, str) else tuple(seqs)
 
 
 def pfunc_parallel(
         pool: ProcessPool,
-        all_seqs: Sequence[Union[str, Tuple[str, ...]]],
+        all_seqs: Sequence[str | Tuple[str, ...]],
         temperature: float = default_temperature,
         sodium: float = default_sodium,
         magnesium: float = default_magnesium,
@@ -257,7 +259,7 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     # Passing either of the keyword arguments universal_newlines=True or encoding='utf8'
     # solves the problem for python3.6. For python3.7 (but not 3.6) one can use text=True
     # XXX: Then why are none of those keyword arguments being used here??
-    process: Optional[sub.Popen] = None
+    process: sub.Popen | None = None
     command_strs = (['wsl.exe', '-e'] if os_is_windows else []) + command_strs
     try:
         with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as process:
