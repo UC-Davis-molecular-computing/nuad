@@ -310,8 +310,6 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
     # WARNING: stacking enthalpies not symmetric
 
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
-
-    # fill in cached energies and determine which indices still need to have their energies calculated
     full_parameters_filename = os.path.join(os.path.dirname(__file__),
                                             parameter_set_directory, parameters_filename)
 
@@ -474,7 +472,8 @@ def wc(seq: str) -> str:
 def free_energy_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
         magnesium: float = default_magnesium) -> float:
-    """Computes the complex free energy of a single strand.
+    """Computes the "complex free energy" (https://docs.nupack.org/definitions/#complex-free-energy)
+    of a single strand according to NUPACK.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.

@@ -3160,8 +3160,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     def write_design_file(self, directory: str = '.', filename: Optional[str] = None,
                           extension: str = 'json') -> None:
         """
-        Write text file representing this :any:`Design`,
-        suitable for reading by the scadnano web interface,
+        Write JSON file representing this :any:`Design`,
+        which can be imported via the method :meth:`Design.from_design_file`,
         with the output file having the same name as the running script but with ``.py`` changed to
         :attr:`default_scadnano_file_extension`,
         unless `filename` is explicitly specified.
@@ -3814,7 +3814,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             domain_names = [domain.name for domain in sc_strand.domains]
             if sc_strand.dna_sequence is None or overwrite:
                 assert None not in domain_names
-                self._assign_to_strand_with_without_checking_existing_sequence(sc_strand, sc_design)
+                self._assign_to_strand_without_checking_existing_sequence(sc_strand, sc_design)
             elif None not in domain_names:
                 self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
             else:
@@ -3899,7 +3899,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                      f'{sc_strand.modifications_int[offset]}')
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
-    def _assign_to_strand_with_without_checking_existing_sequence(
+    def _assign_to_strand_without_checking_existing_sequence(
             self,
             sc_strand: sc.Strand[StrandLabel, DomainLabel],
             sc_design: sc.Design[StrandLabel, DomainLabel]
@@ -4696,7 +4696,7 @@ def _check_nupack_installed() -> None:
             'https://piercelab-caltech.github.io/nupack-docs/start/')
 
 
-def nupack_domain_complex_free_energy_constraint(
+def nupack_domain_free_energy_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
@@ -5618,10 +5618,6 @@ def rna_duplex_strand_pairs_constraint(
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
-
-        for pair, energy in zip(sequence_pairs, energies):
-            if energy > 100:
-                print(f'energy = {energy};  pair = {pair}')
 
         results = []
         for pair, energy in zip(strand_pairs, energies):
