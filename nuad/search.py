@@ -157,7 +157,7 @@ def _determine_domains_to_check(design: Design,
     it is just those in `domains_new` that appear in `all_domains`.
     """
     # either all pairs, or just constraint.pairs if specified
-    domains_to_check_if_domain_changed_none = design.domains \
+    domains_to_check_if_domain_changed_none = tuple(design.domains) \
         if constraint.domains is None else constraint.domains
 
     # filter out those not containing domain_change if specified
@@ -1322,6 +1322,7 @@ def _log_constraint_summary(*, params: SearchParameters,
             print()
         print(header)
 
+
     def _dec(score_: float) -> int:
         # how many decimals after decimal point to use given the score
         return max(1, math.ceil(math.log(1 / score_, 10)) + 2) if score_ > 0 else 1
@@ -1662,7 +1663,7 @@ class EvaluationSet:
         return score_gap
 
     @staticmethod
-    def evaluate_singular_constraint_parallel(constraint: SingularConstraint,
+    def evaluate_singular_constraint_parallel(constraint: SingularConstraint[DesignPart],
                                               parts: Tuple[nc.DesignPart, ...],
                                               score_gap: float) \
             -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
@@ -1673,13 +1674,13 @@ class EvaluationSet:
 
         parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
 
-        def call_evaluate_sequential(parts: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
-            parts_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
-            for part in parts:
+        def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
+            partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
+            for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
                 score, summary = constraint.call_evaluate(seqs, part)
-                parts_scores_summaries.append((part, score, summary))
-            return parts_scores_summaries
+                partz_scores_summaries.append((part, score, summary))
+            return partz_scores_summaries
 
         global _process_pool
         if _process_pool is None:
@@ -2261,7 +2262,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
 
 @dataclass
 class ConstraintsReport:
-    "Represents a report on how well a design did on all constraints."
+    """Represents a report on how well a design did on all constraints."""
 
     reports: List[ConstraintReport]
     """Has one :any:`ConstraintReport` per :any:`Constraint` evaluated."""

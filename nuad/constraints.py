@@ -5601,11 +5601,11 @@ def rna_duplex_strand_pairs_constraint(
     if description is None:
         description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
-    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
+    num_cores = max(cpu_count(), 1)
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_threads)
+    thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:

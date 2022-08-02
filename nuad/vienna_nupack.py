@@ -106,8 +106,7 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
-    if isinstance(seqs, str):
-        seqs = (seqs,)
+    seqs = tupleize(seqs)
 
     try:
         from nupack import pfunc as nupack_pfunc  # type: ignore
@@ -301,10 +300,8 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
         for graphing energies, it's nice if there's not some value several orders of magnitude larger
         than all the rest.
     :return:
-        list of free energies, in the same order as `seq_pairs`
+        list of free energies, in the same order as `pairs`
     """
-    # print(f'rna_duplex_multiple.lru_cache = {rna_duplex_multiple.cache_info()}')
-
     # NB: the string NA_parameter_set needs to be exactly the intended filename;
     # e.g. any extra whitespace characters cause RNAduplex to default to RNA parameter set
     # without warning the user!
@@ -334,7 +331,6 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
                              'is a different error that I don\'t know how to handle. Exiting...'
                              f'\nerror:\n{error}')
 
-    energies_to_calculate: List[float] = []
     lines = output.split('\n')
     if len(lines) - 1 != len(pairs):
         raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
