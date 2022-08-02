@@ -1,7 +1,7 @@
 import enum
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import Optional, Any, Dict, AbstractSet
+from typing import Any, Dict, AbstractSet
 
 import scadnano as sc
 from nuad.json_noindent_serializer import JSONSerializable, NoIndent
@@ -118,11 +118,11 @@ class Modification5Prime(Modification):
     # remove quotes when Py3.6 support dropped
     @staticmethod
     def from_json(json_map: Dict[str, Any]) -> 'Modification5Prime':
-        id = json_map[mod_id_key]
+        id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "5'"
         idt_text = json_map.get(mod_idt_text_key)
-        return Modification5Prime(idt_text=idt_text, id=id)
+        return Modification5Prime(idt_text=idt_text, id=id_)
 
     @staticmethod
     def modification_type() -> ModificationType:
@@ -144,11 +144,11 @@ class Modification3Prime(Modification):
     # remove quotes when Py3.6 support dropped
     @staticmethod
     def from_json(json_map: Dict[str, Any]) -> 'Modification3Prime':
-        id = json_map[mod_id_key]
+        id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "3'"
         idt_text = json_map.get(mod_idt_text_key)
-        return Modification3Prime(idt_text=idt_text, id=id)
+        return Modification3Prime(idt_text=idt_text, id=id_)
 
     @staticmethod
     def modification_type() -> ModificationType:
@@ -162,7 +162,7 @@ class Modification3Prime(Modification):
 class ModificationInternal(Modification):
     """Internal modification of DNA sequence, e.g., biotin or Cy3."""
 
-    allowed_bases: Optional[AbstractSet[str]] = None
+    allowed_bases: AbstractSet[str] | None = None
     """If None, then this is an internal modification that goes between bases. 
     If instead it is a list of bases, then this is an internal modification that attaches to a base,
     and this lists the allowed bases for this internal modification to be placed at. 
@@ -185,13 +185,13 @@ class ModificationInternal(Modification):
     # remove quotes when Py3.6 support dropped
     @staticmethod
     def from_json(json_map: Dict[str, Any]) -> 'ModificationInternal':
-        id = json_map[mod_id_key]
+        id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "internal"
         idt_text = json_map.get(mod_idt_text_key)
         allowed_bases_list = json_map.get(mod_allowed_bases_key)
         allowed_bases = frozenset(allowed_bases_list) if allowed_bases_list is not None else None
-        return ModificationInternal(idt_text=idt_text, id=id, allowed_bases=allowed_bases)
+        return ModificationInternal(idt_text=idt_text, id=id_, allowed_bases=allowed_bases)
 
     @staticmethod
     def modification_type() -> ModificationType:
