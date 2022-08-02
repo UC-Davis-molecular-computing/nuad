@@ -3160,8 +3160,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     def write_design_file(self, directory: str = '.', filename: Optional[str] = None,
                           extension: str = 'json') -> None:
         """
-        Write text file representing this :any:`Design`,
-        suitable for reading by the scadnano web interface,
+        Write JSON file representing this :any:`Design`,
+        which can be imported via the method :meth:`Design.from_design_file`,
         with the output file having the same name as the running script but with ``.py`` changed to
         :attr:`default_scadnano_file_extension`,
         unless `filename` is explicitly specified.
@@ -3814,7 +3814,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             domain_names = [domain.name for domain in sc_strand.domains]
             if sc_strand.dna_sequence is None or overwrite:
                 assert None not in domain_names
-                self._assign_to_strand_with_without_checking_existing_sequence(sc_strand, sc_design)
+                self._assign_to_strand_without_checking_existing_sequence(sc_strand, sc_design)
             elif None not in domain_names:
                 self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
             else:
@@ -3899,7 +3899,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                      f'{sc_strand.modifications_int[offset]}')
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
-    def _assign_to_strand_with_without_checking_existing_sequence(
+    def _assign_to_strand_without_checking_existing_sequence(
             self,
             sc_strand: sc.Strand[StrandLabel, DomainLabel],
             sc_design: sc.Design[StrandLabel, DomainLabel]
@@ -4696,7 +4696,7 @@ def _check_nupack_installed() -> None:
             'https://piercelab-caltech.github.io/nupack-docs/start/')
 
 
-def nupack_domain_complex_free_energy_constraint(
+def nupack_domain_free_energy_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
@@ -4744,7 +4744,7 @@ def nupack_domain_complex_free_energy_constraint(
 
     def evaluate(seqs: Tuple[str], _: Optional[Domain]) -> Result:
         sequence = seqs[0]
-        energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
+        energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
         value = f'{energy:6.2f} kcal/mol'
         return Result(excess=excess, value=value)
@@ -4813,7 +4813,7 @@ def nupack_strand_free_energy_constraint(
 
     def evaluate(seqs: Tuple[str], _: Optional[Strand]) -> Result:
         sequence = seqs[0]
-        energy = nv.complex_free_energy_single_strand(sequence, temperature, sodium, magnesium)
+        energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
         value = f'{energy:6.2f} kcal/mol'
         return Result(excess=excess, value=value)
@@ -4932,7 +4932,7 @@ def nupack_domain_pair_constraint(
 
         max_excess = max(excesses)
 
-        max_name_length = max(len(name) for name in _flatten(name_pairs))
+        max_name_length = max(len(name) for name in flatten(name_pairs))
         lines_and_energies = [(f'{name1:{max_name_length}}, '
                                f'{name2:{max_name_length}}: '
                                f' {energy:6.2f} kcal/mol', energy)
@@ -5607,25 +5607,17 @@ def rna_duplex_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        return nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
-        if parallel and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+        if parallel:
+            energies = nv.rna_duplex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
+                                                       parameters_filename)
         else:
-            energies = calculate_energies_unparallel(sequence_pairs)
+            energies = nv.rna_duplex_multiple(seq_pairs, logger, temperature, parameters_filename)
         return energies
 
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
-
-        for pair, energy in zip(sequence_pairs, energies):
-            if energy > 100:
-                print(f'energy = {energy};  pair = {pair}')
 
         results = []
         for pair, energy in zip(strand_pairs, energies):
@@ -5720,7 +5712,7 @@ def rna_cofold_strand_pairs_constraint(
         if parallel and len(sequence_pairs) > 1:
             lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
             lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = _flatten(lists_of_energies)
+            energies = flatten(lists_of_energies)
         else:
             energies = calculate_energies_unparallel(sequence_pairs)
         return energies
@@ -5782,9 +5774,9 @@ def _all_pairs_domain_sequences_complements_names_from_domains(
     return sequence_pairs, names, domains
 
 
-def _flatten(list_of_lists: Iterable[Iterable[T]]) -> List[T]:
+def flatten(list_of_lists: Iterable[Iterable[T]]) -> Tuple[T]:
     #  Flatten one level of nesting
-    return list(itertools.chain.from_iterable(list_of_lists))
+    return tuple(itertools.chain.from_iterable(list_of_lists))
 
 
 #########################################################################################

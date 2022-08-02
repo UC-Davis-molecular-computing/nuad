@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import NamedTuple, Optional
 import argparse
 import os
@@ -9,6 +10,9 @@ import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
 from nuad.constraints import NumpyConstraint
 
+
+def f(x: int | float) -> float:
+    return x/2
 
 # command-line arguments
 class CLArgs(NamedTuple):
@@ -49,10 +53,10 @@ def main() -> None:
     # just for testing parallel processing
 
     # num_strands = 3
-    # num_strands = 5
+    num_strands = 5
     # num_strands = 10
     # num_strands = 50
-    num_strands = 100
+    # num_strands = 100
     # num_strands = 355
 
     design = nc.Design()
@@ -126,7 +130,7 @@ def main() -> None:
     strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
         strand_complexes=strand_complexes)
 
-    domain_nupack_ss_constraint = nc.nupack_domain_complex_free_energy_constraint(
+    domain_nupack_ss_constraint = nc.nupack_domain_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='DomainSS')
 
     domain_pairs_rna_duplex_constraint = nc.rna_duplex_domain_pairs_constraint(

@@ -17,13 +17,13 @@ import logging
 import random
 import subprocess as sub
 import sys
-from functools import lru_cache
 from multiprocessing.pool import ThreadPool
+from pathos.pools import ProcessPool
 from typing import Sequence, Union, Tuple, List, Dict, Optional, cast, Deque
 
 import numpy as np
 
-import nuad.constraints as dc
+import nuad.constraints as nc
 
 os_is_windows = sys.platform == 'win32'
 
@@ -65,7 +65,6 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     return adjust * (num_seqs - 1)
 
 
-@lru_cache(maxsize=10_000)
 def pfunc(seqs: Union[str, Tuple[str, ...]],
           temperature: float = default_temperature,
           sodium: float = default_sodium,
@@ -134,7 +133,55 @@ def pfunc(seqs: Union[str, Tuple[str, ...]],
     return dg
 
 
-def nupack_complex_base_pair_probabilities(strand_complex: 'dc.Complex',  # circular import causes problems
+def tupleize(seqs: Union[str, Iterable[str]]) -> Tuple[str, ...]:
+    return (seqs,) if isinstance(seqs, str) else tuple(seqs)
+
+
+def pfunc_parallel(
+        pool: ProcessPool,
+        all_seqs: Sequence[Union[str, Tuple[str, ...]]],
+        temperature: float = default_temperature,
+        sodium: float = default_sodium,
+        magnesium: float = default_magnesium,
+        strand_association_penalty: bool = True,
+) -> Tuple[float]:
+    num_seqs = len(all_seqs)
+    if num_seqs == 0:
+        return tuple()
+
+    all_seqs = tuple(tupleize(seqs) for seqs in all_seqs)
+
+    first_seqs = all_seqs[0]
+
+    bases = sum(len(seq) for seq in first_seqs)
+    num_cores = nc.cpu_count(logical=True)
+
+    # these thresholds were measured empirically; see notebook nuad_parallel_time_trials.ipynb
+    call_sequential = (len(all_seqs) == 1
+                       or (bases <= 30 and num_seqs <= 50)
+                       or (bases <= 40 and num_seqs <= 40)
+                       or (bases <= 50 and num_seqs <= 30)
+                       or (bases <= 75 and num_seqs <= 20)
+                       or (bases <= 100 and num_seqs <= 10)
+                       or (bases <= 125 and num_seqs <= 4)
+                       or (bases <= 150 and num_seqs <= 3)
+                       or (num_seqs <= 1)
+                       )
+
+    def calculate_energies_sequential(all_tuples: Sequence[Tuple[str, ...]]) -> Tuple[float]:
+        return tuple(pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty)
+                     for seqs in all_tuples)
+
+    if call_sequential:
+        return calculate_energies_sequential(all_seqs)
+
+    lists_of_sequence_pairs = nc.chunker(all_seqs, num_chunks=num_cores)
+    lists_of_energies = pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+    energies = nc.flatten(lists_of_energies)
+    return tuple(energies)
+
+
+def nupack_complex_base_pair_probabilities(strand_complex: 'nc.Complex',  # circular import causes problems
                                            temperature: float = default_temperature,
                                            sodium: float = default_sodium,
                                            magnesium: float = default_magnesium) -> np.ndarray:
@@ -226,34 +273,12 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     return output_decoded, stderr_decoded
 
 
-# https://github.com/python/cpython/blob/42336def77f53861284336b3335098a1b9b8cab2/Lib/functools.py#L485
-_sentinel = object()
-_max_size = 1_000_000
-_rna_duplex_cache: Dict[Tuple[Tuple[str, str], float, str], float] = {}
-_rna_duplex_queue: Deque[Tuple[Tuple[str, str], float, str]] = collections.deque(maxlen=_max_size)
-
-
-def _rna_duplex_single_cacheable(seq_pair: Tuple[str, str], temperature: float,
-                                 parameters_filename: str) -> Optional[float]:
-    # return None if arguments are not in _rna_duplex_cache,
-    # otherwise return cached energy in _rna_duplex_cache
-    key = (seq_pair, temperature, parameters_filename)
-    result: Union[object, float] = _rna_duplex_cache.get(key, _sentinel)
-    if result is _sentinel:
-        return None
-    else:
-        result_float: float = cast(float, result)
-        return result_float
-
-
-def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
+def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
                         max_energy: float = 0.0,
-                        # cache: bool = True,
-                        cache: bool = False,  # off until I implement LRU queue to bound cache size
-                        ) -> List[float]:
+                        ) -> Tuple[float]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
@@ -261,7 +286,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
     Returns a list (in the same order as seqpairs) of free energies.
 
-    :param seq_pairs:
+    :param pairs:
         sequence (list or tuple) of pairs of DNA sequences
     :param logger:
         logger to use for printing error messages
@@ -276,8 +301,6 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
         of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
         for graphing energies, it's nice if there's not some value several orders of magnitude larger
         than all the rest.
-    :param cache:
-        Whether to cache results to save on number of sequences to give to RNAduplex.
     :return:
         list of free energies, in the same order as `seq_pairs`
     """
@@ -291,17 +314,6 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
     # WARNING: stacking enthalpies not symmetric
 
     # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
-
-    # fill in cached energies and determine which indices still need to have their energies calculated
-    if cache:
-        energies = [_rna_duplex_single_cacheable(seq_pair, temperature, parameters_filename)
-                    for seq_pair in seq_pairs]
-    else:
-        energies = [None] * len(seq_pairs)
-    idxs_to_calculate = [i for i, energy in enumerate(energies) if energy is None]
-    idxs_to_calculate_set = set(idxs_to_calculate)
-    seq_pairs_to_calculate = [seq_pair for i, seq_pair in enumerate(seq_pairs) if i in idxs_to_calculate_set]
-
     full_parameters_filename = os.path.join(os.path.dirname(__file__),
                                             parameter_set_directory, parameters_filename)
 
@@ -312,7 +324,7 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
                                '--noGU', '−−noconv']
 
     # DNA sequences to type after RNAduplex starts up
-    user_input = '\n'.join(f'{seq_pair[0]}\n{seq_pair[1]}' for seq_pair in seq_pairs_to_calculate) + '\n@\n'
+    user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
 
     output, error = call_subprocess(command_strs, user_input)
 
@@ -325,30 +337,60 @@ def rna_duplex_multiple(seq_pairs: Sequence[Tuple[str, str]],
 
     energies_to_calculate: List[float] = []
     lines = output.split('\n')
+    if len(lines) - 1 != len(pairs):
+        raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
+
+    energies = []
     for line in lines[:-1]:
-        energies_to_calculate.append(float(line.split(':')[1].split('(')[1].split(')')[0]))
-    if len(lines) - 1 != len(seq_pairs_to_calculate):
-        raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}')
-
-    assert len(energies_to_calculate) == len(seq_pairs_to_calculate)
-
-    # put calculated energies into list to return alongside cached energies
-    assert len(idxs_to_calculate) == len(energies_to_calculate)
-    for i, energy, seq_pair in zip(idxs_to_calculate, energies_to_calculate, seq_pairs_to_calculate):
+        energy = float(line.split(':')[1].split('(')[1].split(')')[0])
         energy = min(energy, max_energy)
-        energies[i] = energy
-        if cache:
-            # clear out oldest cache key if _rna_duplex_queue is full
-            if len(_rna_duplex_queue) == _rna_duplex_queue.maxlen:
-                lru_item = _rna_duplex_queue[0]
-                if lru_item in _rna_duplex_cache:
-                    del _rna_duplex_cache[lru_item]
+        energies.append(energy)
 
-            key = (seq_pair, temperature, parameters_filename)
-            _rna_duplex_cache[key] = energy
-            _rna_duplex_queue.append(key)
+    return tuple(energies)
 
-    return energies
+
+def rna_duplex_multiple_parallel(
+        thread_pool: ThreadPool,
+        pairs: Sequence[Tuple[str, str]],
+        logger: logging.Logger = logging.root,
+        temperature: float = default_temperature,
+        parameters_filename: str = default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> Tuple[float]:
+    """
+    Parallel version of :meth:`rna_duplex_multiple`. TODO document this
+    """
+    num_pairs = len(pairs)
+    if num_pairs == 0:
+        return tuple()
+
+    bases = len(pairs[0][0] + pairs[0][1])
+    num_cores = nc.cpu_count(logical=True)
+
+    # these thresholds were measured empirically; see notebook nuad_parallel_time_trials.ipynb
+    call_sequential = (len(pairs) == 1
+                       or (bases <= 10 and num_pairs <= 20000)
+                       or (bases <= 15 and num_pairs <= 10000)
+                       or (bases <= 20 and num_pairs <= 5000)
+                       or (bases <= 30 and num_pairs <= 2000)
+                       or (bases <= 40 and num_pairs <= 1000)
+                       or (bases <= 50 and num_pairs <= 800)
+                       or (bases <= 75 and num_pairs <= 200)
+                       or (bases <= 100 and num_pairs <= 150)
+                       or (num_pairs < num_cores)
+                       )
+
+    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+        return rna_duplex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
+                                   parameters_filename=parameters_filename, max_energy=max_energy)
+
+    if call_sequential:
+        return calculate_energies_sequential(pairs)
+
+    lists_of_sequence_pairs = nc.chunker(pairs, num_chunks=num_cores)
+    lists_of_energies = thread_pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+    energies = nc.flatten(lists_of_energies)
+    return tuple(energies)
 
 
 def _fix_filename_windows(parameters_filename: str) -> str:
@@ -432,10 +474,11 @@ def wc(seq: str) -> str:
     return seq.translate(_wctable)[::-1]
 
 
-def complex_free_energy_single_strand(
+def free_energy_single_strand(
         seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
         magnesium: float = default_magnesium) -> float:
-    """Computes the complex free energy of a single strand.
+    """Computes the "complex free energy" (https://docs.nupack.org/definitions/#complex-free-energy)
+    of a single strand according to NUPACK.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
@@ -478,7 +521,7 @@ def binding(seq1: str, seq2: str, *, temperature: float = default_temperature,
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc((seq1, seq2), temperature, sodium, magnesium) - (
-        pfunc(seq1, temperature, sodium, magnesium) + pfunc(seq2, temperature, sodium, magnesium))
+            pfunc(seq1, temperature, sodium, magnesium) + pfunc(seq2, temperature, sodium, magnesium))
 
 
 def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
@@ -581,7 +624,7 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
         wc_seq = wc(seq)
         wc_altseq = wc(altseq)
         if parallel:
-            results = [global_thread_pool.apply_async(complex_free_energy_single_strand,
+            results = [global_thread_pool.apply_async(free_energy_single_strand,
                                                       args=(seq1 + seq2, temperature, sodium, magnesium)) for
                        (seq1, seq2) in
                        [(seq, altseq),
@@ -599,30 +642,30 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
                 return False
             energy_sum += sum(energies)
         else:
-            seq_alt = complex_free_energy_single_strand(seq + altseq, temperature, sodium, magnesium)
+            seq_alt = free_energy_single_strand(seq + altseq, temperature, sodium, magnesium)
             if seq_alt > concat:
                 return False
-            seq_wcalt = complex_free_energy_single_strand(seq + wc_altseq, temperature, sodium, magnesium)
+            seq_wcalt = free_energy_single_strand(seq + wc_altseq, temperature, sodium, magnesium)
             if seq_wcalt > concat:
                 return False
-            wcseq_alt = complex_free_energy_single_strand(wc_seq + altseq, temperature, sodium, magnesium)
+            wcseq_alt = free_energy_single_strand(wc_seq + altseq, temperature, sodium, magnesium)
             if wcseq_alt > concat:
                 return False
-            wcseq_wcalt = complex_free_energy_single_strand(wc_seq + wc_altseq, temperature, sodium,
-                                                            magnesium)
+            wcseq_wcalt = free_energy_single_strand(wc_seq + wc_altseq, temperature, sodium,
+                                                    magnesium)
             if wcseq_wcalt > concat:
                 return False
-            alt_seq = complex_free_energy_single_strand(altseq + seq, temperature, sodium, magnesium)
+            alt_seq = free_energy_single_strand(altseq + seq, temperature, sodium, magnesium)
             if alt_seq > concat:
                 return False
-            alt_wcseq = complex_free_energy_single_strand(altseq + wc_seq, temperature, sodium, magnesium)
+            alt_wcseq = free_energy_single_strand(altseq + wc_seq, temperature, sodium, magnesium)
             if alt_wcseq > concat:
                 return False
-            wcalt_seq = complex_free_energy_single_strand(wc_altseq + seq, temperature, sodium, magnesium)
+            wcalt_seq = free_energy_single_strand(wc_altseq + seq, temperature, sodium, magnesium)
             if wcalt_seq > concat:
                 return False
-            wcalt_wcseq = complex_free_energy_single_strand(wc_altseq + wc_seq, temperature, sodium,
-                                                            magnesium)
+            wcalt_wcseq = free_energy_single_strand(wc_altseq + wc_seq, temperature, sodium,
+                                                    magnesium)
             if wcalt_wcseq > concat:
                 return False
             energy_sum += (seq_alt + seq_wcalt + wcseq_alt + wcseq_wcalt +
