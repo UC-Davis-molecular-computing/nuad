@@ -4239,7 +4239,7 @@ class Result(Generic[DesignPart]):
 def parse_and_normalize_quantity(quantity: float | int | str | pint.Quantity) \
         -> pint.Quantity[Decimal]:
     if isinstance(quantity, (str, float, int)):
-        quantity = ureg(quantity)
+        quantity = ureg.Quantity(quantity)
     quantity = normalize_quantity(quantity)
     return quantity
 
