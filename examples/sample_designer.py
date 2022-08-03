@@ -137,7 +137,7 @@ def main() -> None:
         report_only_violations=False,
         random_seed=1, )
 
-    ns.search_for_dna_sequences(design=design, params=params)
+    ns.search_for_sequences(design=design, params=params)
 
     # for strand in design.strands:
     #     print(f'strand seq = {strand.sequence(spaces_between_domains=True)}')

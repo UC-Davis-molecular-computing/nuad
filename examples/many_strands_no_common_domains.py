@@ -171,7 +171,7 @@ def main() -> None:
         # scrolling_output=False,
         # report_only_violations=False,
     )
-    ns.search_for_dna_sequences(design, params)
+    ns.search_for_sequences(design, params)
 
 
 if __name__ == '__main__':

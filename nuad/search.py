@@ -1,5 +1,5 @@
 """
-The main export of the search module is the function :meth:`search_for_dna_sequences`,
+The main export of the search module is the function :meth:`search_for_sequences`,
 which is a stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
 Various parameters of the search can be controlled using :any:`SearchParameters`.
@@ -454,7 +454,7 @@ The directory {directory}
 is not empty. Its files and subdirectories will be deleted before continuing. 
 To restart a previously cancelled run starting from the files currently in 
 {directory}, 
-call search_for_dna_sequences with the parameter restart=True.
+call search_for_sequences with the parameter restart=True.
 '''
         print(warning)
         done = False
@@ -601,7 +601,7 @@ def _check_design(design: nc.Design) -> None:
 class SearchParameters:
     """
     This class describes various parameters to give to the search algorithm
-    :meth:`search_for_dna_sequences`.
+    :meth:`search_for_sequences`.
     """
 
     constraints: List[Constraint] = field(default_factory=list)
@@ -807,7 +807,7 @@ class SearchParameters:
             idx += 1
 
 
-def search_for_dna_sequences(design: nc.Design, params: SearchParameters) -> None:
+def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
     :any:`Constraint`'s in :data:`SearchParameters.constraints`.
@@ -1212,7 +1212,7 @@ identical to those that would have happened if the search had not be stopped."""
 
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
-    # to give the user the expected behavior that the Design they passed into search_for_dna_sequences
+    # to give the user the expected behavior that the Design they passed into search_for_sequences
     # is the Design being modified by the search (not the Design that is read in from the stored .json)
     design.copy_sequences_from(design_stored)
 
@@ -2000,7 +2000,7 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
     indicating how well `design` does according to `constraints`, assuming
     `design` has sequences assigned to it, for example, if it was read using
     :meth:`constraints.Design.from_design_file`
-    from a design.json file written as part of a call to :meth:`search_for_dna_sequences`.
+    from a design.json file written as part of a call to :meth:`search_for_sequences`.
 
     The report contains the same information as written in the return value of
     :meth:`summary_of_constraints`, but in a more structred format using :any:`ConstraintReport` objects
@@ -2014,7 +2014,7 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
     :param report_only_violations:
         if True, lists only violations of constraints
     :param include_only_with_values:
-        if True, lists only violations of constraints
+        if True, lists only constraints with "values" specified in the Results
     :return:
         :any:`ConstraintsReport` describing a report of how well `design` does
         according to `constraints`
@@ -2039,15 +2039,16 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
 
 
 def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
-                       report_only_violations: bool = False) -> str:
+                       report_only_violations: bool = False,
+                       include_scores: bool = False) -> str:
     """
     Returns text string containing report of how well `design` does according to `constraints`, assuming
     `design` has sequences assigned to it, for example, if it was read using
     :meth:`constraints.Design.from_design_file`
-    from a design.json file written as part of a call to :meth:`search_for_dna_sequences`.
+    from a design.json file written as part of a call to :meth:`search_for_sequences`.
 
     The report is the same format as written to the reports generated when calling
-    :meth:`search_for_dna_sequences`.
+    :meth:`search_for_sequences`.
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
@@ -2055,22 +2056,29 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
         the list of :any:`constraints.Constraint`'s to evaluate in the report
     :param report_only_violations:
         if True, lists only violations of constraints
+    :param include_scores:
+        whether to include the "scores" for each evaluation, which are numbers the search in
+        :meth:`search_for_sequences` is trying to minimize
     :return:
         string describing a report of how well `design` does according to `constraints`
     """
-    constraints_report = create_constraints_report(design, constraints, report_only_violations)
+    constraints_report = create_constraints_report(design=design, constraints=constraints,
+                                                   report_only_violations=report_only_violations)
 
-    summaries = [report.content() for report in constraints_report.reports]
+    summaries = [report.content(include_scores) for report in constraints_report.reports]
 
     score = constraints_report.total_score
     score_unfixed = constraints_report.total_score_nonfixed
     score_total_summary = f'total score of constraint violations: {score:.2f}'
     score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
+    score_summaries = (score_total_summary + '\n'
+                       + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')) \
+        if include_scores else '\n'
+
     summary = (f'total evaluations: {constraints_report.num_evaluations}\n'
                f'total violations: {constraints_report.num_violations}\n'
-               + score_total_summary + '\n'
-               + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+               + score_summaries
                + '\n\n'.join(summaries))
 
     return f'''\
@@ -2090,7 +2098,7 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
     # other constraints
     for constraint in constraints:
         report = ConstraintReport(constraint, eval_set, report_only_violations)
-        summary = report.content()
+        summary = report.content(include_scores=True)
         summaries.append(summary)
 
     score = eval_set.total_score
@@ -2275,7 +2283,7 @@ class ConstraintsReport:
     total_score: float
     """
     Total "score" of evaluations of all :any:`Constraint`'s (the score is what the search done by 
-    :meth:`search_for_dna_sequences` is trying to minimize).
+    :meth:`search_for_sequences` is trying to minimize).
     """
 
     total_score_nonfixed: float
@@ -2392,23 +2400,25 @@ class ConstraintReport(Generic[DesignPart]):
         self.evaluations_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint,
                                                                                 report_only_violations)
 
-    def header(self) -> str:
+    def header(self, include_scores: bool) -> str:
         if self.score != self.score_nonfixed:
             summary_score_unfixed = f'\n* unfixed score of violations: {self.score_nonfixed:.2f}'
         else:
             summary_score_unfixed = None
 
         summary_unfixed_content = "" if summary_score_unfixed is None else summary_score_unfixed
+        score_summary_str = f'\n* score of violations: {self.score:.2f}{summary_unfixed_content}' \
+            if include_scores else ''
+
         summary = f'''\
 **{"*" * len(self.constraint.description)}
 * {self.constraint.description}
 * evaluations: {self.num_evaluations}
-* violations:  {self.num_violations}
-* score of violations: {self.score:.2f}{summary_unfixed_content}'''
+* violations:  {self.num_violations}''' + score_summary_str
 
         return summary
 
-    def content_no_header(self) -> str:
+    def content_no_header(self, include_scores: bool) -> str:
         part_type_name = self.constraint.part_name()
         some_fixed_evals = len(self.evaluations_fixed) > 0
 
@@ -2424,8 +2434,9 @@ class ConstraintReport(Generic[DesignPart]):
 
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
+                score_str = f';  score: {ev.score:.2f}' if include_scores else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
-                       f'{ev.summary};  score: {ev.score:.2f}'
+                       f'{ev.summary}{score_str}'
                 lines_and_scores.append((line, ev.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
@@ -2445,9 +2456,9 @@ class ConstraintReport(Generic[DesignPart]):
 
         return '\n'.join(summaries)
 
-    def content(self) -> str:
-        header = self.header()
-        content_no_header = self.content_no_header()
+    def content(self, include_scores: bool) -> str:
+        header = self.header(include_scores)
+        content_no_header = self.content_no_header(include_scores)
         indented_content = textwrap.indent(content_no_header, '  ')
         return header + '\n' + indented_content
 
