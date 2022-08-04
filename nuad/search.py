@@ -28,6 +28,8 @@ import re
 import datetime
 from functools import lru_cache
 
+import pint
+
 try:
     from typing import Literal
 except ImportError:
@@ -2069,7 +2071,7 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
 
     score = constraints_report.total_score
     score_unfixed = constraints_report.total_score_nonfixed
-    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_total_summary = f'total score of constraint violations:         {score:.2f}'
     score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
     score_summaries = (score_total_summary + '\n'
@@ -2077,7 +2079,7 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
         if include_scores else '\n'
 
     summary = (f'total evaluations: {constraints_report.num_evaluations}\n'
-               f'total violations: {constraints_report.num_violations}\n'
+               f'total violations:  {constraints_report.num_violations}\n'
                + score_summaries
                + '\n\n'.join(summaries))
 
@@ -2198,6 +2200,10 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         with the same rules as `xlims`
     """
     import matplotlib.pyplot as plt
+    from IPython.display import display, Markdown
+
+    def dm(obj):
+        display(Markdown(obj))
 
     if xlims is None:
         xlims = {}
@@ -2206,15 +2212,29 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
 
     assert layout in ['horz', 'vert']
     constraints_report = create_constraints_report(design, constraints, report_only_violations,
-                                                   include_only_with_values=True)
+                                                   include_only_with_values=False)
 
-    num_figs = len(constraints_report.reports)
-
+    # divide into constraints with values (put in histogram) and without (print summary of violations)
+    reports_with_values: List[Tuple[ConstraintReport, List[pint.Quantity]]] = []
+    reports_without_values: List[ConstraintReport] = []
     for i, report in enumerate(constraints_report.reports):
         quantities = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
-        if len(quantities) == 0:
-            # print(f'skipping constraint "{report.constraint.description}" since its evaluations have no values')
-            continue
+        if len(quantities) > 0:
+            reports_with_values.append((report, quantities))
+        else:
+            reports_without_values.append(report)
+    num_figs = len(reports_with_values)
+
+    for report in reports_without_values:
+        part_type_name = report.constraint.part_name()
+        dm(f'## {report.constraint.description}')
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')
+        for viol in report.violations:
+            print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
+
+    for i, (report, quantities) in enumerate(reports_with_values):
+        quantities = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
+        assert len(quantities) > 0
 
         # convert pint.Quantity to unitless magnitude to avoid UnitStrippedWarning when calling py.hist
         values = [q.magnitude for q in quantities]
@@ -2223,22 +2243,18 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
 
         if layout == 'horz':
             plt.subplot(1, num_figs, i + 1)
-        weights = np.ones(len(values)) / len(values) if yscale == 'linear' else None
-        # the histogram of the data
-        # weights is to display as percentage: https://stackoverflow.com/a/51477080
 
         num_bins = _value_from_constraint_dict(bins, report.constraint, _default_num_bins, int)
-        _, __, ___ = plt.hist(values, num_bins, density=True, facecolor='g', alpha=0.75, weights=weights, )
 
-        if yscale == 'linear':
-            from matplotlib.ticker import PercentFormatter
-            plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
+        # print(f'{sorted(list(map(float, values)))=}')
+
+        _, __, ___ = plt.hist(
+            values,
+            bins=num_bins,
+            edgecolor='black',
+        )
+
         plt.yscale(yscale)
-        # if yscale == 'symlog':
-        #     linthresh = 0.0001
-        #     plt.yscale(yscale, linthresh=linthresh)
-        # else:
-        #     plt.yscale(yscale)
 
         # see if user set custom x limits for this constraint
         # not sure why getting mypy error on next line
@@ -2373,6 +2389,10 @@ class ConstraintReport(Generic[DesignPart]):
     evaluations_nonfixed: List[Evaluation]
     evaluations_fixed: List[Evaluation]
 
+    violations: List[Evaluation]
+    violations_nonfixed: List[Evaluation]
+    violations_fixed: List[Evaluation]
+
     report_only_violations: bool
 
     def __init__(self, constraint: nc.Constraint[DesignPart],
@@ -2387,18 +2407,25 @@ class ConstraintReport(Generic[DesignPart]):
 
         self.constraint = constraint
         self.report_only_violations = report_only_violations
-        self.evaluations = evaluation_set.evaluations_of_constraint(constraint,
-                                                                    violations=report_only_violations)
+        self.evaluations = evaluation_set.evaluations_of_constraint(
+            constraint, violations=report_only_violations)
         self.num_evaluations = evaluation_set.num_evaluations_of(constraint)
         self.num_violations = evaluation_set.num_violations_of(constraint)
         self.score = evaluation_set.score_of_constraint(constraint, True)
         self.score_nonfixed = evaluation_set.score_of_constraint_nonfixed(constraint, True)
         self.score_fixed = evaluation_set.score_of_constraint_fixed(constraint, True)
 
-        self.evaluations_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(constraint,
-                                                                                      report_only_violations)
-        self.evaluations_fixed = evaluation_set.evaluations_fixed_of_constraint(constraint,
-                                                                                report_only_violations)
+        self.evaluations_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(
+            constraint, report_only_violations)
+        self.evaluations_fixed = evaluation_set.evaluations_fixed_of_constraint(
+            constraint, report_only_violations)
+
+        self.violations = evaluation_set.evaluations_of_constraint(
+            constraint, violations=True)
+        self.violations_nonfixed = evaluation_set.evaluations_nonfixed_of_constraint(
+            constraint, violations=True)
+        self.violations_fixed = evaluation_set.evaluations_fixed_of_constraint(
+            constraint, violations=True)
 
     def header(self, include_scores: bool) -> str:
         if self.score != self.score_nonfixed:
