@@ -941,7 +941,7 @@ def main() -> None:
                                  # restart=True
                                  )
 
-    ns.search_for_dna_sequences(design, params)
+    ns.search_for_sequences(design, params)
 
 
 if __name__ == '__main__':

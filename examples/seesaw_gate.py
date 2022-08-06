@@ -419,4 +419,4 @@ params = ns.SearchParameters(  # weigh_violations_equally=True,
     out_directory='output/seesaw_gate',
     report_only_violations=False, )
 
-ns.search_for_dna_sequences(design=seesaw_design, params=params)
+ns.search_for_sequences(design=seesaw_design, params=params)

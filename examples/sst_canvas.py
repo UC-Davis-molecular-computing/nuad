@@ -26,7 +26,7 @@ def main() -> None:
         log_time=True,
     )
 
-    ns.search_for_dna_sequences(design, params)
+    ns.search_for_sequences(design, params)
 
 
 # command-line arguments
@@ -268,12 +268,13 @@ def create_tile_no_gggg_constraint(weight: float) -> nc.StrandConstraint:
     # sufficient. See also source code of provided constraints in dsd/constraints.py for more examples,
     # particularly for examples that call NUPACK or ViennaRNA.
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:  # noqa
         sequence = seqs[0]
         if 'GGGG' in sequence:
-            return 1.0, f'GGGG found in {sequence}'
+            result = nc.Result(excess=1.0, summary=f'GGGG found in {sequence}', value=sequence.count('GGGG'))
         else:
-            return 0.0, ''
+            result = nc.Result(excess=0.0, summary=f'', value=0)
+        return result
 
     description = "No GGGG allowed in strand's sequence"
 

@@ -17,9 +17,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+from __future__ import annotations
+
 import logging
 import time
-from typing import Optional, Callable, Any
+from typing import Callable, Any
 
 
 def _current_nanoseconds() -> int:
@@ -37,7 +39,7 @@ def _current_nanoseconds() -> int:
 class Stopwatch:
     def __init__(self) -> None:
         self._start: int = _current_nanoseconds()
-        self._end: Optional[int] = None
+        self._end: int | None = None
 
     def timeit(self, callback: Callable[[], Any]) -> str:
         """
@@ -59,23 +61,23 @@ class Stopwatch:
     def running(self) -> bool:
         return self._end is None
 
-    def restart(self) -> 'Stopwatch':
+    def restart(self) -> Stopwatch:
         self._start = _current_nanoseconds()
         self._end = None
         return self
 
-    def reset(self) -> 'Stopwatch':
+    def reset(self) -> Stopwatch:
         self._start = _current_nanoseconds()
         self._end = self._start
         return self
 
-    def start(self) -> 'Stopwatch':
+    def start(self) -> Stopwatch:
         if not self.running:
             self._start = _current_nanoseconds() - self.duration_ns
             self._end = None
         return self
 
-    def stop(self) -> 'Stopwatch':
+    def stop(self) -> Stopwatch:
         if self.running:
             self._end = _current_nanoseconds()
         return self
@@ -98,8 +100,8 @@ class Stopwatch:
     def microseconds_str(self, precision: int = 2) -> str:
         return f'{self.microseconds():.{precision}f}'
 
-    def milliseconds_str(self, precision: int = 2, width: Optional[int] = None) -> str:
-        width_spec = '' if width == None else width
+    def milliseconds_str(self, precision: int = 2, width: int | None = None) -> str:
+        width_spec = '' if width is None else width
         return f'{self.milliseconds():{width_spec}.{precision}f}'
 
     def seconds_str(self, precision: int = 2) -> str:
@@ -133,9 +135,9 @@ class Stopwatch:
 
     def log(self, msg: str,
             # units: Optional[Literal['s', 'ms', 'us', 'ns']] = None, # Literal not supported in Python 3.7
-            units: Optional[str] = None,
+            units: str | None = None,
             restart: bool = True,
-            logger: Optional[logging.Logger] = None,
+            logger: logging.Logger | None = None,
             ) -> None:
         """
         Useful for timing statements/blocks of statements via the following:
@@ -163,8 +165,8 @@ class Stopwatch:
         if logger is None:
             print_local = print
         else:
-            def print_local(msg: str) -> None:
-                logger.info(msg)
+            def print_local(the_msg: str) -> None:
+                logger.info(the_msg)
 
         if units is None:
             print_local(f'time for {msg}: {self}')
