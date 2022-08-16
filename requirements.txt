@@ -8,5 +8,6 @@ nupack
 tabulate
 pint
 matplotlib
+openpyxl
 scadnano
 typing_extensions; python_version < "3.8"
