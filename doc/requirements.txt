@@ -1,7 +1,0 @@
-numpy
-psutil
-ordered_set
-pathos
-scadnano
-xlwt
-xlrd
