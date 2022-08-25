@@ -4,8 +4,8 @@ which is a stochastic local search for finding DNA sequences to assign to
 :any:`Domain`'s in a :any:`Design` to satisfy all :any:`Constraint`'s.
 Various parameters of the search can be controlled using :any:`SearchParameters`.
 
-Instructions for using the dsd library are available at
-https://github.com/UC-Davis-molecular-computing/dsd#data-model
+Instructions for using the nuad library are available at
+https://github.com/UC-Davis-molecular-computing/nuad#data-model
 """
 
 from __future__ import annotations
