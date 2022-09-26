@@ -2181,24 +2181,24 @@ class IDTFields(JSONSerializable):
     plate: str | None = None
     """Name of plate in case this strand will be ordered on a 96-well or 384-well plate.
 
-    Optional field, but non-optional if :data:`IDTFields.well` is not ``None``.
+    Optional field, but non-optional if :data:`SynthesisFields.well` is not ``None``.
     """
 
     well: str | None = None
     """Well position on plate in case this strand will be ordered on a 96-well or 384-well plate.
 
-    Optional field, but non-optional if :data:`IDTFields.plate` is not ``None``.
+    Optional field, but non-optional if :data:`SynthesisFields.plate` is not ``None``.
     """
 
     def __post_init__(self) -> None:
         _check_idt_string_not_none_or_empty(self.scale, 'scale')
         _check_idt_string_not_none_or_empty(self.purification, 'purification')
         if self.plate is None and self.well is not None:
-            raise ValueError(f'IDTFields.plate cannot be None if IDTFields.well is not None\n'
-                             f'IDTFields.well = {self.well}')
+            raise ValueError(f'SynthesisFields.plate cannot be None if SynthesisFields.well is not None\n'
+                             f'SynthesisFields.well = {self.well}')
         if self.plate is not None and self.well is None:
-            raise ValueError(f'IDTFields.well cannot be None if IDTFields.plate is not None\n'
-                             f'IDTFields.plate = {self.plate}')
+            raise ValueError(f'SynthesisFields.well cannot be None if SynthesisFields.plate is not None\n'
+                             f'SynthesisFields.plate = {self.plate}')
 
     def to_json_serializable(self, suppress_indent: bool = True,
                              **kwargs: Any) -> NoIndent | Dict[str, Any]:
@@ -2228,9 +2228,9 @@ class IDTFields(JSONSerializable):
 
 def _check_idt_string_not_none_or_empty(value: str, field_name: str) -> None:
     if value is None:
-        raise ValueError(f'field {field_name} in IDTFields cannot be None')
+        raise ValueError(f'field {field_name} in SynthesisFields cannot be None')
     if len(value) == 0:
-        raise ValueError(f'field {field_name} in IDTFields cannot be empty')
+        raise ValueError(f'field {field_name} in SynthesisFields cannot be empty')
 
 
 default_strand_group = 'default_strand_group'
@@ -2334,7 +2334,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         :param label:
             Label to associate with this :any:`Strand`.
         :param idt:
-            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
+            :any:`SynthesisFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         """
         self._all_intersecting_domains = None
@@ -3312,7 +3312,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         :param label:
             Label to associate with this :any:`Strand`.
         :param idt:
-            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
+            :any:`SynthesisFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         :return:
             the :any:`Strand` that is created
@@ -3491,7 +3491,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             is the symbol to delimit the four IDT fields name,sequence,scale,purification.
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError
+            :data:`SynthesisFields.name` and the same :meth:`Strand.sequence`. A ValueError
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
@@ -3547,7 +3547,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             :meth:`strand_order_key_function`
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError is
+            :data:`SynthesisFields.name` and the same :meth:`Strand.sequence`. A ValueError is
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
@@ -3563,7 +3563,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
-            :data:`Strand.idt` has the fields :py:data:`IDTFields.plate` and :py:data:`IDTFields.well`,
+            :data:`Strand.idt` has the fields :py:data:`SynthesisFields.plate` and :py:data:`SynthesisFields.well`,
             since `use_default_plates` directs these fields to be ignored.
         :param plate_type:
             a :any:`PlateType` specifying whether to use a 96-well plate or a 384-well plate
@@ -3612,9 +3612,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return domains_in_pool
 
     @staticmethod
-    def from_scadnano_file(sc_filename: str,
-                           fix_assigned_sequences: bool = True,
-                           ignored_strands: Iterable[Strand] | None = None) -> Design[StrandLabel, DomainLabel]:
+    def from_scadnano_file(
+            sc_filename: str,
+            fix_assigned_sequences: bool = True,
+            ignored_strands: Iterable[Strand] | None = None
+    ) -> Design[StrandLabel, DomainLabel]:
         """
         Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
         DNA sequence design.
@@ -3827,7 +3829,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                              ignored_strands: Iterable[Strand] = ()) -> None:
         """
-        Assigns :any:`IDTFields` from this :any:`Design` into `sc_design`.
+        Assigns :any:`SynthesisFields` from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
         IDT fields of the dsd :any:`Strand` with that name.
@@ -4244,7 +4246,7 @@ def parse_and_normalize_quantity(quantity: float | int | str | pint.Quantity) \
     return quantity
 
 
-def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity[Decimal]:
+def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity[Decimal]:  # noqa
     # Convenient constructor for units, eg, :code:`Q_(5.0, 'nM')`.
     # Ensures that the quantity is a Decimal.
     if isinstance(qty, Decimal):
@@ -4687,7 +4689,7 @@ def _check_nupack_installed() -> None:
      Raises ImportError if nupack module is not installed.
     """
     try:
-        import nupack
+        import nupack  # noqa
     except ModuleNotFoundError:
         raise ImportError(
             'NUPACK 4 must be installed to create a constraint that uses NUPACK. '
@@ -5012,9 +5014,9 @@ def nupack_strand_pair_constraint_by_number_matching_domains(
 
     if descriptions is None:
         descriptions = {
-            num_matching: _pair_default_description('strand', 'NUPACK', threshold, temperature) +
-                          f'\nfor strands with {num_matching} complementary '
-                          f'{"domain" if num_matching == 1 else "domains"}'
+            num_matching: (_pair_default_description('strand', 'NUPACK', threshold, temperature) +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
 
@@ -5452,9 +5454,9 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
                           parameters_filename=parameters_filename)
     if descriptions is None:
         descriptions = {
-            num_matching: _pair_default_description('strand', 'RNAcofold', threshold, temperature) +
-                          f'\nfor strands with {num_matching} complementary '
-                          f'{"domain" if num_matching == 1 else "domains"}'
+            num_matching: (_pair_default_description('strand', 'RNAcofold', threshold, temperature) +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
     return _strand_pairs_constraints_by_number_matching_domains(
@@ -5526,9 +5528,9 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
 
     if descriptions is None:
         descriptions = {
-            num_matching: _pair_default_description('strand', 'RNAduplex', threshold, temperature) +
-                          f'\nfor strands with {num_matching} complementary '
-                          f'{"domain" if num_matching == 1 else "domains"}'
+            num_matching: (_pair_default_description('strand', 'RNAduplex', threshold, temperature) +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
 
