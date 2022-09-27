@@ -5035,7 +5035,7 @@ def nupack_domain_pair_constraint(
                                 pairs=pairs)
 
 
-def nupack_strand_pair_constraint_by_number_matching_domains(
+def nupack_strand_pair_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
