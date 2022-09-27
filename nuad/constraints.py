@@ -2181,24 +2181,24 @@ class IDTFields(JSONSerializable):
     plate: str | None = None
     """Name of plate in case this strand will be ordered on a 96-well or 384-well plate.
 
-    Optional field, but non-optional if :data:`SynthesisFields.well` is not ``None``.
+    Optional field, but non-optional if :data:`IDTFields.well` is not ``None``.
     """
 
     well: str | None = None
     """Well position on plate in case this strand will be ordered on a 96-well or 384-well plate.
 
-    Optional field, but non-optional if :data:`SynthesisFields.plate` is not ``None``.
+    Optional field, but non-optional if :data:`IDTFields.plate` is not ``None``.
     """
 
     def __post_init__(self) -> None:
         _check_idt_string_not_none_or_empty(self.scale, 'scale')
         _check_idt_string_not_none_or_empty(self.purification, 'purification')
         if self.plate is None and self.well is not None:
-            raise ValueError(f'SynthesisFields.plate cannot be None if SynthesisFields.well is not None\n'
-                             f'SynthesisFields.well = {self.well}')
+            raise ValueError(f'IDTFields.plate cannot be None if IDTFields.well is not None\n'
+                             f'IDTFields.well = {self.well}')
         if self.plate is not None and self.well is None:
-            raise ValueError(f'SynthesisFields.well cannot be None if SynthesisFields.plate is not None\n'
-                             f'SynthesisFields.plate = {self.plate}')
+            raise ValueError(f'IDTFields.well cannot be None if IDTFields.plate is not None\n'
+                             f'IDTFields.plate = {self.plate}')
 
     def to_json_serializable(self, suppress_indent: bool = True,
                              **kwargs: Any) -> NoIndent | Dict[str, Any]:
@@ -2228,9 +2228,9 @@ class IDTFields(JSONSerializable):
 
 def _check_idt_string_not_none_or_empty(value: str, field_name: str) -> None:
     if value is None:
-        raise ValueError(f'field {field_name} in SynthesisFields cannot be None')
+        raise ValueError(f'field {field_name} in IDTFields cannot be None')
     if len(value) == 0:
-        raise ValueError(f'field {field_name} in SynthesisFields cannot be empty')
+        raise ValueError(f'field {field_name} in IDTFields cannot be empty')
 
 
 default_strand_group = 'default_strand_group'
@@ -2334,7 +2334,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         :param label:
             Label to associate with this :any:`Strand`.
         :param idt:
-            :any:`SynthesisFields` object to associate with this :any:`Strand`; needed to call
+            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         """
         self._all_intersecting_domains = None
@@ -3312,7 +3312,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         :param label:
             Label to associate with this :any:`Strand`.
         :param idt:
-            :any:`SynthesisFields` object to associate with this :any:`Strand`; needed to call
+            :any:`IDTFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         :return:
             the :any:`Strand` that is created
@@ -3491,7 +3491,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             is the symbol to delimit the four IDT fields name,sequence,scale,purification.
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :data:`SynthesisFields.name` and the same :meth:`Strand.sequence`. A ValueError
+            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
@@ -3547,7 +3547,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             :meth:`strand_order_key_function`
         :param warn_duplicate_name:
             if ``True`` prints a warning when two different :any:`Strand`'s have the same
-            :data:`SynthesisFields.name` and the same :meth:`Strand.sequence`. A ValueError is
+            :data:`IDTFields.name` and the same :meth:`Strand.sequence`. A ValueError is
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
@@ -3563,7 +3563,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
-            :data:`Strand.idt` has the fields :py:data:`SynthesisFields.plate` and :py:data:`SynthesisFields.well`,
+            :data:`Strand.idt` has the fields :py:data:`IDTFields.plate` and :py:data:`IDTFields.well`,
             since `use_default_plates` directs these fields to be ignored.
         :param plate_type:
             a :any:`PlateType` specifying whether to use a 96-well plate or a 384-well plate
@@ -3899,7 +3899,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                              ignored_strands: Iterable[Strand] = (),
                                              overwrite: bool = False) -> None:
         """
-        Assigns :any:`SynthesisFields` from this :any:`Design` into `sc_design`.
+        Assigns :any:`IDTFields` from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
         IDT fields of the dsd :any:`Strand` with that name.
