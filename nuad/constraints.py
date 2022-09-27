@@ -3163,7 +3163,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         Write JSON file representing this :any:`Design`,
         which can be imported via the method :meth:`Design.from_design_file`,
         with the output file having the same name as the running script but with ``.py`` changed to
-        :attr:`default_scadnano_file_extension`,
+        ``.json``,
         unless `filename` is explicitly specified.
         For instance, if the script is named ``my_design.py``,
         then the design will be written to ``my_design.json``.
@@ -3777,17 +3777,35 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         else:
             raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
 
+    def assign_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+                                         ignored_strands: Iterable[Strand] = (),
+                                         overwrite: bool = False):
+        """
+        Assigns DNA sequence, IDTFields, and StrandGroups (as a key in a scadnano String.label dict
+        under key "group").
+        TODO: document more
+        """
+        self.assign_sequences_to_scadnano_design(sc_design, ignored_strands, overwrite)
+        self.assign_strand_groups_to_labels(sc_design, ignored_strands, overwrite)
+        self.assign_idt_fields_to_scadnano_design(sc_design, ignored_strands, overwrite)
+        self.assign_modifications_to_scadnano_design(sc_design, ignored_strands, overwrite)
+
     def assign_sequences_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
                                             ignored_strands: Iterable[Strand] = (),
                                             overwrite: bool = False) -> None:
         """
         Assigns sequences from this :any:`Design` into `sc_design`.
 
+        Also writes a label to each scadnano strand. If the label is None a new one is created as
+        a dict with a key `group`. The name of the StrandGroup of the nuad design is the value
+        to assign to this key. If the scadnano strand label is already a dict, it adds this key.
+        If the strand label is not None or a dict, an exception is raised.
+
         Assumes that each domain name in domains in `sc_design` is a :py:data:`Domain.name` of a
         :any:`Domain` in this :any:`Design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
-        DNA sequence of the dsd :any:`Strand` with that name.
+        DNA sequence of the nuad :any:`Strand` with that name.
 
         :param sc_design:
             a scadnano design.
@@ -3826,8 +3844,60 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                f'Make sure that this is a strand you intended to leave out of the '
                                f'sequence design process')
 
+    def shared_strands_with_scadnano_design(self, sc_design: sc.Design,
+                                            ignored_strands: Iterable[Strand] = ()) \
+            -> List[Tuple[Strand, List[sc.Strand]]]:
+        """
+        Returns a list of pairs (nuad_strand, sc_strands), where nuad_strand has the same name
+        as all scadnano Strands in sc_strands, but only scadnano strands are included in the
+        list that do not appear in `ignored_strands`.
+        """
+        sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
+        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
+
+        sc_strands_by_name: Dict[str, List[sc.Strand]] = defaultdict(list)
+        for sc_strand in sc_strands_to_include:
+            sc_strands_by_name[sc_strand.name].append(sc_strand)
+
+        pairs = []
+        for name, nuad_strand in nuad_strands_by_name.items():
+            if name in sc_strands_by_name:
+                sc_strands = sc_strands_by_name[name]
+                pairs.append((nuad_strand, sc_strands))
+
+        return pairs
+
+    def assign_strand_groups_to_labels(self, sc_design: sc.Design,
+                                       ignored_strands: Iterable[Strand] = (),
+                                       overwrite: bool = False) -> None:
+        """
+        TODO: document this
+        """
+        strand_pairs = self.shared_strands_with_scadnano_design(sc_design, ignored_strands)
+
+        for nuad_strand, sc_strands in strand_pairs:
+            for sc_strand in sc_strands:
+                if nuad_strand.group is not None:
+                    if sc_strand.label is None:
+                        sc_strand.label = {}
+                    elif not isinstance(sc_strand.label, dict):
+                        raise ValueError(f'cannot assign strand group to strand {sc_strand.name} '
+                                         f'because it already has a label that is not a dict. '
+                                         f'It must either have label None or a dict.')
+
+                    # if we get here, then sc_strand.label is a dict. Need to check whether
+                    # it already has a 'group' key.
+                    if group_key in sc_strand.label is not None and not overwrite:
+                        raise ValueError(f'Cannot assign strand group from nuad strand to scadnano strand '
+                                         f'{sc_strand.name} (through its label field) because the '
+                                         f'scadnano strand already has a label with group key '
+                                         f'\n{sc_strand.label[group_key]}. '
+                                         f'Set overwrite to True to force an overwrite.')
+                    sc_strand.label[group_key] = nuad_strand.group
+
     def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
-                                             ignored_strands: Iterable[Strand] = ()) -> None:
+                                             ignored_strands: Iterable[Strand] = (),
+                                             overwrite: bool = False) -> None:
         """
         Assigns :any:`SynthesisFields` from this :any:`Design` into `sc_design`.
 
@@ -3838,25 +3908,27 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             a scadnano design.
         :param ignored_strands:
             strands in the scadnano design that are to be not assigned.
+        :param overwrite:
+            whether to overwrite existing fields.
         :raises ValueError:
             if scadnano strand already has any modifications assigned
         """
         # filter out ignored strands
-        sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
+        strand_pairs = self.shared_strands_with_scadnano_design(sc_design, ignored_strands)
 
-        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
-
-        for sc_strand in sc_strands_to_include:
-            nuad_strand = nuad_strands_by_name[sc_strand.name]
-            if nuad_strand.idt is not None:
-                if sc_strand.idt is not None:
-                    raise ValueError(f'Cannot assign IDT fields from dsd strand to scadnano strand '
-                                     f'{sc_strand.name} because the scadnano strand already has IDT fields '
-                                     f'assigned:\n{sc_strand.idt}')
-                sc_strand.idt = nuad_strand.idt.to_scadnano_idt()
+        for nuad_strand, sc_strands in strand_pairs:
+            for sc_strand in sc_strands:
+                if nuad_strand.idt is not None:
+                    if sc_strand.idt is not None and not overwrite:
+                        raise ValueError(f'Cannot assign IDT fields from dsd strand to scadnano strand '
+                                         f'{sc_strand.name} because the scadnano strand already has '
+                                         f'IDT fields assigned:\n{sc_strand.idt}. '
+                                         f'Set overwrite to True to force an overwrite.')
+                    sc_strand.idt = nuad_strand.idt.to_scadnano_idt()
 
     def assign_modifications_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
-                                                ignored_strands: Iterable[Strand] = ()) -> None:
+                                                ignored_strands: Iterable[Strand] = (),
+                                                overwrite: bool = False) -> None:
         """
         Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
 
@@ -3867,6 +3939,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             a scadnano design.
         :param ignored_strands:
             strands in the scadnano design that are to be not assigned.
+        :param overwrite:
+            whether to overwrite existing fields in scadnano design
         :raises ValueError:
             if scadnano strand already has any modifications assigned
         """
@@ -3879,26 +3953,29 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         for sc_strand in sc_strands_to_include:
             dsd_strand: Strand = dsd_strands_by_name[sc_strand.name]
             if dsd_strand.modification_5p is not None:
-                if sc_strand.modification_5p is not None:
+                if sc_strand.modification_5p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 5\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 5\''
-                                     f'modification assigned:\n{sc_strand.modification_5p}')
+                                     f'modification assigned:\n{sc_strand.modification_5p}. '
+                                     f'Set overwrite to True to force an overwrite.')
                 sc_strand.modification_5p = dsd_strand.modification_5p.to_scadnano_modification()
 
             if dsd_strand.modification_3p is not None:
-                if sc_strand.modification_3p is not None:
+                if sc_strand.modification_3p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 3\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 3\''
-                                     f'modification assigned:\n{sc_strand.modification_3p}')
+                                     f'modification assigned:\n{sc_strand.modification_3p}. '
+                                     f'Set overwrite to True to force an overwrite.')
                 sc_strand.modification_3p = dsd_strand.modification_3p.to_scadnano_modification()
 
             for offset, mod_int in dsd_strand.modifications_int.items():
-                if offset in sc_strand.modifications_int is not None:
+                if offset in sc_strand.modifications_int is not None and not overwrite:
                     raise ValueError(f'Cannot assign internal modification from dsd strand to '
                                      f'scadnano strand {sc_strand.name} at offset {offset} '
                                      f'because the scadnano strand already has an internal '
                                      f'modification assigned at that offset:\n'
-                                     f'{sc_strand.modifications_int[offset]}')
+                                     f'{sc_strand.modifications_int[offset]} .'
+                                     f'Set overwrite to True to force an overwrite.')
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
     def _assign_to_strand_without_checking_existing_sequence(
