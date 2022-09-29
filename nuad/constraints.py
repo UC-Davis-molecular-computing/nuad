@@ -3457,7 +3457,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_design = _export_dummy_scadnano_design_for_idt_export(strands)
         return sc_design.to_idt_bulk_input_format(delimiter, key, warn_duplicate_name, only_strands_with_idt)
 
-    def write_idt_bulk_input_file(self, *, directory: str = '.', filename: str = None,
+    def write_idt_bulk_input_file(self, *,
+                                  filename: str = None,
+                                  directory: str = '.',
                                   key: KeyFunction[Strand] | None = None,
                                   extension: str | None = None,
                                   delimiter: str = ',',
@@ -3476,11 +3478,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         The string written is that returned by :meth:`Design.to_idt_bulk_input_format`.
 
+        :param filename:
+            optional custom filename to use (instead of currently running script)
         :param directory:
             specifies a directory in which to place the file, either absolute or relative to
             the current working directory. Default is the current working directory.
-        :param filename:
-            optional custom filename to use (instead of currently running script)
         :param key:
             `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
             order in which to output strand sequences. Some useful defaults are provided by
@@ -3513,7 +3515,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             extension = 'idt'
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
-    def write_idt_plate_excel_file(self, *, directory: str = '.', filename: str = None,
+    def write_idt_plate_excel_file(self, *,
+                                   filename: str = None,
+                                   directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
                                    only_strands_with_idt: bool = False,
@@ -3536,11 +3540,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         that number of strands, because IDT charges extra for a plate with too few strands:
         https://www.idtdna.com/pages/products/custom-dna-rna/dna-oligos/custom-dna-oligos
 
+        :param filename:
+            custom filename if default (explained above) is not desired
         :param directory:
             specifies a directory in which to place the file, either absolute or relative to
             the current working directory. Default is the current working directory.
-        :param filename:
-            custom filename if default (explained above) is not desired
         :param key:
             `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
             order in which to output strand sequences. Some useful defaults are provided by
