@@ -2566,9 +2566,14 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         label_json = json_map.get(label_key)
         label = label_decoder(label_json)
 
+        idt_json = json_map.get(idt_key)
+        idt = None
+        if idt_json is not None:
+            idt = IDTFields.from_json_serializable(idt_json)
+
         strand: Strand[StrandLabel, DomainLabel] = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label)
+            group=group, name=name, label=label, idt=idt)
         return strand
 
     def __repr__(self) -> str:
@@ -3516,7 +3521,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
     def write_idt_plate_excel_file(self, *,
-                                   filename: str = None,
+                                       filename: str = None,
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
