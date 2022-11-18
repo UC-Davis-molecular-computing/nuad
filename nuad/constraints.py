@@ -3958,26 +3958,26 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
-        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
         for sc_strand in sc_strands_to_include:
-            dsd_strand: Strand = dsd_strands_by_name[sc_strand.name]
-            if dsd_strand.modification_5p is not None:
+            nuad_strand: Strand = nuad_strands_by_name[sc_strand.name]
+            if nuad_strand.modification_5p is not None:
                 if sc_strand.modification_5p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 5\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 5\''
                                      f'modification assigned:\n{sc_strand.modification_5p}. '
                                      f'Set overwrite to True to force an overwrite.')
-                sc_strand.modification_5p = dsd_strand.modification_5p.to_scadnano_modification()
+                sc_strand.modification_5p = nuad_strand.modification_5p.to_scadnano_modification()
 
-            if dsd_strand.modification_3p is not None:
+            if nuad_strand.modification_3p is not None:
                 if sc_strand.modification_3p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 3\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 3\''
                                      f'modification assigned:\n{sc_strand.modification_3p}. '
                                      f'Set overwrite to True to force an overwrite.')
-                sc_strand.modification_3p = dsd_strand.modification_3p.to_scadnano_modification()
+                sc_strand.modification_3p = nuad_strand.modification_3p.to_scadnano_modification()
 
-            for offset, mod_int in dsd_strand.modifications_int.items():
+            for offset, mod_int in nuad_strand.modifications_int.items():
                 if offset in sc_strand.modifications_int is not None and not overwrite:
                     raise ValueError(f'Cannot assign internal modification from dsd strand to '
                                      f'scadnano strand {sc_strand.name} at offset {offset} '
