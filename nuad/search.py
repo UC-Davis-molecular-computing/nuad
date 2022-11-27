@@ -860,8 +860,8 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
     Otherwise, if DNA sequences are already assigned to the :any:`Domain`'s initially, these sequences
     are used as a starting point for finding sequences that satisfy all :any:`Constraint`'s.
-    (In this case, those sequences are not checked against any :any:`NumpyConstraint`'s
-    or :any:`SequenceConstraint`'s in the :any:`Design`, since those checks are applied prior to
+    (In this case, those sequences are not checked against any :any:`NumpyFilter`'s
+    or :any:`SequenceFilter`'s in the :any:`Design`, since those checks are applied prior to
     assigning DNA sequences to any :any:`Domain`.)
 
     The function has some side effects. It writes a report on the optimal sequence assignment found so far

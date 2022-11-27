@@ -341,7 +341,7 @@ class TestExportDNASequences(unittest.TestCase):
 class TestNumpyConstraints(unittest.TestCase):
     def test_NearestNeighborEnergyConstraint_raises_exception_if_energies_in_wrong_order(self) -> None:
         with self.assertRaises(ValueError):
-            nc.NearestNeighborEnergyConstraint(-10, -15)
+            nc.NearestNeighborEnergyFilter(-10, -15)
 
 
 class TestInsertDomains(unittest.TestCase):

@@ -5,13 +5,13 @@ import nuad.vienna_nupack as nv  # type: ignore
 
 def main():
     domain_length = 15
-    # energy_constraint = dc.NearestNeighborEnergyConstraint(low_energy=-9.2, high_energy=-7)
-    numpy_constraints = [  # energy_constraint,
-        nc.RunsOfBasesConstraint(['C', 'G'], 4),
-        nc.RunsOfBasesConstraint(['A', 'T'], 4)
+    # energy_constraint = dc.NearestNeighborEnergyFilter(low_energy=-9.2, high_energy=-7)
+    numpy_filters = [  # energy_constraint,
+        nc.RunsOfBasesFilter(['C', 'G'], 4),
+        nc.RunsOfBasesFilter(['A', 'T'], 4)
     ]
     domain_pool = nc.DomainPool(f'length-{domain_length} domains', domain_length,
-                                numpy_constraints=numpy_constraints, replace_with_close_sequences=True)
+                                numpy_filters=numpy_filters, replace_with_close_sequences=True)
 
     random_seed = 0
     strands = [nc.Strand([f'{i}' for i in range(1, 50)])]

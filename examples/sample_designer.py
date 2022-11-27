@@ -88,18 +88,18 @@ def main() -> None:
     else:
         design = initial_design
 
-    numpy_constraints = [
-        nc.NearestNeighborEnergyConstraint(-9.5, -9.0, 52.0),
-        nc.BaseCountConstraint(base='G', high_count=1),
-        nc.RunsOfBasesConstraint(['C', 'G'], 4),
-        nc.RunsOfBasesConstraint(['A', 'T'], 4),
+    numpy_filters = [
+        nc.NearestNeighborEnergyFilter(-9.5, -9.0, 52.0),
+        nc.BaseCountFilter(base='G', high_count=1),
+        nc.RunsOfBasesFilter(['C', 'G'], 4),
+        nc.RunsOfBasesFilter(['A', 'T'], 4),
     ]
 
     lengths = [9, 10, 11, 12]
     domain_pools = {
         length:
             nc.DomainPool(f'length-{length} domains', length,
-                          numpy_constraints=numpy_constraints) for length in lengths
+                          numpy_filters=numpy_filters) for length in lengths
     }
 
     for strand in [strand0, strand1]:

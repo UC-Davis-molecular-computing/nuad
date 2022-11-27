@@ -123,14 +123,14 @@ def create_design(width: int, height: int) -> nc.Design:
     :return:
         design with `width` x `height` canvas of SSTs
     """
-    numpy_constraints = [
-        nc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),  # energies should all be "close"
-        nc.RunsOfBasesConstraint(['C', 'G'], 4),  # forbid substrings of form {C,G}^4
-        nc.ForbiddenSubstringConstraint(['AAAAA', 'TTTTT']),  # forbid 5 A's in a row or 5 T's in a row
+    numpy_filters = [
+        nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),  # energies should all be "close"
+        nc.RunsOfBasesFilter(['C', 'G'], 4),  # forbid substrings of form {C,G}^4
+        nc.ForbiddenSubstringFilter(['AAAAA', 'TTTTT']),  # forbid 5 A's in a row or 5 T's in a row
     ]
 
-    domain_pool_10 = nc.DomainPool(f'length-10_domains', 10, numpy_constraints=numpy_constraints)
-    domain_pool_11 = nc.DomainPool(f'length-11_domains', 11, numpy_constraints=numpy_constraints)
+    domain_pool_10 = nc.DomainPool(f'length-10_domains', 10, numpy_filters=numpy_filters)
+    domain_pool_11 = nc.DomainPool(f'length-11_domains', 11, numpy_filters=numpy_filters)
 
     design = nc.Design()
 
