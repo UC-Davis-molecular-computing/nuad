@@ -444,9 +444,9 @@ class RestrictBasesFilter(NumpyFilter):
     https://science.sciencemag.org/content/332/6034/1196,
     http://www.qianlab.caltech.edu/seesaw_digital_circuits2011_SI.pdf
 
-    Note, however, that this is a constraint :any:`Domain`'s, not :any:`Strand`'s, so for a three-letter
-    code to work, you must take care not to mixed :any:`Domain`'s on a :any:`Strand` that will use
-    different alphabets.
+    Note, however, that this is a filter for :any:`Domain`'s, not whole :any:`Strand`'s, 
+    so for a three-letter code to work, you must take care not to mixed :any:`Domain`'s on a 
+    :any:`Strand` that will use different alphabets.
     """  # noqa
 
     bases: Collection[str]
