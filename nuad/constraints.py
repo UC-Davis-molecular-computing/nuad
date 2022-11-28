@@ -1240,7 +1240,7 @@ class DomainPool(JSONSerializable):
                         shuffle=True, num_random_seqs=num_to_generate, rng=rng)
                     generated_all_seqs = False
 
-                seqs_satisfying_numpy_filters = self._filter_numpy_filters(seqs)
+                seqs_satisfying_numpy_filters = self._apply_numpy_filters(seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_filters))
                 sequence = self._first_sequence_satisfying_sequence_constraints(
                     seqs_satisfying_numpy_filters)
@@ -1284,7 +1284,7 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
                 num_to_generate = num_sequences_total
 
             seqs_satisfying_numpy_filters = \
-                self._generate_random_sequences_satisfying_numpy_filters(rng, num_to_generate)
+                self._generate_random_sequences_passing_numpy_filters(rng, num_to_generate)
             sequence = self._first_sequence_satisfying_sequence_constraints(seqs_satisfying_numpy_filters)
             if sequence is not None:
                 return sequence
@@ -1306,16 +1306,16 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
 
         raise AssertionError('should be unreachable')
 
-    def _generate_random_sequences_satisfying_numpy_filters(self, rng: np.random.Generator,
-                                                                num_to_generate: int) -> nn.DNASeqList:
+    def _generate_random_sequences_passing_numpy_filters(self, rng: np.random.Generator,
+                                                         num_to_generate: int) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
         _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
         seqs = nn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                              num_random_seqs=num_to_generate, rng=rng)
-        seqs_satisfying_numpy_filters = self._filter_numpy_filters(seqs)
-        self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_filters))
-        return seqs_satisfying_numpy_filters
+        seqs_passing_numpy_filters = self._apply_numpy_filters(seqs)
+        self._log_numpy_generation(length, num_to_generate, len(seqs_passing_numpy_filters))
+        return seqs_passing_numpy_filters
 
     @staticmethod
     def _log_numpy_generation(length: int, num_to_generate: int, num_passed: int):
@@ -1328,19 +1328,19 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
 
     def _bases_to_use(self) -> Collection[str]:
         # checks explicitly for RestrictBasesFilter
-        for constraint in self.numpy_filters:
-            if isinstance(constraint, RestrictBasesFilter):
-                return constraint.bases
+        for filter in self.numpy_filters:
+            if isinstance(filter, RestrictBasesFilter):
+                return filter.bases
         return 'A', 'C', 'G', 'T'
 
-    def _filter_numpy_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
-        # filter sequence not passing numpy constraints, but skip NumpyRestrictBasesConstraint since
+    def _apply_numpy_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
+        # filter sequence not passing numpy filters, but skip RestrictBasesFilter since
         # that is more efficiently handled by the DNASeqList constructor to generate the sequences
         # in the first place
-        for constraint in self.numpy_filters:
-            if isinstance(constraint, RestrictBasesFilter):
+        for filter in self.numpy_filters:
+            if isinstance(filter, RestrictBasesFilter):
                 continue
-            seqs = constraint.remove_violating_sequences(seqs)
+            seqs = filter.remove_violating_sequences(seqs)
         return seqs
 
 
