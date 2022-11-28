@@ -353,7 +353,8 @@ def all_pairs_iterator(values: Iterable[T],
 
 SequenceFilter = Callable[[str], bool]
 """
-Constraint that applies to a DNA sequence; the difference between this an a :any:`DomainConstraint` is
+Filter (see description of :any:`NumpyFilter` for explanation of the term "filter") 
+that applies to a DNA sequence; the difference between this an a :any:`DomainConstraint` is
 that these are applied before a sequence is assigned to a :any:`Domain`, so the constraint can only
 be based on the DNA sequence, and not, for instance, on the :any:`Domain`'s :any:`DomainPool`.
 
@@ -373,18 +374,30 @@ slower to apply than a :any:`NumpyFilter`.
 @dataclass  # type: ignore
 class NumpyFilter(ABC):
     """
-    Abstract base class for numpy constraints. These are constraints that can be efficiently encoded
+    Abstract base class for numpy filters. A "filter" is a hard constraint applied to sequences
+    for a :any:`Domain`; a sequence not passing the filter is never allowed to be assigned to
+    a :any:`Domain`. This constrasts with the various subclasses of :any:`Constraint`, which
+    are different in two ways: 1) they can apply to large parts of the design than just a domain,
+    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraint that are
+    allowed to be violated during the course of the search.
+
+    A :any:`NumpyFilter` is one that can be efficiently encoded
     as numpy operations on 2D arrays of bytes representing DNA sequences, through the class
     :any:`np.DNASeqList` (which uses such a 2D array as the field :py:data:`np.DNASeqList.seqarr`).
 
-    Subclasses should set the value self.name, inherited from this class.
+    Subclasses should set the value :data:`NumpyFilter.name`, inherited from this class.
 
     Pre-made subclasses of :any:`NumpyFilter` provided in this library,
     such as :any:`RestrictBasesFilter` or :any:`NearestNeighborEnergyFilter`,
     are dataclasses (https://docs.python.org/3/library/dataclasses.html).
-    There is no requirement that your custom subclasses be dataclasses, but since the subclasses will
+    There is no requirement that custom subclasses be dataclasses, but since the subclasses will
     inherit the field :py:data:`NumpyFilter.name`, you can easily make them dataclasses to get,
-    for example, free ``repr`` and ``str`` implementations. See the source code for the example subclasses.
+    for example, free ``repr`` and ``str`` implementations. See the source code for examples.
+
+    The related type :any:`SequenceFilter` (which is just an alias for a Python function with
+    a certain signature) has a similar purpose, but is used for filters that cannot be encoded
+    as numpy operations. Since they are applied by running a Python loop, they are much slower
+    to evaluate than a :any:`NumpyFilter`.
     """
 
     name: str = field(init=False, default='TODO: give a concrete name to this NumpyFilter')
@@ -395,7 +408,7 @@ class NumpyFilter(ABC):
         """
         Subclasses should override this method.
 
-        Since these are constraints that use numpy, generally they will access the numpy ndarray instance
+        Since these are filters that use numpy, generally they will access the numpy ndarray instance
         `seqs.seqarr`, operate on it, and then create a new :any:`np.DNASeqList` instance via the constructor
         :any:`np.DNASeqList` taking an numpy ndarray as input.
 
@@ -414,7 +427,7 @@ class NumpyFilter(ABC):
             a new :any:`np.DNASeqList` object representing the DNA sequences in `seqs` that
             satisfy the constraint
         """
-        pass
+        raise NotImplementedError()
 
 
 @dataclass
