@@ -8,7 +8,7 @@ from typing import List
 import nuad.constraints as nc  # type: ignore
 import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
-from nuad.constraints import NumpyConstraint
+from nuad.constraints import NumpyFilter
 
 
 def f(x: int | float) -> float:
@@ -76,17 +76,17 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    numpy_constraints: List[NumpyConstraint] = [
-        nc.NearestNeighborEnergyConstraint(-9.3, -9.0, 52.0),
-        # nc.BaseCountConstraint(base='G', high_count=1),
-        # nc.BaseEndConstraint(bases=('C', 'G')),
-        # nc.RunsOfBasesConstraint(['C', 'G'], 4),
-        # nc.RunsOfBasesConstraint(['A', 'T'], 4),
-        # nc.BaseEndConstraint(bases=('A', 'T')),
-        # nc.BaseEndConstraint(bases=('C', 'G'), distance_from_end=1),
-        # nc.BaseAtPositionConstraint(bases='T', position=3),
-        # nc.ForbiddenSubstringConstraint(['GGGG', 'CCCC']),
-        # nc.RestrictBasesConstraint(bases=['A', 'T', 'C']),
+    numpy_filters: List[NumpyFilter] = [
+        nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),
+        # nc.BaseCountFilter(base='G', high_count=1),
+        # nc.BaseEndFilter(bases=('C', 'G')),
+        # nc.RunsOfBasesFilter(['C', 'G'], 4),
+        # nc.RunsOfBasesFilter(['A', 'T'], 4),
+        # nc.BaseEndFilter(bases=('A', 'T')),
+        # nc.BaseEndFilter(bases=('C', 'G'), distance_from_end=1),
+        # nc.BaseAtPositionFilter(bases='T', position=3),
+        # nc.ForbiddenSubstringFilter(['GGGG', 'CCCC']),
+        # nc.RestrictBasesFilter(bases=['A', 'T', 'C']),
     ]
 
     # def nupack_binding_energy_in_bounds(seq: str) -> bool:
@@ -95,18 +95,18 @@ def main() -> None:
     #     return -11 < energy < -9
     #
     # # list of functions:
-    # sequence_constraints: List[SequenceConstraint] = [
+    # sequence_filters: List[SequenceFilter] = [
     #     # nupack_binding_energy_in_bounds,
     # ]
 
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
     domain_pool_10 = nc.DomainPool(f'length-10_domains', 10,
-                                   numpy_constraints=numpy_constraints,
+                                   numpy_filters=numpy_filters,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
     domain_pool_11 = nc.DomainPool(f'length-11_domains', 11,
-                                   numpy_constraints=numpy_constraints,
+                                   numpy_filters=numpy_filters,
                                    replace_with_close_sequences=replace_with_close_sequences,
                                    )
 
