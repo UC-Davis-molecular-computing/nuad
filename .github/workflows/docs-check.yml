@@ -4,7 +4,7 @@ on: pull_request
 
 jobs:
   docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: unhumbleben/nupack:latest
     steps:
