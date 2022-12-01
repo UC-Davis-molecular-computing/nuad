@@ -8,8 +8,8 @@ to define constraints on the sequences assigned to each :any:`Domain` when calli
 
 Also important are two other types of constraints
 (not subclasses of :any:`Constraint`), which are used prior to the search to determine if it is even
-legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyConstraint`,
-and  :any:`SequenceConstraint`, an alias for a function taking a string as input and returning a bool.
+legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyFilter`,
+and  :any:`SequenceFilter`, an alias for a function taking a string as input and returning a bool.
 
 See the README on the GitHub page for more detailed explaination of these classes:
 https://github.com/UC-Davis-molecular-computing/dsd#data-model
@@ -351,58 +351,71 @@ def all_pairs_iterator(values: Iterable[T],
     return it
 
 
-SequenceConstraint = Callable[[str], bool]
+SequenceFilter = Callable[[str], bool]
 """
-Constraint that applies to a DNA sequence; the difference between this an a :any:`DomainConstraint` is
+Filter (see description of :any:`NumpyFilter` for explanation of the term "filter") 
+that applies to a DNA sequence; the difference between this an a :any:`DomainConstraint` is
 that these are applied before a sequence is assigned to a :any:`Domain`, so the constraint can only
 be based on the DNA sequence, and not, for instance, on the :any:`Domain`'s :any:`DomainPool`.
 
-Consequently :any:`SequenceConstraint`'s, like :any:`NumpyConstraint`'s, are treated differently than
-subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceConstraint`'s or
-:any:`NumpyConstraint`'s is never allowed to be assigned into any :any:`Domain`.
+Consequently :any:`SequenceFilter`'s, like :any:`NumpyFilter`'s, are treated differently than
+subtypes of :any:`Constraint`, since a DNA sequence failing any :any:`SequenceFilter`'s or
+:any:`NumpyFilter`'s is never allowed to be assigned into any :any:`Domain`.
 
-The difference with :any:`NumpyConstraint` is that a :any:`NumpyConstraint` requires one to express the
+The difference with :any:`NumpyFilter` is that a :any:`NumpyFilter` requires one to express the
 constraint in a way that is efficient for the linear algebra operations of numpy. If you cannot figure out
-how to do this, a :any:`SequenceConstraint` can be expressed in pure Python, but typically will be much
-slower to apply than a :any:`NumpyConstraint`.
+how to do this, a :any:`SequenceFilter` can be expressed in pure Python, but typically will be much
+slower to apply than a :any:`NumpyFilter`.
 """
 
 
 # The Mypy error being ignored is a bug and is described here:
 # https://github.com/python/mypy/issues/5374#issuecomment-650656381
 @dataclass  # type: ignore
-class NumpyConstraint(ABC):
+class NumpyFilter(ABC):
     """
-    Abstract base class for numpy constraints. These are constraints that can be efficiently encoded
+    Abstract base class for numpy filters. A "filter" is a hard constraint applied to sequences
+    for a :any:`Domain`; a sequence not passing the filter is never allowed to be assigned to
+    a :any:`Domain`. This constrasts with the various subclasses of :any:`Constraint`, which
+    are different in two ways: 1) they can apply to large parts of the design than just a domain,
+    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraint that are
+    allowed to be violated during the course of the search.
+
+    A :any:`NumpyFilter` is one that can be efficiently encoded
     as numpy operations on 2D arrays of bytes representing DNA sequences, through the class
     :any:`np.DNASeqList` (which uses such a 2D array as the field :py:data:`np.DNASeqList.seqarr`).
 
-    Subclasses should set the value self.name, inherited from this class.
+    Subclasses should set the value :data:`NumpyFilter.name`, inherited from this class.
 
-    Pre-made subclasses of :any:`NumpyConstraint` provided in this library,
-    such as :any:`RestrictBasesConstraint` or :any:`NearestNeighborEnergyConstraint`,
+    Pre-made subclasses of :any:`NumpyFilter` provided in this library,
+    such as :any:`RestrictBasesFilter` or :any:`NearestNeighborEnergyFilter`,
     are dataclasses (https://docs.python.org/3/library/dataclasses.html).
-    There is no requirement that your custom subclasses be dataclasses, but since the subclasses will
-    inherit the field :py:data:`NumpyConstraint.name`, you can easily make them dataclasses to get,
-    for example, free ``repr`` and ``str`` implementations. See the source code for the example subclasses.
+    There is no requirement that custom subclasses be dataclasses, but since the subclasses will
+    inherit the field :py:data:`NumpyFilter.name`, you can easily make them dataclasses to get,
+    for example, free ``repr`` and ``str`` implementations. See the source code for examples.
+
+    The related type :any:`SequenceFilter` (which is just an alias for a Python function with
+    a certain signature) has a similar purpose, but is used for filters that cannot be encoded
+    as numpy operations. Since they are applied by running a Python loop, they are much slower
+    to evaluate than a :any:`NumpyFilter`.
     """
 
-    name: str = field(init=False, default='TODO: give a concrete name to this NumpyConstraint')
-    """Name of this :any:`NumpyConstraint`."""
+    name: str = field(init=False, default='TODO: give a concrete name to this NumpyFilter')
+    """Name of this :any:`NumpyFilter`."""
 
     @abstractmethod
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """
         Subclasses should override this method.
 
-        Since these are constraints that use numpy, generally they will access the numpy ndarray instance
+        Since these are filters that use numpy, generally they will access the numpy ndarray instance
         `seqs.seqarr`, operate on it, and then create a new :any:`np.DNASeqList` instance via the constructor
         :any:`np.DNASeqList` taking an numpy ndarray as input.
 
         See the source code of included constraints for examples, such as
-        :py:meth:`NearestNeighborEnergyConstraint.remove_violating_sequences`
+        :py:meth:`NearestNeighborEnergyFilter.remove_violating_sequences`
         or
-        :py:meth:`BaseCountConstraint.remove_violating_sequences`.
+        :py:meth:`BaseCountFilter.remove_violating_sequences`.
         These are usually quite tricky to write, requiring one to think in terms of linear algebra
         operations. The code tends not to be easy to read. But when a constraint can be expressed
         in this way, it is typically *very* fast to apply; many millions of sequences can
@@ -414,11 +427,11 @@ class NumpyConstraint(ABC):
             a new :any:`np.DNASeqList` object representing the DNA sequences in `seqs` that
             satisfy the constraint
         """
-        pass
+        raise NotImplementedError()
 
 
 @dataclass
-class RestrictBasesConstraint(NumpyConstraint):
+class RestrictBasesFilter(NumpyFilter):
     """
     Restricts the sequence to use only a subset of bases. This can be used to implement
     a so-called "three-letter code", for instance, in which a certain subset of :any:`Strand` uses only the
@@ -431,9 +444,9 @@ class RestrictBasesConstraint(NumpyConstraint):
     https://science.sciencemag.org/content/332/6034/1196,
     http://www.qianlab.caltech.edu/seesaw_digital_circuits2011_SI.pdf
 
-    Note, however, that this is a constraint :any:`Domain`'s, not :any:`Strand`'s, so for a three-letter
-    code to work, you must take care not to mixed :any:`Domain`'s on a :any:`Strand` that will use
-    different alphabets.
+    Note, however, that this is a filter for :any:`Domain`'s, not whole :any:`Strand`'s, 
+    so for a three-letter code to work, you must take care not to mixed :any:`Domain`'s on a 
+    :any:`Strand` that will use different alphabets.
     """  # noqa
 
     bases: Collection[str]
@@ -454,7 +467,7 @@ class RestrictBasesConstraint(NumpyConstraint):
 
 
 @dataclass
-class NearestNeighborEnergyConstraint(NumpyConstraint):
+class NearestNeighborEnergyFilter(NumpyFilter):
     """
     This constraint calculates the nearest-neighbor binding energy of a domain with its perfect complement
     (summing over all length-2 substrings of the domain's sequence),
@@ -462,8 +475,8 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
     (https://www.annualreviews.org/doi/abs/10.1146/annurev.biophys.32.110601.141800,
     see Table 1, and example on page 419).
     It rejects any sequences whose energy according to this sum is outside the range
-    [:py:data:`NearestNeighborEnergyConstraint.low_energy`,
-    :py:data:`NearestNeighborEnergyConstraint.high_energy`].
+    [:py:data:`NearestNeighborEnergyFilter.low_energy`,
+    :py:data:`NearestNeighborEnergyFilter.high_energy`].
     """
 
     low_energy: float
@@ -490,7 +503,7 @@ class NearestNeighborEnergyConstraint(NumpyConstraint):
 
 
 @dataclass
-class BaseCountConstraint(NumpyConstraint):
+class BaseCountFilter(NumpyFilter):
     """
     Restricts the sequence to contain a certain number of occurences of a given base.
     """
@@ -500,12 +513,12 @@ class BaseCountConstraint(NumpyConstraint):
 
     high_count: int | None = None
     """
-    Count of :py:data:`BaseCountConstraint.base` must be at most :py:data:`BaseCountConstraint.high_count`.
+    Count of :py:data:`BaseCountFilter.base` must be at most :py:data:`BaseCountFilter.high_count`.
     """
 
     low_count: int | None = None
     """
-    Count of :py:data:`BaseCountConstraint.base` must be at least :py:data:`BaseCountConstraint.low_count`.
+    Count of :py:data:`BaseCountFilter.base` must be at least :py:data:`BaseCountFilter.low_count`.
     """
 
     def __post_init__(self) -> None:
@@ -524,10 +537,10 @@ class BaseCountConstraint(NumpyConstraint):
 
 
 @dataclass
-class BaseEndConstraint(NumpyConstraint):
+class BaseEndFilter(NumpyFilter):
     """
     Restricts the sequence to contain only certain bases on
-    (or near, if :py:data:`BaseEndConstraint.distance` > 0) each end.
+    (or near, if :py:data:`BaseEndFilter.distance` > 0) each end.
     """
 
     bases: Collection[str]
@@ -591,7 +604,7 @@ class BaseEndConstraint(NumpyConstraint):
 
 
 @dataclass
-class BaseAtPositionConstraint(NumpyConstraint):
+class BaseAtPositionFilter(NumpyFilter):
     """
     Restricts the sequence to contain only certain base(s) on at a particular position.
 
@@ -634,7 +647,7 @@ class BaseAtPositionConstraint(NumpyConstraint):
 
 
 @dataclass
-class ForbiddenSubstringConstraint(NumpyConstraint):
+class ForbiddenSubstringFilter(NumpyFilter):
     """
     Restricts the sequence not to contain a certain substring(s), e.g., GGGG.
     """
@@ -649,7 +662,7 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
 
     indices: Sequence[int] | None = None
     """
-    Indices at which to check for each substring in :data:`ForbiddenSubstringConstraint.substrings`.
+    Indices at which to check for each substring in :data:`ForbiddenSubstringFilter.substrings`.
     If not specified, all appropriate indices are checked.
     """
 
@@ -686,7 +699,7 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
             return len(first_substring)
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
-        """Remove sequences that have a string in :py:data:`ForbiddenSubstringConstraint.substrings`
+        """Remove sequences that have a string in :py:data:`ForbiddenSubstringFilter.substrings`
         as a substring."""
         assert isinstance(self.substrings, list)
         sub_len = len(self.substrings[0])
@@ -704,14 +717,14 @@ class ForbiddenSubstringConstraint(NumpyConstraint):
 
 
 @dataclass
-class RunsOfBasesConstraint(NumpyConstraint):
+class RunsOfBasesFilter(NumpyFilter):
     """
     Restricts the sequence not to contain runs of a certain length from a certain subset of bases,
     (e.g., forbidding any substring in {C,G}^3;
     no four bases can appear in a row that are either C or G)
 
     This works by simply generating all strings representing the runs of bases,
-    and then using a :any:`ForbiddenSubstringConstraint` with those strings. So this will not be efficient
+    and then using a :any:`ForbiddenSubstringFilter` with those strings. So this will not be efficient
     for forbidding, for example {A,C,T}^20 (i.e., all runs of A's, C's, or T's of length 20),
     which would generate all 3^20 = 3,486,784,401 strings of length 20 from the alphabet {A,C,T}^20.
     Hopefully such a constraint would not be used in practice.
@@ -719,7 +732,7 @@ class RunsOfBasesConstraint(NumpyConstraint):
 
     bases: Collection[str]
     """
-    Bases to forbid in runs of length :py:data:`RunsOfBasesConstraint.length`.
+    Bases to forbid in runs of length :py:data:`RunsOfBasesFilter.length`.
     """
 
     length: int
@@ -742,17 +755,17 @@ class RunsOfBasesConstraint(NumpyConstraint):
             raise ValueError(f'length must be positive, but it is {self.length}')
         if self.length == 1:
             allowed_bases = all_dna_bases - set(self.bases)
-            logger.warning('You have specified a RunsOfBasesConstraint with length = 1. '
+            logger.warning('You have specified a RunsOfBasesFilter with length = 1. '
                            'Although this will work, it essentially says to forbid using any of the bases '
                            f'in {set(self.bases)}, i.e., only use bases in {allowed_bases}. '
                            f'It is more efficient to use the constraint '
-                           f'RestrictBasesConstraint({allowed_bases}).')
+                           f'RestrictBasesFilter({allowed_bases}).')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences that have a run of given length of bases from given bases."""
         substrings = list(
             map(lambda lst: ''.join(lst), itertools.product(self.bases, repeat=self.length)))
-        constraint = ForbiddenSubstringConstraint(substrings)
+        constraint = ForbiddenSubstringFilter(substrings)
         return constraint.remove_violating_sequences(seqs)
 
 
@@ -926,7 +939,7 @@ class DomainPool(JSONSerializable):
     This is an explicit list of sequences to consider for :any:`Domain`'s using this :any:`DomainPool`.
     During the search, if a domain with this :any:`DomainPool` is picked to have its sequence changed,
     then a sequence will be picked uniformly at random from this list. Note that no 
-    :any:`NumpyConstraint`'s or :any:`SequenceConstraint`'s will be applied.
+    :any:`NumpyFilter`'s or :any:`SequenceFilter`'s will be applied.
     
     Alternatively, the field can be an instance of :any:`SubstringSampler` for the common case that the 
     set of possible sequences is simple all (or many) substrings of a single longer sequence.
@@ -950,31 +963,31 @@ class DomainPool(JSONSerializable):
     number of bases different from the previous sequence (Hamming distance). 
     """
 
-    numpy_constraints: List[NumpyConstraint] = field(
+    numpy_filters: List[NumpyFilter] = field(
         compare=False, hash=False, default_factory=list, repr=False)
     """
-    :any:`NumpyConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
+    :any:`NumpyFilter`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate_sequence`.
 
-    The difference with :py:data:`DomainPool.sequence_constraints` is that these constraints can be applied
+    The difference with :py:data:`DomainPool.sequence_filters` is that these constraints can be applied
     efficiently to many sequences at once, represented as a numpy 2D array of bytes (via the class
     :any:`np.DNASeqList`), so they are done in large batches in advance.
-    In contrast, the constraints in :py:data:`DomainPool.sequence_constraints` are done on Python strings
+    In contrast, the constraints in :py:data:`DomainPool.sequence_filters` are done on Python strings
     representing DNA sequences, and they are called one at a time when a new sequence is requested in
     :py:meth:`DomainPool.generate_sequence`.
 
     Optional; default is empty.
     """
 
-    sequence_constraints: List[SequenceConstraint] = field(
+    sequence_filters: List[SequenceFilter] = field(
         compare=False, hash=False, default_factory=list, repr=False)
     """
-    :any:`SequenceConstraint`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
+    :any:`SequenceFilter`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
 
-    See :py:data:`DomainPool.numpy_constraints` for an explanation of the difference between them.
+    See :py:data:`DomainPool.numpy_filters` for an explanation of the difference between them.
 
     See :py:data:`DomainPool.domain_constraints` for an explanation of the difference between them.
 
@@ -1000,11 +1013,11 @@ class DomainPool(JSONSerializable):
                                          f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
                                          f'has length {len(seq)}.')
 
-            if len(self.numpy_constraints) > 0:
-                raise ValueError('If possible_sequences is specified, then numpy_constraints should '
+            if len(self.numpy_filters) > 0:
+                raise ValueError('If possible_sequences is specified, then numpy_filters should '
                                  'not be specified.')
-            if len(self.sequence_constraints) > 0:
-                raise ValueError('If possible_sequences is specified, then sequence_constraints should '
+            if len(self.sequence_filters) > 0:
+                raise ValueError('If possible_sequences is specified, then sequence_filters should '
                                  'not be specified.')
 
         if self.length is not None:
@@ -1025,31 +1038,31 @@ class DomainPool(JSONSerializable):
                     self.hamming_probability[length] /= total
 
             idx = 0
-            for numpy_constraint in self.numpy_constraints:
-                if not isinstance(numpy_constraint, NumpyConstraint):
-                    raise ValueError('each element of numpy_constraints must be an instance of '
-                                     'NumpyConstraint, '
+            for numpy_constraint in self.numpy_filters:
+                if not isinstance(numpy_constraint, NumpyFilter):
+                    raise ValueError('each element of numpy_filters must be an instance of '
+                                     'NumpyFilter, '
                                      f'but the element at index {idx} is of type {type(numpy_constraint)}')
-                elif isinstance(numpy_constraint, RunsOfBasesConstraint):
+                elif isinstance(numpy_constraint, RunsOfBasesFilter):
                     if numpy_constraint.length > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
-                                         f'RunsOfBasesConstraint was specified with larger length '
+                                         f'RunsOfBasesFilter was specified with larger length '
                                          f'{numpy_constraint.length}, which is not allowed')
-                elif isinstance(numpy_constraint, ForbiddenSubstringConstraint):
+                elif isinstance(numpy_constraint, ForbiddenSubstringFilter):
                     if numpy_constraint.length() > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
-                                         f'ForbiddenSubstringConstraint was specified with larger length '
+                                         f'ForbiddenSubstringFilter was specified with larger length '
                                          f'{numpy_constraint.length()}, which is not allowed')
                 idx += 1
 
             idx = 0
-            for seq_constraint in self.sequence_constraints:
-                # SequenceConstraint is an alias for Callable[[str], float],
+            for seq_constraint in self.sequence_filters:
+                # SequenceFilter is an alias for Callable[[str], float],
                 # which is not checkable using isinstance
                 # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
                 if not callable(seq_constraint):
-                    raise ValueError('each element of numpy_constraints must be an instance of '
-                                     'SequenceConstraint (i.e., be a function that takes a single string '
+                    raise ValueError('each element of numpy_filters must be an instance of '
+                                     'SequenceFilter (i.e., be a function that takes a single string '
                                      'and returns a bool), '
                                      f'but the element at index {idx} is of type {type(seq_constraint)}')
                 idx += 1
@@ -1116,7 +1129,7 @@ class DomainPool(JSONSerializable):
     def _first_sequence_satisfying_sequence_constraints(self, seqs: nn.DNASeqList) -> str | None:
         if len(seqs) == 0:
             return None
-        if len(self.sequence_constraints) == 0:
+        if len(self.sequence_filters) == 0:
             return seqs.get_seq_str(0)
         for idx in range(seqs.numseqs):
             seq = seqs.get_seq_str(idx)
@@ -1129,18 +1142,18 @@ class DomainPool(JSONSerializable):
         :param sequence:
             DNA sequence to check
         :return:
-            whether `sequence` satisfies all constraints in :data:`DomainPool.sequence_constraints`
+            whether `sequence` satisfies all constraints in :data:`DomainPool.sequence_filters`
         """
-        return all(constraint(sequence) for constraint in self.sequence_constraints)
+        return all(constraint(sequence) for constraint in self.sequence_filters)
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None) -> str:
         """
-        Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
-        :py:data:`DomainPool.sequence_constraints`
+        Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_filters` and
+        :py:data:`DomainPool.sequence_filters`
 
         **Note:** By default, there is no check that the sequence returned is unequal to one already
-        assigned somewhere in the design, since both :py:data:`DomainPool.numpy_constraints` and
-        :data:`DomainPool.sequence_constraints` do not have access to the whole :any:`Design`.
+        assigned somewhere in the design, since both :py:data:`DomainPool.numpy_filters` and
+        :data:`DomainPool.sequence_filters` do not have access to the whole :any:`Design`.
         But the :any:`DomainPairConstraint` returned by
         :meth:`domains_not_substrings_of_each_other_constraint`
         can be used to specify this :any:`Design`-wide constraint.
@@ -1159,8 +1172,8 @@ class DomainPool(JSONSerializable):
             picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
         :return:
-            DNA sequence of given length satisfying :py:data:`DomainPool.numpy_constraints` and
-            :py:data:`DomainPool.sequence_constraints`
+            DNA sequence of given length satisfying :py:data:`DomainPool.numpy_filters` and
+            :py:data:`DomainPool.sequence_filters`
         """
         if self.possible_sequences is not None:
             if isinstance(self.possible_sequences, list):
@@ -1227,10 +1240,10 @@ class DomainPool(JSONSerializable):
                         shuffle=True, num_random_seqs=num_to_generate, rng=rng)
                     generated_all_seqs = False
 
-                seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
-                self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_constraints))
+                seqs_satisfying_numpy_filters = self._apply_numpy_filters(seqs)
+                self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_filters))
                 sequence = self._first_sequence_satisfying_sequence_constraints(
-                    seqs_satisfying_numpy_constraints)
+                    seqs_satisfying_numpy_filters)
                 if sequence is not None:
                     return sequence
 
@@ -1270,9 +1283,9 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
             if num_to_generate >= num_sequences_total / 2:
                 num_to_generate = num_sequences_total
 
-            seqs_satisfying_numpy_constraints = \
-                self._generate_random_sequences_satisfying_numpy_constraints(rng, num_to_generate)
-            sequence = self._first_sequence_satisfying_sequence_constraints(seqs_satisfying_numpy_constraints)
+            seqs_satisfying_numpy_filters = \
+                self._generate_random_sequences_passing_numpy_filters(rng, num_to_generate)
+            sequence = self._first_sequence_satisfying_sequence_constraints(seqs_satisfying_numpy_filters)
             if sequence is not None:
                 return sequence
 
@@ -1293,16 +1306,16 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
 
         raise AssertionError('should be unreachable')
 
-    def _generate_random_sequences_satisfying_numpy_constraints(self, rng: np.random.Generator,
-                                                                num_to_generate: int) -> nn.DNASeqList:
+    def _generate_random_sequences_passing_numpy_filters(self, rng: np.random.Generator,
+                                                         num_to_generate: int) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
         _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
         seqs = nn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                              num_random_seqs=num_to_generate, rng=rng)
-        seqs_satisfying_numpy_constraints = self._filter_numpy_constraints(seqs)
-        self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_constraints))
-        return seqs_satisfying_numpy_constraints
+        seqs_passing_numpy_filters = self._apply_numpy_filters(seqs)
+        self._log_numpy_generation(length, num_to_generate, len(seqs_passing_numpy_filters))
+        return seqs_passing_numpy_filters
 
     @staticmethod
     def _log_numpy_generation(length: int, num_to_generate: int, num_passed: int):
@@ -1314,20 +1327,20 @@ NumpyConstraints and SequenceConstraints. Trying another distance.""")
                          f'passed the numpy sequence constraints')
 
     def _bases_to_use(self) -> Collection[str]:
-        # checks explicitly for RestrictBasesConstraint
-        for constraint in self.numpy_constraints:
-            if isinstance(constraint, RestrictBasesConstraint):
-                return constraint.bases
+        # checks explicitly for RestrictBasesFilter
+        for filter in self.numpy_filters:
+            if isinstance(filter, RestrictBasesFilter):
+                return filter.bases
         return 'A', 'C', 'G', 'T'
 
-    def _filter_numpy_constraints(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
-        # filter sequence not passing numpy constraints, but skip NumpyRestrictBasesConstraint since
+    def _apply_numpy_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
+        # filter sequence not passing numpy filters, but skip RestrictBasesFilter since
         # that is more efficiently handled by the DNASeqList constructor to generate the sequences
         # in the first place
-        for constraint in self.numpy_constraints:
-            if isinstance(constraint, RestrictBasesConstraint):
+        for filter in self.numpy_filters:
+            if isinstance(filter, RestrictBasesFilter):
                 continue
-            seqs = constraint.remove_violating_sequences(seqs)
+            seqs = filter.remove_violating_sequences(seqs)
         return seqs
 
 
@@ -2566,9 +2579,14 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         label_json = json_map.get(label_key)
         label = label_decoder(label_json)
 
+        idt_json = json_map.get(idt_key)
+        idt = None
+        if idt_json is not None:
+            idt = IDTFields.from_json_serializable(idt_json)
+
         strand: Strand[StrandLabel, DomainLabel] = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label)
+            group=group, name=name, label=label, idt=idt)
         return strand
 
     def __repr__(self) -> str:
@@ -3457,7 +3475,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_design = _export_dummy_scadnano_design_for_idt_export(strands)
         return sc_design.to_idt_bulk_input_format(delimiter, key, warn_duplicate_name, only_strands_with_idt)
 
-    def write_idt_bulk_input_file(self, *, directory: str = '.', filename: str = None,
+    def write_idt_bulk_input_file(self, *,
+                                  filename: str = None,
+                                  directory: str = '.',
                                   key: KeyFunction[Strand] | None = None,
                                   extension: str | None = None,
                                   delimiter: str = ',',
@@ -3476,11 +3496,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         The string written is that returned by :meth:`Design.to_idt_bulk_input_format`.
 
+        :param filename:
+            optional custom filename to use (instead of currently running script)
         :param directory:
             specifies a directory in which to place the file, either absolute or relative to
             the current working directory. Default is the current working directory.
-        :param filename:
-            optional custom filename to use (instead of currently running script)
         :param key:
             `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
             order in which to output strand sequences. Some useful defaults are provided by
@@ -3513,7 +3533,9 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             extension = 'idt'
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
-    def write_idt_plate_excel_file(self, *, directory: str = '.', filename: str = None,
+    def write_idt_plate_excel_file(self, *,
+                                       filename: str = None,
+                                   directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
                                    only_strands_with_idt: bool = False,
@@ -3536,11 +3558,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         that number of strands, because IDT charges extra for a plate with too few strands:
         https://www.idtdna.com/pages/products/custom-dna-rna/dna-oligos/custom-dna-oligos
 
+        :param filename:
+            custom filename if default (explained above) is not desired
         :param directory:
             specifies a directory in which to place the file, either absolute or relative to
             the current working directory. Default is the current working directory.
-        :param filename:
-            custom filename if default (explained above) is not desired
         :param key:
             `key function <https://docs.python.org/3/howto/sorting.html#key-functions>`_ used to determine
             order in which to output strand sequences. Some useful defaults are provided by
@@ -3949,26 +3971,26 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
-        dsd_strands_by_name = {strand.name: strand for strand in self.strands}
+        nuad_strands_by_name = {strand.name: strand for strand in self.strands}
         for sc_strand in sc_strands_to_include:
-            dsd_strand: Strand = dsd_strands_by_name[sc_strand.name]
-            if dsd_strand.modification_5p is not None:
+            nuad_strand: Strand = nuad_strands_by_name[sc_strand.name]
+            if nuad_strand.modification_5p is not None:
                 if sc_strand.modification_5p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 5\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 5\''
                                      f'modification assigned:\n{sc_strand.modification_5p}. '
                                      f'Set overwrite to True to force an overwrite.')
-                sc_strand.modification_5p = dsd_strand.modification_5p.to_scadnano_modification()
+                sc_strand.modification_5p = nuad_strand.modification_5p.to_scadnano_modification()
 
-            if dsd_strand.modification_3p is not None:
+            if nuad_strand.modification_3p is not None:
                 if sc_strand.modification_3p is not None and not overwrite:
                     raise ValueError(f'Cannot assign 3\' modification from dsd strand to scadnano strand '
                                      f'{sc_strand.name} because the scadnano strand already has a 3\''
                                      f'modification assigned:\n{sc_strand.modification_3p}. '
                                      f'Set overwrite to True to force an overwrite.')
-                sc_strand.modification_3p = dsd_strand.modification_3p.to_scadnano_modification()
+                sc_strand.modification_3p = nuad_strand.modification_3p.to_scadnano_modification()
 
-            for offset, mod_int in dsd_strand.modifications_int.items():
+            for offset, mod_int in nuad_strand.modifications_int.items():
                 if offset in sc_strand.modifications_int is not None and not overwrite:
                     raise ValueError(f'Cannot assign internal modification from dsd strand to '
                                      f'scadnano strand {sc_strand.name} at offset {offset} '
@@ -4164,7 +4186,7 @@ class Constraint(Generic[DesignPart], ABC):
     """
     Abstract base class of all "soft" constraints to apply when running
     :meth:`search.search_for_dna_sequences`.
-    Unlike a :any:`NumpyConstraint` or a :any:`SequenceConstraint`, which disallow certain DNA sequences
+    Unlike a :any:`NumpyFilter` or a :any:`SequenceFilter`, which disallow certain DNA sequences
     from ever being assigned to a :any:`Domain`, a :any:`Constraint` can be violated during the search.
     The goal of the search is to reduce the number of violated :any:`Constraint`'s.
     See :meth:`search.search_for_dna_sequences` for a more detailed description of how the search algorithm

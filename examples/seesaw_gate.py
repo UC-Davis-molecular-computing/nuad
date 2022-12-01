@@ -17,30 +17,30 @@ COMPLEMENT_SUFFIX = '*'
 TOEHOLD_COMPLEMENT = f'{TOEHOLD_DOMAIN}{COMPLEMENT_SUFFIX}'
 
 # Domain pools
-forbidden_substring_constraints = [
-    nc.ForbiddenSubstringConstraint(['G' * 4, 'C' * 4]),
+forbidden_substring_filters = [
+    nc.ForbiddenSubstringFilter(['G' * 4, 'C' * 4]),
 ]
 
-non_sub_long_domain_constraints = [
-    nc.RestrictBasesConstraint(('A', 'C', 'T')),
-    *forbidden_substring_constraints
+non_sub_long_domain_filters = [
+    nc.RestrictBasesFilter(('A', 'C', 'T')),
+    *forbidden_substring_filters
 ]
-sub_long_domain_constraints: List[nc.NumpyConstraint] = [
-    nc.RestrictBasesConstraint(('A', 'C', 'T')),
+sub_long_domain_filters: List[nc.NumpyFilter] = [
+    nc.RestrictBasesFilter(('A', 'C', 'T')),
 ]
 
 if SUB_LONG_DOMAIN_LENGTH > 3:
-    sub_long_domain_constraints.extend(forbidden_substring_constraints)
+    sub_long_domain_filters.extend(forbidden_substring_filters)
 
 SUB_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool('sub_long_domain_pool', SUB_LONG_DOMAIN_LENGTH,
-                                                    numpy_constraints=sub_long_domain_constraints)
+                                                    numpy_filters=sub_long_domain_filters)
 NON_SUB_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool('non_sub_long_domain_pool',
                                                         NON_SUB_LONG_DOMAIN_LENGTH,
-                                                        numpy_constraints=non_sub_long_domain_constraints)
+                                                        numpy_filters=non_sub_long_domain_filters)
 
 toehold_domain_contraints = [
-    nc.ForbiddenSubstringConstraint('G' * 4),
-    nc.ForbiddenSubstringConstraint('C' * 4)
+    nc.ForbiddenSubstringFilter('G' * 4),
+    nc.ForbiddenSubstringFilter('C' * 4)
 ]
 TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool('toehold_domain_pool', 5)
 
@@ -383,11 +383,11 @@ f_waste_6_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
     strand_complexes=[f_waste_6_complex])
 
 
-def four_g_constraint_evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:
+def four_g_constraint_evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
     seq = seqs[0]
-    score = 1000 if 'GGGG' in seq else 0
+    excess = 1000 if 'GGGG' in seq else 0
     violation_str = "" if 'GGGG' not in strand.sequence() else "** violation**"
-    return score, f"{strand.name}: {strand.sequence()}{violation_str}"
+    return nc.Result(excess=excess, summary=f"{strand.name}: {strand.sequence()}{violation_str}")
 
 
 def four_g_constraint_summary(strand: nc.Strand):
@@ -408,8 +408,8 @@ constraints = [
     waste_2_5_complex_constraint,
     reporter_6_complex_constraint,
     f_waste_6_complex_constraint,
+    four_g_constraint,
 ]
-constraints.append(four_g_constraint)
 
 seesaw_design = nc.Design(strands=strands)
 

@@ -25,23 +25,23 @@ ILLEGAL_SUBSTRINGS_FIVE = ['A' * 5, 'T' * 5]
 ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 
 # NumpyConstraints
-three_letter_code_constraint = nc.RestrictBasesConstraint(('A', 'C', 'T'))
-no_gggg_constraint = nc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FOUR)
-no_aaaaa_constraint = nc.ForbiddenSubstringConstraint(ILLEGAL_SUBSTRINGS_FIVE)
-c_content_constraint = nc.BaseCountConstraint('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH),
-                                              ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
+three_letter_code_constraint = nc.RestrictBasesFilter(('A', 'C', 'T'))
+no_gggg_constraint = nc.ForbiddenSubstringFilter(ILLEGAL_SUBSTRINGS_FOUR)
+no_aaaaa_constraint = nc.ForbiddenSubstringFilter(ILLEGAL_SUBSTRINGS_FIVE)
+c_content_constraint = nc.BaseCountFilter('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH),
+                                          ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
 
 # Domain pools
 SUBDOMAIN_SS_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_SS_POOL',
                                                  SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
 SUBDOMAIN_S_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_S_POOL', EXTENDED_TOEHOLD_LENGTH)
 TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    name='TOEHOLD_DOMAIN_POOL', length=TOEHOLD_LENGTH, numpy_constraints=[three_letter_code_constraint])
+    name='TOEHOLD_DOMAIN_POOL', length=TOEHOLD_LENGTH, numpy_filters=[three_letter_code_constraint])
 
 SIGNAL_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
     name='SIGNAL_DOMAIN_POOL', length=SIGNAL_DOMAIN_LENGTH,
-    numpy_constraints=[three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint,
-                       no_gggg_constraint])
+    numpy_filters=[three_letter_code_constraint, c_content_constraint, no_aaaaa_constraint,
+                   no_gggg_constraint])
 
 # Alias
 dc_complex_constraint = nc.nupack_complex_base_pair_probability_constraint
@@ -365,7 +365,7 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
     """
 
     def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[nc.DomainPair]) \
-            -> Tuple[float, str]:
+            -> nc.Result:
         seq1, seq2 = seqs
         if domain_pair is not None:
             domain1, domain2 = domain_pair.domain1, domain_pair.domain2
@@ -401,7 +401,7 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
                        f'\t{domain1}: {domain1.sequence}\n'
                        f'\t{domain2}: {domain2.sequence}\n')
 
-        return result, summary
+        return nc.Result(excess=result, summary=summary)
 
     pairs = itertools.combinations(domains, 2)
 
@@ -430,7 +430,7 @@ def strand_substring_constraint(
                 return True
         return False
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> Tuple[float, str]:
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
         seq = seqs[0]
         if violated(seq):
             violation_str = '** violation**'
@@ -438,7 +438,7 @@ def strand_substring_constraint(
         else:
             violation_str = ''
             score = 0
-        return score, f"{strand.name}: {strand.sequence()}{violation_str}"
+        return nc.Result(excess=score, summary=f"{strand.name}: {strand.sequence()}{violation_str}")
 
     return nc.StrandConstraint(description="Strand Substring Constraint",
                                short_description="Strand Substring Constraint",
