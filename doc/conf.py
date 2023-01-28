@@ -16,8 +16,10 @@ import sphinx.ext.autodoc as auto
 import os
 import sys
 
+project_directory = 'nuad'
+
 sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('../nuad'))
+sys.path.insert(0, os.path.abspath(f'../{project_directory}'))
 
 # Type "make html" at the command line to generate the documentation.
 
@@ -48,7 +50,7 @@ def extract_version(filename: str):
     raise AssertionError(f'could not find version in {filename}')
 
 
-version = extract_version('../nuad/__version__.py')
+version = extract_version(f'../{project_directory}/__version__.py')
 
 # The full version, including alpha/beta/rc tags
 release = version
