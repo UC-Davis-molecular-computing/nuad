@@ -3535,7 +3535,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
     def write_idt_plate_excel_file(self, *,
-                                       filename: str = None,
+                                   filename: str = None,
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
@@ -4530,6 +4530,14 @@ def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
     return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
 
 
+# check all pairs of domains unless one is an ancestor of another in a subdomain tree,
+# but only if one is a strict subdomain of another (i.e., not equal)
+def not_strict_subdomain(dom1: Domain, dom2: Domain) -> bool:
+    if dom1 == dom2:
+        return True
+    return not_subdomain(dom1, dom2)
+
+
 @dataclass(eq=False)
 class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     domain_pairs: Tuple[DomainPair, ...] | None = None
@@ -5332,7 +5340,8 @@ def rna_duplex_domain_pairs_constraint(
         description = _pair_default_description('domain', 'RNAduplex', threshold, temperature)
 
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
-        sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
+        sequence_pairs, name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
+            domain_pairs)
         energies = nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
         results = []
@@ -5849,11 +5858,12 @@ def _all_pairs_domain_sequences_complements_names_from_domains(
     :param domain_pairs:
         Domain pairs.
     :return:
-        pair consisting of two lists, each of length 4 times as long as `domain_pairs`.
+        triple consisting of three lists, each of length 4 times as long as `domain_pairs`.
         Each pair in `domain_pairs` is associated to the 4 combinations of WC complementing (or not)
         the sequences of each Domain.
         - sequence_pairs: the sequences (appropriated complemented or not)
         - names: the names (appropriately *'d or not)
+        - domains: the domains themselves
     """
     sequence_pairs: List[Tuple[str, str]] = []
     names: List[Tuple[str, str]] = []
