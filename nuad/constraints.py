@@ -2363,6 +2363,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
+        starred_domain_indices = [] if starred_domain_indices is None else starred_domain_indices
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
         self.idt = idt
