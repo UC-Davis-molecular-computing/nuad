@@ -5077,6 +5077,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -5110,6 +5111,10 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
                including each strand with itself.
                Mutually exclusive with `strands`.
+        ignore_missing_thresholds:
+            If True, then a key `num` left out of `thresholds` dict will cause no constraint to be
+            returned for pairs of strands with `num` complementary domains.
+            If False, then a ValueError is raised.
 
     Returns:
         list of constraints, one per threshold in `thresholds`
@@ -5144,6 +5149,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
@@ -5519,6 +5525,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        ignore_missing_thresholds: bool = False,
 ) -> List[SPC]:
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
@@ -5537,11 +5544,12 @@ def _strand_pairs_constraints_by_number_matching_domains(
     pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
     keys = set(pairs_by_matching_domains.keys())
     thres_keys = set(thresholds.keys())
-    if keys != thres_keys:
-        raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
-                         'which is the set of integers representing the number of matching domains '
-                         'across all pairs of Strands in the parameter pairs, '
-                         f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
+    if not ignore_missing_thresholds and keys != thres_keys:
+        raise ValueError(f'''\
+The keys of parameter thresholds must be exactly {sorted(list(keys))}, 
+which is the set of integers representing the number of matching domains 
+across all pairs of Strands in the parameter pairs, 
+but instead the thresholds.keys() is {sorted(list(thres_keys))}''')
 
     constraints: List[SPC] = []
 
@@ -5579,10 +5587,11 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
-    Similar to :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    Similar to :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
     but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
     """
     rna_cofold_with_parameters_filename: _StrandPairsConstraintCreator = \
@@ -5606,6 +5615,7 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
@@ -5620,11 +5630,12 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
-    :meth:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
+    :func:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
     based on number of matching (complementary) domains between pairs of strands.
 
     Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
@@ -5647,13 +5658,17 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
-        strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
+        strands: :any:`Strand`'s to compare; if not specified, checks all in design.
                  Mutually exclusive with `pairs`.
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
                including each strand with itself.
                Mutually exclusive with `strands`.
         parameters_filename: Name of parameters file for ViennaRNA;
                              default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+        ignore_missing_thresholds:
+            If True, then a key `num` left out of `thresholds` dict will cause no constraint to be
+            returned for pairs of strands with `num` complementary domains.
+            If False, then a ValueError is raised.
 
     Returns:
         list of constraints, one per threshold in `thresholds`
@@ -5687,6 +5702,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
