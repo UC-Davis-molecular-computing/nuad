@@ -1250,16 +1250,16 @@ class DomainPool(JSONSerializable):
                 max_to_generate_before_moving_on = 10 ** 6
 
                 if generated_all_seqs:
-                    logger.info(f"""\
+                    logger.info(f"""
 We've generated all possible DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyConstraints and SequenceConstraints. Trying another distance.""")
+NumpyFilters and SequenceFilters. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
                 elif num_to_generate >= max_to_generate_before_moving_on:
-                    logger.info(f"""\
+                    logger.info(f"""
 We've generated over {max_to_generate_before_moving_on} DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyConstraints and SequenceConstraints. Trying another distance.""")
+NumpyFilters and SequenceFilters. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
 
                 if sequence is None and (
@@ -5025,8 +5025,7 @@ def nupack_domain_pair_constraint(
                     (nv.wc(seq1), seq2),
                 ])
 
-        energies: List[float]
-        energies = []
+        energies: List[float] = []
         for seq_pair in seq_pairs:
             energy = binding_closure(seq_pair)
             energies.append(energy)
@@ -5340,15 +5339,43 @@ def rna_duplex_domain_pairs_constraint(
         description = _pair_default_description('domain', 'RNAduplex', threshold, temperature)
 
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
-        sequence_pairs, name_pairs, _ = _all_pairs_domain_sequences_complements_names_from_domains(
+        sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
             domain_pairs)
         energies = nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
+        # several consecutive items are from same domain pair but with different wc's;
+        # group them together in the summary
+        groups = defaultdict(list)
+        for (d1, d2), energy, name_pair in zip(domain_tuples, energies, name_pairs):
+            domain_pair = DomainPair(d1, d2)
+            groups[domain_pair.name].append((energy, name_pair))
+
+        # one Result per domain pair
         results = []
-        for pair, energy in zip(domain_pairs, energies):
-            excess = threshold - energy
-            value = f'{energy:6.2f} kcal/mol'
-            results.append(Result(excess=excess, value=value))
+        for _, energies_and_name_pairs in groups.items():
+            energies, name_pairs = zip(*energies_and_name_pairs)
+            excesses: List[float] = []
+            for energy, (name1, name2) in energies_and_name_pairs:
+                if name1 is not None and name2 is not None:
+                    logger.debug(
+                        f'domain pair threshold: {threshold:6.2f} '
+                        f'rna_duplex({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+                excess = max(0.0, (threshold - energy))
+                excesses.append(excess)
+            max_excess = max(excesses)
+
+            max_name_length = max(len(name) for name in flatten(name_pairs))
+            lines_and_energies = [(f'{name1:{max_name_length}}, '
+                                   f'{name2:{max_name_length}}: '
+                                   f' {energy:6.2f} kcal/mol', energy)
+                                  for energy, (name1, name2) in energies_and_name_pairs]
+            lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
+            lines = [line for line, _ in lines_and_energies]
+            summary = '\n  ' + '\n  '.join(lines)
+            max_excess = max(0.0, max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            results.append(result)
+
         return results
 
     pairs_tuple = None
