@@ -413,9 +413,9 @@ class NumpyFilter(ABC):
         :any:`np.DNASeqList` taking an numpy ndarray as input.
 
         See the source code of included constraints for examples, such as
-        :py:meth:`NearestNeighborEnergyFilter.remove_violating_sequences`
+        :meth:`NearestNeighborEnergyFilter.remove_violating_sequences`
         or
-        :py:meth:`BaseCountFilter.remove_violating_sequences`.
+        :meth:`BaseCountFilter.remove_violating_sequences`.
         These are usually quite tricky to write, requiring one to think in terms of linear algebra
         operations. The code tends not to be easy to read. But when a constraint can be expressed
         in this way, it is typically *very* fast to apply; many millions of sequences can
@@ -1038,21 +1038,21 @@ class DomainPool(JSONSerializable):
                     self.hamming_probability[length] /= total
 
             idx = 0
-            for numpy_constraint in self.numpy_filters:
-                if not isinstance(numpy_constraint, NumpyFilter):
+            for numpy_filter in self.numpy_filters:
+                if not isinstance(numpy_filter, NumpyFilter):
                     raise ValueError('each element of numpy_filters must be an instance of '
                                      'NumpyFilter, '
-                                     f'but the element at index {idx} is of type {type(numpy_constraint)}')
-                elif isinstance(numpy_constraint, RunsOfBasesFilter):
-                    if numpy_constraint.length > self.length:
+                                     f'but the element at index {idx} is of type {type(numpy_filter)}')
+                elif isinstance(numpy_filter, RunsOfBasesFilter):
+                    if numpy_filter.length > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
                                          f'RunsOfBasesFilter was specified with larger length '
-                                         f'{numpy_constraint.length}, which is not allowed')
-                elif isinstance(numpy_constraint, ForbiddenSubstringFilter):
-                    if numpy_constraint.length() > self.length:
+                                         f'{numpy_filter.length}, which is not allowed')
+                elif isinstance(numpy_filter, ForbiddenSubstringFilter):
+                    if numpy_filter.length() > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
                                          f'ForbiddenSubstringFilter was specified with larger length '
-                                         f'{numpy_constraint.length()}, which is not allowed')
+                                         f'{numpy_filter.length()}, which is not allowed')
                 idx += 1
 
             idx = 0

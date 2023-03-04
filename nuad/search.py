@@ -2160,7 +2160,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                    bins: int | Dict[str | Constraint, int] = _default_num_bins) -> None:
     """
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
-    :meth:`create_report`) and displays its data graphically in the notebook using matplotlib.
+    :func:`create_constraints_report`) and displays its data graphically in the notebook using matplotlib.
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
