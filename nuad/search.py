@@ -213,7 +213,7 @@ def _determine_domain_pairs_to_check(design: Design,
                                           for domain1, domain2 in constraint.domain_pairs)
         else:
             pairs = all_pairs(design.domains, with_replacement=constraint.check_domain_against_itself,
-                              where=nc.not_subdomain)
+                              where=nc.not_strict_subdomain)
             domain_pairs_to_check = tuple(DomainPair(domain1, domain2) for domain1, domain2 in pairs
                                           if not (domain1.fixed and domain2.fixed))
 
@@ -2160,7 +2160,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                    bins: int | Dict[str | Constraint, int] = _default_num_bins) -> None:
     """
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
-    :meth:`create_report`) and displays its data graphically in the notebook using matplotlib.
+    :func:`create_constraints_report`) and displays its data graphically in the notebook using matplotlib.
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s

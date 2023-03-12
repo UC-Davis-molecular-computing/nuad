@@ -413,9 +413,9 @@ class NumpyFilter(ABC):
         :any:`np.DNASeqList` taking an numpy ndarray as input.
 
         See the source code of included constraints for examples, such as
-        :py:meth:`NearestNeighborEnergyFilter.remove_violating_sequences`
+        :meth:`NearestNeighborEnergyFilter.remove_violating_sequences`
         or
-        :py:meth:`BaseCountFilter.remove_violating_sequences`.
+        :meth:`BaseCountFilter.remove_violating_sequences`.
         These are usually quite tricky to write, requiring one to think in terms of linear algebra
         operations. The code tends not to be easy to read. But when a constraint can be expressed
         in this way, it is typically *very* fast to apply; many millions of sequences can
@@ -1038,21 +1038,21 @@ class DomainPool(JSONSerializable):
                     self.hamming_probability[length] /= total
 
             idx = 0
-            for numpy_constraint in self.numpy_filters:
-                if not isinstance(numpy_constraint, NumpyFilter):
+            for numpy_filter in self.numpy_filters:
+                if not isinstance(numpy_filter, NumpyFilter):
                     raise ValueError('each element of numpy_filters must be an instance of '
                                      'NumpyFilter, '
-                                     f'but the element at index {idx} is of type {type(numpy_constraint)}')
-                elif isinstance(numpy_constraint, RunsOfBasesFilter):
-                    if numpy_constraint.length > self.length:
+                                     f'but the element at index {idx} is of type {type(numpy_filter)}')
+                elif isinstance(numpy_filter, RunsOfBasesFilter):
+                    if numpy_filter.length > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
                                          f'RunsOfBasesFilter was specified with larger length '
-                                         f'{numpy_constraint.length}, which is not allowed')
-                elif isinstance(numpy_constraint, ForbiddenSubstringFilter):
-                    if numpy_constraint.length() > self.length:
+                                         f'{numpy_filter.length}, which is not allowed')
+                elif isinstance(numpy_filter, ForbiddenSubstringFilter):
+                    if numpy_filter.length() > self.length:
                         raise ValueError(f'DomainPool "{self.name}" has length {self.length}, but a '
                                          f'ForbiddenSubstringFilter was specified with larger length '
-                                         f'{numpy_constraint.length()}, which is not allowed')
+                                         f'{numpy_filter.length()}, which is not allowed')
                 idx += 1
 
             idx = 0
@@ -1250,16 +1250,16 @@ class DomainPool(JSONSerializable):
                 max_to_generate_before_moving_on = 10 ** 6
 
                 if generated_all_seqs:
-                    logger.info(f"""\
+                    logger.info(f"""
 We've generated all possible DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyConstraints and SequenceConstraints. Trying another distance.""")
+NumpyFilters and SequenceFilters. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
                 elif num_to_generate >= max_to_generate_before_moving_on:
-                    logger.info(f"""\
+                    logger.info(f"""
 We've generated over {max_to_generate_before_moving_on} DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyConstraints and SequenceConstraints. Trying another distance.""")
+NumpyFilters and SequenceFilters. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
 
                 if sequence is None and (
@@ -2363,6 +2363,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
+        starred_domain_indices = [] if starred_domain_indices is None else starred_domain_indices
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
         self.idt = idt
@@ -3534,7 +3535,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
     def write_idt_plate_excel_file(self, *,
-                                       filename: str = None,
+                                   filename: str = None,
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
@@ -4529,6 +4530,14 @@ def not_subdomain(dom1: Domain, dom2: Domain) -> bool:
     return not dom1.contains_in_subtree(dom2) and not dom2.contains_in_subtree(dom1)
 
 
+# check all pairs of domains unless one is an ancestor of another in a subdomain tree,
+# but only if one is a strict subdomain of another (i.e., not equal)
+def not_strict_subdomain(dom1: Domain, dom2: Domain) -> bool:
+    if dom1 == dom2:
+        return True
+    return not_subdomain(dom1, dom2)
+
+
 @dataclass(eq=False)
 class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  # noqa
     domain_pairs: Tuple[DomainPair, ...] | None = None
@@ -5016,8 +5025,7 @@ def nupack_domain_pair_constraint(
                     (nv.wc(seq1), seq2),
                 ])
 
-        energies: List[float]
-        energies = []
+        energies: List[float] = []
         for seq_pair in seq_pairs:
             energy = binding_closure(seq_pair)
             energies.append(energy)
@@ -5069,6 +5077,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -5102,6 +5111,10 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
                including each strand with itself.
                Mutually exclusive with `strands`.
+        ignore_missing_thresholds:
+            If True, then a key `num` left out of `thresholds` dict will cause no constraint to be
+            returned for pairs of strands with `num` complementary domains.
+            If False, then a ValueError is raised.
 
     Returns:
         list of constraints, one per threshold in `thresholds`
@@ -5136,6 +5149,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
@@ -5331,14 +5345,43 @@ def rna_duplex_domain_pairs_constraint(
         description = _pair_default_description('domain', 'RNAduplex', threshold, temperature)
 
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
-        sequence_pairs, _, _ = _all_pairs_domain_sequences_complements_names_from_domains(domain_pairs)
+        sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
+            domain_pairs)
         energies = nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
+        # several consecutive items are from same domain pair but with different wc's;
+        # group them together in the summary
+        groups = defaultdict(list)
+        for (d1, d2), energy, name_pair in zip(domain_tuples, energies, name_pairs):
+            domain_pair = DomainPair(d1, d2)
+            groups[domain_pair.name].append((energy, name_pair))
+
+        # one Result per domain pair
         results = []
-        for pair, energy in zip(domain_pairs, energies):
-            excess = threshold - energy
-            value = f'{energy:6.2f} kcal/mol'
-            results.append(Result(excess=excess, value=value))
+        for _, energies_and_name_pairs in groups.items():
+            energies, name_pairs = zip(*energies_and_name_pairs)
+            excesses: List[float] = []
+            for energy, (name1, name2) in energies_and_name_pairs:
+                if name1 is not None and name2 is not None:
+                    logger.debug(
+                        f'domain pair threshold: {threshold:6.2f} '
+                        f'rna_duplex({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+                excess = max(0.0, (threshold - energy))
+                excesses.append(excess)
+            max_excess = max(excesses)
+
+            max_name_length = max(len(name) for name in flatten(name_pairs))
+            lines_and_energies = [(f'{name1:{max_name_length}}, '
+                                   f'{name2:{max_name_length}}: '
+                                   f' {energy:6.2f} kcal/mol', energy)
+                                  for energy, (name1, name2) in energies_and_name_pairs]
+            lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
+            lines = [line for line, _ in lines_and_energies]
+            summary = '\n  ' + '\n  '.join(lines)
+            max_excess = max(0.0, max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            results.append(result)
+
         return results
 
     pairs_tuple = None
@@ -5482,6 +5525,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        ignore_missing_thresholds: bool = False,
 ) -> List[SPC]:
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
@@ -5500,11 +5544,12 @@ def _strand_pairs_constraints_by_number_matching_domains(
     pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
     keys = set(pairs_by_matching_domains.keys())
     thres_keys = set(thresholds.keys())
-    if keys != thres_keys:
-        raise ValueError(f'The keys of parameter thresholds must be exactly {sorted(list(keys))}, '
-                         'which is the set of integers representing the number of matching domains '
-                         'across all pairs of Strands in the parameter pairs, '
-                         f'but instead the thresholds.keys() is {sorted(list(thres_keys))}')
+    if not ignore_missing_thresholds and keys != thres_keys:
+        raise ValueError(f'''\
+The keys of parameter thresholds must be exactly {sorted(list(keys))}, 
+which is the set of integers representing the number of matching domains 
+across all pairs of Strands in the parameter pairs, 
+but instead the thresholds.keys() is {sorted(list(thres_keys))}''')
 
     constraints: List[SPC] = []
 
@@ -5542,10 +5587,11 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
-    Similar to :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    Similar to :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
     but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
     """
     rna_cofold_with_parameters_filename: _StrandPairsConstraintCreator = \
@@ -5569,6 +5615,7 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
@@ -5583,11 +5630,12 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel: bool = False,
         strands: Iterable[Strand] | None = None,
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
-    :meth:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
+    :func:`rna_duplex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
     based on number of matching (complementary) domains between pairs of strands.
 
     Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
@@ -5610,13 +5658,17 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
-        strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
+        strands: :any:`Strand`'s to compare; if not specified, checks all in design.
                  Mutually exclusive with `pairs`.
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
                including each strand with itself.
                Mutually exclusive with `strands`.
         parameters_filename: Name of parameters file for ViennaRNA;
                              default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+        ignore_missing_thresholds:
+            If True, then a key `num` left out of `thresholds` dict will cause no constraint to be
+            returned for pairs of strands with `num` complementary domains.
+            If False, then a ValueError is raised.
 
     Returns:
         list of constraints, one per threshold in `thresholds`
@@ -5650,6 +5702,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         parallel=parallel,
         strands=strands,
         pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
     )
 
 
@@ -5848,11 +5901,12 @@ def _all_pairs_domain_sequences_complements_names_from_domains(
     :param domain_pairs:
         Domain pairs.
     :return:
-        pair consisting of two lists, each of length 4 times as long as `domain_pairs`.
+        triple consisting of three lists, each of length 4 times as long as `domain_pairs`.
         Each pair in `domain_pairs` is associated to the 4 combinations of WC complementing (or not)
         the sequences of each Domain.
         - sequence_pairs: the sequences (appropriated complemented or not)
         - names: the names (appropriately *'d or not)
+        - domains: the domains themselves
     """
     sequence_pairs: List[Tuple[str, str]] = []
     names: List[Tuple[str, str]] = []
