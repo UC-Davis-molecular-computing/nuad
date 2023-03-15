@@ -273,12 +273,12 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
 
 def default_score_transfer_function(x: float) -> float:
     """
-    A quadratic transfer function.
+    A cubic transfer function.
     
     :return:
-        max(0.0, x^2)
+        max(0.0, x^3)
     """
-    return max(0.0, x ** 2)
+    return max(0.0, x ** 3)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
