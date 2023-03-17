@@ -5706,6 +5706,252 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     )
 
 
+def longest_complementary_subsequences_loop(arr1: np.ndarray, arr2: np.ndarray, gc_double: bool) -> List[int]:
+    """
+    Like :func:`longest_complementary_subsequences`, but uses a loop instead of numpy operations.
+    This is slower, but is easier to understand and useful for testing.
+    """
+    lcs_sizes = []
+    for s1, s2 in zip(arr1, arr2):
+        s1len = s1.shape[0]
+        s2len = s2.shape[0]
+        table = np.zeros(shape=(s1len + 1, s2len + 1), dtype=np.int8)
+        for i in range(s1len):
+            for j in range(s2len):
+                b1 = s1[i]
+                b2 = s2[j]
+                if b1 + b2 == 3:
+                    weight = 1
+                    if gc_double and (b1 == 1 or b1 == 2):
+                        weight = 2
+                    table[i + 1][j + 1] = weight + table[i][j]
+                else:
+                    table[i + 1][j + 1] = max(table[i + 1][j], table[i][j + 1])
+        lcs_size = table[s1len][s2len]
+        lcs_sizes.append(lcs_size)
+    return lcs_sizes
+
+
+def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_double: bool) -> List[int]:
+    """
+    Calculate length of longest common subsequences between `arr1[i]` and `arr2[i]`
+    for each i, storing in returned list `result[i]`.
+
+    When used for DNA sequences, this assumes `arr2` has been reversed along axis 1, i.e.,
+    the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
+    are assumed to be oriented 3' --> 5'.
+
+    Args
+        arr1: 2D array of DNA sequences, with each sequence represented as a 1D array of 0, 1, 2, 3
+              corresponding to A, C, G, T, respectively, with each row being a single DNA sequence
+              oriented 5' --> 3'.
+        arr2: 2D array of DNA sequences, with each row being a single DNA sequence
+              oriented 3' --> 5'.
+        gc_double: Whether to double the score for G-C base pairs.
+
+    Returns
+        list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
+        between `arr1[i]` and `arr2[i]`.
+    """
+    assert arr1.shape[0] == arr2.shape[0]
+    num_pairs = arr1.shape[0]
+    s1len = arr1.shape[1]
+    s2len = arr2.shape[1]
+    max_length = max(s1len, s2len)
+    dtype = np.min_scalar_type(max_length)  # e.g., uint8 for 0-255, uint16 for 256-65535, etc.
+    table = np.zeros(shape=(num_pairs, s1len + 1, s2len + 1), dtype=dtype)
+
+    for i in range(s1len):
+        for j in range(s2len):
+            bases1 = arr1[:, i]
+            bases2 = arr2[:, j]
+
+            comp_idxs = bases1 + bases2 == 3
+            if gc_double:
+                gc_idxs = np.logical_or(bases1[comp_idxs] == 1, bases1[comp_idxs] == 2)
+                weight = np.ones(len(bases1[comp_idxs]), dtype=dtype)
+                weight[gc_idxs] = 2
+                table[comp_idxs, i + 1, j + 1] = weight + table[comp_idxs, i, j]
+            else:
+                table[comp_idxs, i + 1, j + 1] = 1 + table[comp_idxs, i, j]
+
+            noncomp_idxs = np.logical_not(comp_idxs)
+            rec1 = table[noncomp_idxs, i + 1, j]
+            rec2 = table[noncomp_idxs, i, j + 1]
+            table[noncomp_idxs, i + 1, j + 1] = np.maximum(rec1, rec2)
+
+    lcs_sizes = table[:, s1len, s2len]
+
+    return lcs_sizes
+
+
+def lcs(seqs1: Sequence[str], seqs2: Sequence[str]) -> List[int]:
+    arr1 = nn.seqs2arr(seqs1)
+    arr2 = nn.seqs2arr(seqs2)
+    arr2 = np.flip(arr2, axis=1)
+    return longest_complementary_subsequences(arr1, arr2)
+
+
+def lcs_loop(s1: str, s2: str) -> int:
+    arr1 = nn.seqs2arr([s1])
+    arr2 = nn.seqs2arr([s2[::-1]])
+    return longest_complementary_subsequences_loop(arr1, arr2)[0]
+
+
+def lcs_strand_pairs_constraint(
+        *,
+        threshold: int,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'lcs strand pairs',
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        check_strand_against_itself: bool = True,
+        gc_double: bool = True,
+) -> StrandPairsConstraint:
+    """
+    TODO: describe
+
+    Args
+        threshold:
+
+        weight:
+
+        score_transfer_function:
+
+        description:
+
+        short_description:
+
+        pairs:
+
+        gc_double: Whether to weigh G-C base pairs as double (i.e., they count for 2 instead of 1).
+
+    Returns
+        A :any: StrandPairsConstraint` that checks given pairs of :any:`Strand`'s for excessive
+        interaction due to having long complementary subsequences.
+    """
+    if description is None:
+        description = f'Longest complementary subsequence between strands is > {threshold}'
+
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
+        # import time
+        #
+        # start_eb = time.time()
+
+        seqs1 = [pair.strand1.sequence() for pair in strand_pairs]
+        seqs2 = [pair.strand2.sequence() for pair in strand_pairs]
+        arr1 = nn.seqs2arr(seqs1)
+        arr2 = nn.seqs2arr(seqs2)
+        arr2_rev = np.flip(arr2, axis=1)
+
+
+        # start = time.time()
+        lcs_sizes = longest_complementary_subsequences(arr1, arr2_rev, gc_double)
+        # end = time.time()
+
+
+
+        results = []
+        for lcs_size in lcs_sizes:
+            excess = lcs_size - threshold
+            value = f'{lcs_size}'
+            result = Result(excess=excess, value=value)
+            results.append(result)
+
+        # end_eb = time.time()
+        #
+        # elapsed_ms = int(round((end - start) * 1000, 0))
+        # elapsed_eb_ms = int(round((end_eb - start_eb) * 1000, 0))
+        # print(f'\n{elapsed_ms} ms to measure LCS of {len(seqs1)} pairs')
+        # print(f'{elapsed_eb_ms} ms to run evaluate_bulk')
+
+        return results
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(
+        description=description,
+        short_description=short_description,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        evaluate_bulk=evaluate_bulk,
+        pairs=pairs_tuple,
+        check_strand_against_itself=check_strand_against_itself,
+    )
+
+def lcs_strand_pairs_constraints_by_number_matching_domains(
+        *,
+        thresholds: Dict[int, int],
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Dict[int, str] | None = None,
+        short_descriptions: Dict[int, str] | None = None,
+        parallel: bool = False,
+        strands: Iterable[Strand] | None = None,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        gc_double: bool = True,
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
+) -> List[StrandPairsConstraint]:
+    """
+    TODO
+    """
+
+    def lcs_strand_pairs_constraint_with_dummy_parameters(
+            *,
+            threshold: float,
+            temperature: float = nv.default_temperature,
+            weight: float = 1.0,
+            score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+            description: str | None = None,
+            short_description: str = 'lcs strand pairs',
+            parallel: bool = False,
+            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+            parameters_filename: str = nv.default_vienna_rna_parameter_filename
+    ) -> StrandPairsConstraint:
+        threshold_int = int(threshold)
+        return lcs_strand_pairs_constraint(
+            threshold=threshold_int,
+            weight=weight,
+            score_transfer_function=score_transfer_function,
+            description=description,
+            short_description=short_description,
+            pairs=pairs,
+            check_strand_against_itself=True, #TODO: rewrite signature of other strand pair constraints to include this
+            gc_double=gc_double,
+        )
+
+    if descriptions is None:
+        descriptions = {
+            num_matching: (f'Longest complementary subsequence between strands is > {threshold}' +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
+            for num_matching, threshold in thresholds.items()
+        }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f'LCS{num_matching}comp'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    return _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator=lcs_strand_pairs_constraint_with_dummy_parameters,
+        thresholds=thresholds,
+        temperature=-1,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
+    )
+
 def rna_duplex_strand_pairs_constraint(
         *,
         threshold: float,

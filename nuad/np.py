@@ -47,6 +47,8 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     """Return numpy 2D array converting the given DNA sequences to integers."""
     if len(seqs) == 0:
         return np.empty((0, 0), dtype=np.ubyte)
+    if isinstance(seqs, str):
+        raise ValueError('seqs must be a sequence of strings, not a single string')
     seq_len = len(seqs[0])
     for seq in seqs:
         if len(seq) != seq_len:
