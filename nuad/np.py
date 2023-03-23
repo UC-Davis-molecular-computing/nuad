@@ -60,7 +60,12 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     return arr
 
 
+def arr2seqs(arr: np.ndarray) -> List[str]:
+    """Return list of strings converting the given numpy array of integers to DNA sequences."""
+    return [''.join(bits2base[base] for base in row) for row in arr]
+
 def arr2seq(arr: np.ndarray) -> str:
+    """Return string converting the given numpy array of integers to DNA sequence."""
     bases_ch = [bits2base[base] for base in arr]
     return ''.join(bases_ch)
 
@@ -459,7 +464,7 @@ def longest_common_substrings_singlea1(a1: np.ndarray, a2s: np.ndarray) \
 
     for i1 in range(len(a1)):
         idx = (a2s == a1[i1])
-        idx_shifted = np.insert(idx, 0, np.zeros(numa2s, dtype=np.bool), axis=1)
+        idx_shifted = np.insert(idx, 0, np.zeros(numa2s, dtype=bool), axis=1)
         counter[i1 + 1, idx_shifted] = counter[i1, idx] + 1
 
     counter = np.swapaxes(counter, 0, 1)
@@ -520,7 +525,7 @@ def _longest_common_substrings_pairs(a1s: np.ndarray, a2s: np.ndarray) \
         a1s_cp_col_rp = np.repeat(a1s_cp_col, len_a2, axis=1)
 
         idx = (a2s == a1s_cp_col_rp)
-        idx_shifted = np.hstack([np.zeros(shape=(numpairs, 1), dtype=np.bool), idx])
+        idx_shifted = np.hstack([np.zeros(shape=(numpairs, 1), dtype=bool), idx])
         counter[i1 + 1, idx_shifted] = counter[i1, idx] + 1
 
     counter = np.swapaxes(counter, 0, 1)
@@ -568,7 +573,7 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
 
         # find matching chars and extend length of substring
         match_idxs = (a2s == a1s_col_rp)
-        match_shifted_idxs = np.hstack([np.zeros(shape=(numpairs, 1), dtype=np.bool), match_idxs])
+        match_shifted_idxs = np.hstack([np.zeros(shape=(numpairs, 1), dtype=bool), match_idxs])
         counter[i1 + 1, match_shifted_idxs] = counter[i1, match_idxs] + 1
 
         if i1 > 0:
@@ -578,10 +583,10 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
             loops = (prev_bases << 2) + cur_bases
             latest_energies = loop_energies[loops].reshape(numpairs, 1)
             latest_energies_rp = np.repeat(latest_energies, len_a2, axis=1)
-            match_idxs_false_at_end = np.hstack([match_idxs, np.zeros(shape=(numpairs, 1), dtype=np.bool)])
+            match_idxs_false_at_end = np.hstack([match_idxs, np.zeros(shape=(numpairs, 1), dtype=bool)])
             both_match_idxs = match_idxs_false_at_end & prev_match_shifted_idxs
             prev_match_shifted_shifted_idxs = np.hstack(
-                [np.zeros(shape=(numpairs, 1), dtype=np.bool), prev_match_shifted_idxs])[:, :-1]
+                [np.zeros(shape=(numpairs, 1), dtype=bool), prev_match_shifted_idxs])[:, :-1]
             both_match_shifted_idxs = match_shifted_idxs & prev_match_shifted_shifted_idxs
             energies[i1 + 1, both_match_shifted_idxs] = energies[i1, both_match_idxs] + latest_energies_rp[
                 both_match_idxs]
@@ -1078,7 +1083,7 @@ class DNASeqList:
         subvals = np.dot(subints, powarr)
         toeplitz = create_toeplitz(self.seqlen, sublen)
         convolution = np.dot(toeplitz, self.seqarr.transpose())
-        passall = np.ones(self.numseqs, dtype=np.bool)
+        passall = np.ones(self.numseqs, dtype=bool)
         for subval in subvals:
             passsub = np.all(convolution != subval, axis=0)
             passall = passall & passsub
@@ -1125,7 +1130,7 @@ def create_toeplitz(seqlen: int, sublen: int, indices: Sequence[int] | None = No
                                  f'but {idx} is not; all indices = {indices}')
     num_rows = len(rows)
     num_cols = seqlen
-    toeplitz = np.zeros((num_rows, num_cols), dtype=np.int)
+    toeplitz = np.zeros((num_rows, num_cols), dtype=int)
     toeplitz[:, 0:sublen] = [powarr] * num_rows
     shift = list(rows)
     for i in range(len(rows)):
