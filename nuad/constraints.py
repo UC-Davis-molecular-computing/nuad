@@ -5899,8 +5899,8 @@ def update_diagonal(arr1: np.ndarray, arr2: np.ndarray,
     end = s1len - start
     if not prev_prev_larger:
         end -= 1
-    # TODO: if there's a way to avoid allocating new memory for the Boolean array eq, that will save time
-    #  with 10,000 pairs of sequences, each of length 64, this takes 1/4 the time if we just set
+    # TODO: if there's a way to avoid allocating new memory for the Boolean array eq, that will save time.
+    #  With 10,000 pairs of sequences, each of length 64, this takes 1/4 the time if we just set
     #  eq_idxs[:, start:end + 1] = True, compared to computing sub1==sub2 allocating new memory for eq
     #  (not sure if the computation or the memory allocation dominates, however)
     eq = sub1 == sub2
