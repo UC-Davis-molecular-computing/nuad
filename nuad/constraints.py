@@ -4368,9 +4368,10 @@ def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity
         return ureg.Quantity(qty, unit)
     else:
         # we convert to string to avoid floating-point weirdness. For example
-        # ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
+        #   ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
         #   -2.100000000000000088817841970012523233890533447265625 kilocalorie / mole,
-        # but ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
+        # whereas
+        #   ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
         #   -2.1 kilocalorie / mole,
         qty_str = str(qty)
         return ureg.Quantity(Decimal(qty_str), unit)
