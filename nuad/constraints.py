@@ -24,7 +24,7 @@ import math
 import json
 from decimal import Decimal
 from typing import List, Set, Dict, Callable, Iterable, Tuple, Collection, TypeVar, Any, \
-    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
+    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Optional
 from dataclasses import dataclass, field, InitVar
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -4292,11 +4292,8 @@ class Result(Generic[DesignPart]):
     a threshold.
     """
 
-    summary: str = ''
-    """
-    This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
-    strand, pair of domains, pair of strands).
-    """
+    _summary: Optional[str] = None
+
 
     value: pint.Quantity[Decimal] | None = None
     """
@@ -4328,14 +4325,32 @@ class Result(Generic[DesignPart]):
         if summary is None:
             if value is None:
                 raise ValueError('at least one of value or summary must be specified')
-            self.summary = str(value)
+            # note summary getter calculates summary from value if summary is None,
+            # so no need to set it here
         else:
-            self.summary = summary
+            self._summary = summary
         if value is not None:
             self.value = parse_and_normalize_quantity(value)
 
         self.score = 0.0
         self.part = None  # type:ignore
+
+    @property
+    def summary(self) -> str:
+        """
+        This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
+        strand, pair of domains, pair of strands).
+
+        It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
+        """
+        if self._summary is None:
+            return str(self.value)
+        else:
+            return self._summary
+
+    @summary.setter
+    def summary(self, summary: str) -> None:
+        self._summary = summary
 
 
 def parse_and_normalize_quantity(quantity: float | int | str | pint.Quantity) \
@@ -5883,10 +5898,10 @@ def update_diagonal(arr1: np.ndarray, arr2: np.ndarray,
     # creates view, not copy, so don't modify!
     eq_idxs[:, :] = False
     if i < s1len:
-        sub1 = arr1[:, i::-1]   # indices i, i-1, ..., 0
+        sub1 = arr1[:, i::-1]  # indices i, i-1, ..., 0
         sub2 = arr2[:, :i + 1]  # indices 0, 1,   ..., i
     else:
-        sub1 = arr1[:, :i - s1len:-1]   # indices s1len-1,   s1len-2, , ..., s1len-i
+        sub1 = arr1[:, :i - s1len:-1]  # indices s1len-1,   s1len-2, , ..., s1len-i
         sub2 = arr2[:, i - s1len + 1:]  # indices s1len-i+1, s1len-i+2, ..., s1len-1
 
     # need to set eq_idxs only on entries "within" the DP table, not the padded 0s on the edges
