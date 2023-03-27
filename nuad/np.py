@@ -43,6 +43,23 @@ def seq2arr(seq: str, base2bits_local: Dict[str, int] | None = None) -> np.ndarr
     return np.array([base2bits_local[base] for base in seq], dtype=np.ubyte)
 
 
+# def seqs2arr_old(seqs: Sequence[str]) -> np.ndarray:
+#     """Return numpy 2D array converting the given DNA sequences to integers."""
+#     if len(seqs) == 0:
+#         return np.empty((0, 0), dtype=np.ubyte)
+#     if isinstance(seqs, str):
+#         raise ValueError('seqs must be a sequence of strings, not a single string')
+#     seq_len = len(seqs[0])
+#     for seq in seqs:
+#         if len(seq) != seq_len:
+#             raise ValueError('All sequences in seqs must be equal length')
+#     num_seqs = len(seqs)
+#     arr = np.empty((num_seqs, seq_len), dtype=np.ubyte)
+#     for i in range(num_seqs):
+#         arr[i] = [base2bits[base] for base in seqs[i]]
+#     return arr
+
+
 def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     """Return numpy 2D array converting the given DNA sequences to integers."""
     if len(seqs) == 0:
@@ -54,10 +71,23 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
         if len(seq) != seq_len:
             raise ValueError('All sequences in seqs must be equal length')
     num_seqs = len(seqs)
-    arr = np.empty((num_seqs, seq_len), dtype=np.ubyte)
-    for i in range(num_seqs):
-        arr[i] = [base2bits[base] for base in seqs[i]]
-    return arr
+
+    # the code below is about 5 times faster than the hold implementation (commented out above)
+    seqs_cat = ''.join(seqs)
+
+    # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte)
+    seqs_cat_bytes = seqs_cat.encode()
+    seqs_cat_byte_array = bytearray(seqs_cat_bytes)
+    arr1d = np.frombuffer(seqs_cat_byte_array, dtype=np.ubyte)
+
+    arr2d = arr1d.reshape((num_seqs, seq_len))
+
+    arr2d[arr2d == 65] = 0
+    arr2d[arr2d == 67] = 1
+    arr2d[arr2d == 71] = 2
+    arr2d[arr2d == 84] = 3
+
+    return arr2d
 
 
 def arr2seqs(arr: np.ndarray) -> List[str]:
