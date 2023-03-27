@@ -2200,7 +2200,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         with the same rules as `xlims`
     """
     import matplotlib.pyplot as plt
-    from IPython.display import display, Markdown
+    from IPython.display import display, Markdown  # noqa
 
     def dm(obj):
         display(Markdown(obj))
@@ -2228,7 +2228,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     for report in reports_without_values:
         part_type_name = report.constraint.part_name()
         dm(f'## {report.constraint.description}')
-        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')  # noqa
         for viol in report.violations:
             print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 
