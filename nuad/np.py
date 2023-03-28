@@ -74,10 +74,10 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     lengths_arr = np.fromiter(lengths_it, dtype=int)
     if np.any(lengths_arr != seq_len):
         raise ValueError('All sequences in seqs must be equal length')
-    
+
     num_seqs = len(seqs)
 
-    # the code below is about 5 times faster than the hold implementation (commented out above)
+    # the code below is about 5 times faster than the old implementation (commented out above)
     seqs_cat = ''.join(seqs)
     seqs_cat = seqs_cat.upper()
 
