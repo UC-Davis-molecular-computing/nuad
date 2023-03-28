@@ -87,7 +87,7 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     arr1d = np.frombuffer(seqs_cat_byte_array, dtype=np.ubyte)
     # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte) # generates warning about using frombuffer
 
-    # code below is somewhat magical to me, but it works and is slightly faster than more obvious ways:
+    # code below is magical to me, but it works and is slightly faster than more obvious ways:
     # https://stackoverflow.com/a/35464758
     from_values = np.array([ord(base) for base in ['A', 'C', 'G', 'T']])
     to_values = np.arange(4)
