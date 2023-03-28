@@ -66,14 +66,20 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
         return np.empty((0, 0), dtype=np.ubyte)
     if isinstance(seqs, str):
         raise ValueError('seqs must be a sequence of strings, not a single string')
+
+    # check equal length (a bit faster than a Python loop,
+    # e.g., 3.5 ms for 10^5 seqs compared to 5 ms with Python loop)
     seq_len = len(seqs[0])
-    for seq in seqs:
-        if len(seq) != seq_len:
-            raise ValueError('All sequences in seqs must be equal length')
+    lengths_it = map(len, seqs)
+    lengths_arr = np.fromiter(lengths_it, dtype=int)
+    if np.any(lengths_arr != seq_len):
+        raise ValueError('All sequences in seqs must be equal length')
+    
     num_seqs = len(seqs)
 
     # the code below is about 5 times faster than the hold implementation (commented out above)
     seqs_cat = ''.join(seqs)
+    seqs_cat = seqs_cat.upper()
 
     # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte)
     seqs_cat_bytes = seqs_cat.encode()
@@ -82,10 +88,11 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
 
     arr2d = arr1d.reshape((num_seqs, seq_len))
 
-    arr2d[arr2d == 65] = 0
-    arr2d[arr2d == 67] = 1
-    arr2d[arr2d == 71] = 2
-    arr2d[arr2d == 84] = 3
+    # convert ASCII bytes for 'A', 'C', 'G', 'T' to 0, 1, 2, 3, respectively
+    arr2d[arr2d == ord('A')] = 0
+    arr2d[arr2d == ord('C')] = 1
+    arr2d[arr2d == ord('G')] = 2
+    arr2d[arr2d == ord('T')] = 3
 
     return arr2d
 
