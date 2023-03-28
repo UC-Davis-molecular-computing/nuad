@@ -82,13 +82,14 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     seqs_cat = ''.join(seqs)
     seqs_cat = seqs_cat.upper()
 
-    # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte) # generates warning about using frombuffer
     seqs_cat_bytes = seqs_cat.encode()
     seqs_cat_byte_array = bytearray(seqs_cat_bytes)
     arr1d = np.frombuffer(seqs_cat_byte_array, dtype=np.ubyte)
+    # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte) # generates warning about using frombuffer
 
-    # code below is somewhat magical to me, but it works: https://stackoverflow.com/a/35464758
-    from_values = [ord(base) for base in ['A', 'C', 'G', 'T']]
+    # code below is somewhat magical to me, but it works and is slightly faster than more obvious ways:
+    # https://stackoverflow.com/a/35464758
+    from_values = np.array([ord(base) for base in ['A', 'C', 'G', 'T']])
     to_values = np.arange(4)
     sort_idx = np.argsort(from_values)
     idx = np.searchsorted(from_values, arr1d, sorter=sort_idx)
