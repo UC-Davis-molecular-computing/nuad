@@ -87,6 +87,8 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     arr1d = np.frombuffer(seqs_cat_byte_array, dtype=np.ubyte)
     # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte) # generates warning about using frombuffer
 
+    # convert ASCII bytes for 'A', 'C', 'G', 'T' to 0, 1, 2, 3, respectively
+
     # code below is magical to me, but it works and is slightly faster than more obvious ways:
     # https://stackoverflow.com/a/35464758
     from_values = np.array([ord(base) for base in ['A', 'C', 'G', 'T']])
@@ -96,7 +98,6 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     arr1d = to_values[sort_idx][idx]
 
     # this is a bit slower than the code above, e.g., 75 ms compared to 55 ms for 10^5 sequences
-    # # convert ASCII bytes for 'A', 'C', 'G', 'T' to 0, 1, 2, 3, respectively
     # for i, base in enumerate(['A', 'C', 'G', 'T']):
     #     idxs_with_base = arr2d == ord(base)
     #     arr2d[idxs_with_base] = i
