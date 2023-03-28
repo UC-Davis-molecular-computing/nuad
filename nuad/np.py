@@ -1123,7 +1123,7 @@ class DNASeqList:
     def filter_substring(self, subs: Sequence[str]) -> DNASeqList:
         """Remove any sequence with any elements from subs as a substring."""
         if len(set([len(sub) for sub in subs])) != 1:
-            raise ValueError('All substrings in subs must be equal length: %s' % subs)
+            raise ValueError(f'All substrings in subs must be equal length: {subs}')
         sublen = len(subs[0])
         subints = [[base2bits[base] for base in sub] for sub in subs]
         powarr = [4 ** k for k in range(sublen)]
