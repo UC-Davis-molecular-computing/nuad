@@ -1276,33 +1276,21 @@ def hash_ndarray(arr: np.ndarray) -> int:
     return h
 
 
-CACHE_WC = False
-_calculate_wc_energies_cache: np.ndarray | None = None
-_calculate_wc_energies_cache_hash: int = 0
-
 
 def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool = False) -> np.ndarray:
     """Calculate and store in an array all energies of all sequences in seqarr
     with their Watson-Crick complements."""
-    global _calculate_wc_energies_cache
-    global _calculate_wc_energies_cache_hash
-    if CACHE_WC and _calculate_wc_energies_cache is not None:
-        if _calculate_wc_energies_cache_hash == hash_ndarray(seqarr):
-            return _calculate_wc_energies_cache
     loop_energies = calculate_loop_energies(temperature, negate)
     left_index_bits = seqarr[:, :-1] << 2
     right_index_bits = seqarr[:, 1:]
     pair_indices = left_index_bits + right_index_bits
     pair_energies = loop_energies[pair_indices]
     energies: np.ndarray = np.sum(pair_energies, axis=1)
-    if CACHE_WC:
-        _calculate_wc_energies_cache = energies
-        _calculate_wc_energies_cache_hash = hash_ndarray(_calculate_wc_energies_cache)
     return energies
 
 
 def wc_arr(seqarr: np.ndarray) -> np.ndarray:
-    """Return numpy array of complements of sequences in `seqarr`."""
+    """Return numpy array of reverse complements of sequences in `seqarr`."""
     return (3 - seqarr)[:, ::-1]
 
 
