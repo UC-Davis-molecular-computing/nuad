@@ -111,6 +111,7 @@ def arr2seqs(arr: np.ndarray) -> List[str]:
     """Return list of strings converting the given numpy array of integers to DNA sequences."""
     return [''.join(bits2base[base] for base in row) for row in arr]
 
+
 def arr2seq(arr: np.ndarray) -> str:
     """Return string converting the given numpy array of integers to DNA sequence."""
     bases_ch = [bits2base[base] for base in arr]
@@ -1267,16 +1268,6 @@ def wcenergy_str(seq: str, temperature: float, negate: bool = False) -> float:
     return list(calculate_wc_energies(seqarr, temperature, negate))[0]
 
 
-def hash_ndarray(arr: np.ndarray) -> int:
-    writeable = arr.flags.writeable
-    if writeable:
-        arr.flags.writeable = False
-    h = hash(bytes(arr.data))  # hash(arr.data)
-    arr.flags.writeable = writeable
-    return h
-
-
-
 def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool = False) -> np.ndarray:
     """Calculate and store in an array all energies of all sequences in seqarr
     with their Watson-Crick complements."""
@@ -1292,59 +1283,3 @@ def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool =
 def wc_arr(seqarr: np.ndarray) -> np.ndarray:
     """Return numpy array of reverse complements of sequences in `seqarr`."""
     return (3 - seqarr)[:, ::-1]
-
-
-def prefilter_length_10_11(low_dg: float, high_dg: float, temperature: float, end_gc: bool,
-                           convert_to_list: bool = True) \
-        -> Tuple[List[str], List[str]] | Tuple[DNASeqList, DNASeqList]:
-    """Return sequences of length 10 and 11 with wc energies between given values."""
-    s10: DNASeqList = DNASeqList(length=10)
-    s11: DNASeqList = DNASeqList(length=11)
-    s10 = s10.filter_energy(low=low_dg, high=high_dg, temperature=temperature)
-    s11 = s11.filter_energy(low=low_dg, high=high_dg, temperature=temperature)
-    forbidden_subs = [f'{a}{b}{c}{d}' for a in ['G', 'C']
-                      for b in ['G', 'C']
-                      for c in ['G', 'C']
-                      for d in ['G', 'C']]
-    s10 = s10.filter_substring(forbidden_subs)
-    s11 = s11.filter_substring(forbidden_subs)
-    if end_gc:
-        print(
-            'Removing any domains that end in either A or T; '
-            'also ensuring every domain has an A or T within 2 indexes of the end')
-        s10 = s10.filter_end_gc()
-        s11 = s11.filter_end_gc()
-    for seqs in (s10, s11):
-        if len(seqs) == 0:
-            raise ValueError(
-                f'low_dg {low_dg:.2f} and high_dg {high_dg:.2f} too strict! '
-                f'no sequences of length {seqs.seqlen} found')
-    return (s10.to_list(), s11.to_list()) if convert_to_list else (s10, s11)
-
-
-def all_cats(seq: Sequence[int], seqs: Sequence[int]) -> np.ndarray:
-    """
-    Return all sequences obtained by concatenating seq to either end of a sequence in seqs.
-
-    For example,
-
-    .. code-block:: Python
-
-        all_cats([0,1,2,3], [[3,3,3], [0,0,0]])
-
-    returns the numpy array
-
-    .. code-block:: Python
-
-        [[0,1,2,3,3,3,3],
-         [3,3,3,0,1,2,3],
-         [0,1,2,3,0,0,0],
-         [0,0,0,0,1,2,3]]
-    """
-    seqarr = np.asarray([seq])
-    seqsarr = np.asarray(seqs)
-    ar = seqarr.repeat(seqsarr.shape[0], axis=0)
-    ret = np.concatenate((seqsarr, ar), axis=1)
-    ret2 = np.concatenate((ar, seqsarr), axis=1)
-    ret = np.concatenate((ret, ret2))
-    return ret
