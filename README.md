@@ -170,7 +170,7 @@ In more detail, there are five main types of objects you create to describe your
 
     The search algorithm evaluates the constraints, and for each violated constraint, it turns the `excess` value into a "score" by first passing it through the "score transfer function", which by default squares the value, and then multiplies by the value `Constraint.weight` (by default 1). The goal of the search is to minimize the sum of scores across all violated `Constraint`'s. The reason that the score is squared is that this leads the search algorithm to (slightly) favor reducing the excess of constraint violations that are "more in excess", i.e., it would reduce the total score more to reduce an excess from 4 to 3 (reducing the score from 4<sup>2</sup>=16 to 3<sup>2</sup>=9, a reduction of 16-9=7) than to reduce an excess from 2 to 1 (which reduces 2<sup>2</sup>=4 to 1<sup>2</sup>=1, a reduction of only 4-1=3).
 
-    The full search algorithm is described in the [API documentation for the function nuad.search.search_for_dna_sequences](https://dnadsd.readthedocs.io/en/latest/#search.search_for_dna_sequences).
+    The full search algorithm is described in the [API documentation for the function nuad.search.search_for_sequences](https://dnadsd.readthedocs.io/en/latest/#search.search_for_sequences).
 
 
 ## Constraint evaluations must be pure functions of their inputs
