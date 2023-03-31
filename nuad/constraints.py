@@ -140,6 +140,13 @@ class M13Variant(enum.Enum):
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
     """
 
+    p8634 = "p8634"
+    """Variant of M13mp18 that is 8634 bases long. At the time of this writing, not listed as available
+    from any biotech vender, but Tilibit will make it for you if you ask. 
+    (https://www.tilibit.com/pages/contact-us)
+    """
+
+
     def length(self) -> int:
         """
         :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
@@ -150,6 +157,8 @@ class M13Variant(enum.Enum):
             return 7560
         if self is M13Variant.p8064:
             return 8064
+        if self is M13Variant.p8634:
+            return 8634
         raise AssertionError('should be unreachable')
 
     def scadnano_variant(self) -> sc.M13Variant:
@@ -159,6 +168,8 @@ class M13Variant(enum.Enum):
             return sc.M13Variant.p7560
         if self is M13Variant.p8064:
             return sc.M13Variant.p8064
+        if self is M13Variant.p8634:
+            return sc.M13Variant.p8634
         raise AssertionError('should be unreachable')
 
 
@@ -5763,7 +5774,7 @@ def longest_complementary_subsequences_two_loops(arr1: np.ndarray, arr2: np.ndar
     the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
     are assumed to be oriented 3' --> 5'.
 
-    Args
+    Args:
         arr1: 2D array of DNA sequences, with each sequence represented as a 1D array of 0, 1, 2, 3
               corresponding to A, C, G, T, respectively, with each row being a single DNA sequence
               oriented 5' --> 3'.
@@ -5771,7 +5782,7 @@ def longest_complementary_subsequences_two_loops(arr1: np.ndarray, arr2: np.ndar
               oriented 3' --> 5'.
         gc_double: Whether to double the score for G-C base pairs.
 
-    Returns
+    Returns:
         list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
         between `arr1[i]` and `arr2[i]`.
     """
@@ -5821,7 +5832,7 @@ def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_do
     the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
     are assumed to be oriented 3' --> 5'.
 
-    Args
+    Args:
         arr1: 2D array of DNA sequences, with each sequence represented as a 1D array of 0, 1, 2, 3
               corresponding to A, C, G, T, respectively, with each row being a single DNA sequence
               oriented 5' --> 3'.
@@ -5829,7 +5840,7 @@ def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_do
               oriented 3' --> 5'.
         gc_double: Whether to double the score for G-C base pairs.
 
-    Returns
+    Returns:
         list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
         between `arr1[i]` and `arr2[i]`.
     """

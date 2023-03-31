@@ -1813,9 +1813,8 @@ class EvaluationSet:
         _assert_violations_are_accurate(self.evaluations, self.violations)
 
     def update_scores_and_counts(self) -> None:
-        """
-        :return: Total score of all evaluations.
-        """
+        # return: Total score of all evaluations.
+
         self.total_score = self.total_score_fixed = self.total_score_nonfixed = 0.0
         self.num_evaluations = self.num_evaluations_nonfixed = self.num_evaluations_fixed = 0
         self.num_violations = self.num_violations_nonfixed = self.num_violations_fixed = 0
@@ -1949,11 +1948,11 @@ class Evaluation(Generic[DesignPart]):
 
     def __init__(self, constraint: Constraint, violated: bool, part: DesignPart, domains: Iterable[Domain],
                  score: float, summary: str, result: nc.Result) -> None:
-        # :param constraint:
+        # constraint:
         #     :any:`Constraint` that was violated to result in this
-        # :param domains:
+        # domains:
         #     :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
-        # :param score:
+        # score:
         #     total "score" of this violation, typically something like an excess energy over a
         #     threshold, squared, multiplied by the :data:`Constraint.weight`
         self.constraint = constraint
