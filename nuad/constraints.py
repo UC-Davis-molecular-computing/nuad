@@ -389,7 +389,7 @@ class NumpyFilter(ABC):
     for a :any:`Domain`; a sequence not passing the filter is never allowed to be assigned to
     a :any:`Domain`. This constrasts with the various subclasses of :any:`Constraint`, which
     are different in two ways: 1) they can apply to large parts of the design than just a domain,
-    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraint that are
+    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraints that are
     allowed to be violated during the course of the search.
 
     A :any:`NumpyFilter` is one that can be efficiently encoded
