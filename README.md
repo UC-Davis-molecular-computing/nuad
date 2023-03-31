@@ -129,7 +129,7 @@ In more detail, there are five main types of objects you create to describe your
 
   - There are two types of `Domain`'s with no associated `DomainPool`. One type is a `Domain` with the field `fixed` set to `True` by calling the method `Domain.set_fixed_sequence()`, which has some fixed DNA sequence that cannot be changed. A fixed `Domain` has no `DomainPool`.)
 
-  - The other type is a `Domain` with the field `dependent` set the `True` (by assigning the field directly). Such a domain is dependent for its sequence on the sequence of some other `Domain` with `dependent = False` that either contains it as a subsequence, or is contained in it as a subsequence. For example, one can declare the domain `a` is independent (has `dependent = False`), with length 8, and has dependent subdomains `b` and `c` of length 5 and 3. `a` would have a `DomainPool`, and if `a` is assigned sequence AAACCGTT, then `b` is automatically assigned sequence AAACC, and `c` is automatically assigned sequence GTT. Such subdomains are assigned via the field `Domain.subdomains`; see the API documentation for more details: https://dnadsd.readthedocs.io/en/latest/#constraints.Domain.dependent and https://dnadsd.readthedocs.io/en/latest/#constraints.Domain.subdomains.
+  - The other type is a `Domain` with the field `dependent` set the `True` (by assigning the field directly). Such a domain is dependent for its sequence on the sequence of some other `Domain` with `dependent = False` that either contains it as a subsequence, or is contained in it as a subsequence. For example, one can declare the domain `a` is independent (has `dependent = False`), with length 8, and has dependent subdomains `b` and `c` of length 5 and 3. `a` would have a `DomainPool`, and if `a` is assigned sequence AAACCGTT, then `b` is automatically assigned sequence AAACC, and `c` is automatically assigned sequence GTT. Such subdomains are assigned via the field `Domain.subdomains`; see the API documentation for more details: https://nuad.readthedocs.io/en/latest/#constraints.Domain.dependent and https://nuad.readthedocs.io/en/latest/#constraints.Domain.subdomains.
 
 - `Strand`: A `Strand` contains an ordered list `domains` of `Domain`'s, together with an identification of which `Domain`'s are starred in this `Strand`, the latter specified as a set `starred_domain_indices` of indices (starting at 0) into the list `domains`. For example, the `Strand` consisting of `Domain`'s `a`, `b*`, `c`, `b`, `d*`, in that order, would have `domains = [a, b, c, b, d]` and `starred_domain_indices = {1, 4}`.
 
@@ -146,7 +146,7 @@ In more detail, there are five main types of objects you create to describe your
         
             - `DomainConstraint`: This only looks at a single `Domain`. In practice this is not used much, since there's not much information in a `Domain` other than its DNA sequence, so a `SequenceConstraint` or `NumpyConstraint` typically would already have filtered out any DNA sequence not satisfying such a constraint.
 
-            - `StrandConstraint`: This evaluates a whole `Strand`. A common example is that NUPACK's `pfunc` should indicate a complex free energy above a certain threshold, indicating the `Strand` has little secondary structure. This example constraint is available in the library by calling [nupack_strand_complex_free_energy_constraint](https://dnadsd.readthedocs.io/en/latest/#constraints.nupack_strand_complex_free_energy_constraint).
+            - `StrandConstraint`: This evaluates a whole `Strand`. A common example is that NUPACK's `pfunc` should indicate a complex free energy above a certain threshold, indicating the `Strand` has little secondary structure. This example constraint is available in the library by calling [nupack_strand_complex_free_energy_constraint](https://nuad.readthedocs.io/en/latest/#constraints.nupack_strand_complex_free_energy_constraint).
 
             - `DomainPairConstraint`: This evaluates a pair of `Domain`'s.
 
@@ -170,7 +170,7 @@ In more detail, there are five main types of objects you create to describe your
 
     The search algorithm evaluates the constraints, and for each violated constraint, it turns the `excess` value into a "score" by first passing it through the "score transfer function", which by default squares the value, and then multiplies by the value `Constraint.weight` (by default 1). The goal of the search is to minimize the sum of scores across all violated `Constraint`'s. The reason that the score is squared is that this leads the search algorithm to (slightly) favor reducing the excess of constraint violations that are "more in excess", i.e., it would reduce the total score more to reduce an excess from 4 to 3 (reducing the score from 4<sup>2</sup>=16 to 3<sup>2</sup>=9, a reduction of 16-9=7) than to reduce an excess from 2 to 1 (which reduces 2<sup>2</sup>=4 to 1<sup>2</sup>=1, a reduction of only 4-1=3).
 
-    The full search algorithm is described in the [API documentation for the function nuad.search.search_for_sequences](https://dnadsd.readthedocs.io/en/latest/#search.search_for_sequences).
+    The full search algorithm is described in the [API documentation for the function nuad.search.search_for_sequences](https://nuad.readthedocs.io/en/latest/#search.search_for_sequences).
 
 
 ## Constraint evaluations must be pure functions of their inputs
