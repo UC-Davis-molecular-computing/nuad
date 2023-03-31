@@ -877,8 +877,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
     :param params:
-        A :any:`SearchParameters` object with attributes that can be called within this function
-        for flexibility.
+        A :any:`SearchParameters` object with attributes that can be used to specify options for the search.
 
     """
 
