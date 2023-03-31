@@ -867,10 +867,11 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     The function has some side effects. It writes a report on the optimal sequence assignment found so far
     every time a new improve assignment is found.
 
-    Whenever a new optimal sequence assignment is found, the following are written to files:
-    - DNA sequences of each strand are written to a text file .
-    - the whole dsd design
-    - a report on the DNA sequences indicating how well they do on constraints.
+    Whenever a new optimal sequence assignment is found, the following are also be written to files:
+
+    * DNA sequences of each strand are written to a text file .
+    * the whole design itself
+    * a report on the DNA sequences indicating how well they do on constraints.
 
     :param design:
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
