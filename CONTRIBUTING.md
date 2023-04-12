@@ -1,9 +1,9 @@
-# Contributing to the dsd Python package 
+# Contributing to the nuad Python package 
 First off, thanks for taking the time to contribute!
 
-The following is a set of guidelines for contributing to dsd.
+The following is a set of guidelines for contributing to nuad.
 Feel free to propose changes to this document in a pull request, 
-or post questions as issues on the [issues page](https://github.com/UC-Davis-molecular-computing/dsd/issues).
+or post questions as issues on the [issues page](https://github.com/UC-Davis-molecular-computing/nuad/issues).
 
 
 
@@ -22,13 +22,13 @@ or post questions as issues on the [issues page](https://github.com/UC-Davis-mol
 ### Python
 First, read the [README](README.md) to familiarize yourself with the package from a user's perspective.
 
-The dsd Python package requires at least Python 3.6.
+The nuad Python package requires at least Python 3.6.
 
 ### What to install
 
 Follow the [installation instructions](README.md#installation) to install the correct version of Python if you don't have it already.
 
-I suggest using a powerful IDE such as [PyCharm](https://www.jetbrains.com/pycharm/download/download-thanks.html). [Visual Studio Code](https://code.visualstudio.com/) is also good with the right plugins. The dsd Python package uses type hints, and these tools are very helpful in giving static analysis warnings about the code that may represent errors that will manifest at run time.
+I suggest using a powerful IDE such as [PyCharm](https://www.jetbrains.com/pycharm/download/download-thanks.html). [Visual Studio Code](https://code.visualstudio.com/) is also good with the right plugins. The nuad Python package uses type hints, and these tools are very helpful in giving static analysis warnings about the code that may represent errors that will manifest at run time.
 
 
 ### git
@@ -54,11 +54,11 @@ We use [git](https://git-scm.com/docs/gittutorial) and [GitHub](https://guides.g
 The first step is cloning the repository so you have it available locally.
 
 ```
-git clone https://github.com/UC-Davis-molecular-computing/dsd.git
+git clone https://github.com/UC-Davis-molecular-computing/nuad.git
 ```
 
-Changes to the dsd package should be pushed to the
-[`dev`](https://github.com/UC-Davis-molecular-computing/dsd/tree/dev) branch. So switch to the `dev` branch:
+Changes to the nuad package should be pushed to the
+[`dev`](https://github.com/UC-Davis-molecular-computing/nuad/tree/dev) branch. So switch to the `dev` branch:
 
 ```
 git checkout dev
@@ -112,7 +112,7 @@ For any more significant change that is made (e.g., closing an issue, adding a n
 
 ## Pushing to the repository main branch and documenting changes (done less frequently)
 
-Less frequently, pull requests (abbreviated PR) can be made from `dev` to `main`, but make sure that `dev` is working before merging to `main`, since changes to the docstrings automatically update [readthedocs](https://dsddna.readthedocs.io/en/latest/), which is the site hosting the API documentation. That is, changes to main immediately affect users reading online documentation, so it is critical that these work. Eventually we will automatically upload to PyPI, so this will also affect users installing via pip.
+Less frequently, pull requests (abbreviated PR) can be made from `dev` to `main`, but make sure that `dev` is working before merging to `main`, since changes to the docstrings automatically update [readthedocs](https://nuad.readthedocs.io/en/latest/), which is the site hosting the API documentation. That is, changes to main immediately affect users reading online documentation, so it is critical that these work. Eventually we will automatically upload to PyPI, so this will also affect users installing via pip.
 
 **WARNING:** Always wait for the checks to complete. This is important to ensure that unit tests pass. 
 
