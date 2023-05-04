@@ -731,7 +731,7 @@ class DNASeqList:
                  shuffle: bool = False,
                  alphabet: Collection[str] = ('A', 'C', 'G', 'T'),
                  seqs: Sequence[str] | None = None,
-                 seqarr: np.ndarray = None,
+                 seqarr: np.ndarray | None = None,
                  filename: str | None = None,
                  rng: np.random.Generator = default_rng,
                  hamming_distance_from_sequence: Tuple[int, str] | None = None):
