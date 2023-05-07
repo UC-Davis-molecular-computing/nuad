@@ -1264,8 +1264,7 @@ def wcenergies_str(seqs: Sequence[str], temperature: float, negate: bool = False
 
 
 def wcenergy_str(seq: str, temperature: float, negate: bool = False) -> float:
-    seqarr = seqs2arr([seq])
-    return list(calculate_wc_energies(seqarr, temperature, negate))[0]
+    return wcenergies_str([seq], temperature, negate)[0]
 
 
 def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool = False) -> np.ndarray:
