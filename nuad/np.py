@@ -143,7 +143,7 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C'
     if len(bases) == 0:
         raise ValueError('bases cannot be empty')
     if not set(bases) <= {'A', 'C', 'G', 'T'}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+        raise ValueError(f"bases must be a subset of {{A, C, G, T}}; cannot be {bases}")
 
     base_bits = [base2bits[base] for base in bases]
     digits = np.array(base_bits, dtype=np.ubyte)
