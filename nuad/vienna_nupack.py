@@ -19,7 +19,6 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from pathos.pools import ProcessPool
 from typing import Sequence, Tuple, List, Iterable
 
 import numpy as np
@@ -137,48 +136,53 @@ def tupleize(seqs: str | Iterable[str]) -> Tuple[str, ...]:
     return (seqs,) if isinstance(seqs, str) else tuple(seqs)
 
 
-def pfunc_parallel(
-        pool: ProcessPool,
-        all_seqs: Sequence[str | Tuple[str, ...]],
-        temperature: float = default_temperature,
-        sodium: float = default_sodium,
-        magnesium: float = default_magnesium,
-        strand_association_penalty: bool = True,
-) -> Tuple[float]:
-    num_seqs = len(all_seqs)
-    if num_seqs == 0:
-        return tuple()
+try:
+    from pathos.pools import ProcessPool
 
-    all_seqs = tuple(tupleize(seqs) for seqs in all_seqs)
+    def pfunc_parallel(
+            pool: ProcessPool,
+            all_seqs: Sequence[str | Tuple[str, ...]],
+            temperature: float = default_temperature,
+            sodium: float = default_sodium,
+            magnesium: float = default_magnesium,
+            strand_association_penalty: bool = True,
+    ) -> Tuple[float]:
+        num_seqs = len(all_seqs)
+        if num_seqs == 0:
+            return tuple()
 
-    first_seqs = all_seqs[0]
+        all_seqs = tuple(tupleize(seqs) for seqs in all_seqs)
 
-    bases = sum(len(seq) for seq in first_seqs)
-    num_cores = nc.cpu_count(logical=True)
+        first_seqs = all_seqs[0]
 
-    # these thresholds were measured empirically; see notebook nuad_parallel_time_trials.ipynb
-    call_sequential = (len(all_seqs) == 1
-                       or (bases <= 30 and num_seqs <= 50)
-                       or (bases <= 40 and num_seqs <= 40)
-                       or (bases <= 50 and num_seqs <= 30)
-                       or (bases <= 75 and num_seqs <= 20)
-                       or (bases <= 100 and num_seqs <= 10)
-                       or (bases <= 125 and num_seqs <= 4)
-                       or (bases <= 150 and num_seqs <= 3)
-                       or (num_seqs <= 1)
-                       )
+        bases = sum(len(seq) for seq in first_seqs)
+        num_cores = nc.cpu_count(logical=True)
 
-    def calculate_energies_sequential(all_tuples: Sequence[Tuple[str, ...]]) -> Tuple[float]:
-        return tuple(pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty)
-                     for seqs in all_tuples)
+        # these thresholds were measured empirically; see notebook nuad_parallel_time_trials.ipynb
+        call_sequential = (len(all_seqs) == 1
+                           or (bases <= 30 and num_seqs <= 50)
+                           or (bases <= 40 and num_seqs <= 40)
+                           or (bases <= 50 and num_seqs <= 30)
+                           or (bases <= 75 and num_seqs <= 20)
+                           or (bases <= 100 and num_seqs <= 10)
+                           or (bases <= 125 and num_seqs <= 4)
+                           or (bases <= 150 and num_seqs <= 3)
+                           or (num_seqs <= 1)
+                           )
 
-    if call_sequential:
-        return calculate_energies_sequential(all_seqs)
+        def calculate_energies_sequential(all_tuples: Sequence[Tuple[str, ...]]) -> Tuple[float]:
+            return tuple(pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty)
+                         for seqs in all_tuples)
 
-    lists_of_sequence_pairs = nc.chunker(all_seqs, num_chunks=num_cores)
-    lists_of_energies = pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
-    energies = nc.flatten(lists_of_energies)
-    return tuple(energies)
+        if call_sequential:
+            return calculate_energies_sequential(all_seqs)
+
+        lists_of_sequence_pairs = nc.chunker(all_seqs, num_chunks=num_cores)
+        lists_of_energies = pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+        energies = nc.flatten(lists_of_energies)
+        return tuple(energies)
+except ModuleNotFoundError as e:
+    raise e
 
 
 def nupack_complex_base_pair_probabilities(strand_complex: 'nc.Complex',  # circular import causes problems

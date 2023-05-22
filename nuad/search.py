@@ -867,17 +867,17 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     The function has some side effects. It writes a report on the optimal sequence assignment found so far
     every time a new improve assignment is found.
 
-    Whenever a new optimal sequence assignment is found, the following are written to files:
-    - DNA sequences of each strand are written to a text file .
-    - the whole dsd design
-    - a report on the DNA sequences indicating how well they do on constraints.
+    Whenever a new optimal sequence assignment is found, the following are also be written to files:
+
+    * DNA sequences of each strand are written to a text file .
+    * the whole design itself
+    * a report on the DNA sequences indicating how well they do on constraints.
 
     :param design:
         The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
         and the :any:`Constraint`'s that apply to them
     :param params:
-        A :any:`SearchParameters` object with attributes that can be called within this function
-        for flexibility.
+        A :any:`SearchParameters` object with attributes that can be used to specify options for the search.
 
     """
 
@@ -1813,9 +1813,8 @@ class EvaluationSet:
         _assert_violations_are_accurate(self.evaluations, self.violations)
 
     def update_scores_and_counts(self) -> None:
-        """
-        :return: Total score of all evaluations.
-        """
+        # return: Total score of all evaluations.
+
         self.total_score = self.total_score_fixed = self.total_score_nonfixed = 0.0
         self.num_evaluations = self.num_evaluations_nonfixed = self.num_evaluations_fixed = 0
         self.num_violations = self.num_violations_nonfixed = self.num_violations_fixed = 0
@@ -1949,11 +1948,11 @@ class Evaluation(Generic[DesignPart]):
 
     def __init__(self, constraint: Constraint, violated: bool, part: DesignPart, domains: Iterable[Domain],
                  score: float, summary: str, result: nc.Result) -> None:
-        # :param constraint:
+        # constraint:
         #     :any:`Constraint` that was violated to result in this
-        # :param domains:
+        # domains:
         #     :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
-        # :param score:
+        # score:
         #     total "score" of this violation, typically something like an excess energy over a
         #     threshold, squared, multiplied by the :data:`Constraint.weight`
         self.constraint = constraint
@@ -2200,7 +2199,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         with the same rules as `xlims`
     """
     import matplotlib.pyplot as plt
-    from IPython.display import display, Markdown
+    from IPython.display import display, Markdown  # noqa
 
     def dm(obj):
         display(Markdown(obj))
@@ -2228,7 +2227,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     for report in reports_without_values:
         part_type_name = report.constraint.part_name()
         dm(f'## {report.constraint.description}')
-        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')  # noqa
         for viol in report.violations:
             print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 

@@ -24,7 +24,7 @@ import math
 import json
 from decimal import Decimal
 from typing import List, Set, Dict, Callable, Iterable, Tuple, Collection, TypeVar, Any, \
-    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type
+    cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Optional
 from dataclasses import dataclass, field, InitVar
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -140,6 +140,13 @@ class M13Variant(enum.Enum):
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
     """
 
+    p8634 = "p8634"
+    """Variant of M13mp18 that is 8634 bases long. At the time of this writing, not listed as available
+    from any biotech vender, but Tilibit will make it for you if you ask. 
+    (https://www.tilibit.com/pages/contact-us)
+    """
+
+
     def length(self) -> int:
         """
         :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
@@ -150,6 +157,8 @@ class M13Variant(enum.Enum):
             return 7560
         if self is M13Variant.p8064:
             return 8064
+        if self is M13Variant.p8634:
+            return 8634
         raise AssertionError('should be unreachable')
 
     def scadnano_variant(self) -> sc.M13Variant:
@@ -159,6 +168,8 @@ class M13Variant(enum.Enum):
             return sc.M13Variant.p7560
         if self is M13Variant.p8064:
             return sc.M13Variant.p8064
+        if self is M13Variant.p8634:
+            return sc.M13Variant.p8634
         raise AssertionError('should be unreachable')
 
 
@@ -273,12 +284,12 @@ def m13_substrings_of_length(length: int, except_indices: Iterable[int] = tuple(
 
 def default_score_transfer_function(x: float) -> float:
     """
-    A quadratic transfer function.
+    A cubic transfer function.
     
     :return:
-        max(0.0, x^2)
+        max(0.0, x^3)
     """
-    return max(0.0, x ** 2)
+    return max(0.0, x ** 3)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
@@ -378,7 +389,7 @@ class NumpyFilter(ABC):
     for a :any:`Domain`; a sequence not passing the filter is never allowed to be assigned to
     a :any:`Domain`. This constrasts with the various subclasses of :any:`Constraint`, which
     are different in two ways: 1) they can apply to large parts of the design than just a domain,
-    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraint that are
+    e.g., a :any:`Strand` or a pair of :any:`Domain`'s, and 2) they are "soft" constraints that are
     allowed to be violated during the course of the search.
 
     A :any:`NumpyFilter` is one that can be efficiently encoded
@@ -574,7 +585,7 @@ class BaseEndFilter(NumpyFilter):
                              f'when sequences only have length {seqs.seqlen}')
 
         if self.five_prime:
-            good_left = np.zeros(shape=len(seqs), dtype=np.bool)
+            good_left = np.zeros(shape=len(seqs), dtype=bool)
             left = seqs.seqarr[:, self.distance_from_end]
             for bits in all_bits:
                 if good_left is None:
@@ -583,7 +594,7 @@ class BaseEndFilter(NumpyFilter):
                     good_left |= (left == bits)
 
         if self.three_prime:
-            good_right = np.zeros(shape=len(seqs), dtype=np.bool)
+            good_right = np.zeros(shape=len(seqs), dtype=bool)
             right = seqs.seqarr[:, -1 - self.distance_from_end]
             for bits in all_bits:
                 if good_right is None:
@@ -639,7 +650,7 @@ class BaseAtPositionFilter(NumpyFilter):
         if not 0 <= self.position < seqs.seqlen:
             raise ValueError(f'position must be between 0 and {seqs.seqlen} but it is {self.position}')
         mid = seqs.seqarr[:, self.position]
-        good = np.zeros(shape=len(seqs), dtype=np.bool)
+        good = np.zeros(shape=len(seqs), dtype=bool)
         for base in self.bases:
             good |= (mid == nn.base2bits[base])
         seqarr_pass = seqs.seqarr[good]
@@ -708,7 +719,7 @@ class ForbiddenSubstringFilter(NumpyFilter):
         sub_vals = np.dot(sub_ints, pow_arr)
         toeplitz = nn.create_toeplitz(seqs.seqlen, sub_len, self.indices)
         convolution = np.dot(toeplitz, seqs.seqarr.transpose())
-        pass_all = np.ones(seqs.numseqs, dtype=np.bool)
+        pass_all = np.ones(seqs.numseqs, dtype=bool)
         for sub_val in sub_vals:
             pass_sub = np.all(convolution != sub_val, axis=0)
             pass_all = pass_all & pass_sub
@@ -4292,11 +4303,8 @@ class Result(Generic[DesignPart]):
     a threshold.
     """
 
-    summary: str = ''
-    """
-    This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
-    strand, pair of domains, pair of strands).
-    """
+    _summary: Optional[str] = None
+
 
     value: pint.Quantity[Decimal] | None = None
     """
@@ -4328,14 +4336,32 @@ class Result(Generic[DesignPart]):
         if summary is None:
             if value is None:
                 raise ValueError('at least one of value or summary must be specified')
-            self.summary = str(value)
+            # note summary getter calculates summary from value if summary is None,
+            # so no need to set it here
         else:
-            self.summary = summary
+            self._summary = summary
         if value is not None:
             self.value = parse_and_normalize_quantity(value)
 
         self.score = 0.0
         self.part = None  # type:ignore
+
+    @property
+    def summary(self) -> str:
+        """
+        This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
+        strand, pair of domains, pair of strands).
+
+        It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
+        """
+        if self._summary is None:
+            return str(self.value)
+        else:
+            return self._summary
+
+    @summary.setter
+    def summary(self, summary: str) -> None:
+        self._summary = summary
 
 
 def parse_and_normalize_quantity(quantity: float | int | str | pint.Quantity) \
@@ -4353,9 +4379,10 @@ def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity
         return ureg.Quantity(qty, unit)
     else:
         # we convert to string to avoid floating-point weirdness. For example
-        # ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
+        #   ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
         #   -2.100000000000000088817841970012523233890533447265625 kilocalorie / mole,
-        # but ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
+        # whereas
+        #   ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
         #   -2.1 kilocalorie / mole,
         qty_str = str(qty)
         return ureg.Quantity(Decimal(qty_str), unit)
@@ -4396,7 +4423,7 @@ def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Q
 @dataclass(eq=False)
 class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate: Callable[[Tuple[str, ...], DesignPart | None],
-                       Result[DesignPart]] = lambda _: _raise_unreachable()
+    Result[DesignPart]] = lambda _: _raise_unreachable()
     """
     Essentially a wrapper for a function that evaluates the :any:`Constraint`. 
     It takes as input a tuple of DNA sequences 
@@ -4463,7 +4490,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
 @dataclass(eq=False)
 class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate_bulk: Callable[[Sequence[DesignPart]],
-                            List[Result]] = lambda _: _raise_unreachable()
+    List[Result]] = lambda _: _raise_unreachable()
 
     def call_evaluate_bulk(self, parts: Sequence[DesignPart]) -> List[Result]:
         results: List[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
@@ -4693,7 +4720,7 @@ class DesignConstraint(Constraint[Design]):
     """
 
     evaluate_design: Callable[[Design, Iterable[Domain]],
-                              List[Tuple[DesignPart, float, str]]] = lambda _: _raise_unreachable()
+    List[Tuple[DesignPart, float, str]]] = lambda _: _raise_unreachable()
     """
     Evaluates the :any:`Design` (first argument), possibly taking into account which :any:`Domain`'s have
     changed in the last iteration (second argument).
@@ -5695,6 +5722,404 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_duplex_with_parameters_filename,
         thresholds=thresholds,
         temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
+    )
+
+
+def longest_complementary_subsequences_python_loop(arr1: np.ndarray, arr2: np.ndarray,
+                                                   gc_double: bool) -> List[int]:
+    """
+    Like :func:`longest_complementary_subsequences`, but uses a Python loop instead of numpy operations.
+    This is slower, but is easier to understand and useful for testing.
+    """
+    lcs_sizes = []
+    for s1, s2 in zip(arr1, arr2):
+        s1len = s1.shape[0]
+        s2len = s2.shape[0]
+        table = np.zeros(shape=(s1len + 1, s2len + 1), dtype=np.int8)
+        for i in range(s1len):
+            for j in range(s2len):
+                b1 = s1[i]
+                b2 = s2[j]
+                if b1 + b2 == 3:
+                    weight = 1
+                    if gc_double and (b1 == 1 or b1 == 2):
+                        weight = 2
+                    table[i + 1][j + 1] = weight + table[i][j]
+                else:
+                    table[i + 1][j + 1] = max(table[i + 1][j], table[i][j + 1])
+        lcs_size = table[s1len][s2len]
+        lcs_sizes.append(lcs_size)
+    return lcs_sizes
+
+
+def longest_complementary_subsequences_two_loops(arr1: np.ndarray, arr2: np.ndarray,
+                                                 gc_double: bool) -> List[int]:
+    """
+    Calculate length of longest common subsequences between `arr1[i]` and `arr2[i]`
+    for each i, storing in returned list `result[i]`.
+
+    This uses two nested Python loops to calculate the whole dynamic programming table.
+    :func:`longest_complementary_subsequences` is slightly faster because it maintains only the diagonal
+    of the DP table, and uses numpy vectorized operations to calculate the next diagonal of the table.
+
+    When used for DNA sequences, this assumes `arr2` has been reversed along axis 1, i.e.,
+    the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
+    are assumed to be oriented 3' --> 5'.
+
+    Args:
+        arr1: 2D array of DNA sequences, with each sequence represented as a 1D array of 0, 1, 2, 3
+              corresponding to A, C, G, T, respectively, with each row being a single DNA sequence
+              oriented 5' --> 3'.
+        arr2: 2D array of DNA sequences, with each row being a single DNA sequence
+              oriented 3' --> 5'.
+        gc_double: Whether to double the score for G-C base pairs.
+
+    Returns:
+        list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
+        between `arr1[i]` and `arr2[i]`.
+    """
+    assert arr1.shape[0] == arr2.shape[0]
+    num_pairs = arr1.shape[0]
+    s1len = arr1.shape[1]
+    s2len = arr2.shape[1]
+    max_length = max(s1len, s2len)
+    dtype = np.min_scalar_type(max_length)  # e.g., uint8 for 0-255, uint16 for 256-65535, etc.
+    table = np.zeros(shape=(num_pairs, s1len + 1, s2len + 1), dtype=dtype)
+
+    # convert arr2 to complement and search for longest common subsequence (instead of complementary)
+    arr2 = 3 - arr2
+
+    for i in range(s1len):
+        for j in range(s2len):
+            bases1 = arr1[:, i]
+            bases2 = arr2[:, j]
+
+            equal_idxs = bases1 == bases2
+            if gc_double:
+                gc_idxs = np.logical_or(bases1[equal_idxs] == 1, bases1[equal_idxs] == 2)
+                weight = np.ones(len(bases1[equal_idxs]), dtype=dtype)
+                weight[gc_idxs] = 2
+                table[equal_idxs, i + 1, j + 1] = weight + table[equal_idxs, i, j]
+            else:
+                table[equal_idxs, i + 1, j + 1] = 1 + table[equal_idxs, i, j]
+
+            noncomp_idxs = np.logical_not(equal_idxs)
+            rec1 = table[noncomp_idxs, i + 1, j]
+            rec2 = table[noncomp_idxs, i, j + 1]
+            table[noncomp_idxs, i + 1, j + 1] = np.maximum(rec1, rec2)
+
+    lcs_sizes = table[:, s1len, s2len]
+
+    return lcs_sizes
+
+
+def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_double: bool) -> List[int]:
+    """
+    Calculate length of longest common subsequences between `arr1[i]` and `arr2[i]`
+    for each i, storing in returned list `result[i]`.
+
+    Unlike :func:`longest_complementary_subsequences_two_loops`, this uses only one Python loop,
+
+    When used for DNA sequences, this assumes `arr2` has been reversed along axis 1, i.e.,
+    the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
+    are assumed to be oriented 3' --> 5'.
+
+    Args:
+        arr1: 2D array of DNA sequences, with each sequence represented as a 1D array of 0, 1, 2, 3
+              corresponding to A, C, G, T, respectively, with each row being a single DNA sequence
+              oriented 5' --> 3'.
+        arr2: 2D array of DNA sequences, with each row being a single DNA sequence
+              oriented 3' --> 5'.
+        gc_double: Whether to double the score for G-C base pairs.
+
+    Returns:
+        list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
+        between `arr1[i]` and `arr2[i]`.
+    """
+    assert arr1.shape[0] == arr2.shape[0]
+    num_pairs = arr1.shape[0]
+    s1len = arr1.shape[1]
+    s2len = arr2.shape[1]
+    assert s1len == s2len  # for now, assume same length, but should be relaxed
+
+    max_length = max(s1len, s2len)
+    dtype = np.min_scalar_type(max_length)  # e.g., uint8 for 0-255, uint16 for 256-65535, etc.
+
+    # convert arr2 to WC complement and search for longest common subsequence (instead of complementary)
+    arr2 = 3 - arr2
+
+    length_prev_prev = length_prev = s1len
+    prev_prev_larger = s1len % 2 == 0
+    if prev_prev_larger:
+        length_prev_prev += 1
+    else:
+        length_prev += 1
+
+    # using this spreadsheet to visual DP table:
+    # https://docs.google.com/spreadsheets/d/1FIOgQYFSJ_6r3ThBivDjf0epUxVLgk0xlQnQS6TUeSw/
+    diag_prev_prev = np.zeros(shape=(num_pairs, length_prev_prev), dtype=dtype)
+    diag_prev = np.zeros(shape=(num_pairs, length_prev), dtype=dtype)
+
+    # do dynamic programming to figure out longest complementary subsequence,
+    # maintaining only the diagonal of the table and the previous two diagonals
+
+    # allocate these arrays just once to avoid re-allocating new memory each iteration
+    # they are used for telling which bases are equal between the two sequences
+    eq_idxs_larger = np.zeros((num_pairs, s1len + 1), dtype=bool)
+    eq_idxs_smaller = np.zeros((num_pairs, s1len), dtype=bool)
+    gc_idxs_larger = np.zeros((num_pairs, s1len + 1), dtype=bool)
+    gc_idxs_smaller = np.zeros((num_pairs, s1len), dtype=bool)
+    for i in range(0, 2 * s1len, 2):
+        diag_cur = update_diagonal(arr1, arr2, diag_prev, diag_prev_prev,
+                                   eq_idxs_larger if prev_prev_larger else eq_idxs_smaller,
+                                   gc_idxs_larger if prev_prev_larger else gc_idxs_smaller,
+                                   i, prev_prev_larger, gc_double)
+        if i < 2 * s1len - 2:
+            diag_next = update_diagonal(arr1, arr2, diag_cur, diag_prev,
+                                        eq_idxs_larger if not prev_prev_larger else eq_idxs_smaller,
+                                        gc_idxs_larger if not prev_prev_larger else gc_idxs_smaller,
+                                        i + 1, not prev_prev_larger, gc_double)
+            diag_prev = diag_next
+        diag_prev_prev = diag_cur
+
+    middle_idx = s1len // 2
+    lcs_sizes = diag_prev_prev[:, middle_idx]
+
+    return lcs_sizes
+
+
+def update_diagonal(arr1: np.ndarray, arr2: np.ndarray,
+                    diag_prev: np.ndarray, diag_prev_prev: np.ndarray,
+                    eq_idxs: np.ndarray,
+                    gc_idxs: np.ndarray,
+                    i: int, prev_prev_larger: bool, gc_double: bool) -> np.ndarray:
+    s1len = arr1.shape[1]
+    s2len = arr2.shape[1]
+    assert s1len == s2len  # for now, assume same length, but should be relaxed
+
+    # determine which bases in arr1 and arr2 are equal;
+    # compute LCS for that case and store in diag_eq
+    # creates view, not copy, so don't modify!
+    eq_idxs[:, :] = False
+    if i < s1len:
+        sub1 = arr1[:, i::-1]  # indices i, i-1, ..., 0
+        sub2 = arr2[:, :i + 1]  # indices 0, 1,   ..., i
+    else:
+        sub1 = arr1[:, :i - s1len:-1]  # indices s1len-1,   s1len-2, , ..., s1len-i
+        sub2 = arr2[:, i - s1len + 1:]  # indices s1len-i+1, s1len-i+2, ..., s1len-1
+
+    # need to set eq_idxs only on entries "within" the DP table, not the padded 0s on the edges
+    # see https://docs.google.com/spreadsheets/d/1FIOgQYFSJ_6r3ThBivDjf0epUxVLgk0xlQnQS6TUeSw for example
+
+    if i < s1len:
+        start = (s1len - i) // 2
+    else:
+        start = (i - s1len) // 2 + 1
+    end = s1len - start
+    if not prev_prev_larger:
+        end -= 1
+    # TODO: if there's a way to avoid allocating new memory for the Boolean array eq, that will save time.
+    #  With 10,000 pairs of sequences, each of length 64, this takes 1/4 the time if we just set
+    #  eq_idxs[:, start:end + 1] = True, compared to computing sub1==sub2 allocating new memory for eq
+    #  (not sure if the computation or the memory allocation dominates, however)
+    eq = sub1 == sub2
+    eq_idxs[:, start:end + 1] = eq
+
+    # don't want to allocate new memory, but give variable a better name
+    # to reflect that we are looking at the case where the bases are equal
+    # XXX: note that this is modifying diag_prev_prev,
+    # so only safe to do this after we aren't using it anymore
+    diag_cur = diag_prev_prev
+    diag_cur[eq_idxs] += 1
+    if gc_double:
+        gc_idxs[:, start:end + 1] = np.logical_and(np.logical_or(sub1 == 1, sub1 == 2), eq)
+        diag_cur[gc_idxs] += 1
+
+    # now take maximum with immediately previous diagonal
+    if prev_prev_larger:
+        # diag_cur is 1 larger than diag_prev
+        diag_cur_L = diag_cur[:, :-1]
+        diag_cur_R = diag_cur[:, 1:]
+        np.maximum(diag_cur_L, diag_prev, out=diag_cur_L)  # looks "above" in DP table
+        np.maximum(diag_cur_R, diag_prev, out=diag_cur_R)  # looks "left" in DP table
+    else:
+        # diag_cur is 1 smaller than diag_prev
+        diag_prev_L = diag_prev[:, :-1]
+        diag_prev_R = diag_prev[:, 1:]
+        np.maximum(diag_cur, diag_prev_L, out=diag_cur)  # looks "above" in DP table
+        np.maximum(diag_cur, diag_prev_R, out=diag_cur)  # looks "left" in DP table
+
+    return diag_cur
+
+
+def lcs(seqs1: Sequence[str], seqs2: Sequence[str], gc_double: bool) -> List[int]:
+    arr1 = nn.seqs2arr(seqs1)
+    arr2 = nn.seqs2arr(seqs2)
+    arr2 = np.flip(arr2, axis=1)
+    return longest_complementary_subsequences(arr1, arr2, gc_double)
+
+
+def lcs_loop(s1: str, s2: str, gc_double: bool) -> int:
+    arr1 = nn.seqs2arr([s1])
+    arr2 = nn.seqs2arr([s2[::-1]])
+    return longest_complementary_subsequences_python_loop(arr1, arr2, gc_double)[0]
+
+
+def lcs_strand_pairs_constraint(
+        *,
+        threshold: int,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'lcs strand pairs',
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        check_strand_against_itself: bool = True,
+        gc_double: bool = True,
+) -> StrandPairsConstraint:
+    """
+    TODO: describe
+
+    Args
+        threshold:
+
+        weight:
+
+        score_transfer_function:
+
+        description:
+
+        short_description:
+
+        pairs:
+
+        gc_double: Whether to weigh G-C base pairs as double (i.e., they count for 2 instead of 1).
+
+    Returns
+        A :any: StrandPairsConstraint` that checks given pairs of :any:`Strand`'s for excessive
+        interaction due to having long complementary subsequences.
+    """
+    if description is None:
+        description = f'Longest complementary subsequence between strands is > {threshold}'
+
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
+        # import time
+        # start_eb = time.time()
+
+        seqs1 = [pair.strand1.sequence() for pair in strand_pairs]
+        seqs2 = [pair.strand2.sequence() for pair in strand_pairs]
+        arr1 = nn.seqs2arr(seqs1)
+        arr2 = nn.seqs2arr(seqs2)
+        arr2_rev = np.flip(arr2, axis=1)
+
+        # start = time.time()
+        lcs_sizes = longest_complementary_subsequences(arr1, arr2_rev, gc_double)
+        # lcs_sizes = longest_complementary_subsequences_two_loops(arr1, arr2_rev, gc_double)
+        # end = time.time()
+
+        results = []
+        for lcs_size in lcs_sizes:
+            excess = lcs_size - threshold
+            value = f'{lcs_size}'
+            result = Result(excess=excess, value=value)
+            results.append(result)
+
+        # end_eb = time.time()
+        # elapsed_ms = int(round((end - start) * 1000, 0))
+        # elapsed_eb_ms = int(round((end_eb - start_eb) * 1000, 0))
+        # print(f'\n{elapsed_ms} ms to measure LCS of {len(seqs1)} pairs')
+        # print(f'{elapsed_eb_ms} ms to run evaluate_bulk')
+
+        return results
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(
+        description=description,
+        short_description=short_description,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        evaluate_bulk=evaluate_bulk,
+        pairs=pairs_tuple,
+        check_strand_against_itself=check_strand_against_itself,
+    )
+
+
+def lcs_strand_pairs_constraints_by_number_matching_domains(
+        *,
+        thresholds: Dict[int, int],
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Dict[int, str] | None = None,
+        short_descriptions: Dict[int, str] | None = None,
+        parallel: bool = False,
+        strands: Iterable[Strand] | None = None,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        gc_double: bool = True,
+        parameters_filename: str = '',
+        ignore_missing_thresholds: bool = False,
+) -> List[StrandPairsConstraint]:
+    """
+    TODO
+    """
+    if parameters_filename != '':
+        raise ValueError('should not specify parameters_filename when calling '
+                         'lcs_strand_pairs_constraints_by_number_matching_domains; '
+                         'it is only listed as a parameter for technical reasons relating to code resuse '
+                         'with other constraints that use that parameter')
+
+    def lcs_strand_pairs_constraint_with_dummy_parameters(
+            *,
+            threshold: float,
+            temperature: float = nv.default_temperature,
+            weight: float = 1.0,
+            score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+            description: str | None = None,
+            short_description: str = 'lcs strand pairs',
+            parallel: bool = False,
+            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+            parameters_filename: str = nv.default_vienna_rna_parameter_filename
+    ) -> StrandPairsConstraint:
+        threshold_int = int(threshold)
+        return lcs_strand_pairs_constraint(
+            threshold=threshold_int,
+            weight=weight,
+            score_transfer_function=score_transfer_function,
+            description=description,
+            short_description=short_description,
+            pairs=pairs,
+            check_strand_against_itself=True,
+            # TODO: rewrite signature of other strand pair constraints to include this
+            gc_double=gc_double,
+        )
+
+    if descriptions is None:
+        descriptions = {
+            num_matching: (f'Longest complementary subsequence between strands is > {threshold}' +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
+            for num_matching, threshold in thresholds.items()
+        }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f'LCS{num_matching}comp'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    return _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator=lcs_strand_pairs_constraint_with_dummy_parameters,
+        thresholds=thresholds,
+        temperature=-1,
         weight=weight,
         score_transfer_function=score_transfer_function,
         descriptions=descriptions,
@@ -7515,7 +7940,7 @@ def __get_base_pair_domain_endpoints_to_check(
     # End Input Validation #
 
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
-                                         int] = _get_addr_to_starting_base_pair_idx(strand_complex)
+    int] = _get_addr_to_starting_base_pair_idx(strand_complex)
     all_bound_domain_addresses.update(_get_implicitly_bound_domain_addresses(
         strand_complex, nonimplicit_base_pairs_domain_names))
 

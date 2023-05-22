@@ -43,22 +43,77 @@ def seq2arr(seq: str, base2bits_local: Dict[str, int] | None = None) -> np.ndarr
     return np.array([base2bits_local[base] for base in seq], dtype=np.ubyte)
 
 
+# this was about 5 times slower than the new implementation of `seqs2arr` below
+# def seqs2arr_old(seqs: Sequence[str]) -> np.ndarray:
+#     """Return numpy 2D array converting the given DNA sequences to integers."""
+#     if len(seqs) == 0:
+#         return np.empty((0, 0), dtype=np.ubyte)
+#     if isinstance(seqs, str):
+#         raise ValueError('seqs must be a sequence of strings, not a single string')
+#     seq_len = len(seqs[0])
+#     for seq in seqs:
+#         if len(seq) != seq_len:
+#             raise ValueError('All sequences in seqs must be equal length')
+#     num_seqs = len(seqs)
+#     arr = np.empty((num_seqs, seq_len), dtype=np.ubyte)
+#     for i in range(num_seqs):
+#         arr[i] = [base2bits[base] for base in seqs[i]]
+#     return arr
+
+
 def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     """Return numpy 2D array converting the given DNA sequences to integers."""
     if len(seqs) == 0:
         return np.empty((0, 0), dtype=np.ubyte)
+    if isinstance(seqs, str):
+        raise ValueError('seqs must be a sequence of strings, not a single string')
+
+    # check equal length of each sequence (a bit faster than a Python loop,
+    # e.g., 3.5 ms for 10^5 seqs compared to 5 ms with Python loop)
     seq_len = len(seqs[0])
-    for seq in seqs:
-        if len(seq) != seq_len:
-            raise ValueError('All sequences in seqs must be equal length')
+    lengths_it = map(len, seqs)
+    lengths_arr = np.fromiter(lengths_it, dtype=int)
+    if np.any(lengths_arr != seq_len):
+        raise ValueError('All sequences in seqs must be equal length')
+
     num_seqs = len(seqs)
-    arr = np.empty((num_seqs, seq_len), dtype=np.ubyte)
-    for i in range(num_seqs):
-        arr[i] = [base2bits[base] for base in seqs[i]]
-    return arr
+
+    # the code below is about 5 times faster than the old implementation (commented out above)
+    seqs_cat = ''.join(seqs)
+    seqs_cat = seqs_cat.upper()
+
+    seqs_cat_bytes = seqs_cat.encode()
+    seqs_cat_byte_array = bytearray(seqs_cat_bytes)
+    arr1d = np.frombuffer(seqs_cat_byte_array, dtype=np.ubyte)
+    # arr1d = np.fromstring(seqs_cat_bytes, dtype=np.ubyte) # generates warning about using frombuffer
+
+    # convert ASCII bytes for 'A', 'C', 'G', 'T' to 0, 1, 2, 3, respectively
+
+    # code below is magical to me, but it works and is slightly faster than more obvious ways:
+    # https://stackoverflow.com/a/35464758
+    from_values = np.array([ord(base) for base in ['A', 'C', 'G', 'T']])
+    to_values = np.arange(4)
+    sort_idx = np.argsort(from_values)
+    idx = np.searchsorted(from_values, arr1d, sorter=sort_idx)
+    arr1d = to_values[sort_idx][idx]
+
+    # this is a bit slower than the code above, e.g., 75 ms compared to 55 ms for 10^5 sequences
+    # for i, base in enumerate(['A', 'C', 'G', 'T']):
+    #     idxs_with_base = arr2d == ord(base)
+    #     arr2d[idxs_with_base] = i
+
+    arr2d = arr1d.reshape((num_seqs, seq_len))
+
+    return arr2d
+
+
+def arr2seqs(arr: np.ndarray) -> List[str]:
+    """Return list of strings converting the given numpy array of integers to DNA sequences."""
+    return [''.join(bits2base[base] for base in row) for row in arr]
 
 
 def arr2seq(arr: np.ndarray) -> str:
+    """Return string converting the given numpy array of integers to DNA sequence."""
     bases_ch = [bits2base[base] for base in arr]
     return ''.join(bases_ch)
 
@@ -88,7 +143,7 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C'
     if len(bases) == 0:
         raise ValueError('bases cannot be empty')
     if not set(bases) <= {'A', 'C', 'G', 'T'}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+        raise ValueError(f"bases must be a subset of {{A, C, G, T}}; cannot be {bases}")
 
     base_bits = [base2bits[base] for base in bases]
     digits = np.array(base_bits, dtype=np.ubyte)
@@ -457,7 +512,7 @@ def longest_common_substrings_singlea1(a1: np.ndarray, a2s: np.ndarray) \
 
     for i1 in range(len(a1)):
         idx = (a2s == a1[i1])
-        idx_shifted = np.insert(idx, 0, np.zeros(numa2s, dtype=np.bool), axis=1)
+        idx_shifted = np.insert(idx, 0, np.zeros(numa2s, dtype=bool), axis=1)
         counter[i1 + 1, idx_shifted] = counter[i1, idx] + 1
 
     counter = np.swapaxes(counter, 0, 1)
@@ -518,7 +573,7 @@ def _longest_common_substrings_pairs(a1s: np.ndarray, a2s: np.ndarray) \
         a1s_cp_col_rp = np.repeat(a1s_cp_col, len_a2, axis=1)
 
         idx = (a2s == a1s_cp_col_rp)
-        idx_shifted = np.hstack([np.zeros(shape=(numpairs, 1), dtype=np.bool), idx])
+        idx_shifted = np.hstack([np.zeros(shape=(numpairs, 1), dtype=bool), idx])
         counter[i1 + 1, idx_shifted] = counter[i1, idx] + 1
 
     counter = np.swapaxes(counter, 0, 1)
@@ -566,7 +621,7 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
 
         # find matching chars and extend length of substring
         match_idxs = (a2s == a1s_col_rp)
-        match_shifted_idxs = np.hstack([np.zeros(shape=(numpairs, 1), dtype=np.bool), match_idxs])
+        match_shifted_idxs = np.hstack([np.zeros(shape=(numpairs, 1), dtype=bool), match_idxs])
         counter[i1 + 1, match_shifted_idxs] = counter[i1, match_idxs] + 1
 
         if i1 > 0:
@@ -576,10 +631,10 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
             loops = (prev_bases << 2) + cur_bases
             latest_energies = loop_energies[loops].reshape(numpairs, 1)
             latest_energies_rp = np.repeat(latest_energies, len_a2, axis=1)
-            match_idxs_false_at_end = np.hstack([match_idxs, np.zeros(shape=(numpairs, 1), dtype=np.bool)])
+            match_idxs_false_at_end = np.hstack([match_idxs, np.zeros(shape=(numpairs, 1), dtype=bool)])
             both_match_idxs = match_idxs_false_at_end & prev_match_shifted_idxs
             prev_match_shifted_shifted_idxs = np.hstack(
-                [np.zeros(shape=(numpairs, 1), dtype=np.bool), prev_match_shifted_idxs])[:, :-1]
+                [np.zeros(shape=(numpairs, 1), dtype=bool), prev_match_shifted_idxs])[:, :-1]
             both_match_shifted_idxs = match_shifted_idxs & prev_match_shifted_shifted_idxs
             energies[i1 + 1, both_match_shifted_idxs] = energies[i1, both_match_idxs] + latest_energies_rp[
                 both_match_idxs]
@@ -676,7 +731,7 @@ class DNASeqList:
                  shuffle: bool = False,
                  alphabet: Collection[str] = ('A', 'C', 'G', 'T'),
                  seqs: Sequence[str] | None = None,
-                 seqarr: np.ndarray = None,
+                 seqarr: np.ndarray | None = None,
                  filename: str | None = None,
                  rng: np.random.Generator = default_rng,
                  hamming_distance_from_sequence: Tuple[int, str] | None = None):
@@ -1069,14 +1124,14 @@ class DNASeqList:
     def filter_substring(self, subs: Sequence[str]) -> DNASeqList:
         """Remove any sequence with any elements from subs as a substring."""
         if len(set([len(sub) for sub in subs])) != 1:
-            raise ValueError('All substrings in subs must be equal length: %s' % subs)
+            raise ValueError(f'All substrings in subs must be equal length: {subs}')
         sublen = len(subs[0])
         subints = [[base2bits[base] for base in sub] for sub in subs]
         powarr = [4 ** k for k in range(sublen)]
         subvals = np.dot(subints, powarr)
         toeplitz = create_toeplitz(self.seqlen, sublen)
         convolution = np.dot(toeplitz, self.seqarr.transpose())
-        passall = np.ones(self.numseqs, dtype=np.bool)
+        passall = np.ones(self.numseqs, dtype=bool)
         for subval in subvals:
             passsub = np.all(convolution != subval, axis=0)
             passall = passall & passsub
@@ -1123,7 +1178,7 @@ def create_toeplitz(seqlen: int, sublen: int, indices: Sequence[int] | None = No
                                  f'but {idx} is not; all indices = {indices}')
     num_rows = len(rows)
     num_cols = seqlen
-    toeplitz = np.zeros((num_rows, num_cols), dtype=np.int)
+    toeplitz = np.zeros((num_rows, num_cols), dtype=int)
     toeplitz[:, 0:sublen] = [powarr] * num_rows
     shift = list(rows)
     for i in range(len(rows)):
@@ -1209,100 +1264,21 @@ def wcenergies_str(seqs: Sequence[str], temperature: float, negate: bool = False
 
 
 def wcenergy_str(seq: str, temperature: float, negate: bool = False) -> float:
-    seqarr = seqs2arr([seq])
-    return list(calculate_wc_energies(seqarr, temperature, negate))[0]
-
-
-def hash_ndarray(arr: np.ndarray) -> int:
-    writeable = arr.flags.writeable
-    if writeable:
-        arr.flags.writeable = False
-    h = hash(bytes(arr.data))  # hash(arr.data)
-    arr.flags.writeable = writeable
-    return h
-
-
-CACHE_WC = False
-_calculate_wc_energies_cache: np.ndarray | None = None
-_calculate_wc_energies_cache_hash: int = 0
+    return wcenergies_str([seq], temperature, negate)[0]
 
 
 def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool = False) -> np.ndarray:
     """Calculate and store in an array all energies of all sequences in seqarr
     with their Watson-Crick complements."""
-    global _calculate_wc_energies_cache
-    global _calculate_wc_energies_cache_hash
-    if CACHE_WC and _calculate_wc_energies_cache is not None:
-        if _calculate_wc_energies_cache_hash == hash_ndarray(seqarr):
-            return _calculate_wc_energies_cache
     loop_energies = calculate_loop_energies(temperature, negate)
     left_index_bits = seqarr[:, :-1] << 2
     right_index_bits = seqarr[:, 1:]
     pair_indices = left_index_bits + right_index_bits
     pair_energies = loop_energies[pair_indices]
     energies: np.ndarray = np.sum(pair_energies, axis=1)
-    if CACHE_WC:
-        _calculate_wc_energies_cache = energies
-        _calculate_wc_energies_cache_hash = hash_ndarray(_calculate_wc_energies_cache)
     return energies
 
 
 def wc_arr(seqarr: np.ndarray) -> np.ndarray:
-    """Return numpy array of complements of sequences in `seqarr`."""
+    """Return numpy array of reverse complements of sequences in `seqarr`."""
     return (3 - seqarr)[:, ::-1]
-
-
-def prefilter_length_10_11(low_dg: float, high_dg: float, temperature: float, end_gc: bool,
-                           convert_to_list: bool = True) \
-        -> Tuple[List[str], List[str]] | Tuple[DNASeqList, DNASeqList]:
-    """Return sequences of length 10 and 11 with wc energies between given values."""
-    s10: DNASeqList = DNASeqList(length=10)
-    s11: DNASeqList = DNASeqList(length=11)
-    s10 = s10.filter_energy(low=low_dg, high=high_dg, temperature=temperature)
-    s11 = s11.filter_energy(low=low_dg, high=high_dg, temperature=temperature)
-    forbidden_subs = [f'{a}{b}{c}{d}' for a in ['G', 'C']
-                      for b in ['G', 'C']
-                      for c in ['G', 'C']
-                      for d in ['G', 'C']]
-    s10 = s10.filter_substring(forbidden_subs)
-    s11 = s11.filter_substring(forbidden_subs)
-    if end_gc:
-        print(
-            'Removing any domains that end in either A or T; '
-            'also ensuring every domain has an A or T within 2 indexes of the end')
-        s10 = s10.filter_end_gc()
-        s11 = s11.filter_end_gc()
-    for seqs in (s10, s11):
-        if len(seqs) == 0:
-            raise ValueError(
-                f'low_dg {low_dg:.2f} and high_dg {high_dg:.2f} too strict! '
-                f'no sequences of length {seqs.seqlen} found')
-    return (s10.to_list(), s11.to_list()) if convert_to_list else (s10, s11)
-
-
-def all_cats(seq: Sequence[int], seqs: Sequence[int]) -> np.ndarray:
-    """
-    Return all sequences obtained by concatenating seq to either end of a sequence in seqs.
-
-    For example,
-
-    .. code-block:: Python
-
-        all_cats([0,1,2,3], [[3,3,3], [0,0,0]])
-
-    returns the numpy array
-
-    .. code-block:: Python
-
-        [[0,1,2,3,3,3,3],
-         [3,3,3,0,1,2,3],
-         [0,1,2,3,0,0,0],
-         [0,0,0,0,1,2,3]]
-    """
-    seqarr = np.asarray([seq])
-    seqsarr = np.asarray(seqs)
-    ar = seqarr.repeat(seqsarr.shape[0], axis=0)
-    ret = np.concatenate((seqsarr, ar), axis=1)
-    ret2 = np.concatenate((ar, seqsarr), axis=1)
-    ret = np.concatenate((ret, ret2))
-    return ret
