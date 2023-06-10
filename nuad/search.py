@@ -1924,7 +1924,7 @@ def _assert_violations_are_accurate(evaluations: Dict[Constraint, Dict[nc.Part, 
 
 @dataclass
 class Evaluation(Generic[DesignPart]):
-    # Represents a violation of a single :any:`Constraint` in a :any:`Design`.
+    # Represents an evaluation of a single :any:`Constraint` in a :any:`Design`.
     # The "part" of the :any:`Design` that was evaluated for the constraint is generic type `DesignPart`
     # (e.g., for :any:`StrandPairConstraint`, DesignPart = :any:`Pair` [:any:`Strand`]).
 
