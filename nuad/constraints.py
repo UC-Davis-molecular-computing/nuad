@@ -146,7 +146,6 @@ class M13Variant(enum.Enum):
     (https://www.tilibit.com/pages/contact-us)
     """
 
-
     def length(self) -> int:
         """
         :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
