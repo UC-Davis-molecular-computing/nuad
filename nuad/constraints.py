@@ -2335,7 +2335,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
     def __init__(self,
                  domains: Iterable[Domain[DomainLabel]] | None = None,
-                 starred_domain_indices: Iterable[int] | None = None,
+                 starred_domain_indices: Iterable[int] = (),
                  group: str = default_strand_group,
                  name: str | None = None,
                  label: StrandLabel | None = None,
@@ -2373,7 +2373,6 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
-        starred_domain_indices = [] if starred_domain_indices is None else starred_domain_indices
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
         self.idt = idt
@@ -4303,7 +4302,6 @@ class Result(Generic[DesignPart]):
     """
 
     _summary: Optional[str] = None
-
 
     value: pint.Quantity[Decimal] | None = None
     """
