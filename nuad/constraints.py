@@ -1320,7 +1320,6 @@ NumpyFilters and SequenceFilters. Trying another distance.""")
                                                          num_to_generate: int) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
-        _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
         seqs = nn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                              num_random_seqs=num_to_generate, rng=rng)
         seqs_passing_numpy_filters = self._apply_numpy_filters(seqs)
@@ -4352,7 +4351,12 @@ class Result(Generic[DesignPart]):
         It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
         """
         if self._summary is None:
-            return str(self.value)
+            # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
+            # e.g., kcal/mol instead of kilocalorie / mol
+            # also 2 decimal places to make numbers line up nicely
+            self.value.default_format = '.2fP~'
+            summary_str = f'{self.value}'
+            return str(summary_str)
         else:
             return self._summary
 
