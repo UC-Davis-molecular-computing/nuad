@@ -4354,7 +4354,7 @@ class Result(Generic[DesignPart]):
             # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
             # e.g., kcal/mol instead of kilocalorie / mol
             # also 2 decimal places to make numbers line up nicely
-            self.value.default_format = '.2fP~'
+            self.value.default_format = '.2fC~'
             summary_str = f'{self.value}'
             return str(summary_str)
         else:
