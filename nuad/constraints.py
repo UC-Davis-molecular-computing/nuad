@@ -146,7 +146,6 @@ class M13Variant(enum.Enum):
     (https://www.tilibit.com/pages/contact-us)
     """
 
-
     def length(self) -> int:
         """
         :return: length of this variant of M13 (e.g., 7249 for variant :data:`M13Variant.p7249`)
@@ -1321,7 +1320,6 @@ NumpyFilters and SequenceFilters. Trying another distance.""")
                                                          num_to_generate: int) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
-        _length_threshold_numpy = math.floor(math.log(num_to_generate, 4))
         seqs = nn.DNASeqList(length=length, alphabet=bases, shuffle=True,
                              num_random_seqs=num_to_generate, rng=rng)
         seqs_passing_numpy_filters = self._apply_numpy_filters(seqs)
@@ -1413,11 +1411,8 @@ class Part(ABC):
         pass
 
 
-DomainLabel = TypeVar('DomainLabel')
-
-
 @dataclass
-class Domain(Part, JSONSerializable, Generic[DomainLabel]):
+class Domain(Part, JSONSerializable):
     """
     Represents a contiguous substring of the DNA sequence of a :any:`Strand`, which is intended
     to be either single-stranded, or to bind fully to the Watson-Crick complement of the :any:`Domain`.
@@ -1478,15 +1473,12 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
     Note: If a domain is fixed then all of its subdomains must also be fixed.
     """
 
-    label: DomainLabel | None = None
+    label: str | None = None
     """
-    Optional generic "label" object to associate to this :any:`Domain`.
+    Optional "label" string to associate to this :any:`Domain`.
 
     Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
-    that is naturally JSON serializable. (Calling
-    `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
-    on the object should succeed without having to specify a custom encoder.)
+    for DNA sequence design.
     """
 
     dependent: bool = False
@@ -1524,7 +1516,7 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
     """
 
     def __init__(self, name: str, pool: DomainPool | None = None, sequence: str | None = None,
-                 fixed: bool = False, label: DomainLabel | None = None, dependent: bool = False,
+                 fixed: bool = False, label: str | None = None, dependent: bool = False,
                  subdomains: List[Domain] | None = None, weight: float | None = None) -> None:
         if subdomains is None:
             subdomains = []
@@ -1602,9 +1594,8 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
-                               pool_with_name: Dict[str, DomainPool] | None,
-                               label_decoder: Callable[[Any], DomainLabel] = lambda label: label) \
-            -> Domain[DomainLabel]:
+                               pool_with_name: Dict[str, DomainPool] | None) \
+            -> Domain:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1613,9 +1604,6 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
-        :param label_decoder:
-            Function transforming object deserialized from JSON  (e.g, dict, list, string) into an object
-            of type DomainLabel.
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
@@ -1624,8 +1612,7 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
         sequence: str | None = json_map.get(sequence_key)
         fixed: bool = json_map.get(fixed_key, False)
 
-        label_json: Any = json_map.get(label_key)
-        label = label_decoder(label_json)
+        label: str = json_map.get(label_key)
 
         pool: DomainPool | None
         pool_name: str | None = json_map.get(domain_pool_name_key)
@@ -1637,8 +1624,7 @@ class Domain(Part, JSONSerializable, Generic[DomainLabel]):
         else:
             pool = None
 
-        domain: Domain[DomainLabel] = Domain(
-            name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
+        domain: Domain = Domain(name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
 
     @property
@@ -2259,14 +2245,12 @@ def _check_idt_string_not_none_or_empty(value: str, field_name: str) -> None:
 
 default_strand_group = 'default_strand_group'
 
-StrandLabel = TypeVar('StrandLabel')
-
 
 @dataclass
-class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
+class Strand(Part, JSONSerializable):
     """Represents a DNA strand, made of several :any:`Domain`'s. """
 
-    domains: List[Domain[DomainLabel]]
+    domains: List[Domain]
     """The :any:`Domain`'s on this :any:`Strand`, in order from 5' end to 3' end."""
 
     starred_domain_indices: FrozenSet[int]
@@ -2323,23 +2307,20 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     and for an internal modification that goes between bases, the allowed indices are 0,...,n-2.
     """
 
-    label: StrandLabel | None = None
+    label: str | None = None
     """
-    Optional generic "label" object to associate to this :any:`Strand`.
+    Optional generic "label" string to associate to this :any:`Strand`.
 
     Useful for associating extra information with the :any:`Strand` that will be serialized, for example,
-    for DNA sequence design. It must be an object (e.g., a dict or primitive type such as str or int)
-    that is naturally JSON serializable. (Calling
-    `json.dumps <https://docs.python.org/3/library/json.html#json.dumps>`_
-    on the object should succeed without having to specify a custom encoder.)
+    for DNA sequence design.
     """
 
     def __init__(self,
-                 domains: Iterable[Domain[DomainLabel]] | None = None,
-                 starred_domain_indices: Iterable[int] | None = None,
+                 domains: Iterable[Domain] | None = None,
+                 starred_domain_indices: Iterable[int] = (),
                  group: str = default_strand_group,
                  name: str | None = None,
-                 label: StrandLabel | None = None,
+                 label: str | None = None,
                  idt: IDTFields | None = None,
                  ) -> None:
         """
@@ -2374,7 +2355,6 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
 
         self.domains = list(domains)  # type: ignore
-        starred_domain_indices = [] if starred_domain_indices is None else starred_domain_indices
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
         self.idt = idt
@@ -2573,9 +2553,8 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
     @staticmethod
     def from_json_serializable(json_map: Dict[str, Any],
-                               domain_with_name: Dict[str, Domain[DomainLabel]],
-                               label_decoder: Callable[[Any], StrandLabel] = (lambda label: label),
-                               ) -> Strand[StrandLabel, DomainLabel]:
+                               domain_with_name: Dict[str, Domain],
+                               ) -> Strand:
         """
         :return:
             :any:`Strand` represented by dict `json_map`, assuming it was created by
@@ -2583,20 +2562,19 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """
         name: str = mandatory_field(Strand, json_map, name_key)
         domain_names_json = mandatory_field(Strand, json_map, domain_names_key)
-        domains: List[Domain[DomainLabel]] = [domain_with_name[name] for name in domain_names_json]
+        domains: List[Domain] = [domain_with_name[name] for name in domain_names_json]
         starred_domain_indices = mandatory_field(Strand, json_map, starred_domain_indices_key)
 
         group = json_map.get(group_key, default_strand_group)
 
-        label_json = json_map.get(label_key)
-        label = label_decoder(label_json)
+        label: str = json_map.get(label_key)
 
         idt_json = json_map.get(idt_key)
         idt = None
         if idt_json is not None:
             idt = IDTFields.from_json_serializable(idt_json)
 
-        strand: Strand[StrandLabel, DomainLabel] = Strand(
+        strand: Strand = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
             group=group, name=name, label=label, idt=idt)
         return strand
@@ -2604,27 +2582,27 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
     def __repr__(self) -> str:
         return self.name
 
-    def unstarred_domains(self) -> List[Domain[DomainLabel]]:
+    def unstarred_domains(self) -> List[Domain]:
         """
         :return: list of unstarred :any:`Domain`'s in this :any:`Strand`, in order they appear in
                  :py:data:`Strand.domains`
         """
         return [domain for idx, domain in enumerate(self.domains) if idx not in self.starred_domain_indices]
 
-    def starred_domains(self) -> List[Domain[DomainLabel]]:
+    def starred_domains(self) -> List[Domain]:
         """
         :return: list of starred :any:`Domain`'s in this :any:`Strand`, in order they appear in
                  :py:data:`Strand.domains`
         """
         return [domain for idx, domain in enumerate(self.domains) if idx in self.starred_domain_indices]
 
-    def unstarred_domains_set(self) -> OrderedSet[Domain[DomainLabel]]:
+    def unstarred_domains_set(self) -> OrderedSet[Domain]:
         """
         :return: set of unstarred :any:`Domain`'s in this :any:`Strand`
         """
         return OrderedSet(self.unstarred_domains())
 
-    def starred_domains_set(self) -> OrderedSet[Domain[DomainLabel]]:
+    def starred_domains_set(self) -> OrderedSet[Domain]:
         """
         :return: set of starred :any:`Domain`'s in this :any:`Strand`
         """
@@ -2669,7 +2647,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
         return all(domain.fixed for domain in self.domains)
 
-    def unfixed_domains(self) -> Tuple[Domain[DomainLabel]]:
+    def unfixed_domains(self) -> Tuple[Domain]:
         """
         :return: all :any:`Domain`'s in this :any:`Strand` where :py:data:`Domain.fixed` is False
         """
@@ -2824,7 +2802,7 @@ class Strand(Part, JSONSerializable, Generic[StrandLabel, DomainLabel]):
 
 
 @dataclass
-class DomainPair(Part, Generic[DomainLabel], Iterable[Domain]):
+class DomainPair(Part, Iterable[Domain]):
     domain1: Domain
     domain2: Domain
 
@@ -2855,13 +2833,13 @@ class DomainPair(Part, Generic[DomainLabel], Iterable[Domain]):
     def fixed(self) -> bool:
         return self.domain1.fixed and self.domain2.fixed
 
-    def __iter__(self) -> Iterator[Strand]:
+    def __iter__(self) -> Iterator[Domain]:
         yield self.domain1
         yield self.domain2
 
 
 @dataclass
-class StrandPair(Part, Generic[StrandLabel, DomainLabel], Iterable[Strand]):
+class StrandPair(Part, Iterable[Strand]):
     strand1: Strand
     strand2: Strand
 
@@ -2898,7 +2876,7 @@ class StrandPair(Part, Generic[StrandLabel, DomainLabel], Iterable[Strand]):
 
 
 @dataclass
-class Complex(Part, Generic[StrandLabel, DomainLabel], Iterable[Strand]):
+class Complex(Part, Iterable[Strand]):
     strands: Tuple[Strand, ...]
     """The strands in this complex."""
 
@@ -3058,7 +3036,7 @@ class PlateType(int, Enum):
 
 
 @dataclass
-class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
+class Design(JSONSerializable):
     """
     Represents a complete design, i.e., a set of DNA :any:`Strand`'s with domains,
     and :any:`Constraint`'s on the sequences
@@ -3070,7 +3048,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     # for example caching in a Constraint all pairs of domains in the Design, in case the Constraint
     # is reused for multiple designs in the same program.
 
-    strands: List[Strand[StrandLabel, DomainLabel]]
+    strands: List[Strand]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
     _domains_interned: Dict[str, Domain]
@@ -3078,14 +3056,14 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
     #################################################
     # derived fields, so not specified in constructor
 
-    domains: List[Domain[DomainLabel]] = field(init=False)
+    domains: List[Domain] = field(init=False)
     """
     List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
 
     Computed from :py:data:`Design.strands`, so not specified in constructor.
     """
 
-    strands_by_group_name: Dict[str, List[Strand[StrandLabel, DomainLabel]]] = field(init=False)
+    strands_by_group_name: Dict[str, List[Strand]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
@@ -3216,59 +3194,37 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc.write_file_same_name_as_running_python_script(content, extension, directory, filename)
 
     @staticmethod
-    def from_design_file(filename: str,
-                         strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                         domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                         ) -> Design[StrandLabel, DomainLabel]:
+    def from_design_file(filename: str) -> Design:
         """
         :param filename:
             name of JSON file describing the :any:`Design`
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
         :return:
             :any:`Design` described by the JSON file with name `filename`, assuming it was created using
             :py:meth`Design.to_json`.
         """
         with open(filename, 'r') as f:
             json_str = f.read()
-        return Design.from_json(json_str, strand_label_decoder, domain_label_decoder)
+        return Design.from_json(json_str)
 
     @staticmethod
-    def from_json(json_str: str,
-                  strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                  domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                  ) -> Design[StrandLabel, DomainLabel]:
+    def from_json(json_str: str) -> Design:
         """
         :param json_str:
             The string representing the :any:`Design` as a JSON object.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
         :return:
             :any:`Design` described by this JSON string, assuming it was created using
             :py:meth`Design.to_json`.
         """
         json_map = json.loads(json_str)
-        design: Design[StrandLabel, DomainLabel] = Design.from_json_serializable(
-            json_map, domain_label_decoder=domain_label_decoder, strand_label_decoder=strand_label_decoder)
+        design: Design = Design.from_json_serializable(json_map)
         return design
 
     @staticmethod
-    def from_json_serializable(json_map: Dict[str, Any],
-                               domain_label_decoder: Callable[[Any], DomainLabel] = lambda label: label,
-                               strand_label_decoder: Callable[[Any], StrandLabel] = lambda label: label,
-                               ) -> 'Design[StrandLabel, DomainLabel]':
+    def from_json_serializable(json_map: Dict[str, Any]) -> Design:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Design`, as returned by
             :py:meth:`Design.to_json_serializable`.
-        :param domain_label_decoder:
-            Function that transforms JSON representation of :py:data:`Domain.label` into the proper type.
-        :param strand_label_decoder:
-            Function that transforms JSON representation of :py:data:`Strand.label` into the proper type.
         :return:
             :any:`Design` represented by dict `json_map`, assuming it was created by
             :py:meth:`Design.to_json_serializable`. No constraints are populated.
@@ -3279,16 +3235,13 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
         domains_json = mandatory_field(Design, json_map, domains_key)
         domains: List[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name,
-                                          label_decoder=domain_label_decoder)
+            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
             for domain_json in domains_json]
         domain_with_name = {domain.name: domain for domain in domains}
 
         strands_json = mandatory_field(Design, json_map, strands_key)
-        strands = [Strand.from_json_serializable(
-            json_map=strand_json, domain_with_name=domain_with_name,
-            label_decoder=strand_label_decoder)
-            for strand_json in strands_json]
+        strands = [Strand.from_json_serializable(json_map=strand_json, domain_with_name=domain_with_name)
+                   for strand_json in strands_json]
 
         # modifications in whole design
         if nm.design_modifications_key in json_map:
@@ -3304,11 +3257,11 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def add_strand(self,
                    domain_names: List[str] | None = None,
-                   domains: List[Domain[DomainLabel]] | None = None,
+                   domains: List[Domain] | None = None,
                    starred_domain_indices: Iterable[int] | None = None,
                    group: str = default_strand_group,
                    name: str | None = None,
-                   label: StrandLabel | None = None,
+                   label: str | None = None,
                    idt: IDTFields | None = None,
                    ) -> Strand:
         """
@@ -3634,7 +3587,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         """
         return list(self.domain_pools_to_domain_map.keys())
 
-    def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain[DomainLabel]]:
+    def domains_by_pool_name(self, domain_pool_name: str) -> List[Domain]:
         """
         :param domain_pool_name: name of a :any:`DomainPool`
         :return: the :any:`Domain`'s in `domain_pool`
@@ -3650,7 +3603,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
             sc_filename: str,
             fix_assigned_sequences: bool = True,
             ignored_strands: Iterable[Strand] | None = None
-    ) -> Design[StrandLabel, DomainLabel]:
+    ) -> Design:
         """
         Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
         DNA sequence design.
@@ -3678,10 +3631,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         return Design.from_scadnano_design(sc_design, fix_assigned_sequences, ignored_strands)
 
     @staticmethod
-    def from_scadnano_design(sc_design: sc.Design[StrandLabel, DomainLabel],
+    def from_scadnano_design(sc_design: sc.Design,
                              fix_assigned_sequences: bool = True,
                              ignored_strands: Iterable[Strand] | None = None,
-                             warn_existing_domain_labels: bool = True) -> Design[StrandLabel, DomainLabel]:
+                             warn_existing_domain_labels: bool = True) -> Design:
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
@@ -3758,7 +3711,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
         strand_names: Set[str] = set()
-        design: Design[StrandLabel, DomainLabel] = Design()
+        design: Design = Design()
         for group, sc_strands in sc_strand_groups.items():
             for sc_strand in sc_strands:
                 # do not include strands with the same name more than once
@@ -3770,10 +3723,10 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
                 domain_names: List[str] = [domain.name for domain in sc_strand.domains]
                 sequence = sc_strand.dna_sequence
-                nuad_strand: Strand[StrandLabel, DomainLabel] = design.add_strand(domain_names=domain_names,
-                                                                                  group=group,
-                                                                                  name=sc_strand.name,
-                                                                                  label=sc_strand.label)
+                nuad_strand: Strand = design.add_strand(domain_names=domain_names,
+                                                        group=group,
+                                                        name=sc_strand.name,
+                                                        label=sc_strand.label)
                 # assign sequence
                 if sequence is not None:
                     for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
@@ -3811,7 +3764,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         else:
             raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
 
-    def assign_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+    def assign_fields_to_scadnano_design(self, sc_design: sc.Design,
                                          ignored_strands: Iterable[Strand] = (),
                                          overwrite: bool = False):
         """
@@ -3824,7 +3777,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         self.assign_idt_fields_to_scadnano_design(sc_design, ignored_strands, overwrite)
         self.assign_modifications_to_scadnano_design(sc_design, ignored_strands, overwrite)
 
-    def assign_sequences_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+    def assign_sequences_to_scadnano_design(self, sc_design: sc.Design,
                                             ignored_strands: Iterable[Strand] = (),
                                             overwrite: bool = False) -> None:
         """
@@ -3929,7 +3882,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                          f'Set overwrite to True to force an overwrite.')
                     sc_strand.label[group_key] = nuad_strand.group
 
-    def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+    def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design,
                                              ignored_strands: Iterable[Strand] = (),
                                              overwrite: bool = False) -> None:
         """
@@ -3960,7 +3913,7 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
                                          f'Set overwrite to True to force an overwrite.')
                     sc_strand.idt = nuad_strand.idt.to_scadnano_idt()
 
-    def assign_modifications_to_scadnano_design(self, sc_design: sc.Design[StrandLabel, DomainLabel],
+    def assign_modifications_to_scadnano_design(self, sc_design: sc.Design,
                                                 ignored_strands: Iterable[Strand] = (),
                                                 overwrite: bool = False) -> None:
         """
@@ -4014,8 +3967,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
 
     def _assign_to_strand_without_checking_existing_sequence(
             self,
-            sc_strand: sc.Strand[StrandLabel, DomainLabel],
-            sc_design: sc.Design[StrandLabel, DomainLabel]
+            sc_strand: sc.Strand,
+            sc_design: sc.Design
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
@@ -4041,8 +3994,8 @@ class Design(Generic[StrandLabel, DomainLabel], JSONSerializable):
         sc_strand.set_dna_sequence(strand_sequence)
 
     @staticmethod
-    def _assign_to_strand_with_partial_sequence(sc_strand: sc.Strand[StrandLabel, DomainLabel],
-                                                sc_design: sc.Design[StrandLabel, DomainLabel],
+    def _assign_to_strand_with_partial_sequence(sc_strand: sc.Strand,
+                                                sc_design: sc.Design,
                                                 sc_domain_name_tuples: Dict[Tuple[str, ...], Strand]) -> None:
 
         # check types
@@ -4305,7 +4258,6 @@ class Result(Generic[DesignPart]):
 
     _summary: Optional[str] = None
 
-
     value: pint.Quantity[Decimal] | None = None
     """
     If this is a "numeric" constraint, i.e., checking some number such as the complex free energy of a 
@@ -4355,7 +4307,12 @@ class Result(Generic[DesignPart]):
         It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
         """
         if self._summary is None:
-            return str(self.value)
+            # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
+            # e.g., kcal/mol instead of kilocalorie / mol
+            # also 2 decimal places to make numbers line up nicely
+            self.value.default_format = '.2fC~'
+            summary_str = f'{self.value}'
+            return str(summary_str)
         else:
             return self._summary
 
