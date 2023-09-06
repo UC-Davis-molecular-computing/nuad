@@ -12,7 +12,8 @@ from nuad.constraints import NumpyFilter
 
 
 def f(x: int | float) -> float:
-    return x/2
+    return x / 2
+
 
 # command-line arguments
 class CLArgs(NamedTuple):
@@ -52,8 +53,8 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    # num_strands = 3
-    num_strands = 5
+    num_strands = 3
+    # num_strands = 5
     # num_strands = 10
     # num_strands = 50
     # num_strands = 100
@@ -141,7 +142,10 @@ def main() -> None:
         parallel=parallel)
 
     strand_pairs_rna_duplex_constraint = nc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description='StrandPairRNA', parallel=parallel)
+        threshold=-1.0, temperature=52, short_description='RNAduplex', parallel=parallel)
+
+    strand_pairs_rna_plex_constraint = nc.rna_plex_strand_pairs_constraint(
+        threshold=-1.0, temperature=52, short_description='RNAplex', parallel=parallel)
 
     strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
         threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel)
@@ -151,8 +155,9 @@ def main() -> None:
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
-        strand_individual_ss_constraint,
+        # strand_individual_ss_constraint,
         strand_pairs_rna_duplex_constraint,
+        strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_duplex_constraint,

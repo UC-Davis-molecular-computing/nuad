@@ -5380,6 +5380,97 @@ def rna_duplex_domain_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
+def rna_plex_domain_pairs_constraint(
+        threshold: float,
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
+        description: str | None = None,
+        short_description: str = 'rna_plex_dom_pairs',
+        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
+        -> DomainPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
+    Vienna RNA's RNAduplex executable.
+
+    :param threshold:
+        energy threshold
+    :param temperature:
+        temperature in Celsius
+    :param weight:
+        how much to weigh this :any:`Constraint`
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
+    :param description:
+        long description of constraint suitable for printing in report file
+    :param short_description:
+        short description of constraint suitable for logging to stdout
+    :param pairs:
+        pairs of :any:`Domain`'s to compare; if not specified, checks all pairs
+    :param parameters_filename:
+        name of parameters file for ViennaRNA; default is
+        same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :return:
+        constraint
+    """
+    _check_vienna_rna_installed()
+
+    if description is None:
+        description = _pair_default_description('domain', 'RNAplex', threshold, temperature)
+
+    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
+        sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
+            domain_pairs)
+        energies = nv.rna_plex_multiple(sequence_pairs, logger, temperature, parameters_filename)
+
+        # several consecutive items are from same domain pair but with different wc's;
+        # group them together in the summary
+        groups = defaultdict(list)
+        for (d1, d2), energy, name_pair in zip(domain_tuples, energies, name_pairs):
+            domain_pair = DomainPair(d1, d2)
+            groups[domain_pair.name].append((energy, name_pair))
+
+        # one Result per domain pair
+        results = []
+        for _, energies_and_name_pairs in groups.items():
+            energies, name_pairs = zip(*energies_and_name_pairs)
+            excesses: List[float] = []
+            for energy, (name1, name2) in energies_and_name_pairs:
+                if name1 is not None and name2 is not None:
+                    logger.debug(
+                        f'domain pair threshold: {threshold:6.2f} '
+                        f'rna_plex({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+                excess = max(0.0, (threshold - energy))
+                excesses.append(excess)
+            max_excess = max(excesses)
+
+            max_name_length = max(len(name) for name in flatten(name_pairs))
+            lines_and_energies = [(f'{name1:{max_name_length}}, '
+                                   f'{name2:{max_name_length}}: '
+                                   f' {energy:6.2f} kcal/mol', energy)
+                                  for energy, (name1, name2) in energies_and_name_pairs]
+            lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
+            lines = [line for line, _ in lines_and_energies]
+            summary = '\n  ' + '\n  '.join(lines)
+            max_excess = max(0.0, max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            results.append(result)
+
+        return results
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return DomainPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 score_transfer_function=score_transfer_function,
+                                 evaluate_bulk=evaluate_bulk,
+                                 pairs=pairs_tuple)
+
+
 def _populate_strand_list_and_pairs(strands: Iterable[Strand] | None,
                                     pairs: Iterable[Tuple[Strand, Strand]] | None) \
         -> Tuple[List[Strand], List[Tuple[Strand, Strand]]]:
@@ -5677,6 +5768,93 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_duplex_with_parameters_filename,
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        descriptions=descriptions,
+        short_descriptions=short_descriptions,
+        parallel=parallel,
+        strands=strands,
+        pairs=pairs,
+        ignore_missing_thresholds=ignore_missing_thresholds,
+    )
+
+
+def rna_plex_strand_pairs_constraints_by_number_matching_domains(
+        *,
+        thresholds: Dict[int, float],
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        descriptions: Dict[int, str] | None = None,
+        short_descriptions: Dict[int, str] | None = None,
+        parallel: bool = False,
+        strands: Iterable[Strand] | None = None,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        ignore_missing_thresholds: bool = False,
+) -> List[StrandPairsConstraint]:
+    """
+    Convenience function for creating many constraints as returned by
+    :func:`rna_plex_strand_pairs_constraint`, one for each threshold specified in parameter `thresholds`,
+    based on number of matching (complementary) domains between pairs of strands.
+
+    Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
+
+    Exactly one of `strands` or `pairs` must be specified. If `strands`, then all pairs of strands
+    (including a strand with itself) will be checked; otherwise only those pairs in `pairs` will be checked.
+
+    It is also common to set different thresholds according to the lengths of the strands.
+    This can be done by calling :meth:`strand_pairs_by_lengths` to separate first by lengths
+    in a dict mapping length pairs to strand pairs,
+    then calling this function once for each (key, value) in that dict, giving the value
+    (which is a list of pairs of strands) as the `pairs` parameter to this function.
+
+    Args:
+        thresholds: Energy thresholds in kcal/mol. If `k` domains are complementary between the strands,
+                    then use threshold `thresholds[k]`.
+        temperature: Temperature in Celsius.
+        weight: How much to weigh this :any:`Constraint`.
+        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        descriptions: Long descriptions of constraint suitable for putting into constraint report.
+        short_descriptions: Short descriptions of constraint suitable for logging to stdout.
+        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        strands: :any:`Strand`'s to compare; if not specified, checks all in design.
+                 Mutually exclusive with `pairs`.
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
+               including each strand with itself.
+               Mutually exclusive with `strands`.
+        parameters_filename: Name of parameters file for ViennaRNA;
+                             default is same as :py:meth:`vienna_nupack.rna_plex_multiple`
+        ignore_missing_thresholds:
+            If True, then a key `num` left out of `thresholds` dict will cause no constraint to be
+            returned for pairs of strands with `num` complementary domains.
+            If False, then a ValueError is raised.
+
+    Returns:
+        list of constraints, one per threshold in `thresholds`
+    """
+    rna_plex_with_parameters_filename: _StrandPairsConstraintCreator = \
+        functools.partial(rna_plex_strand_pairs_constraint,  # type:ignore
+                          parameters_filename=parameters_filename)
+
+    if descriptions is None:
+        descriptions = {
+            num_matching: (_pair_default_description('strand', 'RNAplex', threshold, temperature) +
+                           f'\nfor strands with {num_matching} complementary '
+                           f'{"domain" if num_matching == 1 else "domains"}')
+            for num_matching, threshold in thresholds.items()
+        }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f'RNAdup{num_matching}comp'
+            for num_matching, threshold in thresholds.items()
+        }
+
+    return _strand_pairs_constraints_by_number_matching_domains(
+        constraint_creator=rna_plex_with_parameters_filename,
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6149,6 +6327,93 @@ def rna_duplex_strand_pairs_constraint(
                                                        parameters_filename)
         else:
             energies = nv.rna_duplex_multiple(seq_pairs, logger, temperature, parameters_filename)
+        return energies
+
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
+        sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
+        energies = calculate_energies(sequence_pairs)
+
+        results = []
+        for pair, energy in zip(strand_pairs, energies):
+            excess = threshold - energy
+            value = f'{energy:6.2f} kcal/mol'
+            result = Result(excess=excess, value=value)
+            results.append(result)
+        return results
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 score_transfer_function=score_transfer_function,
+                                 evaluate_bulk=evaluate_bulk,
+                                 pairs=pairs_tuple)
+
+
+def rna_plex_strand_pairs_constraint(
+        *,
+        threshold: float,
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'rna_plex_strand_pairs',
+        parallel: bool = False,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> StrandPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
+    Vienna RNA's RNAplex executable.
+
+    Often one wishes to let the threshold depend on how many domains match between a pair of strands.
+    The function :meth:`rna_plex_strand_pairs_constraints_by_number_matching_domains` is useful
+    for this purpose, returning a list of :any:`StrandPairsConstraint`'s such as those returned by this
+    function, one for each possible number of matching domains.
+
+    :param threshold:
+        Energy threshold in kcal/mol. If a float, this is used for all pairs of strands.
+        If a dict[int, float], interpreted to mean that
+    :param temperature:
+        Temperature in Celsius.
+    :param weight:
+        How much to weigh this :any:`Constraint`.
+    :param score_transfer_function:
+        See :py:data:`Constraint.score_transfer_function`.
+    :param description:
+        Long description of constraint suitable for putting into constraint report.
+    :param short_description:
+        Short description of constraint suitable for logging to stdout.
+    :param parallel:
+        Whether to test the each pair of :any:`Strand`'s in parallel.
+    :param pairs:
+        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
+    :param parameters_filename:
+        Name of parameters file for ViennaRNA;
+        default is same as :py:meth:`vienna_nupack.rna_plex_multiple`
+    :return:
+        The :any:`StrandPairsConstraint`.
+    """
+    _check_vienna_rna_installed()
+
+    if description is None:
+        description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
+
+    num_cores = max(cpu_count(), 1)
+
+    # we use ThreadPool instead of pathos because we're farming this out to processes through
+    # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
+    thread_pool = ThreadPool(processes=num_cores)
+
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+        if parallel:
+            energies = nv.rna_plex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
+                                                     parameters_filename)
+        else:
+            energies = nv.rna_plex_multiple(seq_pairs, logger, temperature, parameters_filename)
         return energies
 
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
