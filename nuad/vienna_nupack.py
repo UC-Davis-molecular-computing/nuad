@@ -139,6 +139,7 @@ def tupleize(seqs: str | Iterable[str]) -> Tuple[str, ...]:
 try:
     from pathos.pools import ProcessPool
 
+
     def pfunc_parallel(
             pool: ProcessPool,
             all_seqs: Sequence[str | Tuple[str, ...]],
@@ -337,12 +338,12 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
                              'is a different error that I don\'t know how to handle. Exiting...'
                              f'\nerror:\n{error}')
 
-    lines = output.split('\n')
-    if len(lines) - 1 != len(pairs):
+    lines = [line for line in output.split('\n') if line.strip() != '']
+    if len(lines) != len(pairs):
         raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
 
     energies = []
-    for line in lines[:-1]:
+    for line in lines:
         energy = float(line.split(':')[1].split('(')[1].split(')')[0])
         energy = min(energy, max_energy)
         energies.append(energy)
@@ -384,6 +385,135 @@ def rna_duplex_multiple_parallel(
     def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         return rna_duplex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
                                    parameters_filename=parameters_filename, max_energy=max_energy)
+
+    if call_sequential:
+        return calculate_energies_sequential(pairs)
+
+    lists_of_sequence_pairs = nc.chunker(pairs, num_chunks=num_cores)
+    lists_of_energies = thread_pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+    energies = nc.flatten(lists_of_energies)
+    return tuple(energies)
+
+
+def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
+                      logger: logging.Logger = logging.root,
+                      temperature: float = default_temperature,
+                      parameters_filename: str = default_vienna_rna_parameter_filename,
+                      max_energy: float = 0.0,
+                      ) -> Tuple[float]:
+    """
+    Calls RNAplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
+    on a list of pairs, specifically:
+    [ (seq1, seq2), (seq2, seq3), (seq4, seq5), ... ]
+    where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
+    Returns a list (in the same order as seqpairs) of free energies.
+
+    RNAplex is supposedly faster than RNAduplex, but less accurate since, compared to RNAduplex,
+    " loop energy is an affine function of the loop size instead of a logarithmic function"
+    (https://doi.org/10.1093/bioinformatics/btn193).
+    However, in testing with random sequences, RNAplex can actually be SLOWER, for instance
+    with 1000 pairs of DNA sequences each of length 64, RNAduplex takes 1.93 s on average,
+    compared to 2.28 s for RNAplex. (tested using %timeit in Jupyter lab)
+    This is with default parameters; using "-f 1" speeds up the computing time by about factor 5;
+    in this case RNAplex takes only 0.41 s on average instead of 2.28 s.
+
+    :param pairs:
+        sequence (list or tuple) of pairs of DNA sequences
+    :param logger:
+        logger to use for printing error messages
+    :param temperature:
+        temperature in Celsius
+    :param parameters_filename:
+        name of parameters file for NUPACK
+    :param max_energy:
+        This is the maximum energy possible to assign. If RNAplex reports any energies larger than this,
+        they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        base pairs between them (e.g., CCCC and TTTT), in which case RNAplex assigns a free energy
+        of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        than all the rest.
+    :return:
+        list of free energies, in the same order as `pairs`
+    """
+    # NB: the string NA_parameter_set needs to be exactly the intended filename;
+    # e.g. any extra whitespace characters cause RNAplex to default to RNA parameter set
+    # without warning the user!
+
+    # Note that loading parameter set dna_mathews2004.par throws a warning encoded in that parameter set:
+    # WARNING: stacking enthalpies not symmetric
+
+    # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
+    full_parameters_filename = os.path.join(os.path.dirname(__file__),
+                                            parameter_set_directory, parameters_filename)
+
+    if os_is_windows:
+        full_parameters_filename = _fix_filename_windows(full_parameters_filename)
+
+    command_strs: List[str] = ['RNAplex',
+                               '-P', full_parameters_filename,
+                               '-T', str(temperature),
+                               '-f', '1',
+                               ]
+
+    # DNA sequences to type after RNAplex starts up
+    user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
+
+    output, error = call_subprocess(command_strs, user_input)
+
+    if error.strip() != '':
+        logger.warning('error from RNAplex: ', error)
+        if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
+            raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
+                             'is a different error that I don\'t know how to handle. Exiting...'
+                             f'\nerror:\n{error}')
+
+    lines = [line for line in output.split('\n') if line.strip() != '']
+    if len(lines) != len(pairs):
+        raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
+
+    energies = []
+    for line in lines:
+        energy = float(line.split(':')[1].split('(')[1].split(')')[0])
+        energy = min(energy, max_energy)
+        energies.append(energy)
+
+    return tuple(energies)
+
+
+def rna_plex_multiple_parallel(
+        thread_pool: ThreadPool,
+        pairs: Sequence[Tuple[str, str]],
+        logger: logging.Logger = logging.root,
+        temperature: float = default_temperature,
+        parameters_filename: str = default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> Tuple[float]:
+    """
+    Parallel version of :meth:`rna_plex_multiple`. TODO document this
+    """
+    num_pairs = len(pairs)
+    if num_pairs == 0:
+        return tuple()
+
+    bases = len(pairs[0][0] + pairs[0][1])
+    num_cores = nc.cpu_count(logical=True)
+
+    # these thresholds were measured empirically; see notebook nuad_parallel_time_trials.ipynb
+    call_sequential = (len(pairs) == 1
+                       or (bases <= 10 and num_pairs <= 20000)
+                       or (bases <= 15 and num_pairs <= 10000)
+                       or (bases <= 20 and num_pairs <= 5000)
+                       or (bases <= 30 and num_pairs <= 2000)
+                       or (bases <= 40 and num_pairs <= 1000)
+                       or (bases <= 50 and num_pairs <= 800)
+                       or (bases <= 75 and num_pairs <= 200)
+                       or (bases <= 100 and num_pairs <= 150)
+                       or (num_pairs < num_cores)
+                       )
+
+    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+        return rna_plex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
+                                 parameters_filename=parameters_filename, max_energy=max_energy)
 
     if call_sequential:
         return calculate_energies_sequential(pairs)
