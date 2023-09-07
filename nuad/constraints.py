@@ -4,7 +4,7 @@ This module defines types for helping to define DNA sequence design constraints.
 The key classes are :any:`Design`, :any:`Strand`, :any:`Domain` to define a DNA design,
 and various subclasses of :any:`Constraint`, such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
 to define constraints on the sequences assigned to each :any:`Domain` when calling
-:meth:`search.search_for_dna_sequences`.
+:meth:`search.search_for_dna_sequences`. 
 
 Also important are two other types of constraints
 (not subclasses of :any:`Constraint`), which are used prior to the search to determine if it is even
