@@ -3460,7 +3460,7 @@ class Design(JSONSerializable):
                                   only_strands_with_idt: bool = False,
                                   strands: Iterable[Strand] | None = None) -> None:
         """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
-        :any:`Strand.idt`, suitable for pasting into the "Bulk Input" field of IDT
+        :data:`Strand.vendor_fields`, suitable for pasting into the "Bulk Input" field of IDT
         (Integrated DNA Technologies, Coralville, IA, https://www.idtdna.com/),
         with the output file having the same name as the running script but with ``.py`` changed to ``.idt``,
         unless `filename` is explicitly specified.
