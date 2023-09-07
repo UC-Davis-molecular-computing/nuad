@@ -3,9 +3,8 @@ import unittest
 import os
 
 import numpy
-import xlrd
+import openpyxl
 
-from nuad import constraints
 import nuad.constraints as nc
 import nuad.search as ns
 import scadnano as sc
@@ -279,7 +278,7 @@ class TestFromScadnanoDesign(unittest.TestCase):
 class TestExportDNASequences(unittest.TestCase):
 
     def test_idt_bulk_export(self) -> None:
-        custom_idt = nc.IDTFields(scale='100nm', purification='PAGE')
+        custom_idt = nc.VendorFields(scale='100nm', purification='PAGE')
         design = nc.Design()
         design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt)
         design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
@@ -310,21 +309,21 @@ class TestExportDNASequences(unittest.TestCase):
 
         # add 10 strands in excess of 3 plates
         for plate_type in [sc.PlateType.wells96, sc.PlateType.wells384]:
-            filename = f'test_excel_export_{plate_type.num_wells_per_plate()}.xls'
+            filename = f'test_excel_export_{plate_type.num_wells_per_plate()}.xlsx'
 
             design = nc.Design()
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
-                idt = nc.IDTFields()
+                idt = nc.VendorFields()
                 strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
                 strand.domains[0].set_fixed_sequence('T' * strand_len)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
 
-            book = xlrd.open_workbook(filename)
-            self.assertEqual(4, book.nsheets)
+            book = openpyxl.load_workbook(filename=filename)
+            self.assertEqual(4, len(book.worksheets))
             for plate in range(4):
-                sheet = book.sheet_by_index(plate)
-                self.assertEqual(3, sheet.ncols)
+                sheet = book.worksheets[plate]
+                self.assertEqual(3, sheet.max_column)
 
                 if plate == 2:  # penultimate plate
                     expected_wells = plate_type.num_wells_per_plate() - plate_type.min_wells_per_plate() + 10
@@ -333,7 +332,7 @@ class TestExportDNASequences(unittest.TestCase):
                 else:
                     expected_wells = plate_type.num_wells_per_plate()
 
-                self.assertEqual(expected_wells + 1, sheet.nrows)
+                self.assertEqual(expected_wells + 1, sheet.max_row)
 
             os.remove(filename)
 
