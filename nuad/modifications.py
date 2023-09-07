@@ -23,7 +23,7 @@ modifications_int_key = 'internal_modifications'
 mod_location_key = 'location'
 mod_display_text_key = 'display_text'
 mod_id_key = 'id'
-mod_idt_text_key = 'idt_text'
+mod_vendor_code_key = 'vendor_code'
 mod_font_size_key = 'font_size'
 mod_display_connector_key = 'display_connector'
 mod_allowed_bases_key = 'allowed_bases'
@@ -51,14 +51,14 @@ class Modification(JSONSerializable, ABC):
     :any:`Modification3Prime`, :any:`Modification5Prime`, or :any:`ModificationInternal`
     to instantiate.
 
-    If :data:`Modification.id` is not specified, then :data:`Modification.idt_text` is used as
+    If :data:`Modification.id` is not specified, then :data:`Modification.vendor_code` is used as
     the unique ID. Each :data:`Modification.id` must be unique. For example if you create a 5' "modification"
     to represent 6 T bases: ``t6_5p = Modification5Prime(display_text='6T', idt_text='TTTTTT')``
     (this is a useful hack for putting single-stranded extensions on strands until loopouts on the end
     of a strand are supported;
     see https://github.com/UC-Davis-molecular-computing/scadnano-python-package/issues/2),
     then this would clash with a similar 3' modification without specifying unique IDs for them:
-    ``t6_3p = Modification3Prime(display_text='6T', idt_text='TTTTTT') # ERROR``.
+    ``t6_3p = Modification3Prime(display_text='6T', vendor_code='TTTTTT') # ERROR``.
 
     In general it is recommended to create a single :any:`Modification` object for each *type* of
     modification in the design. For example, if many strands have a 5' biotin, then it is recommended to
@@ -66,27 +66,27 @@ class Modification(JSONSerializable, ABC):
 
     .. code-block:: python
 
-        biotin_5p = Modification5Prime(display_text='B', idt_text='/5Biosg/')
+        biotin_5p = Modification5Prime(display_text='B', vendor_code='/5Biosg/')
         design.strand(0, 0).move(8).with_modification_5p(biotin_5p)
         design.strand(1, 0).move(8).with_modification_5p(biotin_5p)
     """
 
-    idt_text: str
-    """IDT text string specifying this modification (e.g., '/5Biosg/' for 5' biotin). optional"""
+    vendor_code: str
+    """Text string specifying this modification (e.g., '/5Biosg/' for 5' biotin). optional"""
 
     id: str = _default_modification_id
     """
     Representation as a string; used to write in :any:`Strand` json representation,
     while the full description of the modification is written under a global key in the :any:`Design`.
-    If not specified, but :py:data:`Modification.idt_text` is specified, then it will be set equal to that.
+    If not specified, but :data:`Modification.idt_text` is specified, then it will be set equal to that.
     """
 
     def __post_init__(self) -> None:
         if self.id == _default_modification_id:
-            object.__setattr__(self, 'id', self.idt_text)
+            object.__setattr__(self, 'id', self.vendor_code)
 
     def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
-        ret = {mod_idt_text_key: self.idt_text, mod_id_key: self.id}
+        ret = {mod_vendor_code_key: self.vendor_code, mod_id_key: self.id}
         return ret
 
     @staticmethod
@@ -123,15 +123,15 @@ class Modification5Prime(Modification):
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "5'"
-        idt_text = json_map.get(mod_idt_text_key)
-        return Modification5Prime(idt_text=idt_text, id=id_)
+        idt_text = json_map.get(mod_vendor_code_key)
+        return Modification5Prime(vendor_code=idt_text, id=id_)
 
     @staticmethod
     def modification_type() -> ModificationType:
         return ModificationType.five_prime
 
     def to_scadnano_modification(self) -> sc.Modification5Prime:
-        return sc.Modification5Prime(display_text=self.idt_text, idt_text=self.idt_text, id=self.id)
+        return sc.Modification5Prime(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id)
 
 
 @dataclass(frozen=True, eq=True)
@@ -149,15 +149,15 @@ class Modification3Prime(Modification):
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "3'"
-        idt_text = json_map.get(mod_idt_text_key)
-        return Modification3Prime(idt_text=idt_text, id=id_)
+        idt_text = json_map.get(mod_vendor_code_key)
+        return Modification3Prime(vendor_code=idt_text, id=id_)
 
     @staticmethod
     def modification_type() -> ModificationType:
         return ModificationType.three_prime
 
     def to_scadnano_modification(self) -> sc.Modification3Prime:
-        return sc.Modification3Prime(display_text=self.idt_text, idt_text=self.idt_text, id=self.id)
+        return sc.Modification3Prime(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id)
 
 
 @dataclass(frozen=True, eq=True)
@@ -190,15 +190,15 @@ class ModificationInternal(Modification):
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "internal"
-        idt_text = json_map.get(mod_idt_text_key)
+        idt_text = json_map.get(mod_vendor_code_key)
         allowed_bases_list = json_map.get(mod_allowed_bases_key)
         allowed_bases = frozenset(allowed_bases_list) if allowed_bases_list is not None else None
-        return ModificationInternal(idt_text=idt_text, id=id_, allowed_bases=allowed_bases)
+        return ModificationInternal(vendor_code=idt_text, id=id_, allowed_bases=allowed_bases)
 
     @staticmethod
     def modification_type() -> ModificationType:
         return ModificationType.internal
 
     def to_scadnano_modification(self) -> sc.ModificationInternal:
-        return sc.ModificationInternal(display_text=self.idt_text, idt_text=self.idt_text, id=self.id,
+        return sc.ModificationInternal(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id,
                                        allowed_bases=self.allowed_bases)
