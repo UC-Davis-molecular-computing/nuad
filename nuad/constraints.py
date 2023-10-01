@@ -393,7 +393,7 @@ class NumpyFilter(ABC):
 
     A :any:`NumpyFilter` is one that can be efficiently encoded
     as numpy operations on 2D arrays of bytes representing DNA sequences, through the class
-    :any:`np.DNASeqList` (which uses such a 2D array as the field :py:data:`np.DNASeqList.seqarr`).
+    :any:`np.DNASeqList` (which uses such a 2D array as the field :data:`np.DNASeqList.seqarr`).
 
     Subclasses should set the value :data:`NumpyFilter.name`, inherited from this class.
 
@@ -401,7 +401,7 @@ class NumpyFilter(ABC):
     such as :any:`RestrictBasesFilter` or :any:`NearestNeighborEnergyFilter`,
     are dataclasses (https://docs.python.org/3/library/dataclasses.html).
     There is no requirement that custom subclasses be dataclasses, but since the subclasses will
-    inherit the field :py:data:`NumpyFilter.name`, you can easily make them dataclasses to get,
+    inherit the field :data:`NumpyFilter.name`, you can easily make them dataclasses to get,
     for example, free ``repr`` and ``str`` implementations. See the source code for examples.
 
     The related type :any:`SequenceFilter` (which is just an alias for a Python function with
@@ -485,8 +485,8 @@ class NearestNeighborEnergyFilter(NumpyFilter):
     (https://www.annualreviews.org/doi/abs/10.1146/annurev.biophys.32.110601.141800,
     see Table 1, and example on page 419).
     It rejects any sequences whose energy according to this sum is outside the range
-    [:py:data:`NearestNeighborEnergyFilter.low_energy`,
-    :py:data:`NearestNeighborEnergyFilter.high_energy`].
+    [:data:`NearestNeighborEnergyFilter.low_energy`,
+    :data:`NearestNeighborEnergyFilter.high_energy`].
     """
 
     low_energy: float
@@ -523,12 +523,12 @@ class BaseCountFilter(NumpyFilter):
 
     high_count: int | None = None
     """
-    Count of :py:data:`BaseCountFilter.base` must be at most :py:data:`BaseCountFilter.high_count`.
+    Count of :data:`BaseCountFilter.base` must be at most :data:`BaseCountFilter.high_count`.
     """
 
     low_count: int | None = None
     """
-    Count of :py:data:`BaseCountFilter.base` must be at least :py:data:`BaseCountFilter.low_count`.
+    Count of :data:`BaseCountFilter.base` must be at least :data:`BaseCountFilter.low_count`.
     """
 
     def __post_init__(self) -> None:
@@ -550,7 +550,7 @@ class BaseCountFilter(NumpyFilter):
 class BaseEndFilter(NumpyFilter):
     """
     Restricts the sequence to contain only certain bases on
-    (or near, if :py:data:`BaseEndFilter.distance` > 0) each end.
+    (or near, if :data:`BaseEndFilter.distance` > 0) each end.
     """
 
     bases: Collection[str]
@@ -624,11 +624,11 @@ class BaseAtPositionFilter(NumpyFilter):
 
     bases: str | Collection[str]
     """
-    Base(s) to require at position :py:data:`BasePositionConstraint.position`.
+    Base(s) to require at position :data:`BasePositionConstraint.position`.
 
     Can either be a single base, or a collection (e.g., list, tuple, set).
-    If several bases are specified, the base at :py:data:`BasePositionConstraint.position`
-    must be one of the bases in :py:data:`BasePositionConstraint.bases`.
+    If several bases are specified, the base at :data:`BasePositionConstraint.position`
+    must be one of the bases in :data:`BasePositionConstraint.bases`.
     """
 
     position: int
@@ -709,7 +709,7 @@ class ForbiddenSubstringFilter(NumpyFilter):
             return len(first_substring)
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
-        """Remove sequences that have a string in :py:data:`ForbiddenSubstringFilter.substrings`
+        """Remove sequences that have a string in :data:`ForbiddenSubstringFilter.substrings`
         as a substring."""
         assert isinstance(self.substrings, list)
         sub_len = len(self.substrings[0])
@@ -742,7 +742,7 @@ class RunsOfBasesFilter(NumpyFilter):
 
     bases: Collection[str]
     """
-    Bases to forbid in runs of length :py:data:`RunsOfBasesFilter.length`.
+    Bases to forbid in runs of length :data:`RunsOfBasesFilter.length`.
     """
 
     length: int
@@ -980,10 +980,10 @@ class DomainPool(JSONSerializable):
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate_sequence`.
 
-    The difference with :py:data:`DomainPool.sequence_filters` is that these constraints can be applied
+    The difference with :data:`DomainPool.sequence_filters` is that these constraints can be applied
     efficiently to many sequences at once, represented as a numpy 2D array of bytes (via the class
     :any:`np.DNASeqList`), so they are done in large batches in advance.
-    In contrast, the constraints in :py:data:`DomainPool.sequence_filters` are done on Python strings
+    In contrast, the constraints in :data:`DomainPool.sequence_filters` are done on Python strings
     representing DNA sequences, and they are called one at a time when a new sequence is requested in
     :py:meth:`DomainPool.generate_sequence`.
 
@@ -997,9 +997,9 @@ class DomainPool(JSONSerializable):
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
     in the method :py:meth:`DomainPool.generate`.
 
-    See :py:data:`DomainPool.numpy_filters` for an explanation of the difference between them.
+    See :data:`DomainPool.numpy_filters` for an explanation of the difference between them.
 
-    See :py:data:`DomainPool.domain_constraints` for an explanation of the difference between them.
+    See :data:`DomainPool.domain_constraints` for an explanation of the difference between them.
 
     Optional; default is empty.
     """
@@ -1158,11 +1158,11 @@ class DomainPool(JSONSerializable):
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None) -> str:
         """
-        Returns a DNA sequence of given length satisfying :py:data:`DomainPool.numpy_filters` and
-        :py:data:`DomainPool.sequence_filters`
+        Returns a DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
+        :data:`DomainPool.sequence_filters`
 
         **Note:** By default, there is no check that the sequence returned is unequal to one already
-        assigned somewhere in the design, since both :py:data:`DomainPool.numpy_filters` and
+        assigned somewhere in the design, since both :data:`DomainPool.numpy_filters` and
         :data:`DomainPool.sequence_filters` do not have access to the whole :any:`Design`.
         But the :any:`DomainPairConstraint` returned by
         :meth:`domains_not_substrings_of_each_other_constraint`
@@ -1172,7 +1172,7 @@ class DomainPool(JSONSerializable):
         and instead a sequence is chosen randomly to be returned from that list.
 
         :param rng:
-            numpy random number generator to use. To use a default, pass :py:data:`np.default_rng`.
+            numpy random number generator to use. To use a default, pass :data:`np.default_rng`.
         :param previous_sequence:
             previously generated sequence to be replaced by a new sequence; None if no previous
             sequence exists. Used to choose a new sequence "close" to itself in Hamming distance,
@@ -1182,8 +1182,8 @@ class DomainPool(JSONSerializable):
             picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
         :return:
-            DNA sequence of given length satisfying :py:data:`DomainPool.numpy_filters` and
-            :py:data:`DomainPool.sequence_filters`
+            DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
+            :data:`DomainPool.sequence_filters`
         """
         if self.possible_sequences is not None:
             if isinstance(self.possible_sequences, list):
@@ -1419,7 +1419,7 @@ class Domain(Part, JSONSerializable):
 
     If two domains are complementary, they are represented by the same :any:`Domain` object.
     They are distinguished only by whether the :any:`Strand` object containing them has the
-    :any:`Domain` in its set :py:data:`Strand.starred_domains` or not.
+    :any:`Domain` in its set :data:`Strand.starred_domains` or not.
 
     A :any:`Domain` uses only its name to compute hash and equality checks, not its sequence.
     This allows a :any:`Domain` to be used in sets and dicts while modifying the sequence assigned to it,
@@ -1449,7 +1449,7 @@ class Domain(Part, JSONSerializable):
     """
     DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
     variant; the starred variant has the Watson-Crick complement,
-    accessible via :py:data:`Domain.starred_sequence`.
+    accessible via :data:`Domain.starred_sequence`.
     """
 
     weight: float = 1.0
@@ -1655,7 +1655,7 @@ class Domain(Part, JSONSerializable):
     def pool(self, new_pool: DomainPool) -> None:
         """
         :param new_pool: new :any:`DomainPool` to set
-        :raises ValueError: if :py:data:`Domain.pool_` is not None and is not same object as `new_pool`
+        :raises ValueError: if :data:`Domain.pool_` is not None and is not same object as `new_pool`
         """
         if self._pool is not None and new_pool is not self._pool:
             raise ValueError(f'Assigning pool {new_pool} to domain '
@@ -1827,7 +1827,7 @@ class Domain(Part, JSONSerializable):
     @property
     def starred_name(self) -> str:
         """
-        :return: The value :py:data:`Domain.name` with `*` appended to it.
+        :return: The value :data:`Domain.name` with `*` appended to it.
         """
         return self._starred_name
 
@@ -1844,7 +1844,7 @@ class Domain(Part, JSONSerializable):
     def get_name(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the name
-        :return: The value :py:data:`Domain.name` or :py:data:`Domain.starred_name`, depending on
+        :return: The value :data:`Domain.name` or :data:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
         return self._starred_name if starred else self._name
@@ -1852,7 +1852,7 @@ class Domain(Part, JSONSerializable):
     def concrete_sequence(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the sequence
-        :return: The value :py:data:`Domain.sequence` or :py:data:`Domain.starred_sequence`, depending on
+        :return: The value :data:`Domain.sequence` or :data:`Domain.starred_sequence`, depending on
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
@@ -2170,7 +2170,7 @@ class VendorFields(JSONSerializable):
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
-    or :meth:`Design.write_idt_bulk_input_file`, the field :py:data:`Strand.name` is used for the
+    or :meth:`Design.write_idt_bulk_input_file`, the field :data:`Strand.name` is used for the
     name if it exists, otherwise a reasonable default is chosen."""
 
     scale: str = default_vendor_scale
@@ -2255,7 +2255,7 @@ class Strand(Part, JSONSerializable):
     """The :any:`Domain`'s on this :any:`Strand`, in order from 5' end to 3' end."""
 
     starred_domain_indices: FrozenSet[int]
-    """Set of positions of :any:`Domain`'s in :py:data:`Strand.domains`
+    """Set of positions of :any:`Domain`'s in :data:`Strand.domains`
     on this :any:`Strand` that are starred."""
 
     group: str
@@ -2586,14 +2586,14 @@ class Strand(Part, JSONSerializable):
     def unstarred_domains(self) -> List[Domain]:
         """
         :return: list of unstarred :any:`Domain`'s in this :any:`Strand`, in order they appear in
-                 :py:data:`Strand.domains`
+                 :data:`Strand.domains`
         """
         return [domain for idx, domain in enumerate(self.domains) if idx not in self.starred_domain_indices]
 
     def starred_domains(self) -> List[Domain]:
         """
         :return: list of starred :any:`Domain`'s in this :any:`Strand`, in order they appear in
-                 :py:data:`Strand.domains`
+                 :data:`Strand.domains`
         """
         return [domain for idx, domain in enumerate(self.domains) if idx in self.starred_domain_indices]
 
@@ -2650,7 +2650,7 @@ class Strand(Part, JSONSerializable):
 
     def unfixed_domains(self) -> Tuple[Domain]:
         """
-        :return: all :any:`Domain`'s in this :any:`Strand` where :py:data:`Domain.fixed` is False
+        :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.fixed` is False
         """
         return tuple(domain for domain in self.domains if not domain.fixed)
 
@@ -3062,28 +3062,28 @@ class Design(JSONSerializable):
     """
     List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
 
-    Computed from :py:data:`Design.strands`, so not specified in constructor.
+    Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
     strands_by_group_name: Dict[str, List[Strand]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
-    Computed from :py:data:`Design.strands`, so not specified in constructor.
+    Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
     domain_pools_to_domain_map: Dict[DomainPool, List[Domain]] = field(init=False)
     """
     Dict mapping each :any:`DomainPool` to a list of the :any:`Domain`'s in this :any:`Design` in the pool.
 
-    Computed from :py:data:`Design.strands`, so not specified in constructor.
+    Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
     domains_by_name: Dict[str, Domain] = field(init=False)
     """
     Dict mapping each name of a :any:`Domain` to the :any:`Domain`'s in this :any:`Design`.
 
-    Computed from :py:data:`Design.strands`, so not specified in constructor.
+    Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
@@ -3281,15 +3281,15 @@ class Design(JSONSerializable):
 
         :param domain_names:
             Names of the :any:`Domain`'s on this :any:`Strand`.
-            Mutually exclusive with :py:data:`Strand.domains` and :py:data:`Strand.starred_domain_indices`.
+            Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
         :param domains:
             list of :any:`Domain`'s on this :any:`Strand`.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.starred_domain_indices`.
+            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+            :data:`Strand.starred_domain_indices`.
         :param starred_domain_indices:
             Indices of :any:`Domain`'s in `domains` that are starred.
-            Mutually exclusive with :py:data:`Strand.domain_names`, and must be specified jointly with
-            :py:data:`Strand.domains`.
+            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+            :data:`Strand.domains`.
         :param group:
             name of group of this :any:`Strand`.
         :param name:
@@ -3522,7 +3522,7 @@ class Design(JSONSerializable):
                                    strands: Iterable[Strand] | None = None) -> None:
         """
         Write ``.xls`` (Microsoft Excel) file encoding the strands of this :any:`Design` with the field
-        :py:data:`Strand.vendor_fields`, suitable for uploading to IDT
+        :data:`Strand.vendor_fields`, suitable for uploading to IDT
         (Integrated DNA Technologies, Coralville, IA, https://www.idtdna.com/)
         to describe a 96-well or 384-well plate
         (https://www.idtdna.com/site/order/plate/index/dna/),
@@ -3563,7 +3563,7 @@ class Design(JSONSerializable):
             the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
-            :data:`Strand.vendor_fields` has the fields :py:data:`VendorFields.plate` and :py:data:`VendorFields.well`,
+            :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
             since `use_default_plates` directs these fields to be ignored.
         :param plate_type:
             a :any:`PlateType` specifying whether to use a 96-well plate or a 384-well plate
@@ -3621,7 +3621,7 @@ class Design(JSONSerializable):
         Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
         DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
-        :py:data:`Strand.name` and :py:data:`Domain.name` in the obvious way.
+        :data:`Strand.name` and :data:`Domain.name` in the obvious way.
         Assumes each Strand label is a string describing the strand group.
 
         The scadnano package must be importable.
@@ -3651,7 +3651,7 @@ class Design(JSONSerializable):
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
         Each Strand name and Domain name from the scadnano Design are assigned as
-        :py:data:`Strand.name` and :py:data:`Domain.name` in the obvious way.
+        :data:`Strand.name` and :data:`Domain.name` in the obvious way.
         Assumes each Strand label is a string describing the strand group.
 
         The scadnano package must be importable.
@@ -3801,7 +3801,7 @@ class Design(JSONSerializable):
         to assign to this key. If the scadnano strand label is already a dict, it adds this key.
         If the strand label is not None or a dict, an exception is raised.
 
-        Assumes that each domain name in domains in `sc_design` is a :py:data:`Domain.name` of a
+        Assumes that each domain name in domains in `sc_design` is a :data:`Domain.name` of a
         :any:`Domain` in this :any:`Design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
@@ -4744,7 +4744,7 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
         Here is what is checked:
         - strand names and group names appear in the same order
         - domain names and pool names appear in the same order in strands with the same name
-        - :py:data:`Domain.fixed` matches between :any:`Domain`'s
+        - :data:`Domain.fixed` matches between :any:`Domain`'s
     """
     for idx, (strand1, strand2) in enumerate(zip(design1.strands, design2.strands)):
         if strand1.name != strand2.name:
@@ -4833,7 +4833,7 @@ def nupack_domain_free_energy_constraint(
     :param weight:
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param parallel:
         Whether to use parallelization by running constraint evaluation in separate processes
         to take advantage of multiple cores.
@@ -4902,7 +4902,7 @@ def nupack_strand_free_energy_constraint(
     :param weight:
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param parallel:
         Whether to use parallelization by running constraint evaluation in separate processes
         to take advantage of multiple cores.
@@ -4968,15 +4968,15 @@ def nupack_domain_pair_constraint(
         molarity of magnesium (Mg++) in moles per liter
     :param parallel:
         Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
-        :py:data:`Constraint.parallel`)
+        :data:`Constraint.parallel`)
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :data:`Constraint.weight`.
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
         Detailed description of constraint suitable for summary report.
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
+        See :data:`Constraint.short_description`
     :param pairs:
         Pairs of :any:`Domain`'s to compare; if not specified, checks all pairs (including a
         :any:`Domain` against itself).
@@ -5098,8 +5098,8 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         temperature: Temperature in Celsius.
         sodium: concentration of Na+ in molar
         magnesium: concentration of Mg++ in molar
-        weight: How much to weigh this :any:`Constraint`.
-        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        weight: See :data:`Constraint.weight`.
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
@@ -5182,16 +5182,16 @@ def nupack_strand_pair_constraint(
     :param magnesium:
         concentration of Mg++ in molar
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :data:`Constraint.weight`.
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param parallel:
         Whether to use parallelization by running constraint evaluation in separate processes
         to take advantage of multiple cores.
     :param description:
         Detailed description of constraint suitable for report.
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
+        See :data:`Constraint.short_description`
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs (including a
         :any:`Strand` against itself).
@@ -5323,7 +5323,7 @@ def rna_duplex_domain_pairs_constraint(
     :param weight:
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
         long description of constraint suitable for printing in report file
     :param short_description:
@@ -5405,7 +5405,7 @@ def rna_plex_domain_pairs_constraint(
         -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
+    Vienna RNA's RNAplex executable.
 
     :param threshold:
         energy threshold
@@ -5414,7 +5414,7 @@ def rna_plex_domain_pairs_constraint(
     :param weight:
         how much to weigh this :any:`Constraint`
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
         long description of constraint suitable for printing in report file
     :param short_description:
@@ -5482,6 +5482,159 @@ def rna_plex_domain_pairs_constraint(
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
                                  pairs=pairs_tuple)
+
+
+def rna_plex_domain_pairs_nonorthogonal_constraint(
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
+        description: str | None = None,
+        short_description: str = 'rna_plex_dom_pairs',
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
+        -> DomainPairsConstraint:
+    """
+    Returns constraint that checks given pairs of :any:`Domain`'s for interaction energy in a given interval,
+    using ViennaRNA's RNAplex executable.
+
+    This can be used to implement "nonorthogonal" domains as described in these papers:
+
+    - https://drops.dagstuhl.de/opus/volltexte/2023/18787/pdf/LIPIcs-DNA-29-4.pdf
+    - https://www.nature.com/articles/s41557-022-01111-y
+    
+    The "binding affinity table" as described in the first paper is implemented as the `thresholds` 
+    parameter of this function.
+
+    :param thresholds:
+        dict mapping pairs of :any:`Domain`'s, along with Booleans to indicate whether either :any:`Domain`
+        is starred, to pairs of energy thresholds. Alternately, the key can be a pair of :any:`Domain`'s
+        ``(a,b)`` without any Booleans; in this case only the unstarred versions of the domains are checked;
+        this is equivalent to the key ``(a, False, b, False)``.
+
+        For example, if the dict is
+
+        .. code-block:: python
+
+            {
+              (a, False, b, False): (-9.0, -8.0),
+              (a, False, b, True):  (-5.0, -3.0),
+              (a, True,  c, False): (-1.0,  0.0),
+              (a,        d):        (-7.0, -6.0),
+            }
+
+        then the constraint ensures that RNAplex energy for
+
+        - ``(a,b)``  is between -9.0 and -8.0 kcal/mol,
+        - ``(a,b*)`` is between -5.0 and -3.0 kcal/mol,
+        - ``(a*,c)`` is between -1.0 and  0.0 kcal/mol, and
+        - ``(a,d)``  is between -7.0 and -6.0 kcal/mol.
+
+        For all other pairs of domains not listed as keys in the dict (including starred/unstarred versions
+        not specified such as (a*,b*), the constraint is not checked.
+    :param temperature:
+        temperature in Celsius
+    :param weight:
+        See :data:`Constraint.weight`.
+    :param score_transfer_function:
+        See :data:`Constraint.score_transfer_function`.
+    :param description:
+        short_description
+    :param short_description:
+        See :data:`Constraint.short_description`.
+    :param parameters_filename:
+        name of parameters file for ViennaRNA; default is
+        same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :return:
+        constraint
+    """
+    _check_vienna_rna_installed()
+
+    if description is None:
+        description = f'domain pair RNAplex energies for nonorthogonal domains at {temperature}C'
+
+    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
+        sequence_pairs: List[Tuple[str, str]] = []
+        names: List[Tuple[str, str]] = []
+        domains: List[Tuple[Domain, Domain]] = []
+        for pair in domain_pairs:
+            d1, d2 = pair.individual_parts()
+            if d1 == d2:
+                # don't check d-d* or d*-d in this case, but do check d-d and d*-d*
+                starred_each = [(False, False), (True, True)]
+            else:
+                starred_each = [(False, False), (True, True), (False, True), (True, False)]
+            for starred1, starred2 in starred_each:
+                seq1 = d1.concrete_sequence(starred1)
+                seq2 = d2.concrete_sequence(starred2)
+                name1 = d1.get_name(starred1)
+                name2 = d2.get_name(starred2)
+                sequence_pairs.append((seq1, seq2))
+                names.append((name1, name2))
+                domains.append((d1, d2))
+
+        energies = nv.rna_plex_multiple(sequence_pairs, logger, temperature, parameters_filename)
+
+        # several consecutive items are from same domain pair but with different wc's;
+        # group them together in the summary
+        groups = defaultdict(list)
+        for (d1, d2), energy, name_pair in zip(domain_tuples, energies, name_pairs):
+            domain_pair = DomainPair(d1, d2)
+            groups[domain_pair.name].append((energy, name_pair))
+
+        # one Result per domain pair
+        results = []
+        for _, energies_and_name_pairs in groups.items():
+            energies, name_pairs = zip(*energies_and_name_pairs)
+            excesses: List[float] = []
+            for energy, (name1, name2) in energies_and_name_pairs:
+                if name1 is not None and name2 is not None:
+                    logger.debug(
+                        f'domain pair threshold: {threshold:6.2f} '
+                        f'rna_plex({name1}, {name2}, {temperature}) = {energy:6.2f} ')
+                excess = max(0.0, (threshold - energy))
+                excesses.append(excess)
+            max_excess = max(excesses)
+
+            max_name_length = max(len(name) for name in flatten(name_pairs))
+            lines_and_energies = [(f'{name1:{max_name_length}}, '
+                                   f'{name2:{max_name_length}}: '
+                                   f' {energy:6.2f} kcal/mol', energy)
+                                  for energy, (name1, name2) in energies_and_name_pairs]
+            lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
+            lines = [line for line, _ in lines_and_energies]
+            summary = '\n  ' + '\n  '.join(lines)
+            max_excess = max(0.0, max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            results.append(result)
+
+        return results
+
+    # gather pairs of domains referenced in `thresholds`
+    pairs = []
+    pairs_set = set()
+    for key, _ in thresholds.items():
+        if len(key) == 2:
+            d1, d2 = key
+        else:
+            if len(key) != 4:
+                raise ValueError(f'key {key} in thresholds dict must have length 2, if a pair of domains, '
+                                 f'or 4, if a tuple (domain1, starred1, domain2, starred2)')
+            d1, _, d2, _ = key
+            if (d1, d2) in thresholds.keys():
+                raise ValueError(f'cannot have key (d1,d2) in `thresholds` if (d1, starred1, d2, starred2) '
+                                 f'is also a key in `thresholds`, but I found these keys:'
+                                 f'\n  {(d1, d2)}'
+                                 f'\n  {key}')
+        if (d1, d2) not in pairs_set:
+            pairs.append((d1, d2))
+            pairs_set.add((d1, d2))
+
+    return DomainPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 score_transfer_function=score_transfer_function,
+                                 evaluate_bulk=evaluate_bulk,
+                                 pairs=pairs)
 
 
 def _populate_strand_list_and_pairs(strands: Iterable[Strand] | None,
@@ -5779,8 +5932,8 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Energy thresholds in kcal/mol. If `k` domains are complementary between the strands,
                     then use threshold `thresholds[k]`.
         temperature: Temperature in Celsius.
-        weight: How much to weigh this :any:`Constraint`.
-        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        weight: See :data:`Constraint.weight`.
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
@@ -5866,8 +6019,8 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Energy thresholds in kcal/mol. If `k` domains are complementary between the strands,
                     then use threshold `thresholds[k]`.
         temperature: Temperature in Celsius.
-        weight: How much to weigh this :any:`Constraint`.
-        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        weight: See :data:`Constraint.weight`.
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
         parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
@@ -6182,13 +6335,13 @@ def lcs_domain_pairs_constraint(
     Args
         threshold: Max length of complementary subsequence allowed.
 
-        weight: How much to weigh this :any:`Constraint`.
+        weight: See :data:`Constraint.weight`.
 
-        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
 
-        description: Long description of constraint suitable for putting into constraint report.
+        description: See :data:`Constraint.description`
 
-        short_description: Short description of constraint suitable for logging to stdout.
+        short_description: See :data:`Constraint.short_description`
 
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
 
@@ -6254,13 +6407,13 @@ def lcs_strand_pairs_constraint(
     Args
         threshold: Max length of complementary subsequence allowed.
 
-        weight: How much to weigh this :any:`Constraint`.
+        weight: See :data:`Constraint.weight`.
 
-        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
 
-        description: Long description of constraint suitable for putting into constraint report.
+        description: See :data:`Constraint.description`.
 
-        short_description: Short description of constraint suitable for logging to stdout.
+        short_description: See :data:`Constraint.short_description`.
 
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
 
@@ -6424,13 +6577,13 @@ def rna_duplex_strand_pairs_constraint(
     :param temperature:
         Temperature in Celsius.
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :data:`Constraint.weight`.
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
-        Long description of constraint suitable for putting into constraint report.
+        See :data:`Constraint.description`
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
+        See :data:`Constraint.short_description`
     :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
@@ -6511,13 +6664,13 @@ def rna_plex_strand_pairs_constraint(
     :param temperature:
         Temperature in Celsius.
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :data:`Constraint.weight`.
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
-        Long description of constraint suitable for putting into constraint report.
+        See :data:`Constraint.description`
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
+        See :data:`Constraint.short_description`
     :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
@@ -6609,13 +6762,13 @@ def rna_cofold_strand_pairs_constraint(
     :param temperature:
         Temperature in Celsius.
     :param weight:
-        How much to weigh this :any:`Constraint`.
+        See :data:`Constraint.weight`.
     :param score_transfer_function:
-        See :py:data:`Constraint.score_transfer_function`.
+        See :data:`Constraint.score_transfer_function`.
     :param description:
-        Long description of constraint suitable for putting into constraint report.
+        See :data:`Constraint.description`
     :param short_description:
-        Short description of constraint suitable for logging to stdout.
+        See :data:`Constraint.short_description`
     :param parallel:
         Whether to test the each pair of :any:`Strand`'s in parallel.
     :param pairs:
@@ -7437,7 +7590,7 @@ class StrandDomainAddress:
     """
 
     domain_idx: int
-    """order in which domain appears in :py:data:`StrandDomainAddress.strand`
+    """order in which domain appears in :data:`StrandDomainAddress.strand`
     """
 
     def neighbor_5p(self) -> StrandDomainAddress | None:
@@ -8408,7 +8561,7 @@ def nupack_complex_base_pair_probability_constraint(
     :param base_pair_prob_by_type:
         Probability lower bounds for each :py:class:`BasePairType`.
         All :py:class:`BasePairType` comes with a default
-        such as :py:data:`default_interior_to_strand_probability` which will be
+        such as :data:`default_interior_to_strand_probability` which will be
         used if a lower bound is not specified for a particular type.
 
         **Note**: Despite the name of this parameter, set thresholds for unpaired
@@ -8450,7 +8603,7 @@ def nupack_complex_base_pair_probability_constraint(
     :type base_unpaired_prob_upper_bound:
         Optional[Dict[BaseAddress, float]]
     :param temperature:
-        Temperature specified in °C, defaults to :py:data:`vienna_nupack.default_temperature`.
+        Temperature specified in °C, defaults to :data:`vienna_nupack.default_temperature`.
     :type temperature: float, optional
     :param sodium:
         molarity of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
@@ -8458,7 +8611,7 @@ def nupack_complex_base_pair_probability_constraint(
     :param magnesium:
         molarity of magnesium (Mg++) in moles per liter
     :param weight:
-        See :py:data:`Constraint.weight`, defaults to 1.0
+        See :data:`Constraint.weight`, defaults to 1.0
     :type weight:
         float, optional
     :param score_transfer_function:
@@ -8467,11 +8620,11 @@ def nupack_complex_base_pair_probability_constraint(
         threshold.
     :type score_transfer_function: Callable[[float], float], optional
     :param description:
-        See :py:data:`Constraint.description`, defaults to None
+        See :data:`Constraint.description`, defaults to None
     :type description:
         str | None, optional
     :param short_description:
-        See :py:data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
+        See :data:`Constraint.short_description` defaults to 'complex_secondary_structure_nupack'
     :type short_description:
         str, optional
     :param parallel:
