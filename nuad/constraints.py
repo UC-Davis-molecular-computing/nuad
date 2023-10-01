@@ -4190,12 +4190,14 @@ class Constraint(Generic[DesignPart], ABC):
 
     description: str
     """
-    Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol'.
+    Description of the constraint, e.g., 'strand has secondary structure exceeding -2.0 kcal/mol' suitable
+    for printing in a long text report.
     """
 
     short_description: str = ''
     """
-    Very short description of the constraint suitable for compactly logging to the screen, e.g., 'strand_ss'
+    Very short description of the constraint suitable for compactly logging to the screen, where
+    many of these short descriptions must fit onto one line, e.g., 'strand ss' or 'dom pair nupack'
     """
 
     weight: float = 1.0
@@ -5538,7 +5540,7 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
     :param score_transfer_function:
         See :data:`Constraint.score_transfer_function`.
     :param description:
-        short_description
+        See :data:`Constraint.description`.
     :param short_description:
         See :data:`Constraint.short_description`.
     :param parameters_filename:
