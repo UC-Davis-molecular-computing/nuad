@@ -5532,7 +5532,7 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
         - ``(a,d)``  is between -7.0 and -6.0 kcal/mol.
 
         For all other pairs of domains not listed as keys in the dict (including starred/unstarred versions
-        not specified such as (a*,b*), the constraint is not checked.
+        not specified such as ``(a*,b*)``, the constraint is not checked.
     :param temperature:
         temperature in Celsius
     :param weight:
