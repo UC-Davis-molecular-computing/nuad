@@ -5620,14 +5620,8 @@ def _strand_pairs_constraints_by_number_matching_domains(
     # and
     #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
 
-    if strands is None and pairs is None:
-        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
-    elif strands is not None and pairs is not None:
-        raise ValueError('exactly one of strands or pairs must be specified, but both are')
-
-    if strands is not None:
-        assert pairs is None
-        pairs = itertools.combinations_with_replacement(strands, 2)
+    check_strand_against_itself = True
+    pairs = _normalize_strands_pairs_disjoint_parameters(strands, pairs, check_strand_against_itself)
 
     pairs_by_matching_domains = strand_pairs_by_number_matching_domains(pairs=pairs)
     keys = set(pairs_by_matching_domains.keys())
@@ -5662,6 +5656,50 @@ but instead the thresholds.keys() is {sorted(list(thres_keys))}''')
         constraints.append(constraint)
 
     return constraints
+
+
+def _normalize_domains_pairs_disjoint_parameters(
+        domains: Iterable[Domain] | None,
+        pairs: Iterable[Tuple[Domain, Domain]],
+        check_domain_against_itself: bool) -> Iterable[Tuple[Domain, Domain]]:
+    # Enforce that exactly one of domains or pairs is not None, and if domains is specified,
+    # set pairs to be all pairs from domains. Return those pairs; if pairs is specified,
+    # just return it. Also normalize to return a tuple.
+    if domains is None and pairs is None:
+        raise ValueError('exactly one of domains or pairs must be specified, but neither is')
+    elif domains is not None and pairs is not None:
+        raise ValueError('exactly one of domains or pairs must be specified, but both are')
+    if domains is not None:
+        assert pairs is None
+        if check_domain_against_itself:
+            pairs = itertools.combinations_with_replacement(domains, 2)
+        else:
+            pairs = itertools.combinations(domains, 2)
+
+    pairs_tuple = pairs if isinstance(pairs, tuple) else tuple(pairs)
+    return pairs_tuple
+
+
+def _normalize_strands_pairs_disjoint_parameters(
+        strands: Iterable[Strand] | None,
+        pairs: Iterable[Tuple[Strand, Strand]],
+        check_strand_against_itself: bool) -> Iterable[Tuple[Strand, Strand]]:
+    # Enforce that exactly one of strands or pairs is not None, and if strands is specified,
+    # set pairs to be all pairs from strands. Return those pairs; if pairs is specified,
+    # just return it. Also normalize to return a tuple.
+    if strands is None and pairs is None:
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
+    elif strands is not None and pairs is not None:
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
+    if strands is not None:
+        assert pairs is None
+        if check_strand_against_itself:
+            pairs = itertools.combinations_with_replacement(strands, 2)
+        else:
+            pairs = itertools.combinations(strands, 2)
+
+    pairs_tuple = pairs if isinstance(pairs, tuple) else tuple(pairs)
+    return pairs_tuple
 
 
 def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
@@ -5975,6 +6013,8 @@ def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_do
     for each i, storing in returned list `result[i]`.
 
     Unlike :func:`longest_complementary_subsequences_two_loops`, this uses only one Python loop,
+    by using the "anti-diagonal" method for evaluating the dynamic programming table,
+    calculating a whole anti-diagonal from the previous two in O(1) numpy commands.
 
     When used for DNA sequences, this assumes `arr2` has been reversed along axis 1, i.e.,
     the sequences in `arr1` are assumed to be oriented 5' --> 3', and the sequences in `arr2`
@@ -5986,7 +6026,8 @@ def longest_complementary_subsequences(arr1: np.ndarray, arr2: np.ndarray, gc_do
               oriented 5' --> 3'.
         arr2: 2D array of DNA sequences, with each row being a single DNA sequence
               oriented 3' --> 5'.
-        gc_double: Whether to double the score for G-C base pairs.
+        gc_double: Whether to double the score for G-C base pairs. (assumes that integers 1,2 represent
+                   C,G respectively)
 
     Returns:
         list `ret` of ints, where `ret[i]` is the length of the longest complementary subsequence
@@ -6121,6 +6162,79 @@ def lcs_loop(s1: str, s2: str, gc_double: bool) -> int:
     return longest_complementary_subsequences_python_loop(arr1, arr2, gc_double)[0]
 
 
+def lcs_domain_pairs_constraint(
+        *,
+        threshold: int,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'lcs domain pairs',
+        domains: Iterable[Domain] | None = None,
+        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+        check_domain_against_itself: bool = True,
+        gc_double: bool = True,
+) -> DomainPairsConstraint:
+    """
+    Checks pairs of domain sequences for longest complementary subsequences.
+    This can be thought of as a very rough heuristic for "binding energy" that is much less
+    accurate than NUPACK or ViennaRNA, but much faster to evaluate.
+
+    Args
+        threshold: Max length of complementary subsequence allowed.
+
+        weight: How much to weigh this :any:`Constraint`.
+
+        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
+
+        description: Long description of constraint suitable for putting into constraint report.
+
+        short_description: Short description of constraint suitable for logging to stdout.
+
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
+
+        check_domain_against_itself: Whether to check domain `x` against `x*`. (Obviously `x` has a maximal
+                                     common subsequence with `x`, so we don't check that.)
+
+        gc_double: Whether to weigh G-C base pairs as double (i.e., they count for 2 instead of 1).
+
+    Returns
+        A :any:`DomainPairsConstraint` that checks given pairs of :any:`Domain`'s for excessive
+        interaction due to having long complementary subsequences.
+    """
+    if description is None:
+        description = f'Longest complementary subsequence between domains is > {threshold}'
+
+    def evaluate_bulk(pairs: Iterable[DomainPair]) -> List[Result]:
+        seqs1 = [pair.domain1.sequence() for pair in pairs]
+        seqs2 = [pair.domain2.sequence() for pair in pairs]
+        arr1 = nn.seqs2arr(seqs1)
+        arr2 = nn.seqs2arr(seqs2)
+        arr2_rev = np.flip(arr2, axis=1)
+
+        lcs_sizes = longest_complementary_subsequences(arr1, arr2_rev, gc_double)
+
+        results = []
+        for lcs_size in lcs_sizes:
+            excess = lcs_size - threshold
+            value = f'{lcs_size}'
+            result = Result(excess=excess, value=value)
+            results.append(result)
+
+        return results
+
+    pairs = _normalize_domains_pairs_disjoint_parameters(domains, pairs, check_domain_against_itself)
+
+    return DomainPairsConstraint(
+        description=description,
+        short_description=short_description,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        evaluate_bulk=evaluate_bulk,
+        pairs=pairs,
+        check_domain_against_itself=check_domain_against_itself,
+    )
+
+
 def lcs_strand_pairs_constraint(
         *,
         threshold: int,
@@ -6133,25 +6247,29 @@ def lcs_strand_pairs_constraint(
         gc_double: bool = True,
 ) -> StrandPairsConstraint:
     """
-    TODO: describe
+    Checks pairs of strand sequences for longest complementary subsequences.
+    This can be thought of as a very rough heuristic for "binding energy" that is much less
+    accurate than NUPACK or ViennaRNA, but much faster to evaluate.
 
     Args
-        threshold:
+        threshold: Max length of complementary subsequence allowed.
 
-        weight:
+        weight: How much to weigh this :any:`Constraint`.
 
-        score_transfer_function:
+        score_transfer_function: See :py:data:`Constraint.score_transfer_function`.
 
-        description:
+        description: Long description of constraint suitable for putting into constraint report.
 
-        short_description:
+        short_description: Short description of constraint suitable for logging to stdout.
 
-        pairs:
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
+
+        check_strand_against_itself: Whether to check a strand against itself.
 
         gc_double: Whether to weigh G-C base pairs as double (i.e., they count for 2 instead of 1).
 
     Returns
-        A :any: StrandPairsConstraint` that checks given pairs of :any:`Strand`'s for excessive
+        A :any:`StrandPairsConstraint` that checks given pairs of :any:`Strand`'s for excessive
         interaction due to having long complementary subsequences.
     """
     if description is None:
@@ -6222,7 +6340,7 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
     if parameters_filename != '':
         raise ValueError('should not specify parameters_filename when calling '
                          'lcs_strand_pairs_constraints_by_number_matching_domains; '
-                         'it is only listed as a parameter for technical reasons relating to code resuse '
+                         'it is only listed as a parameter for technical reasons relating to code reuse '
                          'with other constraints that use that parameter')
 
     def lcs_strand_pairs_constraint_with_dummy_parameters(
