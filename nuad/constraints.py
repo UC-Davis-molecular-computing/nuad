@@ -2805,12 +2805,22 @@ class Strand(Part, JSONSerializable):
 @dataclass
 class DomainPair(Part, Iterable[Domain]):
     domain1: Domain
+    "First domain"
+
     domain2: Domain
+    "Second domain"
+
+    starred1: bool = False
+    "Whether first domain is starred (not used in most constraints)"
+
+    starred2: bool = False
+    "Whether second domain is starred (not used in most constraints)"
 
     def __post_init__(self) -> None:
-        # make this symmetric so make dict lookups work
+        # make this symmetric so dict lookups work no matter the order
         if self.domain1.name > self.domain2.name:
             self.domain1, self.domain2 = self.domain2, self.domain1
+            self.starred1, self.starred2 = self.starred2, self.starred1
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -2818,10 +2828,10 @@ class DomainPair(Part, Iterable[Domain]):
 
     @property
     def name(self) -> str:
-        return f'{self.domain1.name}, {self.domain2.name}'
+        return self.domain1.get_name(self.starred1) + ", " + self.domain2.get_name(self.starred2)
 
     def key(self) -> str:
-        return f'DomainPair[{self.domain1.name}, {self.domain2.name}]'
+        return f'DomainPair[{self.name}]'
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -4461,8 +4471,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
 
 @dataclass(eq=False)
 class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
-    evaluate_bulk: Callable[[Sequence[DesignPart]],
-    List[Result]] = lambda _: _raise_unreachable()
+    evaluate_bulk: Callable[[Sequence[DesignPart]], List[Result]] = \
+        lambda _: _raise_unreachable()
 
     def call_evaluate_bulk(self, parts: Sequence[DesignPart]) -> List[Result]:
         results: List[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
@@ -5486,15 +5496,166 @@ def rna_plex_domain_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
+def get_domain_pairs_from_thresholds_dict(thresholds):
+    # gather pairs of domains referenced in `thresholds`
+    domain_pairs = []
+    for key, _ in thresholds.items():
+        if len(key) == 2:
+            d1, d2 = key
+            starred1 = starred2 = False
+        else:
+            if len(key) != 4:
+                raise ValueError(f'key {key} in thresholds dict must have length 2, if a pair of domains, '
+                                 f'or 4, if a tuple (domain1, starred1, domain2, starred2)')
+            d1, starred1, d2, starred2 = key
+            if (d1, d2) in thresholds.keys():
+                raise ValueError(f'cannot have key (d1,d2) in `thresholds` if (d1, starred1, d2, starred2) '
+                                 f'is also a key in `thresholds`, but I found these keys:'
+                                 f'\n  {(d1, d2)}'
+                                 f'\n  {key}')
+        domain_pair = DomainPair(d1, d2, starred1, starred2)
+        domain_pairs.append(domain_pair)
+    domain_pairs = tuple(domain_pairs)
+    return domain_pairs
+
+
+PairsEvaluationFunction = Callable[
+    [Sequence[Tuple[str, str]], logging.Logger, float, str, float],
+    Tuple[float]
+]
+
+
+def domain_pairs_nonorthogonal_constraint(
+        evaluation_function: PairsEvaluationFunction,
+        tool_name: str,
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
+        description: str | None = None,
+        short_description: str = 'rna_plex_dom_pairs_nonorth',
+        max_energy: float = 0.0,
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename
+) -> DomainPairsConstraint:
+    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAcofold
+
+    if description is None:
+        description = f'domain pair {tool_name} energies for nonorthogonal domains at {temperature}C'
+
+    domain_pairs = get_domain_pairs_from_thresholds_dict(thresholds)
+
+    # normalize thresholds dict so all keys are 4-tuples
+    thresholds_normalized = {}
+    for key, interval in thresholds.items():
+        if len(key) == 2:
+            thresholds_normalized[(key[0], False, key[1], False)] = interval
+        else:
+            assert len(key) == 4
+            thresholds_normalized[key] = interval
+
+    thresholds = thresholds_normalized
+
+    def evaluate_bulk(dom_pairs: Iterable[DomainPair]) -> List[Result]:
+        sequence_pairs: List[Tuple[str, str]] = []
+        name_pairs: List[Tuple[str, str]] = []
+        domain_tuples: List[Tuple[Domain, Domain]] = []
+        for pair in dom_pairs:
+            dom1, dom2 = pair.individual_parts()
+            star1 = pair.starred1
+            star2 = pair.starred2
+
+            seq1 = dom1.concrete_sequence(star1)
+            seq2 = dom2.concrete_sequence(star2)
+            name1 = dom1.get_name(star1)
+            name2 = dom2.get_name(star2)
+            sequence_pairs.append((seq1, seq2))
+            name_pairs.append((name1, name2))
+            domain_tuples.append((dom1, dom2))
+
+        energies = evaluation_function(sequence_pairs, logger, temperature, parameters_filename, max_energy)
+
+        results = []
+        for dom_pair, energy in zip(dom_pairs, energies):
+            dom1, dom2 = dom_pair.individual_parts()
+            star1 = dom_pair.starred1
+            star2 = dom_pair.starred2
+            if (dom1, star1, dom2, star2) in thresholds:
+                low_threshold, high_threshold = thresholds[(dom1, star1, dom2, star2)]
+            elif (dom2, star2, dom1, star1) in thresholds:
+                low_threshold, high_threshold = thresholds[(dom2, star2, dom1, star1)]
+            else:
+                raise ValueError(f'could not find threshold for domain pair ({dom1.name}, {dom2.name})')
+            if energy < low_threshold:
+                excess = low_threshold - energy
+            elif energy > high_threshold:
+                excess = energy - high_threshold
+            else:
+                excess = 0
+            value = f'{energy:6.2f} kcal/mol'
+            summary = (f'{value}; target interval: [{low_threshold}, {high_threshold}]')
+            result = Result(excess=excess, value=value, summary=summary)
+            results.append(result)
+
+        return results
+
+    return DomainPairsConstraint(description=description,
+                                 short_description=short_description,
+                                 weight=weight,
+                                 score_transfer_function=score_transfer_function,
+                                 evaluate_bulk=evaluate_bulk,
+                                 domain_pairs=domain_pairs)
+
+
+def nupack_domain_pairs_nonorthogonal_constraint(
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
+        temperature: float = nv.default_temperature,
+        sodium: float = nv.default_sodium,
+        magnesium: float = nv.default_magnesium,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'dom_pair_nupack_nonorth',
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> DomainPairsConstraint:
+    """
+    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses NUPACK instead of RNAplex.
+    Only two parameters `sodium` and `magnesium` are different; documented here.
+
+    :param sodium:
+        concentration of sodium (more generally, monovalent ions such as Na+, K+, NH4+)
+        in moles per liter
+    :param magnesium:
+        concentration of magnesium (Mg++) in moles per liter
+    """
+    _check_nupack_installed()
+
+    eval_func = nv.nupack_multiple_with_sodium_magnesium(sodium=sodium, magnesium=magnesium)
+
+    return domain_pairs_nonorthogonal_constraint(
+        evaluation_function=eval_func,
+        tool_name='NUPACK',
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        description=description,
+        short_description=short_description,
+        parameters_filename=parameters_filename,
+        max_energy=max_energy,
+    )
+
+
 def rna_plex_domain_pairs_nonorthogonal_constraint(
         thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] = lambda x: x,
         description: str | None = None,
-        short_description: str = 'rna_plex_dom_pairs',
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename) \
-        -> DomainPairsConstraint:
+        short_description: str = 'rna_plex_dom_pairs_nonorth',
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for interaction energy in a given interval,
     using ViennaRNA's RNAplex executable.
@@ -5551,92 +5712,76 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
     """
     _check_vienna_rna_installed()
 
-    if description is None:
-        description = f'domain pair RNAplex energies for nonorthogonal domains at {temperature}C'
+    return domain_pairs_nonorthogonal_constraint(
+        evaluation_function=nv.rna_plex_multiple,
+        tool_name='RNAplex',
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        description=description,
+        short_description=short_description,
+        parameters_filename=parameters_filename,
+        max_energy=max_energy,
+    )
 
-    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
-        sequence_pairs: List[Tuple[str, str]] = []
-        names: List[Tuple[str, str]] = []
-        domains: List[Tuple[Domain, Domain]] = []
-        for pair in domain_pairs:
-            d1, d2 = pair.individual_parts()
-            if d1 == d2:
-                # don't check d-d* or d*-d in this case, but do check d-d and d*-d*
-                starred_each = [(False, False), (True, True)]
-            else:
-                starred_each = [(False, False), (True, True), (False, True), (True, False)]
-            for starred1, starred2 in starred_each:
-                seq1 = d1.concrete_sequence(starred1)
-                seq2 = d2.concrete_sequence(starred2)
-                name1 = d1.get_name(starred1)
-                name2 = d2.get_name(starred2)
-                sequence_pairs.append((seq1, seq2))
-                names.append((name1, name2))
-                domains.append((d1, d2))
 
-        energies = nv.rna_plex_multiple(sequence_pairs, logger, temperature, parameters_filename)
+def rna_duplex_domain_pairs_nonorthogonal_constraint(
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
+        description: str | None = None,
+        short_description: str = 'rna_plex_dom_pairs_nonorth',
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> DomainPairsConstraint:
+    """
+    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAduplex instead of RNAplex.
+    """
+    _check_vienna_rna_installed()
 
-        # several consecutive items are from same domain pair but with different wc's;
-        # group them together in the summary
-        groups = defaultdict(list)
-        for (d1, d2), energy, name_pair in zip(domain_tuples, energies, name_pairs):
-            domain_pair = DomainPair(d1, d2)
-            groups[domain_pair.name].append((energy, name_pair))
+    return domain_pairs_nonorthogonal_constraint(
+        evaluation_function=nv.rna_duplex_multiple,
+        tool_name='RNAduplex',
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        description=description,
+        short_description=short_description,
+        parameters_filename=parameters_filename,
+        max_energy=max_energy,
+    )
 
-        # one Result per domain pair
-        results = []
-        for _, energies_and_name_pairs in groups.items():
-            energies, name_pairs = zip(*energies_and_name_pairs)
-            excesses: List[float] = []
-            for energy, (name1, name2) in energies_and_name_pairs:
-                if name1 is not None and name2 is not None:
-                    logger.debug(
-                        f'domain pair threshold: {threshold:6.2f} '
-                        f'rna_plex({name1}, {name2}, {temperature}) = {energy:6.2f} ')
-                excess = max(0.0, (threshold - energy))
-                excesses.append(excess)
-            max_excess = max(excesses)
 
-            max_name_length = max(len(name) for name in flatten(name_pairs))
-            lines_and_energies = [(f'{name1:{max_name_length}}, '
-                                   f'{name2:{max_name_length}}: '
-                                   f' {energy:6.2f} kcal/mol', energy)
-                                  for energy, (name1, name2) in energies_and_name_pairs]
-            lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
-            lines = [line for line, _ in lines_and_energies]
-            summary = '\n  ' + '\n  '.join(lines)
-            max_excess = max(0.0, max_excess)
-            result = Result(excess=max_excess, summary=summary, value=max_excess)
-            results.append(result)
+def rna_cofold_domain_pairs_nonorthogonal_constraint(
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]],
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = lambda x: x,
+        description: str | None = None,
+        short_description: str = 'rna_plex_dom_pairs_nonorth',
+        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> DomainPairsConstraint:
+    """
+    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAcofold instead of RNAplex.
+    """
+    _check_vienna_rna_installed()
 
-        return results
-
-    # gather pairs of domains referenced in `thresholds`
-    pairs = []
-    pairs_set = set()
-    for key, _ in thresholds.items():
-        if len(key) == 2:
-            d1, d2 = key
-        else:
-            if len(key) != 4:
-                raise ValueError(f'key {key} in thresholds dict must have length 2, if a pair of domains, '
-                                 f'or 4, if a tuple (domain1, starred1, domain2, starred2)')
-            d1, _, d2, _ = key
-            if (d1, d2) in thresholds.keys():
-                raise ValueError(f'cannot have key (d1,d2) in `thresholds` if (d1, starred1, d2, starred2) '
-                                 f'is also a key in `thresholds`, but I found these keys:'
-                                 f'\n  {(d1, d2)}'
-                                 f'\n  {key}')
-        if (d1, d2) not in pairs_set:
-            pairs.append((d1, d2))
-            pairs_set.add((d1, d2))
-
-    return DomainPairsConstraint(description=description,
-                                 short_description=short_description,
-                                 weight=weight,
-                                 score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs)
+    return domain_pairs_nonorthogonal_constraint(
+        evaluation_function=nv.rna_cofold_multiple,
+        tool_name='RNAcofold',
+        thresholds=thresholds,
+        temperature=temperature,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        description=description,
+        short_description=short_description,
+        parameters_filename=parameters_filename,
+        max_energy=max_energy,
+    )
 
 
 def _populate_strand_list_and_pairs(strands: Iterable[Strand] | None,

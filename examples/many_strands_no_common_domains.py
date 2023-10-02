@@ -55,7 +55,7 @@ def main() -> None:
 
     num_strands = 3
     # num_strands = 5
-    # num_strands = 10
+    # num_many_strands_no_common_domains.pystrands = 10
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
