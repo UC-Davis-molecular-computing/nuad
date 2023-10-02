@@ -4553,13 +4553,15 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     """
     List of :any:`DomainPair`'s to check; if not specified, all pairs in :any:`Design` are checked.
     
-    This is set internally in the constructor based on the optional ``__init__`` parameter `pairs`. 
+    This can be specified manmually, or alternately is set internally in the constructor based on 
+    the optional ``__init__`` parameter `pairs`. 
     """
 
     pairs: InitVar[Iterable[Tuple[Domain, Domain], ...] | None] = None
     """
     Init-only variable (specified in constructor, but is not a field in the class) for specifying
-    pairs of domains to check; if not specified, all pairs in :any:`Design` are checked.
+    pairs of domains to check; if not specified, all pairs in :any:`Design` are checked, unless 
+    :data:`ConstraintWithDomainPairs.domain_pairs` is specified.
     """
 
     check_domain_against_itself: bool = True
@@ -4569,8 +4571,11 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     """
 
     def __post_init__(self, pairs: Iterable[Tuple[Strand, Strand]] | None) -> None:
-        domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
-        object.__setattr__(self, 'domain_pairs', domain_pairs)
+        if self.domain_pairs is None:
+            if self.pairs is not None:
+                raise ValueError(f'can only specify at most one of parameters pairs or domain_pairs')
+            domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
+            object.__setattr__(self, 'domain_pairs', domain_pairs)
 
 
 @dataclass(eq=False)
@@ -4579,13 +4584,15 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     """
     List of :any:`StrandPair`'s to check; if not specified, all pairs in :any:`Design` are checked.
     
-    This is set internally in the constructor based on the optional ``__init__`` parameter `pairs`. 
+    This can be specified manmually, or alternately is set internally in the constructor based on 
+    the optional ``__init__`` parameter `pairs`. 
     """
 
     pairs: InitVar[Iterable[Tuple[Strand, Strand], ...] | None] = None
     """
     Init-only variable (specified in constructor, but is not a field in the class) for specifying
-    pairs of strands; if not specified, all pairs in :any:`Design` are checked.
+    pairs of strands; if not specified, all pairs in :any:`Design` are checked, unless 
+    :data:`ConstraintWithStrandPairs.strand_pairs` is specified.
     """
 
     check_strand_against_itself: bool = True
@@ -4598,8 +4605,11 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     #   or it may be simplest just to remove the frozen and eq from annotation and use default id-based hash
 
     def __post_init__(self, pairs: Iterable[Tuple[Strand, Strand]] | None) -> None:
-        strand_pairs = None if pairs is None else tuple(StrandPair(s1, s2) for s1, s2 in pairs)
-        object.__setattr__(self, 'strand_pairs', strand_pairs)
+        if self.strand_pairs is None:
+            if self.pairs is not None:
+                raise ValueError(f'can only specify at most one of parameters pairs or strand_pairs')
+            strand_pairs = None if pairs is None else tuple(StrandPair(s1, s2) for s1, s2 in pairs)
+            object.__setattr__(self, 'strand_pairs', strand_pairs)
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5579,31 +5589,37 @@ def domain_pairs_nonorthogonal_constraint(
             dom1, dom2 = dom_pair.individual_parts()
             star1 = dom_pair.starred1
             star2 = dom_pair.starred2
+
             if (dom1, star1, dom2, star2) in thresholds:
                 low_threshold, high_threshold = thresholds[(dom1, star1, dom2, star2)]
             elif (dom2, star2, dom1, star1) in thresholds:
                 low_threshold, high_threshold = thresholds[(dom2, star2, dom1, star1)]
             else:
-                raise ValueError(f'could not find threshold for domain pair ({dom1.name}, {dom2.name})')
+                raise ValueError(f'could not find threshold for domain pair '
+                                 f'({dom1.get_name(star1)}, {dom2.get_name(star2)})')
+
             if energy < low_threshold:
                 excess = low_threshold - energy
             elif energy > high_threshold:
                 excess = energy - high_threshold
             else:
                 excess = 0
+
             value = f'{energy:6.2f} kcal/mol'
-            summary = (f'{value}; target interval: [{low_threshold}, {high_threshold}]')
+            summary = (f'{value}; target: [{low_threshold}, {high_threshold}]')
             result = Result(excess=excess, value=value, summary=summary)
             results.append(result)
 
         return results
 
-    return DomainPairsConstraint(description=description,
-                                 short_description=short_description,
-                                 weight=weight,
-                                 score_transfer_function=score_transfer_function,
-                                 evaluate_bulk=evaluate_bulk,
-                                 domain_pairs=domain_pairs)
+    constraint = DomainPairsConstraint(description=description,
+                                       short_description=short_description,
+                                       weight=weight,
+                                       score_transfer_function=score_transfer_function,
+                                       evaluate_bulk=evaluate_bulk,
+                                       domain_pairs=domain_pairs)
+
+    return constraint
 
 
 def nupack_domain_pairs_nonorthogonal_constraint(
