@@ -6,7 +6,9 @@ The main functions are
 :meth:`secondary_structure_single_strand` and :meth:`binding`),
 :meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
 :meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
-that is much faster than calling :meth:`pfunc` on the same pair of strands).
+that is much faster than calling :meth:`pfunc` on the same pair of strands),
+and
+:meth:`rna_plex_multiple` (which is even faster than :meth:`rna_duplex_multiple`).
 """  # noqa
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Tuple, List, Iterable
+from typing import Sequence, Tuple, List, Iterable, Callable
 
 import numpy as np
 
@@ -65,12 +67,13 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     return adjust * (num_seqs - 1)
 
 
-def pfunc(seqs: str | Tuple[str, ...],
-          temperature: float = default_temperature,
-          sodium: float = default_sodium,
-          magnesium: float = default_magnesium,
-          strand_association_penalty: bool = True,
-          ) -> float:
+def pfunc(
+        seqs: str | Tuple[str, ...],
+        temperature: float = default_temperature,
+        sodium: float = default_sodium,
+        magnesium: float = default_magnesium,
+        strand_association_penalty: bool = True,
+) -> float:
     """
     Calls pfunc from NUPACK 4 (http://www.nupack.org/) on a complex consisting of the unique strands in
     seqs, returns energy ("delta G"), i.e., generally a negative number.
@@ -480,6 +483,60 @@ def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
     return tuple(energies)
 
 
+def nupack_multiple_with_sodium_magnesium(
+        sodium: float = default_sodium,
+        magnesium: float = default_magnesium,
+) -> nc.PairsEvaluationFunction:
+    """
+    Used when we want a :any:`BulkConstraint` using NUPACK
+    (even though most of them are :any:`SingularConstraint`'s).
+
+    Calls NUPACK (specifically, the function :meth:`binding`) on a list of pairs:
+    [ (seq1, seq2), (seq2, seq3), (seq4, seq5), ... ]
+    where seqi is a string over {A,C,T,G}.
+
+    :param sodium:
+        molarity of sodium in moles per liter
+    :param magnesium:
+        molarity of magnesium in moles per liter
+    :return:
+        list of free energies, in the same order as `pairs`
+    """
+
+    def nupack_multiple(
+            pairs: Sequence[Tuple[str, str]],
+            logger: logging.Logger = logging.root,
+            temperature: float = default_temperature,
+            parameters_filename: str = default_vienna_rna_parameter_filename,
+            max_energy: float = 0.0,
+    ) -> Tuple[float]:
+        # :param pairs:
+        #     sequence (list or tuple) of pairs of DNA sequences
+        # :param logger:
+        #     logger to use for printing error messages
+        # :param temperature:
+        #     temperature in Celsius
+        # :param parameters_filename:
+        #     name of parameters file for NUPACK
+        # :param max_energy:
+        #     This is the maximum energy possible to assign. If NUPACK reports any energies larger than this,
+        #     they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        #     base pairs between them (e.g., CCCC and TTTT), in which case RNAplex assigns a free energy
+        #     of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        #     for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        #     than all the rest.
+
+        energies = []
+        for seq1, seq2 in pairs:
+            energy = binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
+            energy = min(energy, max_energy)
+            energies.append(energy)
+
+        return tuple(energies)
+
+    return nupack_multiple
+
+
 def rna_plex_multiple_parallel(
         thread_pool: ThreadPool,
         pairs: Sequence[Tuple[str, str]],
@@ -535,11 +592,13 @@ def _fix_filename_windows(parameters_filename: str) -> str:
     return parameters_filename
 
 
-def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
-                        logger: logging.Logger = logging.root,
-                        temperature: float = default_temperature,
-                        parameters_filename: str = default_vienna_rna_parameter_filename,
-                        ) -> List[float]:
+def rna_cofold_multiple(
+        seq_pairs: Sequence[Tuple[str, str]],
+        logger: logging.Logger = logging.root,
+        temperature: float = default_temperature,
+        parameters_filename: str = default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+) -> Tuple[float]:
     """
     Calls RNAcofold (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
@@ -555,8 +614,15 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
         temperature in Celsius
     :param parameters_filename:
         name of NUPACK parameters file
+    :param max_energy:
+        This is the maximum energy possible to assign. If RNAcofold reports any energies larger than this,
+        they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        base pairs between them (e.g., CCCC and TTTT), in which case RNAcofold assigns a free energy
+        of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        than all the rest.
     :return:
-        list of free energies, in the same order as `seq_pairs`
+        tuple of free energies, in the same order as `seq_pairs`
     """
 
     # NB: the string NA_parameter_set needs to be exactly the intended filename;
@@ -590,11 +656,16 @@ def rna_cofold_multiple(seq_pairs: Sequence[Tuple[str, str]],
     lines = output.split('\n')
     dg_list: List[float] = []
     for line in lines[:-1]:
-        dg_list.append(-float(line.split(':')[1].split('(')[1].split(')')[0]))
+        energy = -float(line.split(':')[1].split('(')[1].split(')')[0])
+        energy = min(energy, max_energy)
+        dg_list.append(energy)
+
     if len(lines) - 1 != len(seq_pairs):
         raise AssertionError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}')
 
-    return dg_list
+    dg_tuple = tuple(dg_list)
+
+    return dg_tuple
 
 
 _wctable = str.maketrans('ACGTacgt', 'TGCAtgca')
