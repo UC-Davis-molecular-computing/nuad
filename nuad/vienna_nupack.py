@@ -6,7 +6,9 @@ The main functions are
 :meth:`secondary_structure_single_strand` and :meth:`binding`),
 :meth:`nupack_complex_base_pair_probabilities` (for calculating base pair probabilities with NUPACK),
 :meth:`rna_duplex_multiple` (for calculating an approximation to two-strand complex free energy 
-that is much faster than calling :meth:`pfunc` on the same pair of strands).
+that is much faster than calling :meth:`pfunc` on the same pair of strands),
+and
+:meth:`rna_plex_multiple` (which is even faster than :meth:`rna_duplex_multiple`).
 """  # noqa
 
 from __future__ import annotations
@@ -487,12 +489,11 @@ def nupack_multiple_with_sodium_magnesium(
 ) -> nc.PairsEvaluationFunction:
     """
     Used when we want a :any:`BulkConstraint` using NUPACK
-    (even though most of them are :any:`SingularConstraint`s).
+    (even though most of them are :any:`SingularConstraint`'s).
 
     Calls NUPACK (specifically, the function :meth:`binding`) on a list of pairs:
     [ (seq1, seq2), (seq2, seq3), (seq4, seq5), ... ]
-    where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
-    Returns a list (in the same order as seqpairs) of free energies.
+    where seqi is a string over {A,C,T,G}.
 
     :param sodium:
         molarity of sodium in moles per liter
@@ -509,23 +510,22 @@ def nupack_multiple_with_sodium_magnesium(
             parameters_filename: str = default_vienna_rna_parameter_filename,
             max_energy: float = 0.0,
     ) -> Tuple[float]:
-        """
-        :param pairs:
-            sequence (list or tuple) of pairs of DNA sequences
-        :param logger:
-            logger to use for printing error messages
-        :param temperature:
-            temperature in Celsius
-        :param parameters_filename:
-            name of parameters file for NUPACK
-        :param max_energy:
-            This is the maximum energy possible to assign. If NUPACK reports any energies larger than this,
-            they will be changed to `max_energy`. This is useful in case two sequences have no possible
-            base pairs between them (e.g., CCCC and TTTT), in which case RNAplex assigns a free energy
-            of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
-            for graphing energies, it's nice if there's not some value several orders of magnitude larger
-            than all the rest.
-        """
+        # :param pairs:
+        #     sequence (list or tuple) of pairs of DNA sequences
+        # :param logger:
+        #     logger to use for printing error messages
+        # :param temperature:
+        #     temperature in Celsius
+        # :param parameters_filename:
+        #     name of parameters file for NUPACK
+        # :param max_energy:
+        #     This is the maximum energy possible to assign. If NUPACK reports any energies larger than this,
+        #     they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        #     base pairs between them (e.g., CCCC and TTTT), in which case RNAplex assigns a free energy
+        #     of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        #     for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        #     than all the rest.
+
         energies = []
         for seq1, seq2 in pairs:
             energy = binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)

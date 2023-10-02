@@ -57,7 +57,8 @@ def main() -> None:
 
     epsilon = 1.0
     thresholds = {}
-    for d1, d2 in itertools.combinations_with_replacement(design.domains, 2):
+    # for d1, d2 in itertools.combinations_with_replacement(design.domains, 2):
+    for d1, d2 in itertools.combinations(design.domains, 2):
         if d1.name > d2.name:
             d1, d2 = d2, d1
         name1 = d1.name
