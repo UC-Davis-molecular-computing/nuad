@@ -5506,7 +5506,9 @@ def rna_plex_domain_pairs_constraint(
                                  pairs=pairs_tuple)
 
 
-def get_domain_pairs_from_thresholds_dict(thresholds):
+def get_domain_pairs_from_thresholds_dict(
+        thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]]
+) -> Tuple[DomainPair]:
     # gather pairs of domains referenced in `thresholds`
     domain_pairs = []
     for key, _ in thresholds.items():
