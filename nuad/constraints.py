@@ -1337,19 +1337,19 @@ NumpyFilters and SequenceFilters. Trying another distance.""")
 
     def _bases_to_use(self) -> Collection[str]:
         # checks explicitly for RestrictBasesFilter
-        for filter in self.numpy_filters:
-            if isinstance(filter, RestrictBasesFilter):
-                return filter.bases
+        for filter_ in self.numpy_filters:
+            if isinstance(filter_, RestrictBasesFilter):
+                return filter_.bases
         return 'A', 'C', 'G', 'T'
 
     def _apply_numpy_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         # filter sequence not passing numpy filters, but skip RestrictBasesFilter since
         # that is more efficiently handled by the DNASeqList constructor to generate the sequences
         # in the first place
-        for filter in self.numpy_filters:
-            if isinstance(filter, RestrictBasesFilter):
+        for filter_ in self.numpy_filters:
+            if isinstance(filter_, RestrictBasesFilter):
                 continue
-            seqs = filter.remove_violating_sequences(seqs)
+            seqs = filter_.remove_violating_sequences(seqs)
         return seqs
 
 
@@ -2980,15 +2980,15 @@ def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> s
         # handle modifications
         if strand.modification_5p is not None:
             mod = strand.modification_5p
-            sc_mod = sc.Modification5Prime(idt_text=mod.vendor_code, id=mod.id, display_text=mod.vendor_code)
+            sc_mod = sc.Modification5Prime(vendor_code=mod.vendor_code, display_text=mod.vendor_code)
             sc_strand.modification_5p = sc_mod
         if strand.modification_3p is not None:
             mod = strand.modification_3p
-            sc_mod = sc.Modification3Prime(idt_text=mod.vendor_code, id=mod.id, display_text=mod.vendor_code)
+            sc_mod = sc.Modification3Prime(vendor_code=mod.vendor_code, display_text=mod.vendor_code)
             sc_strand.modification_3p = sc_mod
         if len(strand.modifications_int) > 0:
             for offset, mod in strand.modifications_int.items():
-                sc_mod = sc.ModificationInternal(idt_text=mod.vendor_code, id=mod.id,
+                sc_mod = sc.ModificationInternal(vendor_code=mod.vendor_code,
                                                  display_text=mod.vendor_code,
                                                  allowed_bases=mod.allowed_bases)
                 sc_strand.modifications_int[offset] = sc_mod
@@ -4404,8 +4404,8 @@ def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Q
 
 @dataclass(eq=False)
 class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
-    evaluate: Callable[[Tuple[str, ...], DesignPart | None],
-    Result[DesignPart]] = lambda _: _raise_unreachable()
+    evaluate: Callable[[Tuple[str, ...], DesignPart | None], Result[DesignPart]] = \
+        lambda _: _raise_unreachable()
     """
     Essentially a wrapper for a function that evaluates the :any:`Constraint`. 
     It takes as input a tuple of DNA sequences 
@@ -4570,12 +4570,37 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     Only used if :data:`ConstraintWithDomainPairs.pairs` is not specified, otherwise it is ignored.
     """
 
-    def __post_init__(self, pairs: Iterable[Tuple[Strand, Strand]] | None) -> None:
+    def __post_init__(self, pairs: Iterable[Tuple[Domain, Domain]] | None) -> None:
+        _check_at_most_one_parameter_specified(self.domain_pairs, pairs, 'domain_pairs', 'pairs')
+
         if self.domain_pairs is None:
-            if self.pairs is not None:
-                raise ValueError(f'can only specify at most one of parameters pairs or domain_pairs')
             domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
             object.__setattr__(self, 'domain_pairs', domain_pairs)
+
+
+def _check_at_most_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    if param1 is not None and param2 is not None:
+        raise ValueError(f'must specify at most one of parameters {name1} or {name2}, '
+                         f'but both are not None:\n'
+                         f'{name1}: {param1}\n'
+                         f'{name2}: {param2}')
+
+
+def _check_at_least_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    if param1 is None and param2 is None:
+        raise ValueError(f'must specify at least one of parameters {name1} or {name2}, '
+                         f'but both are None')
+
+
+def _check_exactly_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    if param1 is not None and param2 is not None:
+        raise ValueError(f'must specify exactly one of parameters {name1} or {name2}, '
+                         f'but both are not None:\n'
+                         f'{name1}: {param1}\n'
+                         f'{name2}: {param2}')
+    if param1 is None and param2 is None:
+        raise ValueError(f'must specify exactly one of parameters {name1} or {name2}, '
+                         f'but both are None')
 
 
 @dataclass(eq=False)
@@ -4605,9 +4630,8 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     #   or it may be simplest just to remove the frozen and eq from annotation and use default id-based hash
 
     def __post_init__(self, pairs: Iterable[Tuple[Strand, Strand]] | None) -> None:
+        _check_at_most_one_parameter_specified(self.strand_pairs, pairs, 'strand_pairs', 'pairs')
         if self.strand_pairs is None:
-            if self.pairs is not None:
-                raise ValueError(f'can only specify at most one of parameters pairs or strand_pairs')
             strand_pairs = None if pairs is None else tuple(StrandPair(s1, s2) for s1, s2 in pairs)
             object.__setattr__(self, 'strand_pairs', strand_pairs)
 
@@ -4711,8 +4735,8 @@ class DesignConstraint(Constraint[Design]):
     specifies :data:`DesignConstraint._evaluate_design` instead.
     """
 
-    evaluate_design: Callable[[Design, Iterable[Domain]],
-    List[Tuple[DesignPart, float, str]]] = lambda _: _raise_unreachable()
+    evaluate_design: Callable[[Design, Iterable[Domain]], List[Tuple[DesignPart, float, str]]] = \
+        lambda _: _raise_unreachable()
     """
     Evaluates the :any:`Design` (first argument), possibly taking into account which :any:`Domain`'s have
     changed in the last iteration (second argument).
@@ -4989,7 +5013,7 @@ def nupack_domain_pair_constraint(
     :param magnesium:
         molarity of magnesium (Mg++) in moles per liter
     :param parallel:
-        Whether to test the each pair of :any:`Domain`'s in parallel (i.e., sets field
+        Whether to test each pair of :any:`Domain`'s in parallel (i.e., sets field
         :data:`Constraint.parallel`)
     :param weight:
         See :data:`Constraint.weight`.
@@ -5124,7 +5148,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
-        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        parallel: Whether to test each pair of :any:`Strand`'s in parallel.
         strands: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `pairs`.
                  Mutually exclusive with `pairs`.
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
@@ -5608,7 +5632,7 @@ def domain_pairs_nonorthogonal_constraint(
                 excess = 0
 
             value = f'{energy:6.2f} kcal/mol'
-            summary = (f'{value}; target: [{low_threshold}, {high_threshold}]')
+            summary = f'{value}; target: [{low_threshold}, {high_threshold}]'
             result = Result(excess=excess, value=value, summary=summary)
             results.append(result)
 
@@ -6101,7 +6125,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
-        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        parallel: Whether to test each pair of :any:`Strand`'s in parallel.
         strands: :any:`Strand`'s to compare; if not specified, checks all in design.
                  Mutually exclusive with `pairs`.
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
@@ -6188,7 +6212,7 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
         score_transfer_function: See :data:`Constraint.score_transfer_function`.
         descriptions: Long descriptions of constraint suitable for putting into constraint report.
         short_descriptions: Short descriptions of constraint suitable for logging to stdout.
-        parallel: Whether to test the each pair of :any:`Strand`'s in parallel.
+        parallel: Whether to test each pair of :any:`Strand`'s in parallel.
         strands: :any:`Strand`'s to compare; if not specified, checks all in design.
                  Mutually exclusive with `pairs`.
         pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in `strands`,
@@ -6522,9 +6546,9 @@ def lcs_domain_pairs_constraint(
     if description is None:
         description = f'Longest complementary subsequence between domains is > {threshold}'
 
-    def evaluate_bulk(pairs: Iterable[DomainPair]) -> List[Result]:
-        seqs1 = [pair.domain1.sequence() for pair in pairs]
-        seqs2 = [pair.domain2.sequence() for pair in pairs]
+    def evaluate_bulk(pairs_: Iterable[DomainPair]) -> List[Result]:
+        seqs1 = [pair.domain1.sequence() for pair in pairs_]
+        seqs2 = [pair.domain2.sequence() for pair in pairs_]
         arr1 = nn.seqs2arr(seqs1)
         arr2 = nn.seqs2arr(seqs2)
         arr2_rev = np.flip(arr2, axis=1)
@@ -6665,22 +6689,22 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
             *,
             threshold: float,
             temperature: float = nv.default_temperature,
-            weight: float = 1.0,
-            score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+            weight_: float = 1.0,
+            score_transfer_function_: Callable[[float], float] = default_score_transfer_function,
             description: str | None = None,
             short_description: str = 'lcs strand pairs',
-            parallel: bool = False,
-            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-            parameters_filename: str = nv.default_vienna_rna_parameter_filename
+            parallel_: bool = False,
+            pairs_: Iterable[Tuple[Strand, Strand]] | None = None,
+            parameters_filename_: str = nv.default_vienna_rna_parameter_filename
     ) -> StrandPairsConstraint:
         threshold_int = int(threshold)
         return lcs_strand_pairs_constraint(
             threshold=threshold_int,
-            weight=weight,
-            score_transfer_function=score_transfer_function,
+            weight=weight_,
+            score_transfer_function=score_transfer_function_,
             description=description,
             short_description=short_description,
-            pairs=pairs,
+            pairs=pairs_,
             check_strand_against_itself=True,
             # TODO: rewrite signature of other strand pair constraints to include this
             gc_double=gc_double,
@@ -6750,7 +6774,7 @@ def rna_duplex_strand_pairs_constraint(
     :param short_description:
         See :data:`Constraint.short_description`
     :param parallel:
-        Whether to test the each pair of :any:`Strand`'s in parallel.
+        Whether to test each pair of :any:`Strand`'s in parallel.
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
     :param parameters_filename:
@@ -6837,7 +6861,7 @@ def rna_plex_strand_pairs_constraint(
     :param short_description:
         See :data:`Constraint.short_description`
     :param parallel:
-        Whether to test the each pair of :any:`Strand`'s in parallel.
+        Whether to test each pair of :any:`Strand`'s in parallel.
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
     :param parameters_filename:
@@ -6935,7 +6959,7 @@ def rna_cofold_strand_pairs_constraint(
     :param short_description:
         See :data:`Constraint.short_description`
     :param parallel:
-        Whether to test the each pair of :any:`Strand`'s in parallel.
+        Whether to test each pair of :any:`Strand`'s in parallel.
     :param pairs:
         Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
     :param parameters_filename:
@@ -6955,10 +6979,10 @@ def rna_cofold_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         return nv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
-    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> List[float]:
+    def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel and len(sequence_pairs) > 1:
             lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
             lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
@@ -7110,7 +7134,7 @@ class _AdjacentDuplexType(Enum):
     #                    #-----###-----#
     #                       c*    d*
     #
-    #   Note: if "?" was a "#" (meaning e* is adjacent to c), then then
+    #   Note: if "?" was a "#" (meaning e* is adjacent to c), then
     #   it would be a three arm junction
     #
     ###########################################################################
@@ -7239,7 +7263,7 @@ default_other_probability = 0.70
 
 class BasePairType(Enum):
     """
-    Represents different configurations for a base pair and it's immediate
+    Represents different configurations for a base pair, and its immediate
     neighboring base pairs (or lack thereof).
 
     **Notation**:
@@ -7304,9 +7328,9 @@ class BasePairType(Enum):
 
     **Consecutive "#"**:
 
-    In some cases, extra "#" are needed to to make space for ascii art.
+    In some cases, extra "#" are needed to make space for ascii art.
     We consider any consecutive "#"s to be equivalent "##".
-    The following is consider equivalent to the example above
+    The following is considered equivalent to the example above
 
     .. code-block:: none
 
@@ -7316,7 +7340,7 @@ class BasePairType(Enum):
       strand1  <-----###-----####-----##-----]
                   a*      b*       c*     d*
 
-    Note that only consecutive "#"s is consider equivalent to "##".
+    Note that only consecutive "#"s is considered equivalent to "##".
     The following example is not equivalent to the strands above because
     the "#  #" between b and c are seperated by spaces, so they are
     not equivalent to "##", meaning that b and c neednot be adjacent.
@@ -8610,8 +8634,8 @@ def __get_base_pair_domain_endpoints_to_check(
                 f"Violating domain: {domain_name_complement}")
     # End Input Validation #
 
-    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress,
-    int] = _get_addr_to_starting_base_pair_idx(strand_complex)
+    addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = \
+        _get_addr_to_starting_base_pair_idx(strand_complex)
     all_bound_domain_addresses.update(_get_implicitly_bound_domain_addresses(
         strand_complex, nonimplicit_base_pairs_domain_names))
 
