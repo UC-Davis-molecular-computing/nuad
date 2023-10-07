@@ -802,6 +802,12 @@ class SubstringSampler(JSONSerializable):
             supersequence=m13(), substring_length=300,
             except_overlapping_indices=range(5514, 5557), circular=True)
         pool = DomainPool('M13 rotations', possible_sequences=possible_sequences)
+
+    For this example, using a :any:`SubstringSampler` is much more efficient than explicitly listing
+    all length-300 substrings of M13 in the parameter :data:`DomainPool.possible_sequences`.
+    This is because the latter approach, whenever the :any:`Design` improves and is written to a
+    file, will write out all the length-300 substrings of M13, taking much more space than just
+    writing the full M13 sequence once.
     """
 
     supersequence: str
@@ -810,7 +816,7 @@ class SubstringSampler(JSONSerializable):
     substring_length: int
     """Length of substrings to sample."""
 
-    except_start_indices: Tuple[int]
+    except_start_indices: Tuple[int, ...]
     """*Start* indices in :data:`SubstringSampler.supersequence` to avoid. In the constructor this can 
     be specified directly. Another option (mutually exclusive with the parameter `except_start_indices`)
     is to specify the parameter `except_overlapping_indices`, which sets 
@@ -821,7 +827,7 @@ class SubstringSampler(JSONSerializable):
     """Whether :data:`SubstringSampler.supersequence` is circular. If so, then we can sample indices near the 
     end and the substrings will start at the end and wrap around to the start."""
 
-    start_indices: Tuple[int]
+    start_indices: Tuple[int, ...]
     """List of start indices from which to sample when calling :meth:`SubstringSampler.sample_substring`.
     Computed in constructor from other arguments."""
 
