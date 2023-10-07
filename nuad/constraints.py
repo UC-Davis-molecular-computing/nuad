@@ -715,7 +715,7 @@ class ForbiddenSubstringFilter(NumpyFilter):
         sub_len = len(self.substrings[0])
         sub_ints = [[nn.base2bits[base] for base in sub] for sub in self.substrings]
         pow_arr = [4 ** k for k in range(sub_len)]
-        sub_vals = np.dot(sub_ints, pow_arr)
+        sub_vals = np.dot(sub_ints, pow_arr)  # type: ignore
         toeplitz = nn.create_toeplitz(seqs.seqlen, sub_len, self.indices)
         convolution = np.dot(toeplitz, seqs.seqarr.transpose())
         pass_all = np.ones(seqs.numseqs, dtype=bool)
