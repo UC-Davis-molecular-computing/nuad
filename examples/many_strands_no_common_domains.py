@@ -53,9 +53,9 @@ def main() -> None:
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
     # just for testing parallel processing
 
-    num_strands = 3
+    # num_strands = 3
     # num_strands = 5
-    # num_strands = 10
+    num_strands = 10
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
@@ -156,7 +156,7 @@ def main() -> None:
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
-        strand_pairs_rna_duplex_constraint,
+        # strand_pairs_rna_duplex_constraint,
         strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
@@ -172,7 +172,7 @@ def main() -> None:
         # save_report_for_all_updates=True,
         # save_design_for_all_updates=True,
         force_overwrite=True,
-        # log_time=True,
+        log_time=True,
         # scrolling_output=False,
         # report_only_violations=False,
     )
