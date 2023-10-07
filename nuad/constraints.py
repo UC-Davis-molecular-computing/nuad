@@ -952,8 +952,11 @@ class DomainPool(JSONSerializable):
     :any:`NumpyFilter`'s or :any:`SequenceFilter`'s will be applied.
     
     Alternatively, the field can be an instance of :any:`SubstringSampler` for the common case that the 
-    set of possible sequences is simple all (or many) substrings of a single longer sequence.
+    set of possible sequences is the set of substrings of some length of a single longer sequence.
     For example, this can be used to choose a rotation of the M13mp18 strand in sequence design.
+    (This is advantageous because the files saving the :any:`Design` each time the design improves
+    will be much shorter, since it takes much less space to write the M13 sequence than to write all
+    of its length-300 substrings.)
     
     Should be None if :data:`DomainPool.length` is specified.
     """
@@ -4454,12 +4457,7 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             since it is cheaper to serialize only the sequence(s) than the entire :any:`Part`
             for passing to other processes to evaluate in parallel.
         :return:
-            pair (`excess`, `summary`), where `excess` is a float indicating how much the constraint
-            was violated (0.0 if satisfied) and `summary` is a string summarizing the violation (or lack
-            thereof), suitable for printing into a line of a report. For example, if measuring
-            complex free energy -2.5 kcal/mol of a strand and comparing against a threshold -1.0 kcal/mol,
-            `excess` might be the difference 1.5 between the energy and the threshold,
-            and `summary` might be the string "-2.5 kcal/mol".
+            a :any:`Result` object
         """
         result = (self.evaluate)(seqs, part)  # noqa
         if result.excess < 0.0:
