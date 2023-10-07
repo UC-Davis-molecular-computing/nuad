@@ -4381,7 +4381,7 @@ def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity
 
 def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Quantity[Decimal]:
     """
-    Normalize `quantity` so that it has a Decimal madnitude,
+    Normalize `quantity` so that it has a Decimal magnitude,
     is "compact" if specified (uses units within the correct "3 orders of magnitude":
     https://pint.readthedocs.io/en/0.18/tutorial.html#simplifying-units)
     and eliminate trailing zeros.
