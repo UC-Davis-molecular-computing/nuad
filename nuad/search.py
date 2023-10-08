@@ -2159,6 +2159,11 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
     :func:`create_constraints_report`) and displays its data graphically in the notebook using matplotlib.
 
+    This is a histogram showing how many "design parts" (e.g., strands, pairs of strands, etc.)
+    had various values for each :any:`Constraint`. The x-axis is the value measured by the :any:`Constraint`
+    (more precisely, the number in the field :data:`Result.value` generated when evaluating the
+    :any:`Constraint`), and the y-axis is the number of design parts with that value.
+
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
     :param constraints:
