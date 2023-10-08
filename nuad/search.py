@@ -45,7 +45,7 @@ import numpy.random
 from ordered_set import OrderedSet
 import numpy as np  # noqa
 
-import nuad.np as nnp
+import nuad.np as nn
 
 # XXX: If I understand ThreadPool versus Pool, ThreadPool will get no benefit from multiple cores,
 # but Pool will. However, when I check the core usage, all of them spike when using ThreadPool, which
@@ -900,7 +900,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     if params.random_seed is not None:
         rng = np.random.default_rng(params.random_seed)
     else:
-        rng = nnp.default_rng
+        rng = nn.default_rng
 
     if params.probability_of_keeping_change is None:
         params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
@@ -1370,7 +1370,7 @@ def _log_constraint_summary(*, params: SearchParameters,
 
 def assign_sequences_to_domains_randomly_from_pools(design: Design,
                                                     warn_fixed_sequences: bool,
-                                                    rng: np.random.Generator = nnp.default_rng,
+                                                    rng: np.random.Generator = nn.default_rng,
                                                     overwrite_existing_sequences: bool = False) -> None:
     """
     Assigns to each :any:`Domain` in this :any:`Design` a random DNA sequence from its
@@ -2155,7 +2155,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                           Dict[str | Constraint, None | Tuple[float, float]] = None,
                    yscales: Literal['log', 'linear', 'symlog'] |
                             Dict[str | Constraint,
-                                 Literal['log', 'linear', 'symlog']] = _default_yscale,
+                            Literal['log', 'linear', 'symlog']] = _default_yscale,
                    bins: int | Dict[str | Constraint, int] = _default_num_bins) -> None:
     """
     When run in a Jupyter notebook cell, creates a :any:`ConstraintsReport` (the one returned from
@@ -2214,12 +2214,13 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                                                    include_only_with_values=False)
 
     # divide into constraints with values (put in histogram) and without (print summary of violations)
-    reports_with_values: List[Tuple[ConstraintReport, List[pint.Quantity]]] = []
+    reports_with_values: List[Tuple[ConstraintReport, List[float], List[tuple]]] = []
     reports_without_values: List[ConstraintReport] = []
     for i, report in enumerate(constraints_report.reports):
-        quantities = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
-        if len(quantities) > 0:
-            reports_with_values.append((report, quantities))
+        values = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
+        units = [ev.result.unit for ev in report.evaluations if ev.result.value is not None]
+        if len(values) > 0:
+            reports_with_values.append((report, values, units))
         else:
             reports_without_values.append(report)
     num_figs = len(reports_with_values)
@@ -2231,12 +2232,8 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         for viol in report.violations:
             print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 
-    for i, (report, quantities) in enumerate(reports_with_values):
-        quantities = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
-        assert len(quantities) > 0
-
-        # convert pint.Quantity to unitless magnitude to avoid UnitStrippedWarning when calling py.hist
-        values = [q.magnitude for q in quantities]
+    for i, (report, values, units) in enumerate(reports_with_values):
+        assert len(values) > 0
 
         yscale = _value_from_constraint_dict(yscales, report.constraint, _default_yscale, str)  # type: ignore
 
@@ -2269,8 +2266,9 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                 plt.ylim(ylim)
 
         # label x-axis with units (e.g., kilocalorie / mole)
-        unit = str(quantities[0].units)
-        plt.xlabel(unit)
+        unit = units[0]
+        if unit is not None:
+            plt.xlabel(unit)
 
         plt.title(report.constraint.description)
 
