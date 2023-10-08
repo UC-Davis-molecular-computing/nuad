@@ -21,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Tuple, List, Iterable, Callable
+from typing import Sequence, Tuple, List, Iterable
 
 import numpy as np
 
@@ -326,8 +326,12 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
     if os_is_windows:
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
-    command_strs: List[str] = ['RNAduplex', '-P', full_parameters_filename, '-T', str(temperature),
-                               '--noGU', '−−noconv']
+    command_strs: List[str] = [
+        'RNAduplex',
+        '-P', full_parameters_filename,
+        '-T', str(temperature),
+        '--noGU', '−−noconv',
+    ]
 
     # DNA sequences to type after RNAduplex starts up
     user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
@@ -452,11 +456,12 @@ def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
     if os_is_windows:
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
-    command_strs: List[str] = ['RNAplex',
-                               '-P', full_parameters_filename,
-                               '-T', str(temperature),
-                               '-f', '1',
-                               ]
+    command_strs: List[str] = [
+        'RNAplex',
+        '-P', full_parameters_filename,
+        '-T', str(temperature),
+        '-f', '1',
+    ]
 
     # DNA sequences to type after RNAplex starts up
     user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
@@ -470,6 +475,10 @@ def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
                              'is a different error that I don\'t know how to handle. Exiting...'
                              f'\nerror:\n{error}')
 
+    # with open('output/rna_plex_multiple_input.txt', 'w') as f:
+    #     f.write(user_input)
+    # with open('output/rna_plex_multiple_output.txt', 'w') as f:
+    #     f.write(output)
     lines = [line for line in output.split('\n') if line.strip() != '']
     if len(lines) != len(pairs):
         raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
