@@ -172,7 +172,7 @@ def main() -> None:
         # save_report_for_all_updates=True,
         # save_design_for_all_updates=True,
         force_overwrite=True,
-        log_time=True,
+        # log_time=True,
         # scrolling_output=False,
         # report_only_violations=False,
     )
