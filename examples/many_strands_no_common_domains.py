@@ -8,11 +8,6 @@ from typing import List
 import nuad.constraints as nc  # type: ignore
 import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
-from nuad.constraints import NumpyFilter
-
-
-def f(x: int | float) -> float:
-    return x / 2
 
 
 # command-line arguments
@@ -51,13 +46,13 @@ def main() -> None:
     random_seed = 1
 
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
-    # just for testing parallel processing
 
     # num_strands = 3
+    # num_strands = 5
     # num_strands = 10
-    num_strands = 26
+    # num_strands = 10
     # num_strands = 50
-    # num_strands = 100
+    num_strands = 100
     # num_strands = 355
 
     design = nc.Design()
@@ -77,7 +72,7 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    numpy_filters: List[NumpyFilter] = [
+    numpy_filters: List[nc.NumpyFilter] = [
         nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),
         # nc.BaseCountFilter(base='G', high_count=1),
         # nc.BaseEndFilter(bases=('C', 'G')),
@@ -157,11 +152,11 @@ def main() -> None:
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
-        # strand_pairs_rna_duplex_constraint,
+        strand_pairs_rna_duplex_constraint,
         # strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
-        domain_pairs_rna_plex_constraint,
+        # domain_pairs_rna_plex_constraint,
         # domain_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
         # nc.domains_not_substrings_of_each_other_constraint(),

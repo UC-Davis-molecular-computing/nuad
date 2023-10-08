@@ -22,7 +22,6 @@ import enum
 import os
 import math
 import json
-from decimal import Decimal
 from typing import List, Set, Dict, Callable, Iterable, Tuple, Collection, TypeVar, Any, \
     cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Optional
 from dataclasses import dataclass, field, InitVar
@@ -35,7 +34,6 @@ from numbers import Number
 from enum import Enum, auto, unique
 import functools
 
-import pint
 import numpy as np  # noqa
 from ordered_set import OrderedSet
 
@@ -45,10 +43,6 @@ import nuad.vienna_nupack as nv
 import nuad.np as nn
 import nuad.modifications as nm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
-
-from pint import UnitRegistry
-
-ureg = UnitRegistry()
 
 # need typing_extensions package prior to Python 3.8 to get Protocol object
 try:
@@ -4274,7 +4268,8 @@ class Result(Generic[DesignPart]):
     -2.5 kcal/mol, and a strand has energy -3.4 kcal/mol, then the following are sensible values for
     these fields:
 
-    - ``value`` = ``-3.4``  or  ``"-3.4 kcal/mol"``  or  ``pint.Quantity(Decimal(-3.4), "kcal/mol")``
+    - ``value`` = ``-3.4``
+    - ``unit`` = ``"kcal/mol"``
     - ``excess`` = ``-0.9``
     - ``summary`` = ``"-3.4 kcal/mol"``
     """
@@ -4292,15 +4287,21 @@ class Result(Generic[DesignPart]):
 
     _summary: Optional[str] = None
 
-    value: pint.Quantity[Decimal] | None = None
+    value: float | None = None
     """
     If this is a "numeric" constraint, i.e., checking some number such as the complex free energy of a 
     strand and comparing it to a threshold, this is the "raw" value. It is optional, but if specified,
     then the raw values can be plotted in a Jupyter notebook by the function :meth:`display_report`.
     
-    If a ``float``, then no units are assumed. If it is a ``str``, then it is assumed that it can be 
-    passed to the constructor pint.Quantity and interpreted as a value with units, e.g., the string
-    "-3.4 kcal/mol".
+    Optional units (e.g., 'kcal/mol') can be specified in the field :data:`Result.units`.
+    """
+
+    unit: str | None = None
+    """
+    Optional units for :data:`Result.value`, e.g., ``'kcal/mol'``. 
+    
+    If specified, then the units are used in text reports
+    and to label the y-axis in  plots created by :meth:`search.display_report`.
     """
 
     score: float = field(init=False)
@@ -4317,7 +4318,8 @@ class Result(Generic[DesignPart]):
     def __init__(self,
                  excess: float,
                  summary: str | None = None,
-                 value: float | str | pint.Quantity[Decimal] | None = None) -> None:
+                 value: float | None = None,
+                 unit: str | None = None) -> None:
         self.excess = excess
         if summary is None:
             if value is None:
@@ -4327,7 +4329,11 @@ class Result(Generic[DesignPart]):
         else:
             self._summary = summary
         if value is not None:
-            self.value = parse_and_normalize_quantity(value)
+            self.value = value
+            self.unit = unit
+        else:
+            if unit is not None:
+                raise ValueError('units cannot be specified if value is None')
 
         self.score = 0.0
         self.part = None  # type:ignore
@@ -4344,8 +4350,10 @@ class Result(Generic[DesignPart]):
             # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
             # e.g., kcal/mol instead of kilocalorie / mol
             # also 2 decimal places to make numbers line up nicely
-            self.value.default_format = '.2fC~'
-            summary_str = f'{self.value}'
+            # self.value.default_format = '.2fC~'
+            summary_str = f'{self.value:6.2f}'
+            if self.unit is not None:
+                summary_str += f' {self.unit}'
             return str(summary_str)
         else:
             return self._summary
@@ -4353,62 +4361,6 @@ class Result(Generic[DesignPart]):
     @summary.setter
     def summary(self, summary: str) -> None:
         self._summary = summary
-
-
-def parse_and_normalize_quantity(quantity: float | int | str | pint.Quantity) \
-        -> pint.Quantity[Decimal]:
-    if isinstance(quantity, (str, float, int)):
-        quantity = ureg.Quantity(quantity)
-    quantity = normalize_quantity(quantity)
-    return quantity
-
-
-def Q_(qty: int | str | Decimal | float, unit: str | pint.Unit) -> pint.Quantity[Decimal]:  # noqa
-    # Convenient constructor for units, eg, :code:`Q_(5.0, 'nM')`.
-    # Ensures that the quantity is a Decimal.
-    if isinstance(qty, Decimal):
-        return ureg.Quantity(qty, unit)
-    else:
-        # we convert to string to avoid floating-point weirdness. For example
-        #   ureg.Quantity(Decimal(-2.1), 'kcal/mol') gives
-        #   -2.100000000000000088817841970012523233890533447265625 kilocalorie / mole,
-        # whereas
-        #   ureg.Quantity(Decimal(str(-2.1)), 'kcal/mol') gives
-        #   -2.1 kilocalorie / mole,
-        qty_str = str(qty)
-        return ureg.Quantity(Decimal(qty_str), unit)
-
-
-def normalize_quantity(quantity: pint.Quantity, compact: bool = False) -> pint.Quantity[Decimal]:
-    """
-    Normalize `quantity` so that it has a Decimal magnitude,
-    is "compact" if specified (uses units within the correct "3 orders of magnitude":
-    https://pint.readthedocs.io/en/0.18/tutorial.html#simplifying-units)
-    and eliminate trailing zeros.
-
-    :param quantity:
-        a pint Quantity[Decimal]
-    :param compact:
-        whether to change units to make compact (within correct 3 orders of magnitude, e.g.,
-        30 kg instead of 30,000 g)
-    :return:
-        `quantity` normalized to be compact and without trailing zeros.
-    """
-    if not isinstance(quantity.magnitude, Decimal):
-        quantity = Q_(quantity.magnitude, quantity.units)
-    if compact:
-        quantity = quantity.to_compact()
-    mag_int = quantity.magnitude.to_integral()
-    if mag_int == quantity.magnitude:
-        # can be represented exactly as integer, so return that;
-        # quantity.magnitude.normalize() would use scientific notation in this case, which we don't want
-        quantity = Q_(mag_int, quantity.units)
-    else:
-        # is not exact integer, so normalize will return normal float literal such as 10.2
-        # and not scientific notation like it would for an integer
-        mag_norm = quantity.magnitude.normalize()
-        quantity = Q_(mag_norm, quantity.units)
-    return quantity
 
 
 @dataclass(eq=False)
@@ -4903,8 +4855,7 @@ def nupack_domain_free_energy_constraint(
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
-        value = f'{energy:6.2f} kcal/mol'
-        return Result(excess=excess, value=value)
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if description is None:
         description = f'NUPACK secondary structure of domain exceeds {threshold} kcal/mol'
@@ -4972,8 +4923,7 @@ def nupack_strand_free_energy_constraint(
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
-        value = f'{energy:6.2f} kcal/mol'
-        return Result(excess=excess, value=value)
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if description is None:
         description = f'strand NUPACK energy >= {threshold} kcal/mol at {temperature}C'
@@ -5098,7 +5048,7 @@ def nupack_domain_pair_constraint(
         summary = '\n  ' + '\n  '.join(lines)
 
         max_excess = max(0.0, max_excess)
-        return Result(excess=max_excess, summary=summary, value=max_excess)
+        return Result(excess=max_excess, summary=summary, value=max_excess, unit='kcal/mol')
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -5257,8 +5207,7 @@ def nupack_strand_pair_constraint(
         seq1, seq2 = seqs
         energy = nv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
         excess = max(0.0, threshold - energy)
-        value = f'{energy:6.2f} kcal/mol'
-        return Result(excess=excess, value=value)
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -5426,7 +5375,7 @@ def rna_duplex_domain_pairs_constraint(
             lines = [line for line, _ in lines_and_energies]
             summary = '\n  ' + '\n  '.join(lines)
             max_excess = max(0.0, max_excess)
-            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess, unit='kcal/mol')
             results.append(result)
 
         return results
@@ -5517,7 +5466,7 @@ def rna_plex_domain_pairs_constraint(
             lines = [line for line, _ in lines_and_energies]
             summary = '\n  ' + '\n  '.join(lines)
             max_excess = max(0.0, max_excess)
-            result = Result(excess=max_excess, summary=summary, value=max_excess)
+            result = Result(excess=max_excess, summary=summary, value=max_excess, unit='kcal/mol')
             results.append(result)
 
         return results
@@ -5635,9 +5584,8 @@ def domain_pairs_nonorthogonal_constraint(
             else:
                 excess = 0
 
-            value = f'{energy:6.2f} kcal/mol'
-            summary = f'{value}; target: [{low_threshold}, {high_threshold}]'
-            result = Result(excess=excess, value=value, summary=summary)
+            summary = f'{energy:6.2f} kcal/mol; target: [{low_threshold}, {high_threshold}]'
+            result = Result(excess=excess, value=energy, unit='kcal/mol', summary=summary)
             results.append(result)
 
         return results
@@ -6562,8 +6510,7 @@ def lcs_domain_pairs_constraint(
         results = []
         for lcs_size in lcs_sizes:
             excess = lcs_size - threshold
-            value = f'{lcs_size}'
-            result = Result(excess=excess, value=value)
+            result = Result(excess=excess, value=lcs_size)
             results.append(result)
 
         return results
@@ -6639,8 +6586,7 @@ def lcs_strand_pairs_constraint(
         results = []
         for lcs_size in lcs_sizes:
             excess = lcs_size - threshold
-            value = f'{lcs_size}'
-            result = Result(excess=excess, value=value)
+            result = Result(excess=excess, value=lcs_size)
             results.append(result)
 
         # end_eb = time.time()
@@ -6813,8 +6759,7 @@ def rna_duplex_strand_pairs_constraint(
         results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            value = f'{energy:6.2f} kcal/mol'
-            result = Result(excess=excess, value=value)
+            result = Result(excess=excess, value=energy, unit='kcal/mol')
             results.append(result)
         return results
 
@@ -6900,8 +6845,7 @@ def rna_plex_strand_pairs_constraint(
         results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            value = f'{energy:6.2f} kcal/mol'
-            result = Result(excess=excess, value=value)
+            result = Result(excess=excess, value=energy, unit='kcal/mol')
             results.append(result)
         return results
 
@@ -7002,8 +6946,8 @@ def rna_cofold_strand_pairs_constraint(
         results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            value = f'{energy:6.2f} kcal/mol'
-            results.append(Result(excess=excess, value=value))
+            result = Result(excess=excess, value=energy, unit='kcal/mol')
+            results.append(result)
         return results
 
     pairs_tuple = None

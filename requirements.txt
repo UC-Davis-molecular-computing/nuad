@@ -4,7 +4,6 @@ ordered_set
 pathos
 nupack
 tabulate
-pint
 matplotlib
 openpyxl
 scadnano
