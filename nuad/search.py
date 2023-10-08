@@ -28,8 +28,6 @@ import re
 import datetime
 from functools import lru_cache
 
-import pint
-
 try:
     from typing import Literal
 except ImportError:
