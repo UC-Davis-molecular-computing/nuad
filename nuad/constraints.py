@@ -44,10 +44,6 @@ import nuad.np as nn
 import nuad.modifications as nm
 from nuad.json_noindent_serializer import JSONSerializable, json_encode, NoIndent
 
-from pint import UnitRegistry
-
-ureg = UnitRegistry()
-
 # need typing_extensions package prior to Python 3.8 to get Protocol object
 try:
     from typing import Protocol
@@ -4272,7 +4268,8 @@ class Result(Generic[DesignPart]):
     -2.5 kcal/mol, and a strand has energy -3.4 kcal/mol, then the following are sensible values for
     these fields:
 
-    - ``value`` = ``-3.4``  or  ``"-3.4 kcal/mol"``  or  ``pint.Quantity(Decimal(-3.4), "kcal/mol")``
+    - ``value`` = ``-3.4``
+    - ``unit`` = ``"kcal/mol"``
     - ``excess`` = ``-0.9``
     - ``summary`` = ``"-3.4 kcal/mol"``
     """
