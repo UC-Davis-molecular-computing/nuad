@@ -56,6 +56,7 @@ def main() -> None:
     # num_strands = 3
     # num_strands = 5
     num_strands = 10
+    # num_strands = 30
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
@@ -135,7 +136,10 @@ def main() -> None:
         threshold=-0.0, temperature=52, short_description='DomainSS')
 
     domain_pairs_rna_duplex_constraint = nc.rna_duplex_domain_pairs_constraint(
-        threshold=-2.0, temperature=52, short_description='DomainPairRNA')
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAduplex')
+
+    domain_pairs_rna_plex_constraint = nc.rna_plex_domain_pairs_constraint(
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAplex')
 
     domain_pair_nupack_constraint = nc.nupack_domain_pair_constraint(
         threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
@@ -154,12 +158,13 @@ def main() -> None:
         threshold=3.0, temperature=52, short_description='StrandPairNUPACK', parallel=parallel, weight=0.1)
 
     params = ns.SearchParameters(constraints=[
-        domain_nupack_ss_constraint,
+        # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
         # strand_pairs_rna_duplex_constraint,
         # strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
+        domain_pairs_rna_plex_constraint,
         # domain_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
         # nc.domains_not_substrings_of_each_other_constraint(),
