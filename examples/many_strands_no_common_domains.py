@@ -8,11 +8,6 @@ from typing import List
 import nuad.constraints as nc  # type: ignore
 import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
-from nuad.constraints import NumpyFilter
-
-
-def f(x: int | float) -> float:
-    return x / 2
 
 
 # command-line arguments
@@ -51,13 +46,13 @@ def main() -> None:
     random_seed = 1
 
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
-    # just for testing parallel processing
 
-    num_strands = 3
+    # num_strands = 3
     # num_strands = 5
     # num_strands = 10
+    # num_strands = 10
     # num_strands = 50
-    # num_strands = 100
+    num_strands = 100
     # num_strands = 355
 
     design = nc.Design()
@@ -77,7 +72,7 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    numpy_filters: List[NumpyFilter] = [
+    numpy_filters: List[nc.NumpyFilter] = [
         nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),
         # nc.BaseCountFilter(base='G', high_count=1),
         # nc.BaseEndFilter(bases=('C', 'G')),
@@ -125,17 +120,18 @@ def main() -> None:
             for domain in strand.domains[2:]:
                 domain.pool = domain_pool_11
 
-    # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
-    # so that we know the domain lengths
-    strand_complexes = [nc.Complex(strand) for i, strand in enumerate(design.strands[2:])]
-    strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
-        strand_complexes=strand_complexes)
+    # strand_complexes = [nc.Complex(strand) for i, strand in enumerate(design.strands[2:])]
+    # strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
+    #     strand_complexes=strand_complexes)
 
     domain_nupack_ss_constraint = nc.nupack_domain_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='DomainSS')
 
     domain_pairs_rna_duplex_constraint = nc.rna_duplex_domain_pairs_constraint(
-        threshold=-2.0, temperature=52, short_description='DomainPairRNA')
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAduplex')
+
+    domain_pairs_rna_plex_constraint = nc.rna_plex_domain_pairs_constraint(
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAplex')
 
     domain_pair_nupack_constraint = nc.nupack_domain_pair_constraint(
         threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
@@ -157,9 +153,10 @@ def main() -> None:
         # domain_nupack_ss_constraint,
         # strand_individual_ss_constraint,
         strand_pairs_rna_duplex_constraint,
-        strand_pairs_rna_plex_constraint,
+        # strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
+        # domain_pairs_rna_plex_constraint,
         # domain_pairs_rna_duplex_constraint,
         # strand_base_pair_prob_constraint,
         # nc.domains_not_substrings_of_each_other_constraint(),
@@ -173,7 +170,7 @@ def main() -> None:
         # save_design_for_all_updates=True,
         force_overwrite=True,
         # log_time=True,
-        # scrolling_output=False,
+        scrolling_output=False,
         # report_only_violations=False,
     )
     ns.search_for_sequences(design, params)

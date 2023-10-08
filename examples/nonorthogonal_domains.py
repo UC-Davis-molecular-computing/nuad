@@ -37,18 +37,9 @@ def main() -> None:
     for i in range(num_strands):
         design.add_strand([f'd{i}'])
 
-    some_fixed = False
-    # some_fixed = True
-    if some_fixed:
-        # fix domain of strand 0
-        for domain in design.strands[0].domains:
-            domain.set_fixed_sequence('A' * domain_length)
-
     domain_pool_20 = nc.DomainPool(f'length-20_domains', domain_length)
 
     for i, strand in enumerate(design.strands):
-        if some_fixed and i == 0:
-            continue
         for domain in strand.domains:
             domain.pool = domain_pool_20
 
@@ -72,14 +63,10 @@ def main() -> None:
         thresholds[(d1, d2)] = (energy_low, energy_high)
 
     domain_nupack_pair_nonorth_constraint = nc.nupack_domain_pairs_nonorthogonal_constraint(
-        thresholds=thresholds, temperature=37, short_description='dom pairs nonorth nupack')
-
-    domain_rna_plex_pair_nonorth_constraint = nc.rna_plex_domain_pairs_nonorthogonal_constraint(
-        thresholds=thresholds, temperature=37, short_description='dom pairs nonorth plex')
+        thresholds=thresholds)
 
     params = ns.SearchParameters(constraints=[
         domain_nupack_pair_nonorth_constraint,
-        # domain_rna_plex_pair_nonorth_constraint,
     ],
         out_directory=args.directory,
         restart=args.restart,
