@@ -54,9 +54,8 @@ def main() -> None:
     # just for testing parallel processing
 
     # num_strands = 3
-    # num_strands = 5
-    num_strands = 10
-    # num_strands = 30
+    # num_strands = 10
+    num_strands = 26
     # num_strands = 50
     # num_strands = 100
     # num_strands = 355
@@ -126,11 +125,9 @@ def main() -> None:
             for domain in strand.domains[2:]:
                 domain.pool = domain_pool_11
 
-    # have to set nupack_complex_secondary_structure_constraint after DomainPools are set,
-    # so that we know the domain lengths
-    strand_complexes = [nc.Complex(strand) for i, strand in enumerate(design.strands[2:])]
-    strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
-        strand_complexes=strand_complexes)
+    # strand_complexes = [nc.Complex(strand) for i, strand in enumerate(design.strands[2:])]
+    # strand_base_pair_prob_constraint = nc.nupack_complex_base_pair_probability_constraint(
+    #     strand_complexes=strand_complexes)
 
     domain_nupack_ss_constraint = nc.nupack_domain_free_energy_constraint(
         threshold=-0.0, temperature=52, short_description='DomainSS')

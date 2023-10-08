@@ -21,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Tuple, List, Iterable, Callable
+from typing import Sequence, Tuple, List, Iterable
 
 import numpy as np
 
@@ -475,6 +475,10 @@ def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
                              'is a different error that I don\'t know how to handle. Exiting...'
                              f'\nerror:\n{error}')
 
+    with open('output/rna_plex_multiple_input.txt', 'w') as f:
+        f.write(user_input)
+    with open('output/rna_plex_multiple_output.txt', 'w') as f:
+        f.write(output)
     lines = [line for line in output.split('\n') if line.strip() != '']
     if len(lines) != len(pairs):
         raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
