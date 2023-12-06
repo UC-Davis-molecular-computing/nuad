@@ -1633,7 +1633,7 @@ class Domain(Part, JSONSerializable):
     @property
     def name(self) -> str:
         """
-        :return: :any:`DomainPool` of this :any:`Domain`
+        :return: name of this :any:`Domain`
         """
         return self._name
 
