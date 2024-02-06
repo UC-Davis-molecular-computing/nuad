@@ -23,7 +23,8 @@ def main() -> None:
         out_directory=args.directory,
         restart=args.restart,
         random_seed=args.seed,
-        log_time=True,
+        save_report_for_all_updates=True,
+        # log_time=True,
     )
 
     ns.search_for_sequences(design, params)

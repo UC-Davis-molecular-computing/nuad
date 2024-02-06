@@ -963,7 +963,7 @@ class DomainPool(JSONSerializable):
 
     replace_with_close_sequences: bool = True
     """
-    If True, instead of picking a sequence uniformly at random from all those satisfying the constraints
+    If True, instead of picking a sequence uniformly at random from all those satisfying the filters
     when returning a sequence from :meth:`DomainPool.generate_sequence`,
     one is picked "close" in Hamming distance to the previous sequence of the :any:`Domain`.
     The field :data:`DomainPool.hamming_probability` is used to pick a distance at random, after which
