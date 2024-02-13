@@ -2651,7 +2651,7 @@ class Strand(Part, JSONSerializable):
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
         return all(domain.fixed for domain in self.domains)
 
-    def unfixed_domains(self) -> Tuple[Domain]:
+    def unfixed_domains(self) -> Tuple[Domain, ...]:
         """
         :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.fixed` is False
         """
@@ -4851,7 +4851,7 @@ def nupack_domain_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: Tuple[str], _: Domain | None) -> Result:
+    def evaluate(seqs: Tuple[str, ...], _: Domain | None) -> Result:
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
@@ -4919,7 +4919,7 @@ def nupack_strand_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: Tuple[str], _: Strand | None) -> Result:
+    def evaluate(seqs: Tuple[str, ...], _: Strand | None) -> Result:
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
@@ -5485,7 +5485,7 @@ def rna_plex_domain_pairs_constraint(
 
 def get_domain_pairs_from_thresholds_dict(
         thresholds: Dict[Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]]
-) -> Tuple[DomainPair]:
+) -> Tuple[DomainPair, ...]:
     # gather pairs of domains referenced in `thresholds`
     domain_pairs = []
     for key, _ in thresholds.items():
@@ -5701,6 +5701,9 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
     :param parameters_filename:
         name of parameters file for ViennaRNA; default is
         same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+    :param max_energy:
+        maximum energy to return; if the RNAplex returns a value larger than this, then
+        this value is used instead
     :return:
         constraint
     """
@@ -5889,7 +5892,7 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
                  weight: float = 1.0,
                  score_transfer_function: Callable[[float], float] = default_score_transfer_function,
                  description: str | None = None,
-                 short_description: str,
+                 short_description: str = '',
                  parallel: bool = False,
                  pairs: Iterable[Tuple[Strand, Strand]] | None = None,
                  ) -> SPC: ...
@@ -5955,7 +5958,7 @@ but instead the thresholds.keys() is {sorted(list(thres_keys))}''')
 def _normalize_domains_pairs_disjoint_parameters(
         domains: Iterable[Domain] | None,
         pairs: Iterable[Tuple[Domain, Domain]],
-        check_domain_against_itself: bool) -> Iterable[Tuple[Domain, Domain]]:
+        check_domain_against_itself: bool) -> Tuple[Tuple[Domain, Domain], ...]:
     # Enforce that exactly one of domains or pairs is not None, and if domains is specified,
     # set pairs to be all pairs from domains. Return those pairs; if pairs is specified,
     # just return it. Also normalize to return a tuple.
@@ -6639,22 +6642,21 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
             *,
             threshold: float,
             temperature: float = nv.default_temperature,
-            weight_: float = 1.0,
-            score_transfer_function_: Callable[[float], float] = default_score_transfer_function,
+            weight: float = 1.0,
+            score_transfer_function: Callable[[float], float] = default_score_transfer_function,
             description: str | None = None,
             short_description: str = 'lcs strand pairs',
-            parallel_: bool = False,
-            pairs_: Iterable[Tuple[Strand, Strand]] | None = None,
-            parameters_filename_: str = nv.default_vienna_rna_parameter_filename
+            parallel: bool = False,
+            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
     ) -> StrandPairsConstraint:
         threshold_int = int(threshold)
         return lcs_strand_pairs_constraint(
             threshold=threshold_int,
-            weight=weight_,
-            score_transfer_function=score_transfer_function_,
+            weight=weight,
+            score_transfer_function=score_transfer_function,
             description=description,
             short_description=short_description,
-            pairs=pairs_,
+            pairs=pairs,
             check_strand_against_itself=True,
             # TODO: rewrite signature of other strand pair constraints to include this
             gc_double=gc_double,
