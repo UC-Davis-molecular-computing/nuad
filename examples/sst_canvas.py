@@ -16,17 +16,19 @@ def main() -> None:
     args: CLArgs = parse_command_line_arguments()
 
     design = create_design(width=args.width, height=args.height)
-    thresholds = Thresholds()
-    constraints = create_constraints(design, thresholds)
+
+    constraints = create_constraints(design)
+
     params = ns.SearchParameters(
         constraints=constraints,
         out_directory=args.directory,
         restart=args.restart,
         random_seed=args.seed,
+        scrolling_output=False,
         save_report_for_all_updates=True,
+        force_overwrite=args.force_overwrite,
         # log_time=True,
     )
-
     ns.search_for_sequences(design, params)
 
 
@@ -47,6 +49,9 @@ class CLArgs:
 
     seed: Optional[int] = None
     """seed for random number generator; set to fixed integer for reproducibility"""
+
+    force_overwrite: bool = False
+    """whether to overwrite output files without prompting the user"""
 
 
 def parse_command_line_arguments() -> CLArgs:
@@ -75,13 +80,19 @@ def parse_command_line_arguments() -> CLArgs:
                              'numbering from there (i.e., the next files to be written upon improving the '
                              'design will have index 85).')
 
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='If true, then overwrites the output files without prompting the user.')
+
     args = parser.parse_args()
 
-    return CLArgs(directory=args.output_dir,
-                  width=args.width,
-                  height=args.height,
-                  seed=args.seed,
-                  restart=args.restart)
+    return CLArgs(
+        directory=args.output_dir,
+        width=args.width,
+        height=args.height,
+        seed=args.seed,
+        restart=args.restart,
+        force_overwrite=args.force,
+    )
 
 
 def create_design(width: int, height: int) -> nc.Design:
@@ -206,54 +217,20 @@ class Thresholds:
     """RNAduplex complex free energy threshold for pairs tiles with 1 complementary domain."""
 
 
-def create_constraints(design: nc.Design, thresholds: Thresholds) -> List[nc.Constraint]:
+def create_constraints(design: nc.Design) -> List[nc.Constraint]:
+    thresholds = Thresholds()
+
     strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
         threshold=thresholds.tile_ss, temperature=thresholds.temperature, short_description='StrandSS')
 
-    # This reduces the number of times we have to create these sets from quadratic to linear
-    unstarred_domains_sets = {}
-    starred_domains_sets = {}
-    for strand in design.strands:
-        unstarred_domains_sets[strand.name] = strand.unstarred_domains_set()
-        starred_domains_sets[strand.name] = strand.starred_domains_set()
+    strand_pairs_rna_duplex_constraint_0comp, strand_pairs_rna_duplex_constraint_1comp = \
+        nc.rna_duplex_strand_pairs_constraints_by_number_matching_domains(
+            thresholds={0: thresholds.tile_pair_0comp, 1: thresholds.tile_pair_1comp},
+            temperature=thresholds.temperature,
+            short_descriptions={0: 'StrandPairRNA0Comp', 1: 'StrandPairRNA1Comp'},
+            strands=design.strands,
+        )
 
-    # determine which pairs of strands have 0 complementary domains and which have 1
-    # so we can set different RNAduplex energy constraints for each of them
-    strand_pairs_0_comp = []
-    strand_pairs_1_comp = []
-    for strand1, strand2 in itertools.combinations_with_replacement(design.strands, 2):
-        domains1_unstarred = unstarred_domains_sets[strand1.name]
-        domains2_unstarred = unstarred_domains_sets[strand2.name]
-        domains1_starred = starred_domains_sets[strand1.name]
-        domains2_starred = starred_domains_sets[strand2.name]
-
-        complementary_domains = (domains1_unstarred & domains2_starred) | \
-                                (domains2_unstarred & domains1_starred)
-        complementary_domain_names = [domain.name for domain in complementary_domains]
-        num_complementary_domains = len(complementary_domain_names)
-
-        if num_complementary_domains == 0:
-            strand_pairs_0_comp.append((strand1, strand2))
-        elif num_complementary_domains == 1:
-            strand_pairs_1_comp.append((strand1, strand2))
-        else:
-            raise AssertionError('each pair of strands should have exactly 0 or 1 complementary domains')
-
-    strand_pairs_rna_duplex_constraint_0comp = nc.rna_duplex_strand_pairs_constraint(
-        threshold=thresholds.tile_pair_0comp, temperature=thresholds.temperature,
-        short_description='StrandPairRNA0Comp', pairs=strand_pairs_0_comp)
-    strand_pairs_rna_duplex_constraint_1comp = nc.rna_duplex_strand_pairs_constraint(
-        threshold=thresholds.tile_pair_1comp, temperature=thresholds.temperature,
-        short_description='StrandPairRNA1Comp', pairs=strand_pairs_1_comp)
-
-    # We already forbid GGGG in any domain, but let's also ensure we don't get GGGG in any strand
-    # i.e., forbid GGGG that comes from concatenating domains, e.g.,
-    #
-    #               *  ***
-    #      ACGATCGATG  GGGATGCATGA
-    #     +==========--===========>
-    #     |
-    #     +==========--===========]
     no_gggg_constraint = create_tile_no_gggg_constraint(weight=100)
 
     return [
@@ -268,6 +245,15 @@ def create_tile_no_gggg_constraint(weight: float) -> nc.StrandConstraint:
     # This shows how one might make a custom constraint, in case those in dsd.constraints are not
     # sufficient. See also source code of provided constraints in dsd/constraints.py for more examples,
     # particularly for examples that call NUPACK or ViennaRNA.
+
+    # We already forbid GGGG in any domain, but let's also ensure we don't get GGGG in any strand
+    # i.e., forbid GGGG that comes from concatenating domains, e.g.,
+    #
+    #               *  ***
+    #      ACGATCGATG  GGGATGCATGA
+    #     +==========--===========>
+    #     |
+    #     +==========--===========]
 
     def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:  # noqa
         sequence = seqs[0]
