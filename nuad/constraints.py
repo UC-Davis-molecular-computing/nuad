@@ -5124,7 +5124,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (_pair_default_description('strand', 'NUPACK', threshold, temperature) +
-                           f'\nfor strands with {num_matching} complementary '
+                           f' for strands with {num_matching} complementary '
                            f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
@@ -6023,7 +6023,7 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (_pair_default_description('strand', 'RNAcofold', threshold, temperature) +
-                           f'\nfor strands with {num_matching} complementary '
+                           f' for strands with {num_matching} complementary '
                            f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
@@ -6103,7 +6103,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (_pair_default_description('strand', 'RNAduplex', threshold, temperature) +
-                           f'\nfor strands with {num_matching} complementary '
+                           f' for strands with {num_matching} complementary '
                            f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
@@ -6190,7 +6190,7 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (_pair_default_description('strand', 'RNAplex', threshold, temperature) +
-                           f'\nfor strands with {num_matching} complementary '
+                           f' for strands with {num_matching} complementary '
                            f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
@@ -6665,7 +6665,7 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (f'Longest complementary subsequence between strands is > {threshold}' +
-                           f'\nfor strands with {num_matching} complementary '
+                           f' for strands with {num_matching} complementary '
                            f'{"domain" if num_matching == 1 else "domains"}')
             for num_matching, threshold in thresholds.items()
         }
