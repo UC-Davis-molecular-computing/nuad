@@ -734,7 +734,7 @@ class SearchParameters:
     save_design_for_all_updates: bool = False
     """
     A serialized (JSON) description of the most recently updated :any:`Design` is always written to 
-    a file `current-best-design.json`. If this is True, then in the folder `dsd_designs`, a file unique to 
+    a file `current-best-design.json`. If this is True, then in the folder `designs`, a file unique to 
     that update is also written. Set to False to use less space on disk. 
     """
 
