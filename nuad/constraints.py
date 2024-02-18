@@ -5508,9 +5508,11 @@ def get_domain_pairs_from_thresholds_dict(
     return domain_pairs
 
 
+S = TypeVar('S', str, bytes, bytearray)
+
 PairsEvaluationFunction = Callable[
-    [Sequence[Tuple[str, str]], logging.Logger, float, str, float],
-    Tuple[float]
+    [Sequence[Tuple[S, S]], logging.Logger, float, str, float],
+    Tuple[float, ...]
 ]
 
 

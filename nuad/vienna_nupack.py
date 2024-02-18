@@ -21,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Sequence, Tuple, List, Iterable
+from typing import Sequence, Tuple, List, Iterable, TypeVar
 
 import numpy as np
 
@@ -67,8 +67,11 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     return adjust * (num_seqs - 1)
 
 
+S = TypeVar('S', str, bytes, bytearray)
+
+
 def pfunc(
-        seqs: str | Tuple[str, ...],
+        seqs: S | Tuple[S, ...],
         temperature: float = default_temperature,
         sodium: float = default_sodium,
         magnesium: float = default_magnesium,
@@ -110,7 +113,7 @@ def pfunc(
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
-    seqs = tupleize(seqs)
+    seqs: Tuple[S, ...] = tupleize(seqs)
 
     try:
         from nupack import pfunc as nupack_pfunc  # type: ignore
@@ -135,8 +138,9 @@ def pfunc(
     return dg
 
 
-def tupleize(seqs: str | Iterable[str]) -> Tuple[str, ...]:
-    return (seqs,) if isinstance(seqs, str) else tuple(seqs)
+def tupleize(seqs: S | Iterable[S]) -> Tuple[S, ...]:
+    return (seqs,) if isinstance(seqs, str) or isinstance(seqs, bytes) or isinstance(seqs, bytearray) \
+        else tuple(seqs)
 
 
 try:
@@ -145,12 +149,12 @@ try:
 
     def pfunc_parallel(
             pool: ProcessPool,
-            all_seqs: Sequence[str | Tuple[str, ...]],
+            all_seqs: Sequence[S | Tuple[S, ...]],
             temperature: float = default_temperature,
             sodium: float = default_sodium,
             magnesium: float = default_magnesium,
             strand_association_penalty: bool = True,
-    ) -> Tuple[float]:
+    ) -> Tuple[float, ...]:
         num_seqs = len(all_seqs)
         if num_seqs == 0:
             return tuple()
@@ -174,7 +178,7 @@ try:
                            or (num_seqs <= 1)
                            )
 
-        def calculate_energies_sequential(all_tuples: Sequence[Tuple[str, ...]]) -> Tuple[float]:
+        def calculate_energies_sequential(all_tuples: Sequence[Tuple[S, ...]]) -> Tuple[float, ...]:
             return tuple(pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty)
                          for seqs in all_tuples)
 
@@ -221,8 +225,8 @@ def nupack_complex_base_pair_probabilities(strand_complex: 'nc.Complex',  # circ
         from nupack import Strand as NupackStrand
         from nupack import SetSpec as NupackSetSpec
         from nupack import complex_analysis as nupack_complex_analysis
-        from nupack import PairsMatrix as NupackPairsMatrix
-        from nupack import Model  # type: ignore
+        from nupack import PairMatrix as NupackPairMatrix
+        from nupack import Model
     except ModuleNotFoundError:
         raise ImportError(
             'NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. '
@@ -242,7 +246,7 @@ def nupack_complex_base_pair_probabilities(strand_complex: 'nc.Complex',  # circ
         nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,)))
     nupack_complex_analysis_result = nupack_complex_analysis(
         nupack_complex_set, compute=['pairs'], model=model)
-    pairs: NupackPairsMatrix = nupack_complex_analysis_result[nupack_complex].pairs
+    pairs: NupackPairMatrix = nupack_complex_analysis_result[nupack_complex].pairs
     nupack_complex_result: np.ndarray = pairs.to_array()
     return nupack_complex_result
 
@@ -281,12 +285,12 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     return output_decoded, stderr_decoded
 
 
-def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
+def rna_duplex_multiple(pairs: Sequence[Tuple[S, S]],
                         logger: logging.Logger = logging.root,
                         temperature: float = default_temperature,
                         parameters_filename: str = default_vienna_rna_parameter_filename,
                         max_energy: float = 0.0,
-                        ) -> Tuple[float]:
+                        ) -> Tuple[float, ...]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
@@ -360,12 +364,12 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[str, str]],
 
 def rna_duplex_multiple_parallel(
         thread_pool: ThreadPool,
-        pairs: Sequence[Tuple[str, str]],
+        pairs: Sequence[Tuple[S, S]],
         logger: logging.Logger = logging.root,
         temperature: float = default_temperature,
         parameters_filename: str = default_vienna_rna_parameter_filename,
         max_energy: float = 0.0,
-) -> Tuple[float]:
+) -> Tuple[float, ...]:
     """
     Parallel version of :meth:`rna_duplex_multiple`. TODO document this
     """
@@ -389,7 +393,7 @@ def rna_duplex_multiple_parallel(
                        or (num_pairs < num_cores)
                        )
 
-    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         return rna_duplex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
                                    parameters_filename=parameters_filename, max_energy=max_energy)
 
@@ -402,12 +406,12 @@ def rna_duplex_multiple_parallel(
     return tuple(energies)
 
 
-def rna_plex_multiple(pairs: Sequence[Tuple[str, str]],
+def rna_plex_multiple(pairs: Sequence[Tuple[S, S]],
                       logger: logging.Logger = logging.root,
                       temperature: float = default_temperature,
                       parameters_filename: str = default_vienna_rna_parameter_filename,
                       max_energy: float = 0.0,
-                      ) -> Tuple[float]:
+                      ) -> Tuple[float, ...]:
     """
     Calls RNAplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
@@ -513,12 +517,12 @@ def nupack_multiple_with_sodium_magnesium(
     """
 
     def nupack_multiple(
-            pairs: Sequence[Tuple[str, str]],
+            pairs: Sequence[Tuple[S, S]],
             logger: logging.Logger = logging.root,
             temperature: float = default_temperature,
             parameters_filename: str = default_vienna_rna_parameter_filename,
             max_energy: float = 0.0,
-    ) -> Tuple[float]:
+    ) -> Tuple[float, ...]:
         # :param pairs:
         #     sequence (list or tuple) of pairs of DNA sequences
         # :param logger:
@@ -548,12 +552,12 @@ def nupack_multiple_with_sodium_magnesium(
 
 def rna_plex_multiple_parallel(
         thread_pool: ThreadPool,
-        pairs: Sequence[Tuple[str, str]],
+        pairs: Sequence[Tuple[S, S]],
         logger: logging.Logger = logging.root,
         temperature: float = default_temperature,
         parameters_filename: str = default_vienna_rna_parameter_filename,
         max_energy: float = 0.0,
-) -> Tuple[float]:
+) -> Tuple[float, ...]:
     """
     Parallel version of :meth:`rna_plex_multiple`. TODO document this
     """
@@ -577,7 +581,7 @@ def rna_plex_multiple_parallel(
                        or (num_pairs < num_cores)
                        )
 
-    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         return rna_plex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
                                  parameters_filename=parameters_filename, max_energy=max_energy)
 
@@ -602,12 +606,12 @@ def _fix_filename_windows(parameters_filename: str) -> str:
 
 
 def rna_cofold_multiple(
-        seq_pairs: Sequence[Tuple[str, str]],
+        seq_pairs: Sequence[Tuple[S, S]],
         logger: logging.Logger = logging.root,
         temperature: float = default_temperature,
         parameters_filename: str = default_vienna_rna_parameter_filename,
         max_energy: float = 0.0,
-) -> Tuple[float]:
+) -> Tuple[float, ...]:
     """
     Calls RNAcofold (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
