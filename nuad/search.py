@@ -1063,7 +1063,7 @@ def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
-    domains_changed_list = rng.choice(a=domains, p=probs_opt, replace=False,
+    domains_changed_list = rng.choice(a=domains, p=probs_opt, replace=False,  # type: ignore
                                       size=num_domains_to_change)  # type: ignore
     domains_changed: Tuple[Domain, ...] = tuple(domains_changed_list)
 
