@@ -89,7 +89,7 @@ def default_output_directory() -> str:
 # combinations of inputs so it's worth it to maintain a cache.
 @lru_cache()
 def find_parts_to_check(constraint: nc.Constraint[DesignPart], design: nc.Design,
-                        domains_changed: None | Tuple[Domain]) -> Tuple[DesignPart, ...]:
+                        domains_changed: None | Tuple[Domain, ...]) -> Tuple[DesignPart, ...]:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -1054,17 +1054,18 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 
 
 def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
-                      rng: np.random.Generator) -> Tuple[Tuple[Domain], Dict[Domain, str]]:
+                      rng: np.random.Generator) -> Tuple[Tuple[Domain, ...], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
-    domains = list(eval_set.domain_to_score.keys())
+    domains: List[Domain] = list(eval_set.domain_to_score.keys())
     scores_weighted = [score * domain.weight for domain, score in eval_set.domain_to_score.items()]
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 \
         else rng.choice(a=range(1, max_domains_to_change + 1))
-    domains_changed: Tuple[Domain] = tuple(rng.choice(a=domains, p=probs_opt, replace=False,
-                                                      size=num_domains_to_change))
+    domains_changed_list = rng.choice(a=domains, p=probs_opt, replace=False,
+                                      size=num_domains_to_change)  # type: ignore
+    domains_changed: Tuple[Domain, ...] = tuple(domains_changed_list)
 
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
@@ -1612,7 +1613,7 @@ class EvaluationSet:
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Tuple[Domain]) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...]) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1650,7 +1651,7 @@ class EvaluationSet:
                 total_gap += eval_old.score - eval_new.score
         return total_gap
 
-    def calculate_initial_score_gap(self, design: Design, domains_new: Tuple[Domain]) -> float:
+    def calculate_initial_score_gap(self, design: Design, domains_new: Tuple[Domain, ...]) -> float:
         # before evaluations_new is populated, we need to calculate the total score of evaluations
         # on parts affected by domains_new, which is the score gap assuming all new evaluations come up 0
         score_gap = 0.0
@@ -1667,7 +1668,7 @@ class EvaluationSet:
                                               score_gap: float) \
             -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
         if len(parts) == 0:
-            return tuple()
+            return [], 0.0
 
         num_cpus = nc.cpu_count()
 
@@ -1696,7 +1697,7 @@ class EvaluationSet:
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
                             score_gap: float | None,
-                            domains_new: Tuple[Domain] | None,
+                            domains_new: Tuple[Domain, ...] | None,
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
@@ -2217,7 +2218,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
                                                    include_only_with_values=False)
 
     # divide into constraints with values (put in histogram) and without (print summary of violations)
-    reports_with_values: List[Tuple[ConstraintReport, List[float], List[tuple]]] = []
+    reports_with_values: List[Tuple[ConstraintReport, List[float], List[str]]] = []
     reports_without_values: List[ConstraintReport] = []
     for i, report in enumerate(constraints_report.reports):
         values = [ev.result.value for ev in report.evaluations if ev.result.value is not None]
