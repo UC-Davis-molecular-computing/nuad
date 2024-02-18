@@ -257,7 +257,7 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}.''')
 
     base_bits = np.array([base2bits[base] for base in bases], dtype=np.ubyte)
     num_seqs_to_sample = 2 * num_random_seqs  # c*k in analysis above
-    unique_sorted_arr = None
+    unique_sorted_arr: np.ndarray | None = None
 
     # odds are low to have a collision, so for simplicity we just repeat the whole process if needed
     while unique_sorted_arr is None or len(unique_sorted_arr) < num_random_seqs:
@@ -468,7 +468,7 @@ def longest_common_substring(a1: np.ndarray, a2: np.ndarray, vectorized: bool = 
     substring (subarray) of 1D arrays a1 and a2."""
     assert len(a1.shape) == 1
     assert len(a2.shape) == 1
-    counter = np.zeros(shape=(len(a1) + 1, len(a2) + 1), dtype=np.int)
+    counter = np.zeros(shape=(len(a1) + 1, len(a2) + 1), dtype=np.int8)
     a1idx_longest = a2idx_longest = -1
     len_longest = 0
 
@@ -492,6 +492,7 @@ def longest_common_substring(a1: np.ndarray, a2: np.ndarray, vectorized: bool = 
                         len_longest = c
                         a1idx_longest = i1 + 1 - c
                         a2idx_longest = i2 + 1 - c
+
     return a1idx_longest, a2idx_longest, len_longest
 
 
@@ -508,7 +509,7 @@ def longest_common_substrings_singlea1(a1: np.ndarray, a2s: np.ndarray) \
     numa2s = a2s.shape[0]
     len_a1 = len(a1)
     len_a2 = a2s.shape[1]
-    counter = np.zeros(shape=(len_a1 + 1, numa2s, len_a2 + 1), dtype=np.int)
+    counter = np.zeros(shape=(len_a1 + 1, numa2s, len_a2 + 1), dtype=np.int8)
 
     for i1 in range(len(a1)):
         idx = (a2s == a1[i1])
@@ -566,7 +567,7 @@ def _longest_common_substrings_pairs(a1s: np.ndarray, a2s: np.ndarray) \
     len_a1 = a1s.shape[1]
     len_a2 = a2s.shape[1]
 
-    counter = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.int)
+    counter = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.int8)
 
     for i1 in range(len_a1):
         a1s_cp_col = a1s[:, i1].reshape(numpairs, 1)
@@ -607,8 +608,8 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
     numpairs = a1s.shape[0]
     len_a1 = a1s.shape[1]
     len_a2 = a2s.shape[1]
-    counter = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.int)
-    energies = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.float)
+    counter = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.int8)
+    energies = np.zeros(shape=(len_a1 + 1, numpairs, len_a2 + 1), dtype=np.float32)
 
     #     if not loop_energies:
     loop_energies = calculate_loop_energies(temperature)
