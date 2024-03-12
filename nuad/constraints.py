@@ -6748,7 +6748,7 @@ def rna_duplex_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_cores)
 
-    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         if parallel:
             energies = nv.rna_duplex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
                                                        parameters_filename)
@@ -6834,7 +6834,7 @@ def rna_plex_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_cores)
 
-    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         if parallel:
             energies = nv.rna_plex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
                                                      parameters_filename)
@@ -6931,7 +6931,7 @@ def rna_cofold_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies_unparallel(sequence_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         return nv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
