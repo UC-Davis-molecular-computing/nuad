@@ -1300,7 +1300,7 @@ def energy_hist(length: int | Iterable[int], temperature: float = 37,
     :param combine_lengths:
         If True, then `length` should be an iterable, and the histogram will combine all lengths
         into one. If False (the default), then different lengths are plotted in different colors
-        in the historgram.
+        in the histogram.
     :param show:
         If False, then the histogram plotted, but matplotlib.pyplot.show() is not called.
         This allows one to tweak aspects of the histogram after it is plotted.
