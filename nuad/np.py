@@ -1282,7 +1282,7 @@ def wc_arr(seqarr: np.ndarray) -> np.ndarray:
 
 
 def energy_hist(length: int | Iterable[int], temperature: float = 37,
-                combine_lengths: bool = False, show: bool = False,
+                combine_lengths: bool = False, 
                 num_random_sequences: int = 100_000,
                 figsize: Tuple[int, int] = (15, 6), **kwargs) -> None:
     """
@@ -1302,13 +1302,6 @@ def energy_hist(length: int | Iterable[int], temperature: float = 37,
         If True, then `length` should be an iterable, and the histogram will combine all calculated energies
         from all lengths into one histogram to plot. If False (the default), then different lengths are
         plotted in different colors in the histogram.
-    :param show:
-        If False, then the histogram plotted, but matplotlib.pyplot.show() is not called.
-        This allows one to tweak aspects of the histogram after it is plotted calling functions in
-        matplotlib.pyplot.
-        If True, then the histogram is displayed using matplotlib.pyplot.show().
-        This is convenient for making several histogram plots in a single notebook cell.
-        (Otherwise the several calls to matplotlib.pyplot.hist will overwrite each other.)
     :param num_random_sequences:
         If the length is too large to enumerate all DNA sequences of that length,
         then this many random sequences are used to estimate the histogram.
@@ -1367,6 +1360,3 @@ def energy_hist(length: int | Iterable[int], temperature: float = 37,
     plt.legend(loc='upper right')
     title = kwargs.pop('title', f'Nearest-neighbor energies of DNA sequences at {temperature} C')
     plt.title(title)
-
-    if show:
-        plt.show()
