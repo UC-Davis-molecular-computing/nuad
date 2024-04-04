@@ -1298,14 +1298,16 @@ def energy_hist(length: int | Iterable[int], temperature: float = 37,
     :param temperature:
         temperature in Celsius
     :param combine_lengths:
-        If True, then `length` should be an iterable, and the histogram will combine all lengths
-        into one. If False (the default), then different lengths are plotted in different colors
-        in the histogram.
+        If True, then `length` should be an iterable, and the histogram will combine all calculated energies
+        from all lengths into one histogram to plot. If False (the default), then different lengths are
+        plotted in different colors in the histogram.
     :param show:
         If False, then the histogram plotted, but matplotlib.pyplot.show() is not called.
-        This allows one to tweak aspects of the histogram after it is plotted.
+        This allows one to tweak aspects of the histogram after it is plotted calling functions in
+        matplotlib.pyplot.
         If True, then the histogram is displayed using matplotlib.pyplot.show().
-        This is convenient for making several histograms plots in a single notebook cell.
+        This is convenient for making several histogram plots in a single notebook cell.
+        (Otherwise the several calls to matplotlib.pyplot.hist will overwrite each other.)
     :param num_random_sequences:
         If the length is too large to enumerate all DNA sequences of that length,
         then this many random sequences are used to estimate the histogram.
