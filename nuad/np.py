@@ -1290,6 +1290,9 @@ def energy_hist(length: int | Iterable[int], temperature: float = 37,
     or a randomly selected subset if length(s) is too large to enumerate all DNA sequences
     of that length.
 
+    This is useful, for example, to choose low and high energy values to pass to 
+    :any:`NearestNeighborEnergyFilter`.
+
     :param length:
         length of DNA sequences to consider, or an iterable (e.g., list) of lengths
     :param temperature:
