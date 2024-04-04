@@ -1280,10 +1280,11 @@ def wc_arr(seqarr: np.ndarray) -> np.ndarray:
     """Return numpy array of reverse complements of sequences in `seqarr`."""
     return (3 - seqarr)[:, ::-1]
 
+
 def energy_hist(length: int | Iterable[int], temperature: float = 37,
                 combine_lengths: bool = False, show: bool = False,
                 num_random_sequences: int = 100_000,
-                figsize: Tuple[int,int] = (15,6), **kwargs) -> None:
+                figsize: Tuple[int, int] = (15, 6), **kwargs) -> None:
     """
     Make a matplotlib histogram of the nearest-neighbor energies (as defined by
     :meth:`DNASeqList.energies`) of all DNA sequences of the given length(s),
