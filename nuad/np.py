@@ -522,7 +522,7 @@ def longest_common_substrings_singlea1(a1: np.ndarray, a2s: np.ndarray) \
     idx_longest_raveled = np.argmax(counter_flat, axis=1)
     len_longest = counter_flat[np.arange(counter_flat.shape[0]), idx_longest_raveled]
 
-    idx_longest = np.unravel_index(idx_longest_raveled, dims=(len_a1 + 1, len_a2 + 1))
+    idx_longest = np.unravel_index(idx_longest_raveled, shape=(len_a1 + 1, len_a2 + 1))
     a1idx_longest = idx_longest[0] - len_longest
     a2idx_longest = idx_longest[1] - len_longest
 
@@ -583,7 +583,7 @@ def _longest_common_substrings_pairs(a1s: np.ndarray, a2s: np.ndarray) \
     idx_longest_raveled = np.argmax(counter_flat, axis=1)
     len_longest = counter_flat[np.arange(counter_flat.shape[0]), idx_longest_raveled]
 
-    idx_longest = np.unravel_index(idx_longest_raveled, dims=(len_a1 + 1, len_a2 + 1))
+    idx_longest = np.unravel_index(idx_longest_raveled, shape=(len_a1 + 1, len_a2 + 1))
     a1idx_longest = idx_longest[0] - len_longest
     a2idx_longest = idx_longest[1] - len_longest
 
@@ -669,7 +669,7 @@ def _strongest_common_substrings_all_pairs(a1s: np.ndarray, a2s: np.ndarray, tem
     len_strongest = counter_flat[np.arange(counter_flat.shape[0]), idx_strongest_raveled]
     energy_strongest = energies_flat[np.arange(counter_flat.shape[0]), idx_strongest_raveled]
 
-    idx_strongest = np.unravel_index(idx_strongest_raveled, dims=(len_a1 + 1, len_a2 + 1))
+    idx_strongest = np.unravel_index(idx_strongest_raveled, shape=(len_a1 + 1, len_a2 + 1))
     a1idx_strongest = idx_strongest[0] - len_strongest
     a2idx_strongest = idx_strongest[1] - len_strongest
 
@@ -901,10 +901,6 @@ class DNASeqList:
             f.write(str(self.numseqs) + ' ' + str(self.seqlen) + '\n')
             for i in range(self.numseqs):
                 f.write(self.get_seq_str(i) + '\n')
-
-    def wcenergy(self, idx: int, temperature: float) -> float:
-        """Return energy of idx'th sequence binding to its complement."""
-        return wcenergy(self.seqarr[idx], temperature)
 
     def __repr__(self) -> str:
         return 'DNASeqSet(seqs={})'.format(str([self[i] for i in range(self.numseqs)]))
@@ -1283,3 +1279,88 @@ def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool =
 def wc_arr(seqarr: np.ndarray) -> np.ndarray:
     """Return numpy array of reverse complements of sequences in `seqarr`."""
     return (3 - seqarr)[:, ::-1]
+
+def energy_hist(length: int | Iterable[int], temperature: float = 37,
+                combine_lengths: bool = False, show: bool = False,
+                num_random_sequences: int = 100_000,
+                figsize: Tuple[int,int] = (15,6), **kwargs) -> None:
+    """
+    Make a matplotlib histogram of the nearest-neighbor energies (as defined by
+    :meth:`DNASeqList.energies`) of all DNA sequences of the given length(s),
+    or a randomly selected subset if length(s) is too large to enumerate all DNA sequences
+    of that length.
+
+    :param length:
+        length of DNA sequences to consider, or an iterable (e.g., list) of lengths
+    :param temperature:
+        temperature in Celsius
+    :param combine_lengths:
+        If True, then `length` should be an iterable, and the histogram will combine all lengths
+        into one. If False (the default), then different lengths are plotted in different colors
+        in the historgram.
+    :param show:
+        If False, then the histogram plotted, but matplotlib.pyplot.show() is not called.
+        This allows one to tweak aspects of the histogram after it is plotted.
+        If True, then the histogram is displayed using matplotlib.pyplot.show().
+        This is convenient for making several histograms plots in a single notebook cell.
+    :param num_random_sequences:
+        If the length is too large to enumerate all DNA sequences of that length,
+        then this many random sequences are used to estimate the histogram.
+    :param figsize:
+        Size of the figure in inches.
+    :param kwargs:
+        Any keyword arguments given are passed along as keyword arguments to matplotlib.pyplot.hist:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.hist.html
+    """
+    import matplotlib.pyplot as plt
+
+    if combine_lengths and isinstance(length, int):
+        raise ValueError(f'length must be an iterable if combine_lengths is False, '
+                         f'but it is the int {length}')
+
+    plt.figure(figsize=figsize)
+    plt.xlabel(f'Nearest-neighbor energy (kcal/mol)')
+
+    lengths = [length] if isinstance(length, int) else length
+
+    alpha = 1
+    if len(lengths) > 1:
+        alpha = 0.5
+        if 'label' in kwargs:
+            raise ValueError(f'label (={kwargs["label"]}) '
+                             f'should not be specified if multiple lengths are given')
+
+    bins = kwargs.pop('bins', 20)
+
+    all_energies = []
+    for length in lengths:
+        if length < 9:
+            seqs = DNASeqList(length=length)
+        else:
+            seqs = DNASeqList(length=length, num_random_seqs=num_random_sequences)
+        energies = seqs.energies(temperature=temperature)
+
+        if combine_lengths:
+            all_energies.extend(energies)
+        else:
+            label = kwargs['label'] if 'label' in kwargs else f'length {length}'
+            _ = plt.hist(energies, alpha=alpha, label=label, bins=bins, **kwargs)
+
+    if combine_lengths:
+        if 'label' in kwargs:
+            label = kwargs['label']
+            del kwargs['label']
+        else:
+            if len(lengths) == 1:
+                label = f'length {length}'
+            else:
+                lengths_delimited = ', '.join(map(str, lengths))
+                label = f'lengths {lengths_delimited} combined'
+        _ = plt.hist(all_energies, alpha=alpha, label=label, bins=bins, **kwargs)
+
+    plt.legend(loc='upper right')
+    title = kwargs.pop('title', f'Nearest-neighbor energies of DNA sequences at {temperature} C')
+    plt.title(title)
+
+    if show:
+        plt.show()
