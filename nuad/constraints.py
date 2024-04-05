@@ -6746,7 +6746,8 @@ def rna_duplex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
@@ -6832,7 +6833,8 @@ def rna_plex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
