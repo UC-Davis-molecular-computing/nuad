@@ -1046,10 +1046,19 @@ class DNASeqList:
 
     def energies(self, temperature: float) -> np.ndarray:
         """
+        Calculates the nearest-neighbor binding energy of each sequence with its perfect complement
+        (summing over all length-2 substrings of the domain's sequence),
+        using parameters from the 2004 Santa-Lucia and Hicks paper
+        (https://www.annualreviews.org/doi/abs/10.1146/annurev.biophys.32.110601.141800,
+        see Table 1, and example on page 419).
+
+        This is used by :any:`NearestNeighborEnergyFilter` to calculate the energy
+        of domains when filtering.
+
         :param temperature:
             temperature in Celsius
         :return:
-            nearest-neighbor energies of each sequence with its perfect Watson-Crick complement
+            array of nearest-neighbor energies of each sequence with its perfect Watson-Crick complement
         """
         wcenergies = calculate_wc_energies(self.seqarr, temperature)
         return wcenergies
@@ -1117,31 +1126,6 @@ class DNASeqList:
         good = (mid == base2bits[base])
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
-
-    def filter_substring(self, subs: Sequence[str]) -> DNASeqList:
-        """Remove any sequence with any elements from subs as a substring."""
-        if len(set([len(sub) for sub in subs])) != 1:
-            raise ValueError(f'All substrings in subs must be equal length: {subs}')
-        sublen = len(subs[0])
-        subints = [[base2bits[base] for base in sub] for sub in subs]
-        powarr = [4 ** k for k in range(sublen)]
-        subvals = np.dot(subints, powarr)
-        toeplitz = create_toeplitz(self.seqlen, sublen)
-        convolution = np.dot(toeplitz, self.seqarr.transpose())
-        passall = np.ones(self.numseqs, dtype=bool)
-        for subval in subvals:
-            passsub = np.all(convolution != subval, axis=0)
-            passall = passall & passsub
-        seqarrpass = self.seqarr[passall]
-        return DNASeqList(seqarr=seqarrpass)
-
-    def filter_seqs_by_g_quad(self) -> DNASeqList:
-        """Removes any sticky ends with 4 G's in a row (a G-quadruplex)."""
-        return self.filter_substring(['GGGG'])
-
-    def filter_seqs_by_g_quad_c_quad(self) -> DNASeqList:
-        """Removes any sticky ends with 4 G's or C's in a row (a quadruplex)."""
-        return self.filter_substring(['GGGG', 'CCCC'])
 
     def index(self, sequence: str | np.ndarray) -> int:
         # finds index of sequence in (rows of) self.seqarr
@@ -1282,7 +1266,7 @@ def wc_arr(seqarr: np.ndarray) -> np.ndarray:
 
 
 def energy_hist(length: int | Iterable[int], temperature: float = 37,
-                combine_lengths: bool = False, 
+                combine_lengths: bool = False,
                 num_random_sequences: int = 100_000,
                 figsize: Tuple[int, int] = (15, 6), **kwargs) -> None:
     """
