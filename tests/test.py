@@ -7,6 +7,7 @@ import openpyxl
 
 import nuad.constraints as nc
 import nuad.search as ns
+import nuad.vienna_nupack as nv
 import scadnano as sc
 from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
     _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
@@ -1204,6 +1205,22 @@ class TestSubdomains(unittest.TestCase):
         self.assertIn(a, domains)
         self.assertIn(B, domains)
         self.assertIn(C, domains)
+
+class TestNUPACK(unittest.TestCase):
+
+    def test_pfunc(self) -> None:
+        seq = 'ACGTACGTAGCTGATCCAGCTGATCG'
+        energy = nv.pfunc(seq)
+        self.assertTrue(energy < 0)
+
+class TestViennaRNA(unittest.TestCase):
+    def test_rna_plex(self) -> None:
+        pairs = [
+            ('ACGT','ACGT'),
+            ('TTAC','AATG'),
+        ]
+        energies = nv.rna_plex_multiple(pairs)
+        self.assertEqual(2, len(energies))
 
 
 if __name__ == '__main__':
