@@ -281,7 +281,7 @@ class TestExportDNASequences(unittest.TestCase):
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.VendorFields(scale='100nm', purification='PAGE')
         design = nc.Design()
-        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt)
+        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', vendor_fields=custom_idt)
         design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
 
         #        a       b       c       d       e           f
@@ -315,7 +315,7 @@ class TestExportDNASequences(unittest.TestCase):
             design = nc.Design()
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
                 idt = nc.VendorFields()
-                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
+                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], vendor_fields=idt)
                 strand.domains[0].set_fixed_sequence('T' * strand_len)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)

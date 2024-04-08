@@ -2169,7 +2169,8 @@ def domains_not_substrings_of_each_other_constraint(
 @dataclass
 class VendorFields(JSONSerializable):
     """Data required when ordering DNA strands from a synthesis company such as
-    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
+    `IDT (Integrated DNA Technologies) <https://www.
+    dna.com/>`_.
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
@@ -2573,14 +2574,14 @@ class Strand(Part, JSONSerializable):
 
         label: str = json_map.get(label_key)
 
-        idt_json = json_map.get(vendor_fields_key)
-        idt = None
-        if idt_json is not None:
-            idt = VendorFields.from_json_serializable(idt_json)
+        vendor_fields_json = json_map.get(vendor_fields_key)
+        vendor_fields = None
+        if vendor_fields_json is not None:
+            vendor_fields = VendorFields.from_json_serializable(vendor_fields_json)
 
         strand: Strand = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label, vendor_fields=idt)
+            group=group, name=name, label=label, vendor_fields=vendor_fields)
         return strand
 
     def __repr__(self) -> str:
@@ -3277,7 +3278,7 @@ class Design(JSONSerializable):
                    group: str = default_strand_group,
                    name: str | None = None,
                    label: str | None = None,
-                   idt: VendorFields | None = None,
+                   vendor_fields: VendorFields | None = None,
                    ) -> Strand:
         """
         This is an alternative way to create strands instead of calling the :any:`Strand` constructor
@@ -3309,7 +3310,7 @@ class Design(JSONSerializable):
             Name of this :any:`Strand`.
         :param label:
             Label to associate with this :any:`Strand`.
-        :param idt:
+        :param vendor_fields:
             :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         :return:
@@ -3349,7 +3350,7 @@ class Design(JSONSerializable):
                         group=group,
                         name=name,
                         label=label,
-                        vendor_fields=idt)
+                        vendor_fields=vendor_fields)
 
         for existing_strand in self.strands:
             if strand.name == existing_strand.name:
@@ -3441,7 +3442,7 @@ class Design(JSONSerializable):
                                  domain_delimiter: str = '',
                                  key: KeyFunction[Strand] | None = None,
                                  warn_duplicate_name: bool = False,
-                                 only_strands_with_idt: bool = False,
+                                 only_strands_with_vendor_fields: bool = False,
                                  strands: Iterable[Strand] | None = None) -> str:
         """Called by :meth:`Design.write_idt_bulk_input_file` to determine what string to write to
         the file. This function can be used to get the string directly without creating a file.
@@ -3459,7 +3460,7 @@ class Design(JSONSerializable):
             domain_delimiter=domain_delimiter,
             key=key,
             warn_duplicate_name=warn_duplicate_name,
-            only_strands_with_idt=only_strands_with_idt,
+            only_strands_with_vendor_fields=only_strands_with_vendor_fields,
         )
 
     def write_idt_bulk_input_file(self, *,
@@ -3470,7 +3471,7 @@ class Design(JSONSerializable):
                                   delimiter: str = ',',
                                   domain_delimiter: str = '',
                                   warn_duplicate_name: bool = True,
-                                  only_strands_with_idt: bool = False,
+                                  only_strands_with_vendor_fields: bool = False,
                                   strands: Iterable[Strand] | None = None) -> None:
         """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
         :data:`Strand.vendor_fields`, suitable for pasting into the "Bulk Input" field of IDT
@@ -3505,7 +3506,7 @@ class Design(JSONSerializable):
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
@@ -3518,7 +3519,7 @@ class Design(JSONSerializable):
                                                  domain_delimiter=domain_delimiter,
                                                  key=key,
                                                  warn_duplicate_name=warn_duplicate_name,
-                                                 only_strands_with_idt=only_strands_with_idt,
+                                                 only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                                  strands=strands)
         if extension is None:
             extension = 'idt'
@@ -3529,7 +3530,7 @@ class Design(JSONSerializable):
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
-                                   only_strands_with_idt: bool = False,
+                                   only_strands_with_vendor_fields: bool = False,
                                    use_default_plates: bool = True, warn_using_default_plates: bool = True,
                                    plate_type: PlateType = PlateType.wells96,
                                    strands: Iterable[Strand] | None = None) -> None:
@@ -3564,16 +3565,16 @@ class Design(JSONSerializable):
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             (though scaffold is included if `export_scaffold` is True).
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
             If False, then `use_default_plates` must be True.
         :param use_default_plates:
-            Use default values for plate and well (ignoring those in idt fields, which may be None).
-            If False, each Strand to export must have the field :data:`Strand.vendor_fields`, so in particular
-            the parameter `only_strands_with_idt` must be True.
+            Use default values for plate and well (ignoring those in :data:`Strand.vendor_fields`, which
+            may be None). If False, each Strand to export must have the field :data:`Strand.vendor_fields`,
+            so in particular the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
             :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
@@ -3595,7 +3596,7 @@ class Design(JSONSerializable):
                                              filename=filename,
                                              key=key,
                                              warn_duplicate_name=warn_duplicate_name,
-                                             only_strands_with_idt=only_strands_with_idt,
+                                             only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                              use_default_plates=use_default_plates,
                                              warn_using_default_plates=warn_using_default_plates,
                                              plate_type=plate_type)
