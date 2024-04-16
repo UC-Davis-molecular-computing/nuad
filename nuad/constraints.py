@@ -1387,10 +1387,10 @@ class Part(ABC):
     def __hash__(self) -> int:
         return hash(self.key())
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
+    # @property
+    # @abstractmethod
+    # def name(self) -> str:
+    #     pass
 
     @abstractmethod
     def key(self) -> str:
@@ -1429,7 +1429,7 @@ class Domain(Part, JSONSerializable):
     and also modifying the pool (letting the pool be assigned after it is created).
     """
 
-    _name: str
+    name: str
     """
     Name of the :any:`Domain`.
     This is the "unstarred" version of the name, and it cannot end in `*`.
@@ -1523,7 +1523,7 @@ class Domain(Part, JSONSerializable):
                  subdomains: List[Domain] | None = None, weight: float | None = None) -> None:
         if subdomains is None:
             subdomains = []
-        self._name = name
+        self.name = name
         self._starred_name = name + '*'
         self._pool = pool
         self._sequence = sequence
@@ -1573,7 +1573,7 @@ class Domain(Part, JSONSerializable):
     __hash__ = Part.__hash__
 
     def __repr__(self) -> str:
-        return self._name
+        return self.name
 
     def individual_parts(self) -> Tuple[Domain, ...]:
         return self,
@@ -1630,20 +1630,20 @@ class Domain(Part, JSONSerializable):
         domain: Domain = Domain(name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
 
-    @property
-    def name(self) -> str:
-        """
-        :return: name of this :any:`Domain`
-        """
-        return self._name
-
-    @name.setter
-    def name(self, new_name: str) -> None:
-        """
-        :param new_name: new name to set
-        """
-        self._name = new_name
-        self._starred_name = new_name + '*'
+    # @property
+    # def name(self) -> str:
+    #     """
+    #     :return: name of this :any:`Domain`
+    #     """
+    #     return self._name
+    #
+    # @name.setter
+    # def name(self, new_name: str) -> None:
+    #     """
+    #     :param new_name: new name to set
+    #     """
+    #     self._name = new_name
+    #     self._starred_name = new_name + '*'
 
     @property
     def pool(self) -> DomainPool:
@@ -1850,7 +1850,7 @@ class Domain(Part, JSONSerializable):
         :return: The value :data:`Domain.name` or :data:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
-        return self._starred_name if starred else self._name
+        return self._starred_name if starred else self.name
 
     def concrete_sequence(self, starred: bool) -> str:
         """
@@ -2283,7 +2283,7 @@ class Strand(Part, JSONSerializable):
     or 384-well plates.
     """
 
-    _name: str | None = None
+    name: str
     """Optional name of strand."""
 
     modification_5p: nm.Modification5Prime | None = None
@@ -2320,10 +2320,10 @@ class Strand(Part, JSONSerializable):
     """
 
     def __init__(self,
+                 name: str,
                  domains: Iterable[Domain] | None = None,
                  starred_domain_indices: Iterable[int] = (),
                  group: str = default_strand_group,
-                 name: str | None = None,
                  label: str | None = None,
                  vendor_fields: VendorFields | None = None,
                  ) -> None:
@@ -2348,7 +2348,7 @@ class Strand(Part, JSONSerializable):
         """
         self._all_intersecting_domains = None
         self.group = group
-        self._name = name
+        self.name = name
 
         # XXX: moved this check to Design constructor to allow subdomain graphs to be
         # constructed gradually while building up the design
@@ -2666,7 +2666,7 @@ class Strand(Part, JSONSerializable):
         if self._name is None:
             self._name = self.domain_names_concatenated()
         return self._name
-        # return self.domain_names_concatenated() if self._name is None else self._name
+        return self.domain_names_concatenated() if self._name is None else self._name
 
     @name.setter
     def name(self, new_name: str) -> None:
@@ -3271,11 +3271,11 @@ class Design(JSONSerializable):
         return Design(strands=strands)
 
     def add_strand(self,
+                   name: str,
                    domain_names: List[str] | None = None,
                    domains: List[Domain] | None = None,
                    starred_domain_indices: Iterable[int] | None = None,
                    group: str = default_strand_group,
-                   name: str | None = None,
                    label: str | None = None,
                    idt: VendorFields | None = None,
                    ) -> Strand:
@@ -3315,6 +3315,11 @@ class Design(JSONSerializable):
         :return:
             the :any:`Strand` that is created
         """
+        for strand in self.strands:
+            
+            if strand.name == name:
+                raise ValueError(f"A strand with the name '{name}' already exists.")
+            
         if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or \
                 (domain_names is None and not (domains is not None and starred_domain_indices is not None)):
             raise ValueError('exactly one of domain_names or '
@@ -4132,7 +4137,7 @@ class Design(JSONSerializable):
         self.check_domain_pool_names_unique()
 
     def check_strand_names_unique(self) -> None:
-        strands_by_name = {}
+        strands_by_name: Dict[str, Strand] = {}
         for strand in self.strands:
             name = strand.name
             if name in strands_by_name:
@@ -4140,6 +4145,8 @@ class Design(JSONSerializable):
                                  f'  {strand}\n'
                                  f'and\n'
                                  f'  {strands_by_name[name]}')
+            else:
+                strands_by_name[name] = strand
 
     def check_domain_pool_names_unique(self) -> None:
         # self.domain_pools() already computed by compute_derived_fields()
