@@ -2149,7 +2149,8 @@ def domains_not_substrings_of_each_other_constraint(
 @dataclass
 class VendorFields(JSONSerializable):
     """Data required when ordering DNA strands from a synthesis company such as
-    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
+    `IDT (Integrated DNA Technologies) <https://www.
+    dna.com/>`_.
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
@@ -2552,14 +2553,14 @@ class Strand(Part, JSONSerializable):
 
         label: str = json_map.get(label_key)
 
-        idt_json = json_map.get(vendor_fields_key)
-        idt = None
-        if idt_json is not None:
-            idt = VendorFields.from_json_serializable(idt_json)
+        vendor_fields_json = json_map.get(vendor_fields_key)
+        vendor_fields = None
+        if vendor_fields_json is not None:
+            vendor_fields = VendorFields.from_json_serializable(vendor_fields_json)
 
         strand: Strand = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label, vendor_fields=idt)
+            group=group, name=name, label=label, vendor_fields=vendor_fields)
         return strand
 
     def __repr__(self) -> str:
@@ -3231,7 +3232,7 @@ class Design(JSONSerializable):
                    starred_domain_indices: Iterable[int] | None = None,
                    group: str = default_strand_group,
                    label: str | None = None,
-                   idt: VendorFields | None = None,
+                   vendor_fields: VendorFields | None = None,
                    ) -> Strand:
         """
         This is an alternative way to create strands instead of calling the :any:`Strand` constructor
@@ -3263,7 +3264,7 @@ class Design(JSONSerializable):
             Name of this :any:`Strand`.
         :param label:
             Label to associate with this :any:`Strand`.
-        :param idt:
+        :param vendor_fields:
             :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         :return:
@@ -3308,7 +3309,7 @@ class Design(JSONSerializable):
                         group=group,
                         name=name,
                         label=label,
-                        vendor_fields=idt)
+                        vendor_fields=vendor_fields)
 
         for existing_strand in self.strands:
             if strand.name == existing_strand.name:
@@ -3429,7 +3430,7 @@ class Design(JSONSerializable):
                                   delimiter: str = ',',
                                   domain_delimiter: str = '',
                                   warn_duplicate_name: bool = True,
-                                  only_strands_with_idt: bool = False,
+                                  only_strands_with_vendor_fields: bool = False,
                                   strands: Iterable[Strand] | None = None) -> None:
         """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
         :data:`Strand.vendor_fields`, suitable for pasting into the "Bulk Input" field of IDT
@@ -3464,7 +3465,7 @@ class Design(JSONSerializable):
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
@@ -3477,7 +3478,7 @@ class Design(JSONSerializable):
                                                  domain_delimiter=domain_delimiter,
                                                  key=key,
                                                  warn_duplicate_name=warn_duplicate_name,
-                                                 only_strands_with_vendor_fields=only_strands_with_idt,
+                                                 only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                                  strands=strands)
         if extension is None:
             extension = 'idt'
@@ -3503,7 +3504,7 @@ class Design(JSONSerializable):
         For instance, if the script is named ``my_origami.py``,
         then the sequences will be written to ``my_origami.xls``.
 
-        If the last plate as fewer than 24 strands for a 96-well plate, or fewer than 96 strands for a
+        If the last plate has fewer than 24 strands for a 96-well plate, or fewer than 96 strands for a
         384-well plate, then the last two plates are rebalanced to ensure that each plate has at least
         that number of strands, because IDT charges extra for a plate with too few strands:
         https://www.idtdna.com/pages/products/custom-dna-rna/dna-oligos/custom-dna-oligos
@@ -3530,9 +3531,9 @@ class Design(JSONSerializable):
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
             If False, then `use_default_plates` must be True.
         :param use_default_plates:
-            Use default values for plate and well (ignoring those in idt fields, which may be None).
-            If False, each Strand to export must have the field :data:`Strand.vendor_fields`, so in particular
-            the parameter `only_strands_with_idt` must be True.
+            Use default values for plate and well (ignoring those in :data:`Strand.vendor_fields`, which
+            may be None). If False, each Strand to export must have the field :data:`Strand.vendor_fields`,
+            so in particular the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
             :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
@@ -6707,7 +6708,8 @@ def rna_duplex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
@@ -6793,7 +6795,8 @@ def rna_plex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
