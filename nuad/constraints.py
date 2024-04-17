@@ -3400,7 +3400,7 @@ class Design(JSONSerializable):
                                  domain_delimiter: str = '',
                                  key: KeyFunction[Strand] | None = None,
                                  warn_duplicate_name: bool = False,
-                                 only_strands_with_idt: bool = False,
+                                 only_strands_with_vendor_fields: bool = False,
                                  strands: Iterable[Strand] | None = None) -> str:
         """Called by :meth:`Design.write_idt_bulk_input_file` to determine what string to write to
         the file. This function can be used to get the string directly without creating a file.
@@ -3418,7 +3418,7 @@ class Design(JSONSerializable):
             domain_delimiter=domain_delimiter,
             key=key,
             warn_duplicate_name=warn_duplicate_name,
-            only_strands_with_idt=only_strands_with_idt,
+            only_strands_with_vendor_fields=only_strands_with_vendor_fields,
         )
 
     def write_idt_bulk_input_file(self, *,
@@ -3477,7 +3477,7 @@ class Design(JSONSerializable):
                                                  domain_delimiter=domain_delimiter,
                                                  key=key,
                                                  warn_duplicate_name=warn_duplicate_name,
-                                                 only_strands_with_idt=only_strands_with_idt,
+                                                 only_strands_with_vendor_fields=only_strands_with_idt,
                                                  strands=strands)
         if extension is None:
             extension = 'idt'
@@ -3488,7 +3488,7 @@ class Design(JSONSerializable):
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
-                                   only_strands_with_idt: bool = False,
+                                   only_strands_with_vendor_fields: bool = False,
                                    use_default_plates: bool = True, warn_using_default_plates: bool = True,
                                    plate_type: PlateType = PlateType.wells96,
                                    strands: Iterable[Strand] | None = None) -> None:
@@ -3523,7 +3523,7 @@ class Design(JSONSerializable):
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             (though scaffold is included if `export_scaffold` is True).
@@ -3554,7 +3554,7 @@ class Design(JSONSerializable):
                                              filename=filename,
                                              key=key,
                                              warn_duplicate_name=warn_duplicate_name,
-                                             only_strands_with_idt=only_strands_with_idt,
+                                             only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                              use_default_plates=use_default_plates,
                                              warn_using_default_plates=warn_using_default_plates,
                                              plate_type=plate_type)
