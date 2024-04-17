@@ -1387,11 +1387,6 @@ class Part(ABC):
     def __hash__(self) -> int:
         return hash(self.key())
 
-    # @property
-    # @abstractmethod
-    # def name(self) -> str:
-    #     pass
-
     @abstractmethod
     def key(self) -> str:
         # used as key in dictionary
@@ -1629,21 +1624,6 @@ class Domain(Part, JSONSerializable):
 
         domain: Domain = Domain(name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
         return domain
-
-    # @property
-    # def name(self) -> str:
-    #     """
-    #     :return: name of this :any:`Domain`
-    #     """
-    #     return self._name
-    #
-    # @name.setter
-    # def name(self, new_name: str) -> None:
-    #     """
-    #     :param new_name: new name to set
-    #     """
-    #     self._name = new_name
-    #     self._starred_name = new_name + '*'
 
     @property
     def pool(self) -> DomainPool:
@@ -2261,6 +2241,8 @@ class Strand(Part, JSONSerializable):
     """Set of positions of :any:`Domain`'s in :data:`Strand.domains`
     on this :any:`Strand` that are starred."""
 
+    name: str
+
     group: str
     """Optional "group" field to describe strands that share similar properties."""
 
@@ -2282,9 +2264,6 @@ class Strand(Part, JSONSerializable):
     file that can be uploaded to IDT's website for describing DNA sequences to be ordered in 96-well
     or 384-well plates.
     """
-
-    name: str
-    """Optional name of strand."""
 
     modification_5p: nm.Modification5Prime | None = None
     """
@@ -2656,31 +2635,6 @@ class Strand(Part, JSONSerializable):
         :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.fixed` is False
         """
         return tuple(domain for domain in self.domains if not domain.fixed)
-
-    @property
-    def name(self) -> str:
-        """
-        :return: name of this :any:`Strand` if it was assigned one, otherwise :any:`Domain` names are
-                 concatenated with '-' joining them
-        """
-        if self._name is None:
-            self._name = self.domain_names_concatenated()
-        return self._name
-        return self.domain_names_concatenated() if self._name is None else self._name
-
-    @name.setter
-    def name(self, new_name: str) -> None:
-        """
-        Sets name of this :any:`Strand`.
-        """
-        self._name = new_name
-
-    # def complementary_domains(self, other: Strand) -> List[Domain]:
-    #     """
-    #     :param other: another :any:`Strand`
-    #     :return: list of :any:`Domain`'s that are complementary between this :any:`Strand` and `other`,
-    #              in the order they appear in this :any:`Strand`.
-    #     """
 
     def address_of_domain(self, domain_idx: int) -> 'StrandDomainAddress':
         """Returns :any:`StrandDomainAddress` of the domain located at domain_idx
