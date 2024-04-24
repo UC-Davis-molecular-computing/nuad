@@ -59,7 +59,7 @@ def construct_strand(design: Design, domain_names: List[str], domain_lengths: Li
 class TestIntersectingDomains(unittest.TestCase):
 
     def test_strand_intersecting_domains(self) -> None:
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -932,7 +932,7 @@ class TestSubdomains(unittest.TestCase):
                           subdomains=[b, c])
 
     def test_construct_strand(self):
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -958,7 +958,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(strand.domains[0], a)
 
     def test_error_strand_with_unassignable_subsequence(self):
-        """
+        r"""
         Test that constructing a strand with an unassignable subsequence raises
         a ValueError.
 
@@ -988,7 +988,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertRaises(ValueError, Design, strands=[strand])
 
     def test_error_strand_with_redundant_independence(self):
-        """
+        r"""
         Test that constructing a strand with an redundant indepndence in subdomain
         graph raises a ValueError.
 
@@ -1040,7 +1040,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertRaises(ValueError, Design, strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
-        """Returns domains with the following subdomain hierarchy:
+        r"""Returns domains with the following subdomain hierarchy:
 
         .. code-block:: none
 
@@ -1065,7 +1065,7 @@ class TestSubdomains(unittest.TestCase):
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
 
     def test_assign_dna_sequence_to_parent(self):
-        """
+        r"""
         Test assigning dna sequence to parent (a) and propagating it downwards
 
         .. code-block:: none
@@ -1089,7 +1089,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(sequence[18:], domains['h'].sequence())
 
     def test_assign_dna_sequence_to_leaf(self):
-        """
+        r"""
         Test assigning dna sequence to E, F and propgate upward to b
 
         .. code-block:: none
@@ -1110,7 +1110,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual('CATAGCTTTCC', domains['b'].sequence())
 
     def test_assign_dna_sequence_mixed(self):
-        """
+        r"""
         Test assigning dna sequence to E, F, and C and propgate to entire tree.
 
         .. code-block:: none
@@ -1177,7 +1177,7 @@ class TestSubdomains(unittest.TestCase):
             a.set_sequence('A' * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
-        """Test constructing a strand using a dependent subdomain (not parent)
+        r"""Test constructing a strand using a dependent subdomain (not parent)
 
         .. code-block:: none
 
