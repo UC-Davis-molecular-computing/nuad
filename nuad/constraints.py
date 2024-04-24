@@ -3533,7 +3533,7 @@ class Design(JSONSerializable):
         :param use_default_plates:
             Use default values for plate and well (ignoring those in :data:`Strand.vendor_fields`, which
             may be None). If False, each Strand to export must have the field :data:`Strand.vendor_fields`,
-            so in particular the parameter `only_strands_with_idt` must be True.
+            so in particular the parameter `only_strands_with_vendor_fields` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
             :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
