@@ -239,6 +239,16 @@ class TestModifyDesignAfterCreated(unittest.TestCase):
 
 
 class TestFromScadnanoDesign(unittest.TestCase):
+    def test_import_strands_from_scadnano(self):
+        self.design = Design()
+        helices = [sc.Helix(max_offset=100) for _ in range(2)]
+        sc_design = sc.Design(helices=helices)
+        sc_design.draw_strand(0, 0).move(10).cross(1).move(-10)
+        s0 = sc_design.strands[0].name
+        if s0 == "None":
+            with self.assertRaises(ValueError):
+                self.design.check_strand_names_unique()
+
     def test_two_instances_of_domain(self) -> None:
         '''
             x           x
