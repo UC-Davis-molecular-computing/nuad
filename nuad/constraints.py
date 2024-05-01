@@ -2169,8 +2169,7 @@ def domains_not_substrings_of_each_other_constraint(
 @dataclass
 class VendorFields(JSONSerializable):
     """Data required when ordering DNA strands from a synthesis company such as
-    `IDT (Integrated DNA Technologies) <https://www.
-    dna.com/>`_.
+    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
