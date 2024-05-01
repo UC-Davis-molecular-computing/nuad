@@ -72,7 +72,7 @@ domain_pools_key = 'domain_pools'
 domain_pools_num_sampled_key = 'domain_pools_num_sampled'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
-group_key = 'label'
+# group_key = 'label'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
 substring_length_key = 'substring_length'
@@ -2521,7 +2521,7 @@ class Strand(Part, JSONSerializable):
             Dictionary ``d`` representing this :any:`Strand` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
-        dct: Dict[str, Any] = {name_key: self.name, group_key: self.label}
+        dct: Dict[str, Any] = {name_key: self.name, label_key: self.label}
 
         domains_list = [domain.name for domain in self.domains]
         dct[domain_names_key] = NoIndent(domains_list) if suppress_indent else domains_list
@@ -3690,33 +3690,11 @@ class Design(JSONSerializable):
         strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands] \
             if ignored_strands is not None else sc_design.strands
 
-        # warn if not labels are dicts containing group_name_key on strands
-        for sc_strand in strands_to_include:
-            if (isinstance(sc_strand.label, dict) and group_key not in sc_strand.label) or \
-                    (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_key)):
-                logger.warning(f'Strand label {sc_strand.label} should be an object with attribute named '
-                               f'"{group_key}" (for instance a dict or namedtuple).\n'
-                               f'  The label is type {type(sc_strand.label)}. '
-                               f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                               f'named "{group_key}" with associated value of type str.')
-            else:
-                label_value = Design.get_group_name_from_strand_label(sc_strand)
-                if not isinstance(label_value, str):
-                    logger.warning(f'Strand label {sc_strand.label} has attribute named '
-                                   f'"{group_key}", but its associated value is not a string.\n'
-                                   f'The value is type {type(label_value)}. '
-                                   f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                                   f'named "{group_key}" with associated value of type str.')
-
-                # raise TypeError(f'strand label {sc_strand.label} must be a dict, '
-                #                 f'but instead is type {type(sc_strand.label)}')
-
         # groups scadnano strands by strand labels
         sc_strand_groups: DefaultDict[str, List[sc.Strand]] = defaultdict(list)
         for sc_strand in strands_to_include:
             assigned = False
-            if hasattr(sc_strand.label, group_key) or (
-                    isinstance(sc_strand.label, dict) and group_key in sc_strand.label):
+            if isinstance(sc_strand.label, dict):
                 label = Design.get_group_name_from_strand_label(sc_strand)
                 if isinstance(label, str):
                     sc_strand_groups[label].append(sc_strand)
@@ -3772,12 +3750,12 @@ class Design(JSONSerializable):
 
     @staticmethod
     def get_group_name_from_strand_label(sc_strand: Strand) -> Any:
-        if hasattr(sc_strand.label, group_key):
-            return getattr(sc_strand.label, group_key)
-        elif isinstance(sc_strand.label, dict) and group_key in sc_strand.label:
-            return sc_strand.label[group_key]
+        if hasattr(sc_strand.label, label_key):
+            return getattr(sc_strand.label, label_key)
+        elif isinstance(sc_strand.label, dict) and label_key in sc_strand.label:
+            return sc_strand.label[label_key]
         else:
-            raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
+            raise AssertionError(f'label does not have either an attribute or a dict key "{label_key}"')
 
     def assign_fields_to_scadnano_design(self, sc_design: sc.Design,
                                          ignored_strands: Iterable[Strand] = (),
@@ -3868,33 +3846,6 @@ class Design(JSONSerializable):
                 pairs.append((nuad_strand, sc_strands))
 
         return pairs
-
-    def assign_strand_groups_to_labels(self, sc_design: sc.Design,
-                                       ignored_strands: Iterable[Strand] = (),
-                                       overwrite: bool = False) -> None:
-        """
-        TODO: document this
-        """
-        strand_pairs = self.shared_strands_with_scadnano_design(sc_design, ignored_strands)
-
-        for nuad_strand, sc_strands in strand_pairs:
-            for sc_strand in sc_strands:
-                if sc_strand.label is None:
-                    sc_strand.label = {}
-                elif not isinstance(sc_strand.label, dict):
-                    raise ValueError(f'cannot assign strand group to strand {sc_strand.name} '
-                                     f'because it already has a label that is not a dict. '
-                                     f'It must either have label None or a dict.')
-
-                    # if we get here, then sc_strand.label is a dict. Need to check whether
-                    # it already has a 'group' key.
-                if group_key in sc_strand.label is not None and not overwrite:
-                    raise ValueError(f'Cannot assign strand group from nuad strand to scadnano strand '
-                                     f'{sc_strand.name} (through its label field) because the '
-                                     f'scadnano strand already has a label with group key '
-                                     f'\n{sc_strand.label[group_key]}. '
-                                     f'Set overwrite to True to force an overwrite.')
-                sc_strand.label[group_key] = nuad_strand.label
 
     def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design,
                                              ignored_strands: Iterable[Strand] = (),
