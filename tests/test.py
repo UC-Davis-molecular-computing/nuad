@@ -7,6 +7,7 @@ import openpyxl
 
 import nuad.constraints as nc
 import nuad.search as ns
+import nuad.vienna_nupack as nv
 import scadnano as sc
 from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
     _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
@@ -58,7 +59,7 @@ def construct_strand(design: Design, domain_names: List[str], domain_lengths: Li
 class TestIntersectingDomains(unittest.TestCase):
 
     def test_strand_intersecting_domains(self) -> None:
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -280,7 +281,7 @@ class TestExportDNASequences(unittest.TestCase):
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.VendorFields(scale='100nm', purification='PAGE')
         design = nc.Design()
-        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', idt=custom_idt)
+        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', vendor_fields=custom_idt)
         design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
 
         #        a       b       c       d       e           f
@@ -314,7 +315,7 @@ class TestExportDNASequences(unittest.TestCase):
             design = nc.Design()
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
                 idt = nc.VendorFields()
-                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], idt=idt)
+                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], vendor_fields=idt)
                 strand.domains[0].set_fixed_sequence('T' * strand_len)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
@@ -931,7 +932,7 @@ class TestSubdomains(unittest.TestCase):
                           subdomains=[b, c])
 
     def test_construct_strand(self):
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -957,7 +958,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(strand.domains[0], a)
 
     def test_error_strand_with_unassignable_subsequence(self):
-        """
+        r"""
         Test that constructing a strand with an unassignable subsequence raises
         a ValueError.
 
@@ -987,7 +988,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertRaises(ValueError, Design, strands=[strand])
 
     def test_error_strand_with_redundant_independence(self):
-        """
+        r"""
         Test that constructing a strand with an redundant indepndence in subdomain
         graph raises a ValueError.
 
@@ -1039,7 +1040,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertRaises(ValueError, Design, strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
-        """Returns domains with the following subdomain hierarchy:
+        r"""Returns domains with the following subdomain hierarchy:
 
         .. code-block:: none
 
@@ -1064,7 +1065,7 @@ class TestSubdomains(unittest.TestCase):
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
 
     def test_assign_dna_sequence_to_parent(self):
-        """
+        r"""
         Test assigning dna sequence to parent (a) and propagating it downwards
 
         .. code-block:: none
@@ -1088,7 +1089,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual(sequence[18:], domains['h'].sequence())
 
     def test_assign_dna_sequence_to_leaf(self):
-        """
+        r"""
         Test assigning dna sequence to E, F and propgate upward to b
 
         .. code-block:: none
@@ -1109,7 +1110,7 @@ class TestSubdomains(unittest.TestCase):
         self.assertEqual('CATAGCTTTCC', domains['b'].sequence())
 
     def test_assign_dna_sequence_mixed(self):
-        """
+        r"""
         Test assigning dna sequence to E, F, and C and propgate to entire tree.
 
         .. code-block:: none
@@ -1176,7 +1177,7 @@ class TestSubdomains(unittest.TestCase):
             a.set_sequence('A' * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
-        """Test constructing a strand using a dependent subdomain (not parent)
+        r"""Test constructing a strand using a dependent subdomain (not parent)
 
         .. code-block:: none
 
@@ -1204,6 +1205,22 @@ class TestSubdomains(unittest.TestCase):
         self.assertIn(a, domains)
         self.assertIn(B, domains)
         self.assertIn(C, domains)
+
+class TestNUPACK(unittest.TestCase):
+
+    def test_pfunc(self) -> None:
+        seq = 'ACGTACGTAGCTGATCCAGCTGATCG'
+        energy = nv.pfunc(seq)
+        self.assertTrue(energy < 0)
+
+class TestViennaRNA(unittest.TestCase):
+    def test_rna_plex(self) -> None:
+        pairs = [
+            ('ACGT','ACGT'),
+            ('TTAC','AATG'),
+        ]
+        energies = nv.rna_plex_multiple(pairs)
+        self.assertEqual(2, len(energies))
 
 
 if __name__ == '__main__':
