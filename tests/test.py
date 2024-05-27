@@ -1,3 +1,4 @@
+import time
 from typing import Dict, List
 import unittest
 import os
@@ -8,6 +9,9 @@ import openpyxl
 import nuad.constraints as nc
 import nuad.search as ns
 import scadnano as sc
+import random
+import nuad.vienna_nupack as nv
+
 from nuad.constraints import Design, Domain, _get_base_pair_domain_endpoints_to_check, \
     _get_implicitly_bound_domain_addresses, _exterior_base_type_of_domain_3p_end, _BasePairDomainEndpoint, \
     Strand, DomainPool, BasePairType, StrandDomainAddress
@@ -341,6 +345,102 @@ class TestNumpyConstraints(unittest.TestCase):
     def test_NearestNeighborEnergyConstraint_raises_exception_if_energies_in_wrong_order(self) -> None:
         with self.assertRaises(ValueError):
             nc.NearestNeighborEnergyFilter(-10, -15)
+            
+class TestLCS(unittest.TestCase):
+    def test_lcs(self) -> None:
+        s1_1 = 'AAAAAAAA'
+        s2_1 = 'CTCTCCCT'
+        s1_2 = 'GGGGGGGG'
+        s2_2 = 'CCCTCCTC'
+        lcs_lens_act = nc.lcs([s1_1, s1_2], [s2_1, s2_2], False)
+        lcs_lens_exp = numpy.array([3, 6])
+        # print()
+        # print(lcs_lens_act)
+        # print(lcs_lens_exp)
+        self.assertEqual(numpy.array_equal(lcs_lens_exp, lcs_lens_act), True)
+        
+
+def reverse_complement(dna):
+    complement_dict = {'A': 'T', 'C': 'G', 'T': 'A', 'G': 'C'}
+    reverse_comp = ''.join(complement_dict[base] for base in dna)
+    return reverse_comp
+
+def longest_common_subsequence(str1, str2):
+    m, n = len(str1), len(str2)
+    dp = [[0 if i == 0 or j == 0 else None for j in range(n+1)] for i in range(m+1)]
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if str1[i - 1] == str2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+
+    lcs_length = dp[m][n]
+
+    return lcs_length
+
+
+
+class TestLCSSIMD(unittest.TestCase):
+    def test_lcs_simd(self) -> None:
+        s1_1 = 'AAAAAAAA'
+        s2_1 = 'CTCTCCCT'
+        s1_2 = 'GGGGGGGG'
+        s2_2 = 'CCCTCCTC'
+        lcs_lens_act = nc.lcs_simd([s1_1, s1_2], [s2_1, s2_2])
+        lcs_lens_exp = numpy.array([3, 6])
+        self.assertEqual(numpy.array_equal(lcs_lens_exp, lcs_lens_act), True)
+    def test_lcs_simd2(self) -> None:
+        s1_1 = 'TAGCGTACGACTCAGCAGCATCAGCATCAGCATCAGCACGCGCGCGACTACG'
+        s2_1 = 'GCATCAGCATCAACTTCATCATCATCATACT'
+        lcs_lens_act = nc.lcs_simd([s1_1], [s2_1])
+        lcs_lens_exp = numpy.array([24])
+        self.assertEqual(numpy.array_equal(lcs_lens_exp, lcs_lens_act), True)
+    def test_lcs_simd3(self) -> None:
+        for i in range(2, 100, 2):
+            characters = ['A', 'C', 'T', 'G']
+            s1_1 = ''.join(random.choice(characters) for _ in range(i))
+            s2_1 = ''.join(random.choice(characters) for _ in range(i+10))
+            design1 = Design()
+            design2 = Design()
+            # design3 = Design()
+            # design4 = Design()
+            start_time = time.time()
+            nv.binding(s1_1, s2_1)
+            end_time = time.time()
+            nupack_time = end_time-start_time
+            start_time = time.time()
+            lcs_lens_act = nc.lcs_simd([s1_1], [s2_1])
+            end_time = time.time()
+            simd_time = (end_time-start_time)*10
+            start_time = time.time()
+            nv.rna_plex_multiple([(s1_1, s2_1)])
+            end_time = time.time()
+            vienna_time = end_time-start_time
+            print(i, simd_time, vienna_time, nupack_time)
+            lcs_lens_exp = numpy.array([longest_common_subsequence(s1_1, reverse_complement(s2_1))])
+            # self.assertEqual(numpy.array_equal(lcs_lens_exp, lcs_lens_act), True)
+        # for i in range(1000, 10000, 500):
+        #     characters = ['A', 'C', 'T', 'G']
+        #     s1_1 = ''.join(random.choice(characters) for _ in range(i))
+        #     s2_1 = ''.join(random.choice(characters) for _ in range(i+10))
+        #     design1 = Design()
+        #     design2 = Design()
+        #     # design3 = Design()
+        #     # design4 = Design()
+        #     start_time = time.time()
+        #     lcs_lens_act = nc.lcs_simd([s1_1], [s2_1])
+        #     end_time = time.time()
+        #     simd_time = end_time-start_time
+        #     start_time = time.time()
+        #     nv.rna_plex_multiple([(s1_1, s2_1)])
+        #     end_time = time.time()
+        #     vienna_time = end_time-start_time
+        #     print(i, simd_time, vienna_time)
+        #     lcs_lens_exp = numpy.array([longest_common_subsequence(s1_1, reverse_complement(s2_1))])
+        #     # self.assertEqual(numpy.array_equal(lcs_lens_exp, lcs_lens_act), True)
+        
 
 
 class TestInsertDomains(unittest.TestCase):

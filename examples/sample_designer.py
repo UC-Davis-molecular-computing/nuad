@@ -113,6 +113,10 @@ def main() -> None:
     strand3.domains[0].pool = domain_pools[lengths[1]]
     strand3.domains[1].pool = domain_pools[lengths[2]]
 
+    # strand_pairs_lcs_slow_constraint = nc.lcs_strand_pairs_constraint(
+    #     threshold=10.0, short_description='StrandPairSlow',
+    #     pairs=[(strand0, strand2), (strand0, strand3), (strand1, strand2), (strand1, strand3)]
+    # )
     strand_pairs_no_comp_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0, temperature=52, short_description='StrandPairNoCompl',
         pairs=((strand0, strand1), (strand2, strand3))

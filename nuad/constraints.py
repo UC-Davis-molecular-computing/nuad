@@ -22,6 +22,7 @@ import enum
 import os
 import math
 import json
+import ctypes as ct
 from typing import List, Set, Dict, Callable, Iterable, Tuple, Collection, TypeVar, Any, \
     cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Optional
 from dataclasses import dataclass, field, InitVar
@@ -6610,6 +6611,110 @@ def lcs_strand_pairs_constraint(
         pairs=pairs_tuple,
         check_strand_against_itself=check_strand_against_itself,
     )
+
+def lcs_simd_strand_pairs_constraint(
+        *,
+        threshold: int,
+        weight: float = 1.0,
+        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        description: str | None = None,
+        short_description: str = 'lcs simd strand pairs',
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        check_strand_against_itself: bool = True,
+        gc_double: bool = True,
+) -> StrandPairsConstraint:
+    """
+    Checks pairs of strand sequences for longest complementary subsequences.
+    This can be thought of as a very rough heuristic for "binding energy" that is much less
+    accurate than NUPACK or ViennaRNA, but much faster to evaluate.
+
+    Args
+        threshold: Max length of complementary subsequence allowed.
+
+        weight: See :data:`Constraint.weight`.
+
+        score_transfer_function: See :data:`Constraint.score_transfer_function`.
+
+        description: See :data:`Constraint.description`.
+
+        short_description: See :data:`Constraint.short_description`.
+
+        pairs: Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs in design.
+
+        check_strand_against_itself: Whether to check a strand against itself.
+
+        gc_double: Whether to weigh G-C base pairs as double (i.e., they count for 2 instead of 1).
+
+    Returns
+        A :any:`StrandPairsConstraint` that checks given pairs of :any:`Strand`'s for excessive
+        interaction due to having long complementary subsequences.
+    """
+    if description is None:
+        description = f'Longest complementary subsequence between strands is > {threshold}'
+
+    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
+        import time
+        seqs1 = []
+        seqs2 = []
+        start_eb = time.time()
+        # for pair in strand_pairs:
+        #     seqs1.append(pair.strand1.sequence())
+        #     seqs2.append(pair.strand2.sequence())
+        seqs1 = [pair.strand1.sequence() for pair in strand_pairs]  
+        seqs2 = [pair.strand2.sequence() for pair in strand_pairs]
+        results = lcs_simd(seqs1, seqs2)
+        # arr2_rev = np.flip(arr2, axis=1)
+
+        # lcs_sizes = longest_complementary_subsequences(arr1, arr2_rev, gc_double)
+        # lcs_sizes = longest_complementary_subsequences_two_loops(arr1, arr2_rev, gc_double)
+        
+        # for lcs_size in lcs_sizes:
+        #     excess = lcs_size - threshold
+        #     result = Result(excess=excess, value=lcs_size)
+        #     results.append(result)
+
+        # end_eb = time.time()
+        # elapsed_ms = int(round((end - start) * 1000, 0))
+        # elapsed_eb_ms = int(round((end_eb - start_eb) * 1000, 0))
+        # print(f'\n{elapsed_ms} ms to measure LCS of {len(seqs1)} pairs')
+        # print(f'{elapsed_eb_ms} ms to run evaluate_bulk')
+        return results
+
+    pairs_tuple = None
+    if pairs is not None:
+        pairs_tuple = tuple(pairs)
+
+    return StrandPairsConstraint(
+        description=description,
+        short_description=short_description,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        evaluate_bulk=evaluate_bulk,
+        pairs=pairs_tuple,
+        check_strand_against_itself=check_strand_against_itself,
+    )
+
+c_lib = ""
+
+def lcs_simd(seqs1: List[str], seqs2: List[str]) -> List[Result]:
+        import time
+        start_eb = time.time()
+        global c_lib
+        if c_lib == "":
+             c_lib = ct.CDLL("../sw-all-pairs-nuad/lib_sw_score_all_pairs.so")
+             c_lib.lcs_bulk_simd.argtypes = [ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.POINTER(ct.c_char_p), ct.POINTER(ct.c_char_p), ct.POINTER(ct.c_int)]
+             c_lib.restype = ct.POINTER(ct.c_int)
+        start = time.time()
+        arr1 = (ct.c_char_p * len(seqs1))()
+        arr1[:] = [ct.c_char_p(s.encode('utf-8')) for s in seqs1]
+        arr2 = (ct.c_char_p * len(seqs2))()
+        arr2[:] = [ct.c_char_p(s.encode('utf-8')) for s in seqs2]   
+        arr3 = (ct.c_int * len(seqs1))()
+        # print(arr1)
+        # print(arr2)
+        c_lib.lcs_bulk_simd(len(seqs1[0]), len(seqs2[0]), 0, 0, 1, 0, len(seqs1), arr1, arr2, arr3)
+        results = list(arr3)
+        return results
 
 
 def lcs_strand_pairs_constraints_by_number_matching_domains(
