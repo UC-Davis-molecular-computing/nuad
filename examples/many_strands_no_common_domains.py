@@ -133,7 +133,7 @@ def main() -> None:
     domain_pairs_rna_plex_constraint = nc.rna_plex_domain_pairs_constraint(
         threshold=-2.0, temperature=52, short_description='DomainPairRNAplex')
 
-    domain_pair_nupack_constraint = nc.nupack_domain_pair_constraint(
+    domain_pair_constraint = nc.nupack_domain_pair_constraint(
         threshold=-0.5, temperature=52, short_description='DomainPairNUPACK',
         parallel=parallel)
 
