@@ -2232,7 +2232,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     for report in reports_without_values:
         part_type_name = report.constraint.part_name()
         dm(f'## {report.constraint.description}')
-        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')  # noqa
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (#violations/#evaluations)')  # noqa
         for viol in report.violations:
             print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 

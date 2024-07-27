@@ -7,7 +7,7 @@ in the nearest neighbor model and filtering those outside a given range).
 Based on the DNA single-stranded tile (SST) sequence designer used in the following publication.
 
 "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly"
-Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
+Woods*, Doty*, Myhrvold, Hui, Zhou, Yin, Winfree. (*Joint first co-authors)
 """  # noqa
 
 from __future__ import annotations
