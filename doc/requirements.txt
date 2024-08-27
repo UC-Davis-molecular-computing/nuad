@@ -4,8 +4,6 @@ numpy
 psutil
 ordered_set
 pathos
-xlwt
-xlrd
 tabulate
 pint
 matplotlib

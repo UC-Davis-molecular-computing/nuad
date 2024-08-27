@@ -77,7 +77,7 @@ To install nuad, you can either install it using pip (the slightly simpler optio
   3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
 
       ```
-      pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
+      pip install numpy ordered_set psutil pathos openpyxl tabulate scadnano
       ``` 
     
       at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
