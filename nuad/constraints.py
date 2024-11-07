@@ -1814,7 +1814,7 @@ class Domain(Part, JSONSerializable):
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
-        Set DNA sequence and fix it so it is not changed by the dsd sequence designer.
+        Set DNA sequence and fix it so it is not changed by the nuad sequence designer.
 
         Since it is being fixed, there is no Domain pool, so we don't check the pool or whether it has
         a length. We also bypass the check that it is not fixed.
@@ -5839,6 +5839,12 @@ def strand_pairs_by_number_matching_domains(*, strands: Iterable[Strand] | None 
     """
     Utility function for calculating number of complementary domains betweeen several pairs of strands.
 
+    Note that for the common use case that you want to create several constraints, each with their own threshold
+    depending on the number of complementary domains, you should use functions such as 
+    :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains` or 
+    :func:`nupack_strand_pair_constraints_by_number_matching_domains`, which in turn calls this function
+    and then creates as many constraints as their are different numbers of complementary domains.
+
     Args:
         strands: list of :any:`Strand`'s in which to find pairs. Mutually exclusive with `pairs`.
         pairs: list of pairs of strands. Mutually exclusive with `strands`.
@@ -6714,6 +6720,8 @@ def rna_duplex_strand_pairs_constraint(
     The function :meth:`rna_duplex_strand_pairs_constraints_by_number_matching_domains` is useful
     for this purpose, returning a list of :any:`StrandPairsConstraint`'s such as those returned by this
     function, one for each possible number of matching domains.
+
+    TODO: explain that this should be many pairs of strands to be fast
 
     :param threshold:
         Energy threshold in kcal/mol. If a float, this is used for all pairs of strands.
@@ -8672,7 +8680,7 @@ def nupack_complex_base_pair_probability_constraint(
         short_description: str = 'ComplexBPProbs',
         parallel: bool = False,
 ) -> ComplexConstraint:
-    """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
+    """Returns constraint that checks given base pair probabilities in tuples of :any:`Strand`'s
 
     :param strand_complexes:
         Iterable of :any:`Strand` tuples
