@@ -8351,7 +8351,7 @@ from typing import Union  # seems the | notation doesn't work here despite from 
 
 BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
 """Represents a reference to a base. Can be either specified as a NUPACK base
-index or an index of a dsd :py:class:`StrandDomainAddress`:
+index or an index of a nuad :py:class:`StrandDomainAddress`:
 """
 BasePairAddress = Tuple[BaseAddress, BaseAddress]
 """Represents a reference to a base pair
@@ -8667,10 +8667,10 @@ def nupack_complex_base_pair_probability_constraint(
         all_base_pairs: Iterable[BoundDomains] | None = None,
         base_pair_prob_by_type: Dict[BasePairType, float] | None = None,
         base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
-        base_pair_prob: Dict[BasePairAddress, float] = None,
-        base_unpaired_prob: Dict[BaseAddress, float] = None,
-        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
-        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
+        base_pair_prob: Dict[BasePairAddress, float] | None = None,
+        base_unpaired_prob: Dict[BaseAddress, float] | None = None,
+        base_pair_prob_upper_bound: Dict[BasePairAddress, float] | None = None,
+        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] | None = None,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
@@ -8866,6 +8866,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
+
+    #TODO: 11/6/2024: replace entries with function parameters that are not None
     # End populating base_pair_probs
 
     if description is None:
