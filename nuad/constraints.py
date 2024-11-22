@@ -3288,13 +3288,21 @@ class Design(JSONSerializable):
         A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
         `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
         If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as variables
+        assumed to be starred.
+
+        In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
+        a new domain name that has not been encountered.
+        Also, :any:`Domain`'s created in this way are "interned" as variables
         in a cache stored in the :any:`Design` object;
         no two :any:`Domain`'s with the same name in this design will be created,
         and subsequent uses of the same name will refer to the same :any:`Domain` object.
 
         :param domain_names:
             Names of the :any:`Domain`'s on this :any:`Strand`.
+            :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
+            is specified; if the domain name has already been used (or its complement via the convention
+            that names ending in a `*` are the complement of the domain whose name is equal but without
+            ending in a `*`), then the same :any:`Domain` object is reused.
             Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
         :param domains:
             list of :any:`Domain`'s on this :any:`Strand`.
