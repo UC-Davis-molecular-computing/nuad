@@ -355,7 +355,7 @@ def rna_duplex_multiple_deprecated(
     :param temperature:
         temperature in Celsius
     :param parameters_filename:
-        name of parameters file for NUPACK
+        name of parameters file for ViennaRNA
     :param max_energy:
         This is the maximum energy possible to assign. If RNAduplex reports any energies larger than this,
         they will be changed to `max_energy`. This is useful in case two sequences have no possible
