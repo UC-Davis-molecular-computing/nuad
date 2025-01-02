@@ -6,5 +6,6 @@ nupack
 tabulate
 matplotlib
 openpyxl
+viennarna
 scadnano
 typing_extensions; python_version < "3.8"
