@@ -1814,7 +1814,7 @@ class Domain(Part, JSONSerializable):
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
-        Set DNA sequence and fix it so it is not changed by the dsd sequence designer.
+        Set DNA sequence and fix it so it is not changed by the nuad sequence designer.
 
         Since it is being fixed, there is no Domain pool, so we don't check the pool or whether it has
         a length. We also bypass the check that it is not fixed.
@@ -2169,7 +2169,8 @@ def domains_not_substrings_of_each_other_constraint(
 @dataclass
 class VendorFields(JSONSerializable):
     """Data required when ordering DNA strands from a synthesis company such as
-    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
+    `IDT (Integrated DNA Technologies) <https://www.
+    dna.com/>`_.
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
@@ -2573,14 +2574,14 @@ class Strand(Part, JSONSerializable):
 
         label: str = json_map.get(label_key)
 
-        idt_json = json_map.get(vendor_fields_key)
-        idt = None
-        if idt_json is not None:
-            idt = VendorFields.from_json_serializable(idt_json)
+        vendor_fields_json = json_map.get(vendor_fields_key)
+        vendor_fields = None
+        if vendor_fields_json is not None:
+            vendor_fields = VendorFields.from_json_serializable(vendor_fields_json)
 
         strand: Strand = Strand(
             domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label, vendor_fields=idt)
+            group=group, name=name, label=label, vendor_fields=vendor_fields)
         return strand
 
     def __repr__(self) -> str:
@@ -3277,7 +3278,7 @@ class Design(JSONSerializable):
                    group: str = default_strand_group,
                    name: str | None = None,
                    label: str | None = None,
-                   idt: VendorFields | None = None,
+                   vendor_fields: VendorFields | None = None,
                    ) -> Strand:
         """
         This is an alternative way to create strands instead of calling the :any:`Strand` constructor
@@ -3287,13 +3288,21 @@ class Design(JSONSerializable):
         A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
         `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
         If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred. Also, :any:`Domain`'s created in this way are "interned" as variables
+        assumed to be starred.
+
+        In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
+        a new domain name that has not been encountered.
+        Also, :any:`Domain`'s created in this way are "interned" as variables
         in a cache stored in the :any:`Design` object;
         no two :any:`Domain`'s with the same name in this design will be created,
         and subsequent uses of the same name will refer to the same :any:`Domain` object.
 
         :param domain_names:
             Names of the :any:`Domain`'s on this :any:`Strand`.
+            :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
+            is specified; if the domain name has already been used (or its complement via the convention
+            that names ending in a `*` are the complement of the domain whose name is equal but without
+            ending in a `*`), then the same :any:`Domain` object is reused.
             Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
         :param domains:
             list of :any:`Domain`'s on this :any:`Strand`.
@@ -3309,7 +3318,7 @@ class Design(JSONSerializable):
             Name of this :any:`Strand`.
         :param label:
             Label to associate with this :any:`Strand`.
-        :param idt:
+        :param vendor_fields:
             :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         :return:
@@ -3349,7 +3358,7 @@ class Design(JSONSerializable):
                         group=group,
                         name=name,
                         label=label,
-                        vendor_fields=idt)
+                        vendor_fields=vendor_fields)
 
         for existing_strand in self.strands:
             if strand.name == existing_strand.name:
@@ -3441,7 +3450,7 @@ class Design(JSONSerializable):
                                  domain_delimiter: str = '',
                                  key: KeyFunction[Strand] | None = None,
                                  warn_duplicate_name: bool = False,
-                                 only_strands_with_idt: bool = False,
+                                 only_strands_with_vendor_fields: bool = False,
                                  strands: Iterable[Strand] | None = None) -> str:
         """Called by :meth:`Design.write_idt_bulk_input_file` to determine what string to write to
         the file. This function can be used to get the string directly without creating a file.
@@ -3459,7 +3468,7 @@ class Design(JSONSerializable):
             domain_delimiter=domain_delimiter,
             key=key,
             warn_duplicate_name=warn_duplicate_name,
-            only_strands_with_idt=only_strands_with_idt,
+            only_strands_with_vendor_fields=only_strands_with_vendor_fields,
         )
 
     def write_idt_bulk_input_file(self, *,
@@ -3470,7 +3479,7 @@ class Design(JSONSerializable):
                                   delimiter: str = ',',
                                   domain_delimiter: str = '',
                                   warn_duplicate_name: bool = True,
-                                  only_strands_with_idt: bool = False,
+                                  only_strands_with_vendor_fields: bool = False,
                                   strands: Iterable[Strand] | None = None) -> None:
         """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
         :data:`Strand.vendor_fields`, suitable for pasting into the "Bulk Input" field of IDT
@@ -3505,7 +3514,7 @@ class Design(JSONSerializable):
             is raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
@@ -3518,7 +3527,7 @@ class Design(JSONSerializable):
                                                  domain_delimiter=domain_delimiter,
                                                  key=key,
                                                  warn_duplicate_name=warn_duplicate_name,
-                                                 only_strands_with_idt=only_strands_with_idt,
+                                                 only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                                  strands=strands)
         if extension is None:
             extension = 'idt'
@@ -3529,7 +3538,7 @@ class Design(JSONSerializable):
                                    directory: str = '.',
                                    key: KeyFunction[Strand] | None = None,
                                    warn_duplicate_name: bool = False,
-                                   only_strands_with_idt: bool = False,
+                                   only_strands_with_vendor_fields: bool = False,
                                    use_default_plates: bool = True, warn_using_default_plates: bool = True,
                                    plate_type: PlateType = PlateType.wells96,
                                    strands: Iterable[Strand] | None = None) -> None:
@@ -3544,7 +3553,7 @@ class Design(JSONSerializable):
         For instance, if the script is named ``my_origami.py``,
         then the sequences will be written to ``my_origami.xls``.
 
-        If the last plate as fewer than 24 strands for a 96-well plate, or fewer than 96 strands for a
+        If the last plate has fewer than 24 strands for a 96-well plate, or fewer than 96 strands for a
         384-well plate, then the last two plates are rebalanced to ensure that each plate has at least
         that number of strands, because IDT charges extra for a plate with too few strands:
         https://www.idtdna.com/pages/products/custom-dna-rna/dna-oligos/custom-dna-oligos
@@ -3564,16 +3573,16 @@ class Design(JSONSerializable):
             raised (regardless of the value of this parameter)
             if two different :any:`Strand`'s have the same name but different sequences, IDT scales, or IDT
             purifications.
-        :param only_strands_with_idt:
+        :param only_strands_with_vendor_fields:
             If False (the default), all non-scaffold sequences are output, with reasonable default values
             chosen if the field :data:`Strand.vendor_fields` is missing.
             (though scaffold is included if `export_scaffold` is True).
             If True, then strands lacking the field :data:`Strand.vendor_fields` will not be exported.
             If False, then `use_default_plates` must be True.
         :param use_default_plates:
-            Use default values for plate and well (ignoring those in idt fields, which may be None).
-            If False, each Strand to export must have the field :data:`Strand.vendor_fields`, so in particular
-            the parameter `only_strands_with_idt` must be True.
+            Use default values for plate and well (ignoring those in :data:`Strand.vendor_fields`, which
+            may be None). If False, each Strand to export must have the field :data:`Strand.vendor_fields`,
+            so in particular the parameter `only_strands_with_idt` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
             :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
@@ -3595,7 +3604,7 @@ class Design(JSONSerializable):
                                              filename=filename,
                                              key=key,
                                              warn_duplicate_name=warn_duplicate_name,
-                                             only_strands_with_idt=only_strands_with_idt,
+                                             only_strands_with_vendor_fields=only_strands_with_vendor_fields,
                                              use_default_plates=use_default_plates,
                                              warn_using_default_plates=warn_using_default_plates,
                                              plate_type=plate_type)
@@ -5838,6 +5847,12 @@ def strand_pairs_by_number_matching_domains(*, strands: Iterable[Strand] | None 
     """
     Utility function for calculating number of complementary domains betweeen several pairs of strands.
 
+    Note that for the common use case that you want to create several constraints, each with their own threshold
+    depending on the number of complementary domains, you should use functions such as 
+    :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains` or 
+    :func:`nupack_strand_pair_constraints_by_number_matching_domains`, which in turn calls this function
+    and then creates as many constraints as their are different numbers of complementary domains.
+
     Args:
         strands: list of :any:`Strand`'s in which to find pairs. Mutually exclusive with `pairs`.
         pairs: list of pairs of strands. Mutually exclusive with `strands`.
@@ -6714,6 +6729,8 @@ def rna_duplex_strand_pairs_constraint(
     for this purpose, returning a list of :any:`StrandPairsConstraint`'s such as those returned by this
     function, one for each possible number of matching domains.
 
+    TODO: explain that this should be many pairs of strands to be fast
+
     :param threshold:
         Energy threshold in kcal/mol. If a float, this is used for all pairs of strands.
         If a dict[int, float], interpreted to mean that
@@ -6746,7 +6763,8 @@ def rna_duplex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
@@ -6832,7 +6850,8 @@ def rna_plex_strand_pairs_constraint(
 
     # we use ThreadPool instead of pathos because we're farming this out to processes through
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_cores)
+    if parallel:
+        thread_pool = ThreadPool(processes=num_cores)
 
     def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
         if parallel:
@@ -8340,7 +8359,7 @@ from typing import Union  # seems the | notation doesn't work here despite from 
 
 BaseAddress = Union[int, Tuple[StrandDomainAddress, int]]
 """Represents a reference to a base. Can be either specified as a NUPACK base
-index or an index of a dsd :py:class:`StrandDomainAddress`:
+index or an index of a nuad :py:class:`StrandDomainAddress`:
 """
 BasePairAddress = Tuple[BaseAddress, BaseAddress]
 """Represents a reference to a base pair
@@ -8656,10 +8675,10 @@ def nupack_complex_base_pair_probability_constraint(
         all_base_pairs: Iterable[BoundDomains] | None = None,
         base_pair_prob_by_type: Dict[BasePairType, float] | None = None,
         base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
-        base_pair_prob: Dict[BasePairAddress, float] = None,
-        base_unpaired_prob: Dict[BaseAddress, float] = None,
-        base_pair_prob_upper_bound: Dict[BasePairAddress, float] = None,
-        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] = None,
+        base_pair_prob: Dict[BasePairAddress, float] | None = None,
+        base_unpaired_prob: Dict[BaseAddress, float] | None = None,
+        base_pair_prob_upper_bound: Dict[BasePairAddress, float] | None = None,
+        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] | None = None,
         temperature: float = nv.default_temperature,
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
@@ -8669,7 +8688,7 @@ def nupack_complex_base_pair_probability_constraint(
         short_description: str = 'ComplexBPProbs',
         parallel: bool = False,
 ) -> ComplexConstraint:
-    """Returns constraint that checks given base pairs probabilities in tuples of :any:`Strand`'s
+    """Returns constraint that checks given base pair probabilities in tuples of :any:`Strand`'s
 
     :param strand_complexes:
         Iterable of :any:`Strand` tuples
@@ -8855,6 +8874,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
     for base_type in BasePairType:
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
+
+    #TODO: 11/6/2024: replace entries with function parameters that are not None
     # End populating base_pair_probs
 
     if description is None:

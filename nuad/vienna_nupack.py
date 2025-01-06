@@ -32,6 +32,7 @@ os_is_windows = sys.platform == 'win32'
 parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 
 default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
+# default_vienna_rna_parameter_filename = 'dna_mathews2004.par'
 
 default_temperature = 37
 default_magnesium = 0.0125
@@ -273,6 +274,7 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     # XXX: Then why are none of those keyword arguments being used here??
     process: sub.Popen | None = None
     command_strs = (['wsl.exe', '-e'] if os_is_windows else []) + command_strs
+
     try:
         with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as process:
             output, stderr = process.communicate(user_input.encode())
@@ -280,21 +282,69 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
         if process is not None:
             process.kill()
         raise error
+
     output_decoded = output.decode()
     stderr_decoded = stderr.decode()
+
     return output_decoded, stderr_decoded
 
+def rna_duplex_multiple(
+        pairs: Sequence[Tuple[S, S]],
+        temperature: float = default_temperature,
+        max_energy: float = 0.0,
+        gu_wobble: bool = False,
+    ) -> Tuple[float, ...]:
+    """
+    Calls `RNA.duplexfold` (from ViennaRNA Python package:
+    https://www.tbi.univie.ac.at/RNA/ViennaRNA/refman/api_python.html)
+    on a list of pairs, specifically:
+    [ (seq1, seq2), (seq3, seq4), (seq5, seq6), ... ]
+    where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
+    Returns a list (in the same order as seqpairs) of free energies.
 
-def rna_duplex_multiple(pairs: Sequence[Tuple[S, S]],
-                        logger: logging.Logger = logging.root,
-                        temperature: float = default_temperature,
-                        parameters_filename: str = default_vienna_rna_parameter_filename,
-                        max_energy: float = 0.0,
-                        ) -> Tuple[float, ...]:
+    :param pairs:
+        sequence (list or tuple) of pairs of DNA sequences
+    :param temperature:
+        temperature in Celsius
+    :param max_energy:
+        This is the maximum energy possible to assign. If RNAduplex reports any energies larger than this,
+        they will be changed to `max_energy`. This is useful in case two sequences have no possible
+        base pairs between them (e.g., CCCC and TTTT), in which case RNAduplex assigns a free energy
+        of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
+        for graphing energies, it's nice if there's not some value several orders of magnitude larger
+        than all the rest.
+    :param gu_wobble:
+        Whether to allow GU wobble pairs; I honestly don't know what this means for DNA, but
+        it's an option in RNAduplex, and it makes a difference in calculating the energy.
+    :return:
+        list of free energies, in the same order as `pairs`
+    """
+
+    import RNA
+
+    RNA.cvar.temperature = temperature
+    RNA.cvar.noGU = not gu_wobble
+    RNA.params_load_DNA_Mathews2004()
+
+    energies = []
+    for seq1, seq2 in pairs:
+        result = RNA.duplexfold(seq1, seq1)
+        energy = min(result.energy, max_energy)
+        energies.append(energy)
+
+    return tuple(energies)
+
+def rna_duplex_multiple_deprecated(
+        pairs: Sequence[Tuple[S, S]],
+        logger: logging.Logger = logging.root,
+        temperature: float = default_temperature,
+        parameters_filename: str = default_vienna_rna_parameter_filename,
+        max_energy: float = 0.0,
+    ) -> Tuple[float, ...]:
     """
     Calls RNAduplex (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
     on a list of pairs, specifically:
-    [ (seq1, seq2), (seq2, seq3), (seq4, seq5), ... ]
+    [ (seq1, seq2), (seq3, seq4), (seq5, seq6), ... ]
     where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
     Returns a list (in the same order as seqpairs) of free energies.
 
@@ -305,7 +355,7 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[S, S]],
     :param temperature:
         temperature in Celsius
     :param parameters_filename:
-        name of parameters file for NUPACK
+        name of parameters file for ViennaRNA
     :param max_energy:
         This is the maximum energy possible to assign. If RNAduplex reports any energies larger than this,
         they will be changed to `max_energy`. This is useful in case two sequences have no possible
@@ -344,10 +394,10 @@ def rna_duplex_multiple(pairs: Sequence[Tuple[S, S]],
 
     if error.strip() != '':
         logger.warning('error from RNAduplex: ', error)
-        if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
-            raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
-                             'is a different error that I don\'t know how to handle. Exiting...'
-                             f'\nerror:\n{error}')
+        # if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
+        #     raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
+        #                      'is a different error that I don\'t know how to handle. Exiting...'
+        #                      f'\nerror:\n{error}')
 
     lines = [line for line in output.split('\n') if line.strip() != '']
     if len(lines) != len(pairs):

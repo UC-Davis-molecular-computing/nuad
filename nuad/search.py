@@ -927,6 +927,9 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             if rng_restart is not None:
                 rng = rng_restart
 
+        iteration = 0
+        stopwatch = Stopwatch()
+
         eval_set = EvaluationSet(params.constraints, params.never_increase_score)
         eval_set.evaluate_all(design)
 
@@ -935,11 +938,11 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
                                       directories=directories, eval_set=eval_set)
 
-        iteration = 0
-        stopwatch = Stopwatch()
 
         while not _done(iteration, params, eval_set):
             if params.log_time:
+                stopwatch.stop()
+                _log_time(stopwatch)
                 stopwatch.restart()
 
             _check_cpu_count(cpu_count)
@@ -976,9 +979,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                                               eval_set=eval_set)
 
             iteration += 1
-            if params.log_time:
-                stopwatch.stop()
-                _log_time(stopwatch)
 
         _log_constraint_summary(params=params, eval_set=eval_set,
                                 iteration=iteration, num_new_optimal=num_new_optimal)
@@ -1293,11 +1293,11 @@ def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
             med_time = statistics.median(time_last_n_calls)
             content += f' median: {med_time:.1f} ms |'
         content_width = len(content)
-        logger.info('\n' + ('-' * content_width) + '\n' + content)
+        logger.info('\n' + content)
     else:
         # skip appending first time, since it is much larger and skews the average
         content = f'| time for first call: {stopwatch.milliseconds_str()} ms |'
-        logger.info('\n' + ('-' * len(content)) + '\n' + content)
+        logger.info('\n' + content)
         time_last_n_calls_available = True
 
 
@@ -2232,7 +2232,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
     for report in reports_without_values:
         part_type_name = report.constraint.part_name()
         dm(f'## {report.constraint.description}')
-        dm(f'### {report.num_violations}/{report.num_evaluations}  (\#violations/\#evaluations)')  # noqa
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (#violations/#evaluations)')  # noqa
         for viol in report.violations:
             print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 

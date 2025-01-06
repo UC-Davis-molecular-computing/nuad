@@ -1,9 +1,9 @@
+sphinx
+sphinx_rtd_theme
 numpy
 psutil
 ordered_set
 pathos
-xlwt
-xlrd
 tabulate
 pint
 matplotlib

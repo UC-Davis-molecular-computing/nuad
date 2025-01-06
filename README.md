@@ -67,6 +67,10 @@ To install nuad, you can either install it using pip (the slightly simpler optio
 
         and then unzip somewhere on your file system.
 
+  2. Install the Python package by changing to the directory where the nuad repository is stored localled and type `pip install -e .` This should install the needed dependencies.
+
+If step 2 above does not work, try the following:
+
   2. Add the directory `nuad` that you just created to your `PYTHONPATH` environment variable. In Linux, Mac, or [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install-win10), this is done by adding this line to your startup script (e.g., `~/.bashrc`, or `~/.bash_profile` for Mac OS), where `/path/to/nuad` represents the path to the `nuad` directory:
 
       ```
@@ -77,18 +81,16 @@ To install nuad, you can either install it using pip (the slightly simpler optio
   3. Install the Python packages dependencies listed in the file [requirements.txt](https://github.com/UC-Davis-molecular-computing/nuad/blob/main/requirements.txt) by typing 
 
       ```
-      pip install numpy ordered_set psutil pathos xlwt xlrd tabulate scadnano
+      pip install numpy ordered_set psutil pathos openpyxl tabulate scadnano viennarna
       ``` 
     
       at the command line. If you have Python 3.7 then you will also have to install the `typing_extensions` package: `pip install typing_extensions`
 
-### Installing NUPACK and ViennaRNA
+### Installing NUPACK
 
 Recall that if you are using Windows, you must do all installation through [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) (Windows subsystem for Linux).
 
-Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation), [ViennaRNA installation](https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html), and [ViennaRNA downloads](https://www.tbi.univie.ac.at/RNA/#download)). If you do not install one of them, you can still install nuad, but most of the useful functions specifying pre-packaged constraints will be unavailable to call.
-
-After installing ViennaRNA, it may be necessary to add its executables directory (the directory containing executable programs such as RNAduplex) to your `PATH` environment variable. (Similarly to how the `PYTHONPATH` variable is adjusted above.) NUPACK 4 does not come with an executable, so this step is unnecessary; it is called directly from within Python.
+Install NUPACK (version 4) and ViennaRNA following their installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation). If you do not install NUPACK, you can still install nuad, but manyu of the useful functions specifying pre-packaged constraints will be unavailable to call.
 
 <!-- To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`. -->
 
@@ -111,8 +113,6 @@ To test that NUPACK and ViennaRNA can each be called from within the Python libr
 >>> import nuad.vienna_nupack as nv
 >>> nv.pfunc('GCGCGCGCGC')  # test NUPACK 4
 -1.9079766874655928
->>> nv.rna_duplex_multiple([('GCGCGCGCGC', 'GCGCGCGCGC')]) # test ViennaRNA
-[-15.7]
 ```
 
 ## Data model
