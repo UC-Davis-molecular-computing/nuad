@@ -90,7 +90,7 @@ If step 2 above does not work, try the following:
 
 Recall that if you are using Windows, you must do all installation through [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) (Windows subsystem for Linux).
 
-Install NUPACK (version 4) following its installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation). If you do not install NUPACK, you can still install nuad, but manyu of the useful functions specifying pre-packaged constraints will be unavailable to call.
+Install NUPACK (version 4) following its installation instructions ([NUPACK installation](https://docs.nupack.org/start/#maclinux-installation)). If you do not install NUPACK, you can still install nuad, but manyu of the useful functions specifying pre-packaged constraints will be unavailable to call.
 
 <!-- To test that NUPACK 4 is installed correctly, run `python3 -m pip show nupack`. -->
 
