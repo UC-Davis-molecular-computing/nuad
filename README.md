@@ -10,7 +10,7 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 * [API documentation](#api-documentation)
 * [Installation](#installation)
   * [Installing nuad](#installing-nuad)
-  * [Installing NUPACK and ViennaRNA](#installing-nupack-and-viennarna)
+  * [Installing NUPACK](#installing-nupack)
 * [Data model](#data-model)
 * [Constraint evaluations must be pure functions of their inputs](#constraint-evaluations-must-be-pure-functions-of-their-inputs)
 * [Examples](#examples)
