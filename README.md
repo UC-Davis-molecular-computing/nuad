@@ -209,24 +209,3 @@ Please report issues (bugs or feature requests) at the [nuad GitHub repository i
 ## Contributing
 
 See the [CONTRIBUTING document](CONTRIBUTING.md).
-
-## NUPACK Copyright Notice
-
-Since nuad will eventually be distributed with NUPACK, we include the following license
-agreement as required by [NUPACK](http://www.nupack.org/downloads/register).
-
-### NUPACK Software License Agreement for Non-Commercial Academic Use and Redistribution
-Copyright © 2022 California Institute of Technology. All rights reserved.
-
-1. Use and redistribution in source form and/or binary form, with or without modification, are permitted for non-commercial academic purposes only, provided that the following conditions are met:
-
-2. Redistributions in source form must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-3. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation provided with the distribution.
-
-4. Web applications that use the software in source form or binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in online documentation provided with the web application.
-
-Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote derivative works without specific prior written permission.
-
-### Disclaimer
-This software is provided by the copyright holders and contributors "as is" and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed.  In no event shall the copyright holder or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
