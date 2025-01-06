@@ -25,7 +25,7 @@ nuad stands for "NUcleic Acid Designer".† It is a Python library that enables 
 
 Note: The nuad package was originally called dsd (DNA sequence designer), so you may see some old references to this name for the package.
 
-†A secondary reason for the name of the package is that some work was done when the primary author was on sabbatical in Maynooth, Ireland, whose original Irish name is [*Maigh Nuad*](https://en.wikipedia.org/wiki/Maynooth#Etymology).
+†A secondary reason for the name of the package is that some work was done when the primary author was on sabbatical in Maynooth, Ireland, whose original Irish name is [*Maigh Nuad*](https://en.wikipedia.org/wiki/Maynooth#Etymology), meaning "plain of Nuadha", an ancient Irish god.
 
 
 ## API documentation
