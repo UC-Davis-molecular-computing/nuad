@@ -6766,12 +6766,12 @@ def rna_duplex_strand_pairs_constraint(
     if parallel:
         thread_pool = ThreadPool(processes=num_cores)
 
-    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         if parallel:
             energies = nv.rna_duplex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
                                                        parameters_filename)
         else:
-            energies = nv.rna_duplex_multiple(seq_pairs, logger, temperature, parameters_filename)
+            energies = nv.rna_duplex_multiple(seq_pairs, temperature)
         return energies
 
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
