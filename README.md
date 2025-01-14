@@ -33,7 +33,7 @@ The API documentation is on readthedocs: https://nuad.readthedocs.io/
 
 
 ## Installation
-nuad requires Python version 3.7 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on two pieces of software that are not installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
+nuad requires Python version 3.8 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on two pieces of software that are not installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
 
 nuad uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download), which must be installed separately (see below for link to installation instructions). While it is technically possible to use nuad without them, most of the pre-packaged constraints require them.
 
