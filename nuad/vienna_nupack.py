@@ -524,10 +524,10 @@ def rna_plex_multiple(pairs: Sequence[Tuple[S, S]],
 
     if error.strip() != '':
         logger.warning('error from RNAplex: ', error)
-        if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
-            raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
-                             'is a different error that I don\'t know how to handle. Exiting...'
-                             f'\nerror:\n{error}')
+        # if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
+        #     raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
+        #                      'is a different error that I don\'t know how to handle. Exiting...'
+        #                      f'\nerror:\n{error}')
 
     # with open('output/rna_plex_multiple_input.txt', 'w') as f:
     #     f.write(user_input)

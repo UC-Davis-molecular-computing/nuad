@@ -750,6 +750,11 @@ class SearchParameters:
     Whether to log the time taken per iteration to the screen.
     """
 
+    hidden_threshold_heuristic: bool = False
+    """
+    TODO:
+    """
+
     scrolling_output: bool = True
     r"""
     If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
@@ -931,7 +936,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         stopwatch = Stopwatch()
 
         eval_set = EvaluationSet(params.constraints, params.never_increase_score)
-        eval_set.evaluate_all(design)
+        eval_set.evaluate_all(design, hidden_threshold_heuristic=params.hidden_threshold_heuristic)
 
         if not params.restart:
             # write initial sequences and report
@@ -950,7 +955,8 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            eval_set.evaluate_new(design, domains_new=domains_new)
+            eval_set.evaluate_new(design, domains_new=domains_new,
+                                  hidden_threshold_heuristic=params.hidden_threshold_heuristic)
 
             # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
@@ -1604,16 +1610,23 @@ class EvaluationSet:
         self.domain_to_violations_new = defaultdict(list)
         self.domain_to_score_new = defaultdict(float)
 
-    def evaluate_all(self, design: Design) -> None:
+    def evaluate_all(self, design: Design, hidden_threshold_heuristic: bool) -> None:
         # called on all parts of the design and sets self.evaluations
         self.reset_all()
         for constraint in self.constraints:
-            self.evaluate_constraint(constraint, design, None, None)
+            self.evaluate_constraint(
+                constraint,
+                design,
+                hidden_threshold_heuristic=hidden_threshold_heuristic,
+                score_gap=None,
+                domains_new=None,
+            )
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...]) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...],
+                     hidden_threshold_heuristic: bool) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1621,7 +1634,13 @@ class EvaluationSet:
         if self.never_increase_score:
             score_gap = self.calculate_initial_score_gap(design, domains_new)
         for constraint in self.constraints:
-            score_gap = self.evaluate_constraint(constraint, design, score_gap, domains_new)
+            score_gap = self.evaluate_constraint(
+                constraint,
+                design,
+                hidden_threshold_heuristic=hidden_threshold_heuristic,
+                score_gap=score_gap,
+                domains_new=domains_new,
+            )
             if score_gap is not None and _is_significantly_greater(0.0, score_gap):
                 break
         self.domain_to_score_new = EvaluationSet.sum_domain_scores(self.domain_to_violations_new)
@@ -1665,7 +1684,8 @@ class EvaluationSet:
     @staticmethod
     def evaluate_singular_constraint_parallel(constraint: SingularConstraint[DesignPart],
                                               parts: Tuple[nc.DesignPart, ...],
-                                              score_gap: float) \
+                                              score_gap: float,
+                                              hidden_threshold_heuristic: bool) \
             -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
         if len(parts) == 0:
             return [], 0.0
@@ -1678,7 +1698,7 @@ class EvaluationSet:
             partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
             for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                score, summary = constraint.call_evaluate(seqs, part)
+                score, summary = constraint.call_evaluate(seqs, part, hidden_threshold_heuristic)
                 partz_scores_summaries.append((part, score, summary))
             return partz_scores_summaries
 
@@ -1696,6 +1716,7 @@ class EvaluationSet:
     def evaluate_constraint(self,
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
+                            hidden_threshold_heuristic: bool,
                             score_gap: float | None,
                             domains_new: Tuple[Domain, ...] | None,
                             ) -> float:
@@ -1712,7 +1733,7 @@ class EvaluationSet:
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
                 for part in parts:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                    result = constraint.call_evaluate(seqs, part)
+                    result = constraint.call_evaluate(seqs, part, hidden_threshold_heuristic)
                     results.append(result)
                     if result.score > 0.0:
                         if score_gap is not None:
@@ -1721,7 +1742,8 @@ class EvaluationSet:
                                 break
             else:
                 violating_parts_scores_summaries, score_gap = \
-                    EvaluationSet.evaluate_singular_constraint_parallel(constraint, parts, score_gap)
+                    EvaluationSet.evaluate_singular_constraint_parallel(constraint, parts, score_gap,
+                                                                        hidden_threshold_heuristic)
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):

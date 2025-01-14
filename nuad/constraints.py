@@ -282,7 +282,7 @@ def default_score_transfer_function(x: float) -> float:
     :return:
         max(0.0, x^3)
     """
-    return max(0.0, x ** 3)
+    return max(0.0, x ** 5)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)
@@ -4212,6 +4212,8 @@ class Result(Generic[DesignPart]):
     a threshold.
     """
 
+    hidden_excess: float
+
     _summary: Optional[str] = None
 
     value: float | None = None
@@ -4423,7 +4425,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-    def call_evaluate(self, seqs: Tuple[str, ...], part: DesignPart | None) -> Result[DesignPart]:
+    def call_evaluate(self, seqs: Tuple[str, ...], part: DesignPart | None,
+                      hidden_threshold_heuristic: bool) -> Result[DesignPart]:
         """
         Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
         supplied in constructor.
@@ -4435,13 +4438,20 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             the :any:`Part` to be evaluated. Might be None if parallelization is being used,
             since it is cheaper to serialize only the sequence(s) than the entire :any:`Part`
             for passing to other processes to evaluate in parallel.
+        :param hidden_threshold_heuristic:
+            TODO: document this
         :return:
             a :any:`Result` object
         """
         result = (self.evaluate)(seqs, part)  # noqa
         if result.excess < 0.0:
             result.excess = 0.0
-        result.score = self.weight * self.score_transfer_function(result.excess)
+        excess = result.excess
+        if hidden_threshold_heuristic:
+            if excess > 0 and self.threshold is not None and self.threshold < 0:
+                excess -= self.threshold * 0.2
+                result.hidden_excess = excess
+        result.score = self.weight * self.score_transfer_function(excess)
         result.part = part
         return result
 
