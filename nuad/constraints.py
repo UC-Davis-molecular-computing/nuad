@@ -4179,6 +4179,117 @@ DesignPart = TypeVar('DesignPart',
                      Design)
 
 
+@dataclass
+class Result(Generic[DesignPart]):
+    """
+    A :any:`Result` is returned from the function :data:`SingularConstraint.evaluate`, and a list of
+    :any:`Result`'s is returned from the function :data:`BulkConstraint.evaluate_bulk`, describing the
+    result of evaluating the constraint on the design "part".
+
+    A :any:`Result` must have an "excess" and "summary" specified.
+
+    Optionally one may also specify a "value", which helps in graphically displaying the results of
+    evaluating constraints using the function :meth:`display_report`.
+
+    For example, if the constraint checks that the NUPACK complex free energy of a strand is at least
+    -2.5 kcal/mol, and a strand has energy -3.4 kcal/mol, then the following are sensible values for
+    these fields:
+
+    - ``value`` = ``-3.4``
+    - ``unit`` = ``"kcal/mol"``
+    - ``excess`` = ``-0.9``
+    - ``summary`` = ``"-3.4 kcal/mol"``
+    """
+
+    excess: float
+    """
+    The excess is a nonnegative value that is turned into a score, and the search minimizes the total score 
+    of all constraint evaluations. Setting this to 0 (or a negative value) means the constraint 
+    is satisfied, and setting it to a positive value means the constraint is violated. The interpretation
+    is that the larger `excess` is, the more the constraint is violated.
+
+    For example, a common value for excess is the amount by which the NUPACK complex free energy exceeds
+    a threshold.
+    """
+
+    _summary: Optional[str] = None
+
+    value: float | None = None
+    """
+    If this is a "numeric" constraint, i.e., checking some number such as the complex free energy of a 
+    strand and comparing it to a threshold, this is the "raw" value. It is optional, but if specified,
+    then the raw values can be plotted in a Jupyter notebook by the function :meth:`display_report`.
+
+    Optional units (e.g., 'kcal/mol') can be specified in the field :data:`Result.units`.
+    """
+
+    unit: str | None = None
+    """
+    Optional units for :data:`Result.value`, e.g., ``'kcal/mol'``. 
+
+    If specified, then the units are used in text reports
+    and to label the y-axis in  plots created by :meth:`search.display_report`.
+    """
+
+    score: float = field(init=False)
+    """
+    Set by the search algorithm based on :data:`Result.excess` as well as other data such as the 
+    constraint's weight and the :data:`SearchParameters.score_transfer_function`.
+    """
+
+    part: DesignPart = field(init=False)
+    """
+    Set by the search algorithm based on the part that was evaluated.
+    """
+
+    def __init__(self,
+                 excess: float,
+                 summary: str | None = None,
+                 value: float | None = None,
+                 unit: str | None = None) -> None:
+        self.excess = excess
+        if summary is None:
+            if value is None:
+                raise ValueError('at least one of value or summary must be specified')
+            # note summary getter calculates summary from value if summary is None,
+            # so no need to set it here
+        else:
+            self._summary = summary
+        if value is not None:
+            self.value = value
+            self.unit = unit
+        else:
+            if unit is not None:
+                raise ValueError('units cannot be specified if value is None')
+
+        self.score = 0.0
+        self.part = None  # type:ignore
+
+    @property
+    def summary(self) -> str:
+        """
+        This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
+        strand, pair of domains, pair of strands).
+
+        It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
+        """
+        if self._summary is None:
+            # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
+            # e.g., kcal/mol instead of kilocalorie / mol
+            # also 2 decimal places to make numbers line up nicely
+            # self.value.default_format = '.2fC~'
+            summary_str = f'{self.value:6.2f}'
+            if self.unit is not None:
+                summary_str += f' {self.unit}'
+            return str(summary_str)
+        else:
+            return self._summary
+
+    @summary.setter
+    def summary(self, summary: str) -> None:
+        self._summary = summary
+
+
 # eq=False gives us the default object.__hash__ id-based hashing
 # needs to be on all classes in the hierarchy for this to work
 @dataclass(eq=False)
@@ -4244,6 +4355,18 @@ class Constraint(Generic[DesignPart], ABC):
     than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
     """
 
+    threshold: float | None = None
+    """
+    If this constraint involves comparing a number to a threshold, this is the threshold.
+    
+    It is assumed that it is a negative number, and that the constrain is for some value
+    (like an energy measured by NUPACK) to be greater than the threshold. This is used in a heuristic
+    in the stochastical local search where we use a "hidden" threshold closer to 0 for the search
+    but use this value for calculating scores. See this issue for more explanation:
+    
+    https://github.com/UC-Davis-molecular-computing/nuad/issues/268
+    """
+
     @staticmethod
     @abstractmethod
     def part_name() -> str:
@@ -4259,117 +4382,6 @@ class Constraint(Generic[DesignPart], ABC):
 
 def _raise_unreachable():
     raise AssertionError('This should be unreachable')
-
-
-@dataclass
-class Result(Generic[DesignPart]):
-    """
-    A :any:`Result` is returned from the function :data:`SingularConstraint.evaluate`, and a list of
-    :any:`Result`'s is returned from the function :data:`BulkConstraint.evaluate_bulk`, describing the
-    result of evaluating the constraint on the design "part".
-
-    A :any:`Result` must have an "excess" and "summary" specified.
-
-    Optionally one may also specify a "value", which helps in graphically displaying the results of
-    evaluating constraints using the function :meth:`display_report`.
-
-    For example, if the constraint checks that the NUPACK complex free energy of a strand is at least
-    -2.5 kcal/mol, and a strand has energy -3.4 kcal/mol, then the following are sensible values for
-    these fields:
-
-    - ``value`` = ``-3.4``
-    - ``unit`` = ``"kcal/mol"``
-    - ``excess`` = ``-0.9``
-    - ``summary`` = ``"-3.4 kcal/mol"``
-    """
-
-    excess: float
-    """
-    The excess is a nonnegative value that is turned into a score, and the search minimizes the total score 
-    of all constraint evaluations. Setting this to 0 (or a negative value) means the constraint 
-    is satisfied, and setting it to a positive value means the constraint is violated. The interpretation
-    is that the larger `excess` is, the more the constraint is violated.
-    
-    For example, a common value for excess is the amount by which the NUPACK complex free energy exceeds
-    a threshold.
-    """
-
-    _summary: Optional[str] = None
-
-    value: float | None = None
-    """
-    If this is a "numeric" constraint, i.e., checking some number such as the complex free energy of a 
-    strand and comparing it to a threshold, this is the "raw" value. It is optional, but if specified,
-    then the raw values can be plotted in a Jupyter notebook by the function :meth:`display_report`.
-    
-    Optional units (e.g., 'kcal/mol') can be specified in the field :data:`Result.units`.
-    """
-
-    unit: str | None = None
-    """
-    Optional units for :data:`Result.value`, e.g., ``'kcal/mol'``. 
-    
-    If specified, then the units are used in text reports
-    and to label the y-axis in  plots created by :meth:`search.display_report`.
-    """
-
-    score: float = field(init=False)
-    """
-    Set by the search algorithm based on :data:`Result.excess` as well as other data such as the 
-    constraint's weight and the :data:`SearchParameters.score_transfer_function`.
-    """
-
-    part: DesignPart = field(init=False)
-    """
-    Set by the search algorithm based on the part that was evaluated.
-    """
-
-    def __init__(self,
-                 excess: float,
-                 summary: str | None = None,
-                 value: float | None = None,
-                 unit: str | None = None) -> None:
-        self.excess = excess
-        if summary is None:
-            if value is None:
-                raise ValueError('at least one of value or summary must be specified')
-            # note summary getter calculates summary from value if summary is None,
-            # so no need to set it here
-        else:
-            self._summary = summary
-        if value is not None:
-            self.value = value
-            self.unit = unit
-        else:
-            if unit is not None:
-                raise ValueError('units cannot be specified if value is None')
-
-        self.score = 0.0
-        self.part = None  # type:ignore
-
-    @property
-    def summary(self) -> str:
-        """
-        This string is displayed in the text report on constraints, after the name of the "part" (e.g.,
-        strand, pair of domains, pair of strands).
-
-        It can be set explicitly, or calculated from :data:`Result.value` if not set explicitly.
-        """
-        if self._summary is None:
-            # This formatting is "short pretty": https://pint.readthedocs.io/en/stable/user/formatting.html
-            # e.g., kcal/mol instead of kilocalorie / mol
-            # also 2 decimal places to make numbers line up nicely
-            # self.value.default_format = '.2fC~'
-            summary_str = f'{self.value:6.2f}'
-            if self.unit is not None:
-                summary_str += f' {self.unit}'
-            return str(summary_str)
-        else:
-            return self._summary
-
-    @summary.setter
-    def summary(self, summary: str) -> None:
-        self._summary = summary
 
 
 @dataclass(eq=False)
@@ -4878,7 +4890,8 @@ def nupack_domain_free_energy_constraint(
                             score_transfer_function=score_transfer_function,
                             evaluate=evaluate,
                             parallel=parallel,
-                            domains=domains)
+                            domains=domains,
+                            threshold=threshold)
 
 
 def nupack_strand_free_energy_constraint(
@@ -4946,7 +4959,8 @@ def nupack_strand_free_energy_constraint(
                             score_transfer_function=score_transfer_function,
                             evaluate=evaluate,
                             parallel=parallel,
-                            strands=strands)
+                            strands=strands,
+                            threshold=threshold)
 
 
 def nupack_domain_pair_constraint(
@@ -5068,7 +5082,8 @@ def nupack_domain_pair_constraint(
                                 score_transfer_function=score_transfer_function,
                                 evaluate=evaluate,
                                 parallel=parallel,
-                                pairs=pairs)
+                                pairs=pairs,
+                                threshold=threshold)
 
 
 def nupack_strand_pair_constraints_by_number_matching_domains(
@@ -5228,6 +5243,7 @@ def nupack_strand_pair_constraint(
                                 parallel=parallel,
                                 pairs=pairs,
                                 evaluate=evaluate,
+                                threshold=threshold,
                                 )
 
 
@@ -5398,7 +5414,9 @@ def rna_duplex_domain_pairs_constraint(
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs_tuple)
+                                 pairs=pairs_tuple,
+                                 threshold=threshold,
+                                 )
 
 
 def rna_plex_domain_pairs_constraint(
@@ -5489,7 +5507,9 @@ def rna_plex_domain_pairs_constraint(
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs_tuple)
+                                 pairs=pairs_tuple,
+                                 threshold=threshold,
+                                 )
 
 
 def get_domain_pairs_from_thresholds_dict(
@@ -5538,6 +5558,8 @@ def domain_pairs_nonorthogonal_constraint(
         parameters_filename: str = nv.default_vienna_rna_parameter_filename
 ) -> DomainPairsConstraint:
     # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAcofold
+
+    logger.warning(f'hidden threshold heuristic not yet supported for domain_pairs_nonorthogonal_constraint')
 
     if description is None:
         description = f'domain pair {tool_name} energies for nonorthogonal domains at {temperature}C'
@@ -6545,6 +6567,7 @@ def lcs_domain_pairs_constraint(
         evaluate_bulk=evaluate_bulk,
         pairs=pairs,
         check_domain_against_itself=check_domain_against_itself,
+        threshold=threshold,
     )
 
 
@@ -6629,6 +6652,7 @@ def lcs_strand_pairs_constraint(
         evaluate_bulk=evaluate_bulk,
         pairs=pairs_tuple,
         check_strand_against_itself=check_strand_against_itself,
+        threshold=threshold,
     )
 
 
@@ -6794,7 +6818,9 @@ def rna_duplex_strand_pairs_constraint(
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs_tuple)
+                                 pairs=pairs_tuple,
+                                 threshold=threshold,
+                                 )
 
 
 def rna_plex_strand_pairs_constraint(
@@ -6881,7 +6907,9 @@ def rna_plex_strand_pairs_constraint(
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs_tuple)
+                                 pairs=pairs_tuple,
+                                 threshold=threshold,
+                                 )
 
 
 def energy_excess(energy: float, threshold: float) -> float:
@@ -6982,7 +7010,9 @@ def rna_cofold_strand_pairs_constraint(
                                  weight=weight,
                                  score_transfer_function=score_transfer_function,
                                  evaluate_bulk=evaluate_bulk,
-                                 pairs=pairs_tuple)
+                                 pairs=pairs_tuple,
+                                 threshold=threshold,
+                                 )
 
 
 def _all_pairs_domain_sequences_complements_names_from_domains(
@@ -8875,7 +8905,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence.''')
         if base_type not in base_type_probability_threshold:
             base_type_probability_threshold[base_type] = base_type.default_pair_probability()
 
-    #TODO: 11/6/2024: replace entries with function parameters that are not None
+    # TODO: 11/6/2024: replace entries with function parameters that are not None
     # End populating base_pair_probs
 
     if description is None:
