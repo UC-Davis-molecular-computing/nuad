@@ -17,6 +17,7 @@ import os
 import shutil
 import sys
 import logging
+from termcolor import cprint
 from collections import defaultdict, deque
 import collections.abc as abc
 from dataclasses import dataclass, field
@@ -83,6 +84,7 @@ pprint_indent = 4
 
 def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
+
 
 
 # This function takes a lot of time if we don't cache results; but there's not too many different
@@ -805,6 +807,94 @@ class SearchParameters:
                 raise ValueError('each element of constraints must be an instance of Constraint, '
                                  f'but the element at index {idx} is of type {type(constraint)}')
             idx += 1
+
+def search_partial_assignment(design: nc.Design, params: SearchParameters) -> None:
+    if params.random_seed is not None:
+        rng = np.random.default_rng(params.random_seed)
+    else:
+        rng = nn.default_rng
+
+    unassigned_domains = []
+    for strand in design.strands:
+        for domain in strand.domains:
+            if not domain.has_sequence() and not domain.dependent and domain not in unassigned_domains:
+                assert not domain.fixed
+                unassigned_domains.append(domain)
+
+    all_evals: OrderedSet[Evaluation] = OrderedSet()
+    domain_to_evals: dict[Domain, List[Evaluation]] = defaultdict(list)
+    for constraint in params.constraints:
+        parts = find_parts_to_check(constraint, design, None)
+        for part in parts:
+            domains = _independent_domains_in_part(part, exclude_fixed=True)
+            evaluation = Evaluation(constraint=constraint, part=part, domains=domains, result=None)
+            for domain in domains:
+                domain_to_evals[domain].append(evaluation)
+                all_evals.add(evaluation)
+
+    i=0
+    #TODO: pick better data structure for unassigned_domains;
+    # should be set with fast removal (so not OrderedSet) but consistent iteration order
+    # possibly need to roll our own OrderedSet using, e.g., ArrayList, but we remove item at index
+    # i by moving last element to index i and decrementing length
+    while len(unassigned_domains) > 0:
+        idx = rng.choice(len(unassigned_domains))
+        domain = unassigned_domains[idx]
+        new_sequence = domain.pool.generate_sequence(rng)
+        domain.set_sequence(new_sequence)
+        cprint(f'  assigning sequence to domain:     {domain.name}')
+        for strand in design.strands:
+            if all(domain.has_sequence() for domain in strand.domains):
+                print(f'  strand {strand.name}: {strand.sequence("-")}')
+
+        violations = []
+        can_evaluate_one = False
+        for evaluation in domain_to_evals[domain]:
+            if evaluation.can_evaluate():
+                can_evaluate_one = True
+                evaluation.evaluate()
+                if evaluation.violated():
+                    violations.append(evaluation)
+
+        if can_evaluate_one and len(violations) == 0:
+            cprint(f'  evaluated at least one and found no violations', 'green')
+
+        if len(violations) > 0:
+            # unassign domain we just assigned a sequence to above
+            domain.remove_sequence()
+            print(f'  unassigning domain just assigned: {domain.name}')
+            for evaluation in domain_to_evals[domain]:
+                if evaluation.evaluated():
+                    evaluation.unevaluate()
+
+            # pick a random violation that we just found, and pick *another* random
+            # domain involved in it, and unassign that one as well
+            violation = rng.choice(violations)
+            if len(violation.domains) > 1:
+                other_domain = rng.choice(list(violation.domains))
+                while other_domain == domain:
+                    other_domain = rng.choice(list(violation.domains))
+                other_domain.remove_sequence()
+                assert other_domain not in unassigned_domains
+                unassigned_domains.append(other_domain)
+                print(f'  unassigning domain involved:      {other_domain.name}')
+                for evaluation in domain_to_evals[other_domain]:
+                    if evaluation.evaluated():
+                        evaluation.unevaluate()
+        else:
+            unassigned_domains.pop(idx)
+
+
+
+        # if i % 10 == 0:
+        print(f'{i=}, {len(unassigned_domains)=}')
+        i += 1
+
+    for ev in all_evals:
+        assert ev.evaluated()
+        assert not ev.violated()
+
+
 
 
 def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
@@ -1532,6 +1622,8 @@ class EvaluationSet:
     domain_to_evaluations: Dict[Domain, List[Evaluation]]
     # Dict mapping each Domain to the set of all Evaluations for which it is blamed
 
+    domain_to_evaluations_new: Dict[Domain, List[Evaluation]]
+
     violations: Dict[Constraint, Dict[nc.Part, Evaluation]]
     # "2D dict" mapping each (Constraint, Part) to the list of all violations of it.
     # (evaluation that had a positive score)
@@ -1542,11 +1634,6 @@ class EvaluationSet:
     # "2D dict" mapping some Constraint, Part to the list of all new Evaluations of it
     # (after changing domain(s)).
     # Unlike violations, only has keys for parts affected by the most recent domain changes.
-
-    domain_to_evaluations: Dict[Domain, List[Evaluation]]
-    # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
-
-    domain_to_evaluations_new: Dict[Domain, List[Evaluation]]
 
     domain_to_violations: Dict[Domain, List[Evaluation]]
     # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
@@ -1631,7 +1718,7 @@ class EvaluationSet:
         # NOTE: this filters out the fixed domains,
         # but we keep them in eval_set for the sake of reports
         domain_to_score = {
-            domain: sum(violation.score for violation in domain_violations)
+            domain: sum(violation.score() for violation in domain_violations)
             for domain, domain_violations in domain_to_violations.items()
             if not domain.fixed
         }
@@ -1645,10 +1732,10 @@ class EvaluationSet:
         for ((constraint, part), eval_new) in items_2d(self.evaluations_new):
             eval_old = self.evaluations[constraint][part]
             assert eval_old.part.fixed == eval_new.part.fixed
-            assert eval_old.violated == (eval_old.score > 0)
-            assert eval_new.violated == (eval_new.score > 0)
+            assert eval_old.violated() == (eval_old.score() > 0)
+            assert eval_new.violated() == (eval_new.score() > 0)
             if fixed is None or eval_old.part.fixed == fixed:
-                total_gap += eval_old.score - eval_new.score
+                total_gap += eval_old.score() - eval_new.score()
         return total_gap
 
     def calculate_initial_score_gap(self, design: Design, domains_new: Tuple[Domain, ...]) -> float:
@@ -1659,7 +1746,7 @@ class EvaluationSet:
             parts = find_parts_to_check(constraint, design, domains_new)
             for part in parts:
                 ev = self.evaluations[constraint][part]
-                score_gap += ev.score
+                score_gap += ev.score()
         return score_gap
 
     @staticmethod
@@ -1753,14 +1840,13 @@ class EvaluationSet:
         for result in results:
             domains = _independent_domains_in_part(result.part, exclude_fixed=False)
             evaluation = Evaluation(constraint=constraint, part=result.part, domains=domains,
-                                    score=result.score, summary=result.summary, violated=result.score > 0,
                                     result=result)
 
             evals_of_constraint[result.part] = evaluation
             for domain in domains:
                 domain_to_evals[domain].append(evaluation)
 
-            if evaluation.violated:
+            if evaluation.violated():
                 viols_of_constraint[result.part] = evaluation
                 for domain in domains:
                     domain_to_viols[domain].append(evaluation)
@@ -1778,7 +1864,7 @@ class EvaluationSet:
 
         # update all evaluations
         for (constraint, part), evaluation in items_2d(self.evaluations_new):
-            # CONSIDER updating everything in this loop by looking up eval.violated
+            # CONSIDER updating everything in this loop by looking up eval.violated()
             self.evaluations[constraint][part] = evaluation
 
             # update dict mapping domain to list of evals/violations for which it is blamed
@@ -1787,7 +1873,7 @@ class EvaluationSet:
                 self.domain_to_violations[domain] = self.domain_to_violations_new[domain]
 
             viols_by_part = self.violations[constraint]
-            if evaluation.violated:
+            if evaluation.violated():
                 # if was not a violation before, increment total violations
                 if part not in viols_by_part:
                     self.num_violations += 1
@@ -1797,7 +1883,7 @@ class EvaluationSet:
                         self.num_violations_nonfixed += 1
                 # add it to violations, or replace existing violation
                 viols_by_part[part] = evaluation
-            elif not evaluation.violated and part in viols_by_part.keys():
+            elif not evaluation.violated() and part in viols_by_part.keys():
                 # otherwise remove violation if one was there from old EvaluationSet,
                 # and decrement total violations
                 del viols_by_part[part]
@@ -1828,13 +1914,13 @@ class EvaluationSet:
 
         # count violations and score
         for violation in values_2d(self.violations):
-            self.total_score += violation.score
+            self.total_score += violation.score()
             self.num_violations += 1
             if violation.part.fixed:
-                self.total_score_fixed += violation.score
+                self.total_score_fixed += violation.score()
                 self.num_violations_fixed += 1
             else:
-                self.total_score_nonfixed += violation.score
+                self.total_score_nonfixed += violation.score()
                 self.num_violations_nonfixed += 1
 
     def total_score_new(self, fixed: bool | None = None) -> float:
@@ -1856,14 +1942,14 @@ class EvaluationSet:
         #     constraint to filter scores on
         # :return:
         #     Total score of all evaluations due to `constraint`.
-        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations))
+        return sum(evaluation.score() for evaluation in self.evaluations_of_constraint(constraint, violations))
 
     def score_of_constraint_nonfixed(self, constraint: Constraint, violations: bool) -> float:
         # :param constraint:
         #     constraint to filter scores on
         # :return:
         #     Total score of all nonfixed evaluations due to `constraint`.
-        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations)
+        return sum(evaluation.score() for evaluation in self.evaluations_of_constraint(constraint, violations)
                    if not evaluation.part.fixed)
 
     def score_of_constraint_fixed(self, constraint: Constraint, violations: bool) -> float:
@@ -1871,7 +1957,7 @@ class EvaluationSet:
         #     constraint to filter scores on
         # :return:
         #     Total score of all fixed violations due to `constraint`.
-        return sum(evaluation.score for evaluation in self.evaluations_of_constraint(constraint, violations)
+        return sum(evaluation.score() for evaluation in self.evaluations_of_constraint(constraint, violations)
                    if evaluation.part.fixed)
 
     def has_nonfixed_evaluations(self) -> bool:
@@ -1909,16 +1995,16 @@ def _assert_violations_are_accurate(evaluations: Dict[Constraint, Dict[nc.Part, 
         assert part in evals_by_part.keys()
         ev = evals_by_part[part]
         assert viol == ev
-        assert viol.violated  # also assert that they really are violated
+        assert viol.violated()  # also assert that they really are violated
 
     # now go in reverse and ensure the keys in evaluations not in violations are all not violated
     for (constraint, part), ev in items_2d(evaluations):
         if part in violations[constraint].keys():
             viol = violations[constraint][part]
             assert viol == ev
-            assert ev.violated
+            assert ev.violated()
         else:
-            assert not ev.violated
+            assert not ev.violated()
 
 
 @dataclass
@@ -1930,23 +2016,16 @@ class Evaluation(Generic[DesignPart]):
     constraint: Constraint
     # :any:`Constraint` that was evaluated to result in this :any:`Evaluation`.
 
-    violated: bool
-    # whether the :any:`Constraint` was violated last time it was evaluated
-
     part: DesignPart
     # DesignPart that caused this violation
 
     domains: FrozenSet[Domain]  # = field(init=False, hash=False, compare=False, default=None)
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
 
-    summary: str
+    result: nc.Result | None
 
-    score: float
-
-    result: nc.Result
-
-    def __init__(self, constraint: Constraint, violated: bool, part: DesignPart, domains: Iterable[Domain],
-                 score: float, summary: str, result: nc.Result) -> None:
+    def __init__(self, constraint: Constraint, part: DesignPart, domains: Iterable[Domain],
+                 result: nc.Result | None) -> None:
         # constraint:
         #     :any:`Constraint` that was violated to result in this
         # domains:
@@ -1955,25 +2034,13 @@ class Evaluation(Generic[DesignPart]):
         #     total "score" of this violation, typically something like an excess energy over a
         #     threshold, squared, multiplied by the :data:`Constraint.weight`
         self.constraint = constraint
-        self.violated = violated
         self.part = part
         self.domains = frozenset(domains)
-        self.score = score
-        self.summary = summary
         self.result = result
 
-        # object.__setattr__(self, 'constraint', constraint)
-        # object.__setattr__(self, 'violated', violated)
-        # object.__setattr__(self, 'part', part)
-        # domains_frozen = frozenset(domains)
-        # object.__setattr__(self, 'domains', domains_frozen)
-        # object.__setattr__(self, 'score', score)
-        # object.__setattr__(self, 'summary', summary)
-        # object.__setattr__(self, 'result', result)
-
     def __repr__(self) -> str:
-        return f'Evaluation({self.constraint.short_description}, score={self.score:.2f}, ' \
-               f'summary={self.summary}, violated={self.violated})'
+        return f'Evaluation({self.constraint.short_description}, score={self.score():.2f}, ' \
+               f'summary={self.summary()}, violated={self.violated()})'
 
     def __str__(self) -> str:
         return repr(self)
@@ -1985,6 +2052,34 @@ class Evaluation(Generic[DesignPart]):
 
     def __eq__(self, other):
         return self is other
+
+    def score(self) -> float:
+        return self.result.score
+
+    def summary(self) -> str:
+        return self.result.summary
+
+    def violated(self) -> bool:
+        return self.result is not None and self.result.score > 0.0
+
+    def can_evaluate(self) -> bool:
+        return all(domain.has_sequence() for domain in self.domains)
+
+    def evaluate(self) -> None:
+        assert self.can_evaluate()
+        seqs = tuple(indv_part.sequence() for indv_part in self.part.individual_parts())
+        if isinstance(self.constraint, SingularConstraint):
+            self.result = self.constraint.call_evaluate(seqs, self.part)
+        else:
+            raise NotImplementedError('BulkConstraint and DesignConstraint not yet implemented')
+
+    def unevaluate(self) -> None:
+        if self.result is None:
+            raise ValueError('cannot unevaluate an Evaluation that has not been evaluated')
+        self.result = None
+
+    def evaluated(self) -> bool:
+        return self.result is not None
 
 
 ####################################################################################
@@ -2234,7 +2329,7 @@ def display_report(design: nc.Design, constraints: Iterable[Constraint],
         dm(f'## {report.constraint.description}')
         dm(f'### {report.num_violations}/{report.num_evaluations}  (#violations/#evaluations)')  # noqa
         for viol in report.violations:
-            print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
+            print(f'  {part_type_name} {viol.part.name}: {viol.summary()}')
 
     for i, (report, values, units) in enumerate(reports_with_values):
         assert len(values) > 0
@@ -2429,7 +2524,7 @@ class ConstraintReport(Generic[DesignPart]):
             constraint, violations=True)
 
     def header(self, include_scores: bool) -> str:
-        if self.score != self.score_nonfixed:
+        if self!= self.score_nonfixed:
             summary_score_unfixed = f'\n* unfixed score of violations: {self.score_nonfixed:.2f}'
         else:
             summary_score_unfixed = None
@@ -2462,10 +2557,10 @@ class ConstraintReport(Generic[DesignPart]):
 
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
-                score_str = f';  score: {ev.score:.2f}' if include_scores else ''
+                score_str = f';  score: {ev.score():.2f}' if include_scores else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
-                       f'{ev.summary}{score_str}'
-                lines_and_scores.append((line, ev.score))
+                       f'{ev.summary()}{score_str}'
+                lines_and_scores.append((line, ev.score()))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
 

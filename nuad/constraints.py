@@ -22,6 +22,7 @@ import enum
 import os
 import math
 import json
+from functools import lru_cache
 from typing import List, Set, Dict, Callable, Iterable, Tuple, Collection, TypeVar, Any, \
     cast, Generic, DefaultDict, FrozenSet, Iterator, Sequence, Type, Optional
 from dataclasses import dataclass, field, InitVar
@@ -1770,6 +1771,9 @@ class Domain(Part, JSONSerializable):
         self._starred_sequence = nv.wc(new_sequence)
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
+
+    def remove_sequence(self) -> None:
+        self._sequence = self._starred_sequence = None
 
     def _set_subdomain_sequences(self, new_sequence: str) -> None:
         """Sets sequence for all subdomains.
@@ -6766,12 +6770,12 @@ def rna_duplex_strand_pairs_constraint(
     if parallel:
         thread_pool = ThreadPool(processes=num_cores)
 
-    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float]:
+    def calculate_energies(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
         if parallel:
             energies = nv.rna_duplex_multiple_parallel(thread_pool, seq_pairs, logger, temperature,
                                                        parameters_filename)
         else:
-            energies = nv.rna_duplex_multiple(seq_pairs, logger, temperature, parameters_filename)
+            energies = nv.rna_duplex_multiple(seq_pairs, temperature)
         return energies
 
     def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> List[Result]:
