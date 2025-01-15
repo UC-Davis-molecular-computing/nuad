@@ -28,8 +28,8 @@ def main() -> None:
         scrolling_output=False,
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
-        report_only_violations=False,
-        score_transfer_function=lambda score: score**5,
+        report_only_violations=args.report_only_violations,
+        # score_transfer_function=lambda score: score**5,
         # log_time=True,
     )
     ns.search_for_sequences(design, params)
@@ -55,6 +55,8 @@ class CLArgs:
 
     force_overwrite: bool = False
     """whether to overwrite output files without prompting the user"""
+
+    report_only_violations: bool = True
 
 
 def parse_command_line_arguments() -> CLArgs:
@@ -86,6 +88,13 @@ def parse_command_line_arguments() -> CLArgs:
     parser.add_argument('-f', '--force', action='store_true',
                         help='If true, then overwrites the output files without prompting the user.')
 
+    parser.add_argument(
+        "-a",
+        "--report_all_evaluations",
+        action="store_true",
+        help="If true, then reports all constraint evalutions in the text report, not only violtations.",
+    )
+
     args = parser.parse_args()
 
     return CLArgs(
@@ -95,6 +104,7 @@ def parse_command_line_arguments() -> CLArgs:
         seed=args.seed,
         restart=args.restart,
         force_overwrite=args.force,
+        report_only_violations=not args.report_all_evaluations,
     )
 
 
