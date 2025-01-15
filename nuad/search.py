@@ -967,13 +967,12 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         stopwatch = Stopwatch()
 
         eval_set = EvaluationSet(params.constraints, params.never_increase_score)
-        eval_set.evaluate_all(design, hidden_threshold_heuristic=params.hidden_threshold_heuristic)
-        
+        eval_set.evaluate_all(design, params)
+
         if not params.restart:
             # write initial sequences and report
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
                                       directories=directories, eval_set=eval_set)
-
 
         while not _done(iteration, params, eval_set):
             if params.log_time:
@@ -986,8 +985,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            eval_set.evaluate_new(design, domains_new=domains_new,
-                                  hidden_threshold_heuristic=params.hidden_threshold_heuristic)
+            eval_set.evaluate_new(design, domains_new=domains_new, params=params)
 
             # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
@@ -1134,7 +1132,7 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 def _double_check_violations_from_scratch(design: nc.Design, params: SearchParameters, iteration: int,
                                           eval_set: EvaluationSet):
     eval_set_from_scratch = EvaluationSet(params.constraints, params.never_increase_score)
-    eval_set_from_scratch.evaluate_all(design)
+    eval_set_from_scratch.evaluate_all(design, params)
     score_new = eval_set.total_score_new()
     score_opt = eval_set.total_score
     score_fs = eval_set_from_scratch.total_score
@@ -1641,23 +1639,22 @@ class EvaluationSet:
         self.domain_to_violations_new = defaultdict(list)
         self.domain_to_score_new = defaultdict(float)
 
-    def evaluate_all(self, design: Design, params: SearchParameters, hidden_threshold_heuristic: bool) -> None:
+    def evaluate_all(self, design: Design, params: SearchParameters) -> None:
         # called on all parts of the design and sets self.evaluations
         self.reset_all()
         for constraint in self.constraints:
             self.evaluate_constraint(
                 constraint,
                 design,
-                hidden_threshold_heuristic=hidden_threshold_heuristic,
                 score_gap=None,
                 domains_new=None,
+                params=params,
             )
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...], params: SearchParameters,
-                     hidden_threshold_heuristic: bool) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...], params: SearchParameters) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1668,10 +1665,9 @@ class EvaluationSet:
             score_gap = self.evaluate_constraint(
                 constraint,
                 design,
-                params=params,
-                hidden_threshold_heuristic=hidden_threshold_heuristic,
                 score_gap=score_gap,
                 domains_new=domains_new,
+                params=params,
             )
             if score_gap is not None and _is_significantly_greater(0.0, score_gap):
                 break
@@ -1717,7 +1713,7 @@ class EvaluationSet:
     def evaluate_singular_constraint_parallel(constraint: SingularConstraint[DesignPart],
                                               parts: Tuple[nc.DesignPart, ...],
                                               score_gap: float,
-                                              hidden_threshold_heuristic: bool) \
+                                              params: SearchParameters) \
             -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
         if len(parts) == 0:
             return [], 0.0
@@ -1728,12 +1724,12 @@ class EvaluationSet:
 
         def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
             raise NotImplementedError()
-            partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
-            for part in partz:
-                seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                score, summary = constraint.call_evaluate(seqs, part, hidden_threshold_heuristic)
-                partz_scores_summaries.append((part, score, summary))
-            return partz_scores_summaries
+            # partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
+            # for part in partz:
+            #     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
+            #     score, summary = constraint.call_evaluate(seqs, part, hidden_threshold_heuristic)
+            #     partz_scores_summaries.append((part, score, summary))
+            # return partz_scores_summaries
 
         global _process_pool
         if _process_pool is None:
@@ -1749,7 +1745,6 @@ class EvaluationSet:
     def evaluate_constraint(self,
                             constraint: Constraint[DesignPart],
                             design: Design,  # only used with DesignConstraint
-                            hidden_threshold_heuristic: bool,
                             score_gap: float | None,
                             domains_new: Tuple[Domain, ...] | None,
                             params: SearchParameters,
@@ -1771,7 +1766,8 @@ class EvaluationSet:
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
                 for part in parts:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                    result = constraint.call_evaluate(seqs, part, score_transfer_function, hidden_threshold_heuristic)
+                    result = constraint.call_evaluate(seqs, part, score_transfer_function,
+                                                      params.hidden_threshold_heuristic)
                     results.append(result)
                     if result.score > 0.0:
                         if score_gap is not None:
@@ -1780,8 +1776,8 @@ class EvaluationSet:
                                 break
             else:
                 violating_parts_scores_summaries, score_gap = \
-                    EvaluationSet.evaluate_singular_constraint_parallel(constraint, parts, score_gap,
-                                                                        hidden_threshold_heuristic)
+                    EvaluationSet.evaluate_singular_constraint_parallel(
+                        constraint, parts, score_gap, params)
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
@@ -2051,9 +2047,12 @@ class Evaluation(Generic[DesignPart]):
 # report generating functions
 
 
-def create_constraints_report(design: nc.Design, constraints: Iterable[Constraint],
-                              report_only_violations: bool = False,
-                              include_only_with_values: bool = False) -> ConstraintsReport:
+def create_constraints_report(
+        design: nc.Design,
+        params: SearchParameters,
+        report_only_violations: bool = False,
+        include_only_with_values: bool = False,
+) -> ConstraintsReport:
     """
     Returns :any:`ConstraintsReport`, where its :data:`ConstraintsReport.reports` field has one
     :any:`ConstraintReport` for each :any:`Constraint` in `constraints`,
@@ -2069,8 +2068,8 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
-    :param constraints:
-        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param params:
+        the :any:`SearchParameters` used by the search
     :param report_only_violations:
         if True, lists only violations of constraints
     :param include_only_with_values:
@@ -2079,10 +2078,11 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
         :any:`ConstraintsReport` describing a report of how well `design` does
         according to `constraints`
     """
-    eval_set = EvaluationSet(constraints, False)
-    eval_set.evaluate_all(design)
+    eval_set = EvaluationSet(params.constraints, False)
+    eval_set.evaluate_all(design, params)
 
-    reports = [ConstraintReport(constraint, eval_set, report_only_violations) for constraint in constraints]
+    reports = [ConstraintReport(constraint, eval_set, report_only_violations)
+               for constraint in params.constraints]
 
     constraints_report = ConstraintsReport(
         reports=reports,
@@ -2098,7 +2098,7 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
     return constraints_report
 
 
-def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
+def create_text_report(design: nc.Design, params: SearchParameters,
                        report_only_violations: bool = False,
                        include_scores: bool = False) -> str:
     """
@@ -2112,8 +2112,8 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
 
     :param design:
         the :any:`constraints.Design`, with sequences assigned to all :any:`Domain`'s
-    :param constraints:
-        the list of :any:`constraints.Constraint`'s to evaluate in the report
+    :param params:
+        the :any:`SearchParameters` used by the search
     :param report_only_violations:
         if True, lists only violations of constraints
     :param include_scores:
@@ -2122,7 +2122,7 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
     :return:
         string describing a report of how well `design` does according to `constraints`
     """
-    constraints_report = create_constraints_report(design=design, constraints=constraints,
+    constraints_report = create_constraints_report(design=design, params=params,
                                                    report_only_violations=report_only_violations)
 
     summaries = [report.content(include_scores, report_only_violations)

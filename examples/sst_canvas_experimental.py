@@ -59,6 +59,8 @@ class CLArgs:
 
     hidden_threshold_heuristic: bool = False
 
+    report_only_violations: bool = False
+
 
 def parse_command_line_arguments() -> CLArgs:
     default_directory = os.path.join("output", ns.script_name_no_ext())
@@ -119,6 +121,13 @@ def parse_command_line_arguments() -> CLArgs:
         "--hidden_threshold_heuristic",
         action="store_true",
         help="If true, then uses the hidden threshold heuristic as explained in issue 268.",
+    )
+
+    parser.add_argument(
+        "-v",
+        "--report_only_violations",
+        action="store_true",
+        help="If true, then reports only violations of constraints in the text report.",
     )
 
     args = parser.parse_args()
