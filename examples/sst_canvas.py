@@ -1,3 +1,5 @@
+
+
 from dataclasses import dataclass
 from typing import Optional
 import argparse
@@ -26,8 +28,6 @@ def main() -> None:
         scrolling_output=False,
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
-        hidden_threshold_heuristic=args.hidden_threshold_heuristic,
-        # report_only_violations=False,
         # log_time=True,
     )
     ns.search_for_sequences(design, params)
@@ -53,8 +53,6 @@ class CLArgs:
 
     force_overwrite: bool = False
     """whether to overwrite output files without prompting the user"""
-
-    hidden_threshold_heuristic: bool = False
 
 
 def parse_command_line_arguments() -> CLArgs:
@@ -86,9 +84,6 @@ def parse_command_line_arguments() -> CLArgs:
     parser.add_argument('-f', '--force', action='store_true',
                         help='If true, then overwrites the output files without prompting the user.')
 
-    parser.add_argument('-t', '--hidden_threshold_heuristic', action='store_true',
-                        help='If true, then uses the hidden threshold heuristic as explained in issue 268.')
-
     args = parser.parse_args()
 
     return CLArgs(
@@ -98,7 +93,6 @@ def parse_command_line_arguments() -> CLArgs:
         seed=args.seed,
         restart=args.restart,
         force_overwrite=args.force,
-        hidden_threshold_heuristic=args.hidden_threshold_heuristic,
     )
 
 
@@ -214,10 +208,10 @@ class Thresholds:
     temperature: float = 52.0
     """Temperature in Celsius"""
 
-    tile_ss: float = -3.0
+    tile_ss: float = -1.5
     """NUPACK complex free energy threshold for individual tiles."""
 
-    tile_pair_0comp: float = -4.0
+    tile_pair_0comp: float = -2.5
     """RNAduplex complex free energy threshold for pairs tiles with no complementary domains."""
 
     tile_pair_1comp: float = -6.5
@@ -238,23 +232,13 @@ def create_constraints(design: nc.Design) -> List[nc.Constraint]:
             strands=design.strands,
         )
 
-    strand_pairs_nupack_constraint_0comp, strand_pairs_nupack_constraint_1comp = \
-        nc.nupack_strand_pair_constraints_by_number_matching_domains(
-            thresholds={0: thresholds.tile_pair_0comp, 1: thresholds.tile_pair_1comp},
-            temperature=thresholds.temperature,
-            short_descriptions={0: 'StrandPairNUPACK0Comp', 1: 'StrandPairNUPACK1Comp'},
-            strands=design.strands,
-        )
-
     no_gggg_constraint = create_tile_no_gggg_constraint(weight=100)
 
     return [
         strand_individual_ss_constraint,
         strand_pairs_rna_duplex_constraint_0comp,
         strand_pairs_rna_duplex_constraint_1comp,
-        # strand_pairs_nupack_constraint_0comp,
-        # strand_pairs_nupack_constraint_1comp,
-        # no_gggg_constraint,
+        no_gggg_constraint,
     ]
 
 
