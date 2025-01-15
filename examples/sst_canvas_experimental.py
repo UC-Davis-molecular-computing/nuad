@@ -124,10 +124,10 @@ def parse_command_line_arguments() -> CLArgs:
     )
 
     parser.add_argument(
-        "-v",
-        "--report_only_violations",
+        "-a",
+        "--report_all_evaluations",
         action="store_true",
-        help="If true, then reports only violations of constraints in the text report.",
+        help="If true, then reports all constraint evalutions in the text report, not only violtations.",
     )
 
     args = parser.parse_args()
@@ -139,8 +139,7 @@ def parse_command_line_arguments() -> CLArgs:
         seed=args.seed,
         restart=args.restart,
         force_overwrite=args.force,
-        hidden_threshold_heuristic=args.hidden_threshold_heuristic,
-        report_only_violations=args.report_only_violations,
+        report_only_violations=not args.report_all_evaluations,
     )
 
 
