@@ -680,6 +680,21 @@ class SearchParameters:
     """
     If True, does not give report on each constraint that was satisfied; only reports violations
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
+    If False, then the report shows all evaluations, including those that passed, and the violations
+    are marked in the text report with a `!` at the end of the line, e.g., 
+    
+    ::
+    
+        ************************************************
+        * strand NUPACK energy >= -3.0 kcal/mol at 52.0C
+        * evaluations: 4
+        * violations:  1
+        * score of violations: 0.29
+        
+          strand t_0_1:  -3.06 kcal/mol;  score: 0.29 !
+          strand t_0_0:  -1.88 kcal/mol;  score: 0.00
+          strand t_1_0:  -2.37 kcal/mol;  score: 0.00
+          strand t_1_1:  -2.58 kcal/mol;  score: 0.00
     """
 
     max_iterations: int | None = None
@@ -2065,7 +2080,8 @@ def create_text_report(design: nc.Design, constraints: Iterable[Constraint],
     constraints_report = create_constraints_report(design=design, constraints=constraints,
                                                    report_only_violations=report_only_violations)
 
-    summaries = [report.content(include_scores) for report in constraints_report.reports]
+    summaries = [report.content(include_scores, report_only_violations)
+                 for report in constraints_report.reports]
 
     score = constraints_report.total_score
     score_unfixed = constraints_report.total_score_nonfixed
@@ -2098,7 +2114,7 @@ def summary_of_constraints(constraints: Iterable[Constraint], report_only_violat
     # other constraints
     for constraint in constraints:
         report = ConstraintReport(constraint, eval_set, report_only_violations)
-        summary = report.content(include_scores=True)
+        summary = report.content(include_scores=True, report_only_violations=report_only_violations)
         summaries.append(summary)
 
     score = eval_set.total_score
@@ -2446,7 +2462,7 @@ class ConstraintReport(Generic[DesignPart]):
 
         return summary
 
-    def content_no_header(self, include_scores: bool) -> str:
+    def content_no_header(self, include_scores: bool, report_only_violations: bool) -> str:
         part_type_name = self.constraint.part_name()
         some_fixed_evals = len(self.evaluations_fixed) > 0
 
@@ -2463,8 +2479,9 @@ class ConstraintReport(Generic[DesignPart]):
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
                 score_str = f';  score: {ev.score:.2f}' if include_scores else ''
+                viol_str = ' !' if ev.violated and not report_only_violations else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
-                       f'{ev.summary}{score_str}'
+                       f'{ev.summary}{score_str}{viol_str}'
                 lines_and_scores.append((line, ev.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
@@ -2484,9 +2501,9 @@ class ConstraintReport(Generic[DesignPart]):
 
         return '\n'.join(summaries)
 
-    def content(self, include_scores: bool) -> str:
+    def content(self, include_scores: bool, report_only_violations: bool) -> str:
         header = self.header(include_scores)
-        content_no_header = self.content_no_header(include_scores)
+        content_no_header = self.content_no_header(include_scores, report_only_violations)
         indented_content = textwrap.indent(content_no_header, '  ')
         return header + '\n' + indented_content
 
