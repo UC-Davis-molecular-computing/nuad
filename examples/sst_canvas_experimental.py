@@ -217,7 +217,7 @@ def create_design(width: int, height: int) -> nc.Design:
 
 @dataclass
 class Thresholds:
-    temperature: float = 52.0
+    temperature: float = 37.0
     """Temperature in Celsius"""
 
     tile_ss: float = -3.0
