@@ -710,6 +710,22 @@ class SearchParameters:
     all constraints are satisfied, but they are "mostly" satisfied. 
     """
 
+    score_transfer_function: Callable[[float], float] = nc.default_score_transfer_function
+    """
+    Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
+    float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
+    secondary structure energy exceeding a threshold, the score returned is the difference between 
+    the energy and the threshold.
+    
+    The score is then passed through the `score_transfer_function`.
+    The default is :func:`nuad.constraints.default_score_transfer_function`, 
+    a cubic ReLU f(x) = max(0, x**3).
+    This "punishes" more severe violations more, for example, it would
+    bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
+    threshold to 2 kcal/mol excess,
+    than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
+    """
+
     max_domains_to_change: int = 1
     """
     Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
@@ -952,7 +968,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
         eval_set = EvaluationSet(params.constraints, params.never_increase_score)
         eval_set.evaluate_all(design, hidden_threshold_heuristic=params.hidden_threshold_heuristic)
-
+        
         if not params.restart:
             # write initial sequences and report
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
@@ -1625,7 +1641,7 @@ class EvaluationSet:
         self.domain_to_violations_new = defaultdict(list)
         self.domain_to_score_new = defaultdict(float)
 
-    def evaluate_all(self, design: Design, hidden_threshold_heuristic: bool) -> None:
+    def evaluate_all(self, design: Design, params: SearchParameters, hidden_threshold_heuristic: bool) -> None:
         # called on all parts of the design and sets self.evaluations
         self.reset_all()
         for constraint in self.constraints:
@@ -1640,7 +1656,7 @@ class EvaluationSet:
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...],
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...], params: SearchParameters,
                      hidden_threshold_heuristic: bool) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
@@ -1652,6 +1668,7 @@ class EvaluationSet:
             score_gap = self.evaluate_constraint(
                 constraint,
                 design,
+                params=params,
                 hidden_threshold_heuristic=hidden_threshold_heuristic,
                 score_gap=score_gap,
                 domains_new=domains_new,
@@ -1710,6 +1727,7 @@ class EvaluationSet:
         parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
 
         def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
+            raise NotImplementedError()
             partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
             for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
@@ -1734,6 +1752,7 @@ class EvaluationSet:
                             hidden_threshold_heuristic: bool,
                             score_gap: float | None,
                             domains_new: Tuple[Domain, ...] | None,
+                            params: SearchParameters,
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
@@ -1742,13 +1761,17 @@ class EvaluationSet:
 
         parts = find_parts_to_check(constraint, design, domains_new)
 
+        score_transfer_function = constraint.score_transfer_function
+        if score_transfer_function is None:
+            score_transfer_function = params.score_transfer_function
+
         # measure violations of constraints and collect in list of triples (part, score, summary)
         results: List[nc.Result] = []
         if isinstance(constraint, SingularConstraint):
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
                 for part in parts:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                    result = constraint.call_evaluate(seqs, part, hidden_threshold_heuristic)
+                    result = constraint.call_evaluate(seqs, part, score_transfer_function, hidden_threshold_heuristic)
                     results.append(result)
                     if result.score > 0.0:
                         if score_gap is not None:
@@ -1762,10 +1785,10 @@ class EvaluationSet:
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
-                results = constraint.call_evaluate_design(design, domains_new)
+                results = constraint.call_evaluate_design(design, domains_new, score_transfer_function)
             else:
                 # XXX: I don't understand the mypy error on the next line
-                results = constraint.call_evaluate_bulk(parts)  # type: ignore
+                results = constraint.call_evaluate_bulk(parts, score_transfer_function)  # type: ignore
 
             # we can't quit this function early,
             # but we can let the caller know to stop evaluating constraints
@@ -2501,7 +2524,7 @@ class ConstraintReport(Generic[DesignPart]):
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
                 score_str = f';  score: {ev.score:.2f}' if include_scores else ''
-                viol_str = f' !' if ev.violated and not report_only_violations else ''
+                viol_str = ' !' if ev.violated and not report_only_violations else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
                        f'{ev.summary}{score_str}{viol_str}'
                 lines_and_scores.append((line, ev.score))
