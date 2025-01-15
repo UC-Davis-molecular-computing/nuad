@@ -282,7 +282,7 @@ def default_score_transfer_function(x: float) -> float:
     :return:
         max(0.0, x^3)
     """
-    return max(0.0, x ** 5)
+    return max(0.0, x ** 3)
 
 
 logger = logging.Logger('dsd', level=logging.DEBUG)

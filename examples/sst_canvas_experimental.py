@@ -29,7 +29,7 @@ def main() -> None:
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
         hidden_threshold_heuristic=args.hidden_threshold_heuristic,
-        # report_only_violations=False,
+        report_only_violations=False,
         # log_time=True,
     )
     ns.search_for_sequences(design, params)
