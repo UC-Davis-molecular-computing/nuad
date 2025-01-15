@@ -710,6 +710,22 @@ class SearchParameters:
     all constraints are satisfied, but they are "mostly" satisfied. 
     """
 
+    score_transfer_function: Callable[[float], float] = nc.default_score_transfer_function
+    """
+    Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
+    float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
+    secondary structure energy exceeding a threshold, the score returned is the difference between 
+    the energy and the threshold.
+    
+    The score is then passed through the `score_transfer_function`.
+    The default is :func:`nuad.constraints.default_score_transfer_function`, 
+    a cubic ReLU f(x) = max(0, x**3).
+    This "punishes" more severe violations more, for example, it would
+    bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
+    threshold to 2 kcal/mol excess,
+    than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
+    """
+
     max_domains_to_change: int = 1
     """
     Maximum number of :any:`constraints.Domain`'s to change at a time. A number between 1 and
@@ -946,7 +962,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         stopwatch = Stopwatch()
 
         eval_set = EvaluationSet(params.constraints, params.never_increase_score)
-        eval_set.evaluate_all(design)
+        eval_set.evaluate_all(design, params)
 
         if not params.restart:
             # write initial sequences and report
@@ -965,7 +981,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            eval_set.evaluate_new(design, domains_new=domains_new)
+            eval_set.evaluate_new(design, domains_new=domains_new, params=params)
 
             # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
@@ -1619,16 +1635,16 @@ class EvaluationSet:
         self.domain_to_violations_new = defaultdict(list)
         self.domain_to_score_new = defaultdict(float)
 
-    def evaluate_all(self, design: Design) -> None:
+    def evaluate_all(self, design: Design, params: SearchParameters) -> None:
         # called on all parts of the design and sets self.evaluations
         self.reset_all()
         for constraint in self.constraints:
-            self.evaluate_constraint(constraint, design, None, None)
+            self.evaluate_constraint(constraint, design, None, None, params)
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...]) -> None:
+    def evaluate_new(self, design: Design, domains_new: Tuple[Domain, ...], params: SearchParameters) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
         # does quit early optimization since this is only called when comparing to an existing set of evals
         self.reset_new()
@@ -1636,7 +1652,7 @@ class EvaluationSet:
         if self.never_increase_score:
             score_gap = self.calculate_initial_score_gap(design, domains_new)
         for constraint in self.constraints:
-            score_gap = self.evaluate_constraint(constraint, design, score_gap, domains_new)
+            score_gap = self.evaluate_constraint(constraint, design, score_gap, domains_new, params)
             if score_gap is not None and _is_significantly_greater(0.0, score_gap):
                 break
         self.domain_to_score_new = EvaluationSet.sum_domain_scores(self.domain_to_violations_new)
@@ -1690,6 +1706,7 @@ class EvaluationSet:
         parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
 
         def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
+            raise NotImplementedError()
             partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
             for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
@@ -1713,6 +1730,7 @@ class EvaluationSet:
                             design: Design,  # only used with DesignConstraint
                             score_gap: float | None,
                             domains_new: Tuple[Domain, ...] | None,
+                            params: SearchParameters,
                             ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
@@ -1721,13 +1739,17 @@ class EvaluationSet:
 
         parts = find_parts_to_check(constraint, design, domains_new)
 
+        score_transfer_function = constraint.score_transfer_function
+        if score_transfer_function is None:
+            score_transfer_function = params.score_transfer_function
+
         # measure violations of constraints and collect in list of triples (part, score, summary)
         results: List[nc.Result] = []
         if isinstance(constraint, SingularConstraint):
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
                 for part in parts:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                    result = constraint.call_evaluate(seqs, part)
+                    result = constraint.call_evaluate(seqs, part, score_transfer_function)
                     results.append(result)
                     if result.score > 0.0:
                         if score_gap is not None:
@@ -1740,10 +1762,10 @@ class EvaluationSet:
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
-                results = constraint.call_evaluate_design(design, domains_new)
+                results = constraint.call_evaluate_design(design, domains_new, score_transfer_function)
             else:
                 # XXX: I don't understand the mypy error on the next line
-                results = constraint.call_evaluate_bulk(parts)  # type: ignore
+                results = constraint.call_evaluate_bulk(parts, score_transfer_function)  # type: ignore
 
             # we can't quit this function early,
             # but we can let the caller know to stop evaluating constraints

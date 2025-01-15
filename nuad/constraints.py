@@ -4229,19 +4229,12 @@ class Constraint(Generic[DesignPart], ABC):
     for sequences to satisfy all constraints.
     """
 
-    score_transfer_function: Callable[[float], float] = default_score_transfer_function
+    score_transfer_function: Optional[Callable[[float], float]] = None
     """
-    Score transfer function to use. When a constraint is violated, the constraint returns a nonnegative
-    float (the score) indicating the "severity" of the violation. For example, if a :any:`Strand` has 
-    secondary structure energy exceeding a threshold, the score returned is the difference between 
-    the energy and the threshold.
+    See :data:`nuad.search.SearchParameters.score_transfer_function`.
     
-    The score is then passed through the `score_transfer_function`.
-    The default is the squared ReLU function: f(x) = max(0, x^2).
-    This "punishes" more severe violations more, for example, it would
-    bring down the total score of violations more to reduce a violation 3 kcal/mol in excess of its
-    threshold to 2 kcal/mol excess,
-    than to reduce a violation only 1 kcal/mol in excess of its threshold down to 0.
+    If specified, this will override the one specified in 
+    :data:`nuad.search.SearchParameters.score_transfer_function`.
     """
 
     @staticmethod
@@ -4411,7 +4404,8 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         if self.weight <= 0:
             raise ValueError(f'weight must be positive but it is {self.weight}')
 
-    def call_evaluate(self, seqs: Tuple[str, ...], part: DesignPart | None) -> Result[DesignPart]:
+    def call_evaluate(self, seqs: Tuple[str, ...], part: DesignPart | None,
+                      score_transfer_function: Callable[[float], float]) -> Result[DesignPart]:
         """
         Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
         supplied in constructor.
@@ -4423,13 +4417,16 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             the :any:`Part` to be evaluated. Might be None if parallelization is being used,
             since it is cheaper to serialize only the sequence(s) than the entire :any:`Part`
             for passing to other processes to evaluate in parallel.
+        :param score_transfer_function:
+            function to apply to the excess value of the :any:`Result` returned by the evaluate function,
+            to compute the score.
         :return:
             a :any:`Result` object
         """
         result = (self.evaluate)(seqs, part)  # noqa
         if result.excess < 0.0:
             result.excess = 0.0
-        result.score = self.weight * self.score_transfer_function(result.excess)
+        result.score = self.weight * score_transfer_function(result.excess)
         result.part = part
         return result
 
@@ -4439,13 +4436,14 @@ class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate_bulk: Callable[[Sequence[DesignPart]], List[Result]] = \
         lambda _: _raise_unreachable()
 
-    def call_evaluate_bulk(self, parts: Sequence[DesignPart]) -> List[Result]:
+    def call_evaluate_bulk(self, parts: Sequence[DesignPart],
+                           score_transfer_function: Callable[[float], float]) -> List[Result]:
         results: List[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
         # apply weight and transfer scores
         for result, part in zip(results, parts):
             if result.excess < 0.0:
                 result.excess = 0.0
-            result.score = self.weight * self.score_transfer_function(result.excess)
+            result.score = self.weight * score_transfer_function(result.excess)
             result.part = part
         return results
 
@@ -4721,14 +4719,15 @@ class DesignConstraint(Constraint[Design]):
         if self.evaluate_design is None:
             raise ValueError('_evaluate_design should be specified in a DesignConstraint')
 
-    def call_evaluate_design(self, design: Design, domains_changed: Iterable[Domain]) \
+    def call_evaluate_design(self, design: Design, domains_changed: Iterable[Domain],
+                             score_transfer_function: Callable[[float], float]) \
             -> List[Result]:
         results = (self._evaluate_bulk)(design, domains_changed)  # noqa
         # apply weight and transfer scores
         for result in zip(results):
             if result.excess < 0.0:
                 result.excess = 0.0
-            result.score = self.weight * self.score_transfer_function(result.excess)
+            result.score = self.weight * score_transfer_function(result.excess)
             result.part = design
         return results
 
@@ -4820,7 +4819,7 @@ def nupack_domain_free_energy_constraint(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         parallel: bool = False,
         description: str | None = None,
         short_description: str = 'strand_ss_nupack',
@@ -4887,7 +4886,7 @@ def nupack_strand_free_energy_constraint(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         parallel: bool = False,
         description: str | None = None,
         short_description: str = 'strand_ss_nupack',
@@ -4956,7 +4955,7 @@ def nupack_domain_pair_constraint(
         magnesium: float = nv.default_magnesium,
         parallel: bool = False,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'dom_pair_nupack',
         pairs: Iterable[Tuple[Domain, Domain]] | None = None,
@@ -5077,7 +5076,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -5169,7 +5168,7 @@ def nupack_strand_pair_constraint(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'strand_pair_nupack',
         parallel: bool = False,
@@ -5617,7 +5616,7 @@ def nupack_domain_pairs_nonorthogonal_constraint(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'dom_pair_nupack_nonorth',
         parameters_filename: str = nv.default_vienna_rna_parameter_filename,
@@ -5907,7 +5906,7 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
                  threshold: float,
                  temperature: float = nv.default_temperature,
                  weight: float = 1.0,
-                 score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+                 score_transfer_function: Optional[Callable[[float], float]] = None,
                  description: str | None = None,
                  short_description: str = '',
                  parallel: bool = False,
@@ -5921,7 +5920,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -6021,7 +6020,7 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -6064,7 +6063,7 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -6151,7 +6150,7 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
         thresholds: Dict[int, float],
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -6480,7 +6479,7 @@ def lcs_domain_pairs_constraint(
         *,
         threshold: int,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'lcs domain pairs',
         domains: Iterable[Domain] | None = None,
@@ -6552,7 +6551,7 @@ def lcs_strand_pairs_constraint(
         *,
         threshold: int,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'lcs strand pairs',
         pairs: Iterable[Tuple[Strand, Strand]] | None = None,
@@ -6636,7 +6635,7 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
         *,
         thresholds: Dict[int, int],
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         descriptions: Dict[int, str] | None = None,
         short_descriptions: Dict[int, str] | None = None,
         parallel: bool = False,
@@ -6660,7 +6659,7 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
             threshold: float,
             temperature: float = nv.default_temperature,
             weight: float = 1.0,
-            score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+            score_transfer_function: Optional[Callable[[float], float]] = None,
             description: str | None = None,
             short_description: str = 'lcs strand pairs',
             parallel: bool = False,
@@ -6713,7 +6712,7 @@ def rna_duplex_strand_pairs_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
@@ -6802,7 +6801,7 @@ def rna_plex_strand_pairs_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'rna_plex_strand_pairs',
         parallel: bool = False,
@@ -6906,7 +6905,7 @@ def rna_cofold_strand_pairs_constraint(
         threshold: float,
         temperature: float = nv.default_temperature,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'rna_dup_strand_pairs',
         parallel: bool = False,
@@ -8683,7 +8682,7 @@ def nupack_complex_base_pair_probability_constraint(
         sodium: float = nv.default_sodium,
         magnesium: float = nv.default_magnesium,
         weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = default_score_transfer_function,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
         description: str | None = None,
         short_description: str = 'ComplexBPProbs',
         parallel: bool = False,

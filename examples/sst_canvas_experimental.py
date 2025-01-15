@@ -29,6 +29,7 @@ def main() -> None:
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
         report_only_violations=False,
+        score_transfer_function=lambda score: score**5,
         # log_time=True,
     )
     ns.search_for_sequences(design, params)
