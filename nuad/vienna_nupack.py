@@ -328,7 +328,7 @@ def rna_duplex_multiple(
 
     energies = []
     for seq1, seq2 in pairs:
-        result = RNA.duplexfold(seq1, seq1)
+        result = RNA.duplexfold(seq1, seq2)
         energy = min(result.energy, max_energy)
         energies.append(energy)
 
