@@ -681,7 +681,7 @@ class SearchParameters:
     If True, does not give report on each constraint that was satisfied; only reports violations
     and summary of all constraint checks of a certain type (e.g., how many constraint checks there were).
     If False, then the report shows all evaluations, including those that passed, and the violations
-    are marked in the text report with a `*` at the end of the line, e.g., 
+    are marked in the text report with a `!` at the end of the line, e.g., 
     
     ::
     
@@ -691,7 +691,7 @@ class SearchParameters:
         * violations:  1
         * score of violations: 0.29
         
-          strand t_0_1:  -3.06 kcal/mol;  score: 0.29 *
+          strand t_0_1:  -3.06 kcal/mol;  score: 0.29 !
           strand t_0_0:  -1.88 kcal/mol;  score: 0.00
           strand t_1_0:  -2.37 kcal/mol;  score: 0.00
           strand t_1_1:  -2.58 kcal/mol;  score: 0.00
@@ -2501,7 +2501,7 @@ class ConstraintReport(Generic[DesignPart]):
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
                 score_str = f';  score: {ev.score:.2f}' if include_scores else ''
-                viol_str = f' *' if ev.violated and not report_only_violations else ''
+                viol_str = f' !' if ev.violated and not report_only_violations else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
                        f'{ev.summary}{score_str}{viol_str}'
                 lines_and_scores.append((line, ev.score))
