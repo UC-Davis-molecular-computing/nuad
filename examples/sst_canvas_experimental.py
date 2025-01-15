@@ -29,7 +29,7 @@ def main() -> None:
         scrolling_output=False,
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
-        report_only_violations=False,
+        report_only_violations=args.report_only_violations,
         score_transfer_function=lambda score: score**5,
         # log_time=True,
     )
@@ -140,6 +140,7 @@ def parse_command_line_arguments() -> CLArgs:
         restart=args.restart,
         force_overwrite=args.force,
         hidden_threshold_heuristic=args.hidden_threshold_heuristic,
+        report_only_violations=args.report_only_violations,
     )
 
 
