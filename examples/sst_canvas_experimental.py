@@ -29,7 +29,7 @@ def main() -> None:
         save_report_for_all_updates=True,
         force_overwrite=args.force_overwrite,
         report_only_violations=args.report_only_violations,
-        # score_transfer_function=lambda score: score**5,
+        score_transfer_function=lambda score: score**5,
         # log_time=True,
     )
     ns.search_for_sequences(design, params)
@@ -220,13 +220,13 @@ class Thresholds:
     temperature: float = 37.0
     """Temperature in Celsius"""
 
-    tile_ss: float = -3.0
+    tile_ss: float = -3.5
     """NUPACK complex free energy threshold for individual tiles."""
 
-    tile_pair_0comp: float = -4.0
+    tile_pair_0comp: float = -5.0
     """RNAduplex complex free energy threshold for pairs tiles with no complementary domains."""
 
-    tile_pair_1comp: float = -6.5
+    tile_pair_1comp: float = -12.0
     """RNAduplex complex free energy threshold for pairs tiles with 1 complementary domain."""
 
 
