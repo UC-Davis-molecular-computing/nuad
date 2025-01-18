@@ -10,33 +10,6 @@ import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
 
 
-# command-line arguments
-class CLArgs(NamedTuple):
-    directory: str
-    restart: bool
-
-
-def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join('output', ns.script_name_no_ext())
-
-    parser = argparse.ArgumentParser(  # noqa
-        description='Small example design for testing.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-o', '--output-dir', type=str, default=default_directory,
-                        help='directory in which to place output files')
-    parser.add_argument('-r', '--restart', action='store_true',
-                        help='If true, then assumes output directory contains output of search that was '
-                             'cancelled, to restart '
-                             'from. Similar to -i option, but will automatically find the most recent design '
-                             '(assuming they are numbered with a number such as -84), and will start the '
-                             'numbering from there (i.e., the next files to be written upon improving the '
-                             'design will have -85).')
-
-    args = parser.parse_args()
-
-    return CLArgs(directory=args.output_dir, restart=args.restart)
-
-
 def main() -> None:
     args: CLArgs = parse_command_line_arguments()
 
@@ -45,16 +18,19 @@ def main() -> None:
 
     random_seed = 1
 
+    # parallel = False
+    parallel = True
+
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
 
-    # num_strands = 3
+    num_strands = 2
     # num_strands = 5
-    # num_strands = 10
     # num_strands = 10
     # num_strands = 50
     # num_strands = 100
-    num_strands = 200
+    # num_strands = 200
     # num_strands = 355
+    # num_strands = 1000
 
     design = nc.Design()
     #                     si         wi         ni         ei
@@ -69,9 +45,6 @@ def main() -> None:
         for domain in design.strands[0].domains:
             domain.set_fixed_sequence('ACGTACGTAC')
         design.strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
-
-    parallel = False
-    # parallel = True
 
     numpy_filters: List[nc.NumpyFilter] = [
         nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),
@@ -152,9 +125,9 @@ def main() -> None:
 
     params = ns.SearchParameters(constraints=[
         # domain_nupack_ss_constraint,
-        # strand_individual_ss_constraint,
+        strand_individual_ss_constraint,
         # strand_pairs_rna_duplex_constraint,
-        strand_pairs_rna_plex_constraint,
+        # strand_pairs_rna_plex_constraint,
         # strand_pair_nupack_constraint,
         # domain_pair_nupack_constraint,
         # domain_pairs_rna_plex_constraint,
@@ -175,6 +148,33 @@ def main() -> None:
         # report_only_violations=False,
     )
     ns.search_for_sequences(design, params)
+
+# command-line arguments
+class CLArgs(NamedTuple):
+    directory: str
+    restart: bool
+
+
+def parse_command_line_arguments() -> CLArgs:
+    default_directory = os.path.join('output', ns.script_name_no_ext())
+
+    parser = argparse.ArgumentParser(  # noqa
+        description='Small example design for testing.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-o', '--output-dir', type=str, default=default_directory,
+                        help='directory in which to place output files')
+    parser.add_argument('-r', '--restart', action='store_true',
+                        help='If true, then assumes output directory contains output of search that was '
+                             'cancelled, to restart '
+                             'from. Similar to -i option, but will automatically find the most recent design '
+                             '(assuming they are numbered with a number such as -84), and will start the '
+                             'numbering from there (i.e., the next files to be written upon improving the '
+                             'design will have -85).')
+
+    args = parser.parse_args()
+
+    return CLArgs(directory=args.output_dir, restart=args.restart)
+
 
 
 if __name__ == '__main__':

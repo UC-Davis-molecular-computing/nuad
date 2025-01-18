@@ -126,12 +126,16 @@ def pfunc(
 
     # expensive to create a Model, so don't create the same one twice
     param = (temperature, sodium, magnesium)
+    print(f'in pfunc, {param=}')
     if param not in _cached_nupack_models:
         model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
+    print(f'in pfunc, {model=}')
     _, dg = nupack_pfunc(strands=seqs, model=model)
+
+    print(f'in pfunc, {dg=}')
 
     if strand_association_penalty and len(seqs) > 1:
         dg += calculate_strand_association_penalty(temperature, len(seqs))
@@ -522,12 +526,12 @@ def rna_plex_multiple(pairs: Sequence[Tuple[S, S]],
 
     output, error = call_subprocess(command_strs, user_input)
 
-    if error.strip() != '':
-        logger.warning('error from RNAplex: ', error)
-        if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
-            raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
-                             'is a different error that I don\'t know how to handle. Exiting...'
-                             f'\nerror:\n{error}')
+    # if error.strip() != '':
+    #     logger.warning('error from RNAplex: ', error)
+    #     if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
+    #         raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
+    #                          'is a different error that I don\'t know how to handle. Exiting...'
+    #                          f'\nerror:\n{error}')
 
     # with open('output/rna_plex_multiple_input.txt', 'w') as f:
     #     f.write(user_input)

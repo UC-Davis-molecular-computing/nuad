@@ -4423,7 +4423,9 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
         :return:
             a :any:`Result` object
         """
+        print(f"in call_evaluate for seqs = {seqs}")
         result = (self.evaluate)(seqs, part)  # noqa
+        print(f'{result=}')
         if result.excess < 0.0:
             result.excess = 0.0
         result.score = self.weight * score_transfer_function(result.excess)
@@ -4929,7 +4931,9 @@ def nupack_strand_free_energy_constraint(
 
     def evaluate(seqs: Tuple[str, ...], _: Strand | None) -> Result:
         sequence = seqs[0]
+        print(f"in evaluate for nupack constraint, sequence = {sequence}")
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
+        print(f'for sequence {sequence}, {energy=}')
         excess = max(0.0, threshold - energy)
         return Result(excess=excess, value=energy, unit='kcal/mol')
 

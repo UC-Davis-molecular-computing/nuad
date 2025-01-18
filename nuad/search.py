@@ -969,7 +969,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
                                       directories=directories, eval_set=eval_set)
 
-
         while not _done(iteration, params, eval_set):
             if params.log_time:
                 stopwatch.stop()
@@ -1694,44 +1693,47 @@ class EvaluationSet:
         return score_gap
 
     @staticmethod
-    def evaluate_singular_constraint_parallel(constraint: SingularConstraint[DesignPart],
-                                              parts: Tuple[nc.DesignPart, ...],
-                                              score_gap: float) \
-            -> Tuple[List[Tuple[nc.DesignPart, float, str]], float]:
+    def evaluate_singular_constraint_parallel(
+            constraint: SingularConstraint[DesignPart],
+            parts: Tuple[nc.DesignPart, ...],
+            score_transfer_function: Callable[[float], float],
+    ) -> List[nc.Result]:
         if len(parts) == 0:
-            return [], 0.0
+            return []
 
         num_cpus = nc.cpu_count()
 
         parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
 
-        def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[Tuple[nc.DesignPart, float, str]]:
-            raise NotImplementedError()
-            partz_scores_summaries: List[Tuple[nc.DesignPart, float, str]] = []
+        def call_evaluate_sequential(partz: Tuple[nc.DesignPart]) -> List[nc.Result]:
+            resultz: List[nc.Result] = []
+            logger.info(f'*** handling {len(partz)} parts: {partz}')
             for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                score, summary = constraint.call_evaluate(seqs, part)
-                partz_scores_summaries.append((part, score, summary))
-            return partz_scores_summaries
+                logger.info(f'for {part}, {seqs=}')
+                result = constraint.call_evaluate(seqs, part, score_transfer_function)
+                logger.info(f"for {part}, {result=}")
+                resultz.append(result)
+            return resultz
 
         global _process_pool
         if _process_pool is None:
             _process_pool = new_process_pool(num_cpus)
 
-        lists_of_violating_parts_scores_summaries = _process_pool.map(call_evaluate_sequential, parts_chunks)
-        parts_scores_summaries = [elt
-                                  for elts in lists_of_violating_parts_scores_summaries
-                                  for elt in elts]
+        logger.info(f'about to call process_pool.map')
+        list_of_list_of_results = _process_pool.map(call_evaluate_sequential, parts_chunks)
+        results = [result for list_of_results in list_of_list_of_results for result in list_of_results]
 
-        return parts_scores_summaries, score_gap
+        return results
 
-    def evaluate_constraint(self,
-                            constraint: Constraint[DesignPart],
-                            design: Design,  # only used with DesignConstraint
-                            score_gap: float | None,
-                            domains_new: Tuple[Domain, ...] | None,
-                            params: SearchParameters,
-                            ) -> float:
+    def evaluate_constraint(
+            self,
+            constraint: Constraint[DesignPart],
+            design: Design,  # only used with DesignConstraint
+            score_gap: float | None,
+            domains_new: Tuple[Domain, ...] | None,
+            params: SearchParameters,
+    ) -> float:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
         if score_gap is not None:
@@ -1743,7 +1745,7 @@ class EvaluationSet:
         if score_transfer_function is None:
             score_transfer_function = params.score_transfer_function
 
-        # measure violations of constraints and collect in list of triples (part, score, summary)
+        # measure violations of constraints and collect in list of results
         results: List[nc.Result] = []
         if isinstance(constraint, SingularConstraint):
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
@@ -1757,8 +1759,11 @@ class EvaluationSet:
                             if _is_significantly_greater(0.0, score_gap):
                                 break
             else:
-                violating_parts_scores_summaries, score_gap = \
-                    EvaluationSet.evaluate_singular_constraint_parallel(constraint, parts, score_gap)
+                results = EvaluationSet.evaluate_singular_constraint_parallel(
+                    constraint, parts, score_transfer_function)
+                total_score = sum(result.score for result in results)
+                if score_gap is not None:
+                    score_gap -= total_score
 
         elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
             if isinstance(constraint, DesignConstraint):
