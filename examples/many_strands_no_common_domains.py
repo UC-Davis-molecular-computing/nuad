@@ -9,7 +9,6 @@ import nuad.constraints as nc  # type: ignore
 import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
 
-
 def main() -> None:
     args: CLArgs = parse_command_line_arguments()
 
@@ -23,7 +22,7 @@ def main() -> None:
 
     # many 4-domain strands with no common domains, 4 domains each, every domain length = 10
 
-    num_strands = 2
+    num_strands = 3
     # num_strands = 5
     # num_strands = 10
     # num_strands = 50
