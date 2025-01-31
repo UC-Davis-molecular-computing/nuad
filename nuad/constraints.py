@@ -5351,7 +5351,7 @@ def rna_duplex_domain_pairs_constraint(
     def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> List[Result]:
         sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
             domain_pairs)
-        energies = nv.rna_duplex_multiple(sequence_pairs, logger, temperature, parameters_filename)
+        energies = nv.rna_duplex_multiple(sequence_pairs, temperature=temperature)
 
         # several consecutive items are from same domain pair but with different wc's;
         # group them together in the summary

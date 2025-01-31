@@ -444,8 +444,7 @@ def rna_duplex_multiple_parallel(
                        )
 
     def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
-        return rna_duplex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
-                                   parameters_filename=parameters_filename, max_energy=max_energy)
+        return rna_duplex_multiple(pairs=seq_pairs, temperature=temperature, max_energy=max_energy)
 
     if call_sequential:
         return calculate_energies_sequential(pairs)
