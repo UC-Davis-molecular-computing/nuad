@@ -169,8 +169,9 @@ def main() -> None:
         # save_report_for_all_updates=True,
         # save_design_for_all_updates=True,
         force_overwrite=True,
-        log_time=True,
-        # scrolling_output=False,
+        # log_time=True,
+        scrolling_output=False,
+        warn_no_seqs_found=False,
         # report_only_violations=False,
     )
     ns.search_for_sequences(design, params)

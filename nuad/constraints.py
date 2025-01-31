@@ -1159,7 +1159,8 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_filters)
 
-    def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None) -> str:
+    def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None,
+                          warn_no_seqs_found: bool = False) -> str:
         """
         Returns a DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
         :data:`DomainPool.sequence_filters`
@@ -1184,6 +1185,12 @@ class DomainPool(JSONSerializable):
             The number of differences between `previous_sequence` and its neighbors is determined by randomly
             picking a Hamming distance from :data:`DomainPool.hamming_probability` with
             weighted probabilities of choosing each distance.
+        :param warn_no_seqs_found:
+            whether to warn if no sequences satisfying constraints are found when generating a large number;
+            this is on by default in case the user made the NumpyFilters or SequenceFilters too restrictive,
+            but it can be annoying to see it printed when it is not hurting the search (frequently it appears when
+            filters are restrictive and Hamming distance 1 is picked, but it's okay because it simply samples
+            a larger Hamming distance the next time)
         :return:
             DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
             :data:`DomainPool.sequence_filters`
@@ -1199,11 +1206,12 @@ class DomainPool(JSONSerializable):
         elif not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
         else:
-            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng)
+            sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng, warn_no_seqs_found)
 
         return sequence
 
-    def _sample_hamming_distance_from_sequence(self, previous_sequence: str, rng: np.random.Generator) -> str:
+    def _sample_hamming_distance_from_sequence(
+            self, previous_sequence: str, rng: np.random.Generator, warn_no_seqs_found: bool = False) -> str:
         # all possible distances from 1 to len(previous_sequence) are calculated.
 
         hamming_probabilities = np.array(list(self.hamming_probability.values()))
@@ -1262,13 +1270,13 @@ class DomainPool(JSONSerializable):
 
                 max_to_generate_before_moving_on = 10 ** 6
 
-                if generated_all_seqs:
+                if warn_no_seqs_found and generated_all_seqs:
                     logger.info(f"""
 We've generated all possible DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 
 NumpyFilters and SequenceFilters. Trying another distance.""")
                     available_distances_list.remove(sampled_distance)
-                elif num_to_generate >= max_to_generate_before_moving_on:
+                elif warn_no_seqs_found and num_to_generate >= max_to_generate_before_moving_on:
                     logger.info(f"""
 We've generated over {max_to_generate_before_moving_on} DNA sequences at Hamming distance {sampled_distance} 
 from the previous sequence {previous_sequence} and not found one that passed your 

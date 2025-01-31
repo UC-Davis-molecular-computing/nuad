@@ -781,6 +781,15 @@ class SearchParameters:
     Whether to log the time taken per iteration to the screen.
     """
 
+    warn_no_seqs_found: bool = True
+    """
+    Whether to log a warning if no sequences are found that satisfy the :any:`NumpyFilter`'s and :any:`SequenceFilters`.
+    This is on by default to warn the user if their filters are too restrictive, since this could cause the search 
+    to freeze. However, it usually only appears with very restrictive filters and Hamming distance 1,
+    and a larger Hamming distance is picked after, so the search is not actually frozen. If you are confident
+    of this, then you can turn this off to clean up the console output.
+    """
+
     scrolling_output: bool = True
     r"""
     If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
@@ -950,6 +959,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         if not params.restart:
             assign_sequences_to_domains_randomly_from_pools(design=design,
                                                             warn_fixed_sequences=params.warn_fixed_sequences,
+                                                            warn_no_seqs_found=params.warn_no_seqs_found,
                                                             rng=rng,
                                                             overwrite_existing_sequences=False)
             num_new_optimal = 0
@@ -969,7 +979,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             _write_intermediate_files(design=design, params=params, rng=rng, num_new_optimal=num_new_optimal,
                                       directories=directories, eval_set=eval_set)
 
-
         while not _done(iteration, params, eval_set):
             if params.log_time:
                 stopwatch.stop()
@@ -978,7 +987,8 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
             _check_cpu_count(cpu_count)
 
-            domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng)
+            domains_new, original_sequences = _reassign_domains(eval_set, params.max_domains_to_change, rng,
+                                                                params.warn_no_seqs_found)
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             eval_set.evaluate_new(design, domains_new=domains_new, params=params)
@@ -1084,8 +1094,12 @@ def _setup_directories(params: SearchParameters) -> _Directories:
     return directories
 
 
-def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
-                      rng: np.random.Generator) -> Tuple[Tuple[Domain, ...], Dict[Domain, str]]:
+def _reassign_domains(
+        eval_set: EvaluationSet,
+        max_domains_to_change: int,
+        rng: np.random.Generator,
+        warn_no_seqs_found: bool
+) -> Tuple[Tuple[Domain, ...], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
     domains: List[Domain] = list(eval_set.domain_to_score.keys())
@@ -1111,7 +1125,7 @@ def _reassign_domains(eval_set: EvaluationSet, max_domains_to_change: int,
         assert domain not in original_sequences
         previous_sequence = domain.sequence()
         original_sequences[domain] = previous_sequence
-        new_sequence = domain.pool.generate_sequence(rng, previous_sequence)
+        new_sequence = domain.pool.generate_sequence(rng, previous_sequence, warn_no_seqs_found)
         domain.set_sequence(new_sequence)
 
     return domains_changed, original_sequences
@@ -1398,10 +1412,13 @@ def _log_constraint_summary(*, params: SearchParameters,
     print(first_newline + table_str, end='')
 
 
-def assign_sequences_to_domains_randomly_from_pools(design: Design,
-                                                    warn_fixed_sequences: bool,
-                                                    rng: np.random.Generator = nn.default_rng,
-                                                    overwrite_existing_sequences: bool = False) -> None:
+def assign_sequences_to_domains_randomly_from_pools(
+        design: Design,
+        warn_fixed_sequences: bool,
+        warn_no_seqs_found: bool,
+        rng: np.random.Generator = nn.default_rng,
+        overwrite_existing_sequences: bool = False,
+) -> None:
     """
     Assigns to each :any:`Domain` in this :any:`Design` a random DNA sequence from its
     :any:`DomainPool`, calling :py:meth:`constraints.DomainPool.generate_sequence` to get the sequence.
@@ -1413,6 +1430,8 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
     :param warn_fixed_sequences:
         Whether to log warning that each :any:`Domain` with :data:`constraints.Domain.fixed` = True
         is not being assigned.
+    :param warn_no_seqs_found:
+        See :data:`SearchParameters.warn_no_seqs_found`.
     :param rng:
         numpy random number generator (type returned by numpy.random.default_rng()).
     :param overwrite_existing_sequences:
@@ -1436,7 +1455,7 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
         if overwrite_existing_sequences:
             if not domain.fixed:
                 at_least_one_domain_unfixed = True
-                new_sequence = domain.pool.generate_sequence(rng, domain.sequence())
+                new_sequence = domain.pool.generate_sequence(rng, domain.sequence(), warn_no_seqs_found)
                 domain.set_sequence(new_sequence)
                 assert len(domain.sequence()) == domain.pool.length
             else:
@@ -1447,7 +1466,8 @@ def assign_sequences_to_domains_randomly_from_pools(design: Design,
                 # domain is not fixed so that we know it is eligible to be overwritten during the search
                 at_least_one_domain_unfixed = True
             if not domain.fixed and not domain.has_sequence():
-                new_sequence = domain.pool.generate_sequence(rng)
+                new_sequence = domain.pool.generate_sequence(
+                    rng, previous_sequence=None, warn_no_seqs_found=warn_no_seqs_found)
                 domain.set_sequence(new_sequence)
                 assert len(domain.sequence()) == domain.get_length()
             elif warn_fixed_sequences:

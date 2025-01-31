@@ -230,7 +230,7 @@ class TestModifyDesignAfterCreated(unittest.TestCase):
         for domain in strand.domains:
             domain.pool = pool
         rng = numpy.random.default_rng(0)
-        ns.assign_sequences_to_domains_randomly_from_pools(self.design, True, rng)
+        ns.assign_sequences_to_domains_randomly_from_pools(self.design, True, True, rng)
 
         # assert we don't raise an exception trying to access the sequence of each domain
         s0 = strand.domains[0].sequence  # noqa
