@@ -33,9 +33,7 @@ The API documentation is on readthedocs: https://nuad.readthedocs.io/
 
 
 ## Installation
-nuad requires Python version 3.9 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on two pieces of software that are not installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
-
-nuad uses [NUPACK](http://www.nupack.org/downloads), which must be installed separately (see below for link to installation instructions). While it is technically possible to use nuad without them, most of the pre-packaged constraints require them.
+nuad requires Python version 3.9 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on [NUPACK](http://www.nupack.org/downloads), which cannot be installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). While it is technically possible to use nuad without NUPACK, many of the pre-packaged constraints require NUPACK to be installed.
 
 To use NUPACK on Windows, you must use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
