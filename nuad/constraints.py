@@ -515,25 +515,25 @@ class BaseCountFilter(NumpyFilter):
     base: str
     """Base to count."""
 
-    high_count: int | None = None
+    high: int | None = None
     """
-    Count of :data:`BaseCountFilter.base` must be at most :data:`BaseCountFilter.high_count`.
+    Count of :data:`BaseCountFilter.base` must be at most this.
     """
 
-    low_count: int | None = None
+    low: int | None = None
     """
-    Count of :data:`BaseCountFilter.base` must be at least :data:`BaseCountFilter.low_count`.
+    Count of :data:`BaseCountFilter.base` must be at least this.
     """
 
     def __post_init__(self) -> None:
         self.name = 'base_count'
-        if self.low_count is None and self.high_count is None:
+        if self.low is None and self.high is None:
             raise ValueError('at least one of low_count or high_count must be specified')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences whose counts of a certain base are outside of an interval."""
-        low_count = self.low_count if self.low_count is not None else 0
-        high_count = self.high_count if self.high_count is not None else seqs.seqlen
+        low_count = self.low if self.low is not None else 0
+        high_count = self.high if self.high is not None else seqs.seqlen
         sumarr = np.sum(seqs.seqarr == nn.base2bits[self.base], axis=1)
         good = (low_count <= sumarr) & (sumarr <= high_count)
         seqarr_pass = seqs.seqarr[good]

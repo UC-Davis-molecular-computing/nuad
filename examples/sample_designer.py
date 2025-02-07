@@ -90,7 +90,7 @@ def main() -> None:
 
     numpy_filters = [
         nc.NearestNeighborEnergyFilter(-9.5, -9.0, 52.0),
-        nc.BaseCountFilter(base='G', high_count=1),
+        nc.BaseCountFilter(base='G', high=1),
         nc.RunsOfBasesFilter(['C', 'G'], 4),
         nc.RunsOfBasesFilter(['A', 'T'], 4),
     ]
