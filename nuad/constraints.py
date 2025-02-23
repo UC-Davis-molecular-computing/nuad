@@ -509,33 +509,45 @@ class NearestNeighborEnergyFilter(NumpyFilter):
 @dataclass
 class BaseCountFilter(NumpyFilter):
     """
-    Restricts the sequence to contain a certain number of occurences of a given base.
+    Restricts the sequence to contain a certain number of occurences of given bases.
     """
 
-    base: str
-    """Base to count."""
+    bases: str
+    """Bases to count. e.g., 'A' or 'AT'. If multiple bases are included, it ensures the sum of their counts is 
+    between :data:`BaseCountFilter.high` and :data:`BaseCountFilter.low`."""
 
     high: int | None = None
     """
-    Count of :data:`BaseCountFilter.base` must be at most this.
+    Count of bases in :data:`BaseCountFilter.bases` must be at most this.
     """
 
     low: int | None = None
     """
-    Count of :data:`BaseCountFilter.base` must be at least this.
+    Count of bases in :data:`BaseCountFilter.bases` must be at least this.
     """
 
     def __post_init__(self) -> None:
         self.name = 'base_count'
         if self.low is None and self.high is None:
             raise ValueError('at least one of low_count or high_count must be specified')
+        if len(self.bases) == 0:
+            raise ValueError('bases cannot be empty')
+        for base in self.bases:
+            if base not in all_dna_bases:
+                raise ValueError(f'base {base} is not a valid DNA base; must be one of {all_dna_bases}')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
-        """Remove sequences whose counts of a certain base are outside of an interval."""
+        """Remove sequences whose counts of a certain bases are outside of an interval."""
         low_count = self.low if self.low is not None else 0
         high_count = self.high if self.high is not None else seqs.seqlen
-        sumarr = np.sum(seqs.seqarr == nn.base2bits[self.base], axis=1)
-        good = (low_count <= sumarr) & (sumarr <= high_count)
+        first_base = True
+        for base in self.bases:
+            if first_base:
+                sumarr = np.sum(seqs.seqarr == nn.base2bits[base], axis=1)
+                first_base = False
+            else:
+                sumarr += np.sum(seqs.seqarr == nn.base2bits[base], axis=1) # noqa
+        good = (low_count <= sumarr) & (sumarr <= high_count) # noqa
         seqarr_pass = seqs.seqarr[good]
         return nn.DNASeqList(seqarr=seqarr_pass)
 
