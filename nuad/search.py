@@ -1142,7 +1142,7 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: Dic
 def _double_check_violations_from_scratch(design: nc.Design, params: SearchParameters, iteration: int,
                                           eval_set: EvaluationSet):
     eval_set_from_scratch = EvaluationSet(params.constraints, params.never_increase_score)
-    eval_set_from_scratch.evaluate_all(design)
+    eval_set_from_scratch.evaluate_all(design, params)
     score_new = eval_set.total_score_new()
     score_opt = eval_set.total_score
     score_fs = eval_set_from_scratch.total_score
@@ -2077,7 +2077,8 @@ def create_constraints_report(design: nc.Design, constraints: Iterable[Constrain
         according to `constraints`
     """
     eval_set = EvaluationSet(constraints, False)
-    eval_set.evaluate_all(design)
+    params = SearchParameters()
+    eval_set.evaluate_all(design, params)
 
     reports = [ConstraintReport(constraint, eval_set, report_only_violations) for constraint in constraints]
 
