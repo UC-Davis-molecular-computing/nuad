@@ -8,4 +8,6 @@ matplotlib
 openpyxl
 viennarna
 scadnano
+pre-commit
+black
 typing_extensions; python_version < "3.8"
