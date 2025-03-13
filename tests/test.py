@@ -344,6 +344,381 @@ class TestNumpyFilters(unittest.TestCase):
             nc.NearestNeighborEnergyFilter(-10, -15)
 
 
+class TestDagObjectCreation(unittest.TestCase):
+    def test_init(self) -> None:
+        """                        D 20
+                                /      \
+                              A 10
+                            /   \
+                         j 2   c 8     B 10
+                          / \    | /\ / \
+                     e 1   f 1   g4   h4   i2
+                                     /\
+                                    x  y
+                    """
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        # D = Domain(
+        #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        # )
+        visited, domain_name_to_interval = nc.set_domains_memoryviews(h)
+        self.assertEqual(
+            visited, {"A", "b", "c", "e", "f", "g", "h", "i", "B", "x", "y"}
+        )
+
+        # self.assertEqual(11, dag._length_of_shared_subdomains(dag.domain_name_to_domain["D"], dag.domain_name_to_domain["h"]))
+
+        self.assertEqual(A, b.parents[0])
+        self.assertEqual((15, 17), domain_name_to_interval["x"])
+        self.assertEqual((17, 20), domain_name_to_interval["y"])
+
+        self.assertEqual((0, 5), domain_name_to_interval["e"])
+        self.assertEqual((5, 10), domain_name_to_interval["f"])
+        self.assertEqual((10, 15), domain_name_to_interval["g"])
+        self.assertEqual((15, 20), domain_name_to_interval["h"])
+        self.assertEqual((20, 25), domain_name_to_interval["i"])
+
+        self.assertEqual((0, 20), domain_name_to_interval["A"])
+        self.assertEqual((10, 25), domain_name_to_interval["B"])
+
+        # self.assertEqual((0, 25), dag.domain_name_to_interval["D"])
+
+
+class TestAllIntersectingDomains(unittest.TestCase):
+    def test_init(self):
+        """                        D 20
+                                        /      \
+                                      A 10
+                                    /   \
+                                 j 2   c 8     B 10
+                                  / \    | /\ / \
+                             e 1   f 1   g4   h4   i2
+                                             /\
+                                            x  y
+                            """
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        # D = Domain(
+        #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        # )
+        A_intersected_domains = A.all_domains_intersecting()
+        A_intersected_domain_names = set()
+        for d in A_intersected_domains:
+            A_intersected_domain_names.add(d.name)
+        self.assertEqual(
+            A_intersected_domain_names,
+            {"A", "b", "c", "e", "f", "g", "h", "B", "x", "y"},
+        )
+        i_intersected_domains = i.all_domains_intersecting()
+        i_intersected_domain_names = set()
+        for d in i_intersected_domains:
+            i_intersected_domain_names.add(d.name)
+        self.assertEqual(
+            i_intersected_domain_names,
+            {"B", "i"},
+        )
+        x_intersected_domains = x.all_domains_intersecting()
+        x_intersected_domain_names = set()
+        for d in x_intersected_domains:
+            x_intersected_domain_names.add(d.name)
+        self.assertEqual(
+            x_intersected_domain_names,
+            {"A", "c", "h", "B", "x"},
+        )
+
+
+class AllDomainsInDAG(unittest.TestCase):
+    def test_init(self):
+        """                        D 20
+                                        /      \
+                                      A 10
+                                    /   \
+                                 b 2   c 8     B 10
+                                  / \    | /\ / \
+                             e 1   f 1   g4   h4   i2
+                                             /\
+                                            x  y
+                            """
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        # D = Domain(
+        #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        # )
+        dag_domains = {d.name for d in i.all_domains_in_dag()}
+        self.assertEqual(
+            dag_domains,
+            {"A", "b", "c", "e", "f", "g", "h", "i", "B", "x", "y"},
+        )
+
+
+class AllDomainsInTree(unittest.TestCase):
+    def test_init(self):
+        """                        D 20
+                                        /      \
+                                      A 10
+                                    /   \
+                                 j 2   c 8     B 10
+                                  / \    | /\ / \
+                             e 1   f 1   g4   h4   i2
+                                             /\
+                                            x  y
+                            """
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        # D = Domain(
+        #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        # )
+        tree_domains = {d.name for d in i.all_domains_in_tree()}
+        self.assertEqual(tree_domains, {"B", "i", "h", "g", "x", "y"})
+
+
+class TestCheckIsDag(unittest.TestCase):
+    def test_init(self):
+        """
+
+                                              A 10
+                                            /   \
+                                         j 2   c 8     B 10
+                                          / \    | /\ / \
+                                     e 1   f 1   g4   h4   i2
+                                                     /\
+                                                    x  y
+
+                                            I
+                                          /  \
+                                        F ____ E
+                                    """
+        I = Domain("I", assign_domain_pool_of_length(5), dependent=True)
+        E = Domain("E", assign_domain_pool_of_length(5), dependent=True)
+        F = Domain("F", assign_domain_pool_of_length(5), dependent=True, subdomains=[I])
+        I.subdomains.append(E)
+        E.subdomains.append(F)
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        D = Domain(
+            "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        )
+
+        B_dag_set = set(B.check_is_dag().keys())
+        print(B_dag_set)
+        # B_dag_set_names = {d.name for d in B_dag_set}
+        self.assertEqual(
+            B_dag_set, {"A", "b", "c", "e", "f", "g", "h", "B", "x", "y", "i", "D"}
+        )
+        # F.check_is_dag()
+
+
+class TestTopologicalSort(unittest.TestCase):
+    """
+                                            A 10
+                                            /   \
+                                         b 2   c 8     B 10
+                                          / \    | /\ / \
+                                     e 1   f 1   g4   h4   i2
+                                                     /\
+                                                    x  y
+    """
+
+    def test_init(self):
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, i]
+        )
+        D = Domain(
+            "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
+        )
+        # self.assertEqual(nc.topological_sort_domains([D,A,B, b, c, e, f, i, x, y, g, h]), [])
+
+
+class TestDagIsSinglyConnected(unittest.TestCase):
+    """
+                                                A 10
+                                                /   \
+                                             b 2   c 8     B 10
+                                              / \    | /\ / \
+                                         e 1   f 1   g4   h4   i2
+                                                         /\
+                                                        x  y
+        """
+
+    def test_init(self):
+        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+
+        x = Domain("x", assign_domain_pool_of_length(2), dependent=True)
+        y = Domain("y", assign_domain_pool_of_length(3), dependent=True)
+        h = Domain(
+            "h", assign_domain_pool_of_length(5), dependent=True, subdomains=[x, y]
+        )
+
+        i = Domain("i", assign_domain_pool_of_length(5), dependent=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+        )
+        c = Domain(
+            "c",
+            assign_domain_pool_of_length(10),
+            dependent=True,
+            subdomains=[g, h],
+        )
+
+        A = Domain(
+            "A", assign_domain_pool_of_length(20), dependent=False, subdomains=[b, c]
+        )
+        B = Domain(
+            "B", assign_domain_pool_of_length(15), dependent=False, subdomains=[g, h, f]
+        )
+        h.check_dag_is_singly_connected()
+        
 class TestInsertDomains(unittest.TestCase):
     def setUp(self) -> None:
         self.design = Design()
