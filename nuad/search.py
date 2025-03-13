@@ -846,7 +846,13 @@ class SearchParameters:
                                  f'but the element at index {idx} is of type {type(constraint)}')
             idx += 1
 
+def set_memoryviews(design) -> None:
+    domains = design.domains
 
+    for domain in domains:
+        if domain.memoryview_sequence is None:
+            nc.set_domains_memoryviews(domain)
+            
 def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
     Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
@@ -929,9 +935,10 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     design.compute_derived_fields()
 
     design.check_all_subdomain_graphs_acyclic()
-    design.check_all_subdomain_graphs_uniquely_assignable()
+    design.check_all_subdomain_dags_singly_connected()
     design.check_names_unique()
     _check_design(design)
+    set_memoryviews(design)
 
     directories = _setup_directories(params)
 
