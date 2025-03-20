@@ -2127,10 +2127,12 @@ class Domain(Part, JSONSerializable):
                 for sd in domain.subdomains:
                     if not sd in domains:
                         stack.append(sd)
+                    # graph.add_edge(self.name, sd.name)
 
                 for parent in domain.parents:
                     if not parent in domains:
                         stack.append(parent)
+                    # graph.add_edge(parent.name, self.name)
 
         return domains
 
