@@ -846,7 +846,7 @@ class SearchParameters:
                                  f'but the element at index {idx} is of type {type(constraint)}')
             idx += 1
 
-def set_memoryviews(design) -> None:
+def set_memoryviews(design: nc.Design) -> None:
     domains = design.domains
 
     for domain in domains:
@@ -934,9 +934,13 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
     design.compute_derived_fields()
 
+    design.check_names_unique()
+    #TODO: combine next two into one method check_subdomain_graphs_legal
+    # build graphs (as networkx object) where nodes are domain names by doing DFS
+    # on the implicit undirected graph of Domains where edges are parents and children
+    # then check those networkx graphs are acyclic and singly connected, to avoid redoing work
     design.check_all_subdomain_graphs_acyclic()
     design.check_all_subdomain_dags_singly_connected()
-    design.check_names_unique()
     _check_design(design)
     set_memoryviews(design)
 

@@ -2067,41 +2067,43 @@ class Domain(Part, JSONSerializable):
                         f"in subdomain graph rooted at subdomain {sd}. The following error was found: {e}"
                     )
 
-    def check_is_dag(self) -> Dict["Domain", int]:
+    def check_is_dag(self) -> Dict["Domain", DFSState]:
         """To verify the directed graph containing this domain is acyclic."""
-        # colors 0 or None: white, 1: gray, 2: black
+        #TODO: why do we call this three times instead of just once at the start of the search?
         domains = self.all_domains_in_dag()
         visited_domains = {}
         for domain in domains:
-            if visited_domains.get(domain.name) is None:
+            if domain.name not in visited_domains.keys():
                 dfs(domain, visited_domains)
         return visited_domains
 
-    def check_dag_is_singly_connected(self):
+    def check_dag_is_singly_connected(self) -> None:
         domains = self.all_domains_in_dag()
         sources = get_sources(domains)
-        # topological sorting
+        #TODO: I think reverse should be False to put sources first
         sorted_domains = sorted(
             domains, key=lambda domain: len(domain.parents), reverse=True
-        )
+        ) # ensure sources are at start since topolocial_sort_domains assumes this
         sorted_domains = topological_sort_domains(sorted_domains)
 
+        # use dynamic programming to count how many paths go from s to every node u;
+        # if any node u has more than two paths from s, it's an error
         # algo
         for source_domain in sources:
-            paths_from_source = {}
+            num_paths_from_source = {}
             for domain in sorted_domains:
-                paths_from_source[domain] = 0
-            paths_from_source[source_domain] = 1
+                num_paths_from_source[domain] = 0
+            num_paths_from_source[source_domain] = 1
             for domain in sorted_domains:
-                if paths_from_source[domain] == 0:
+                if num_paths_from_source[domain] == 0:
                     continue
-                else:
-                    for sd in domain.subdomains:
-                        paths_from_source[sd] += paths_from_source[domain]
-                        if paths_from_source[sd] > 1:
-                            raise ValueError(
-                                f"The DAG with root at the domain {source_domain.name} is not singly connected: More than one path from {source_domain.name} to {sd.name}."
-                            )
+                for sd in domain.subdomains:
+                    num_paths_from_source[sd] += num_paths_from_source[domain]
+                    if num_paths_from_source[sd] > 1:
+                        #TODO: figure out the paths and list them here
+                        raise ValueError(
+                            f"The DAG with root at the domain {source_domain.name} is not singly connected: More than one path from {source_domain.name} to {sd.name}."
+                        )
 
     def all_domains_in_tree(self) -> List["Domain"]:
         """
@@ -2458,12 +2460,9 @@ def set_domains_memoryviews(
         A set of all the subdomains for which memoryviews have been calcualted in this method as well as a dictionary of them as keys and their intervals as values.
     """
 
-    visited_names = set()
-    """names of the domains contained in this dag"""
-    domain_name_to_interval = {}
-    """mapping each domain name to its indices in the union sequence"""
-    domain_name_to_domain = {}
-    """mapping each domain name to its domain"""
+    visited_names = set() # names of the domains contained in this dag
+    domain_name_to_interval = {} # mapping each domain name to its indices in the union sequence
+    domain_name_to_domain = {} # mapping each domain name to its domain
     traversal(
         initial_domain, domain_name_to_interval, domain_name_to_domain, visited_names
     )
@@ -2633,27 +2632,35 @@ def get_sources(domains: Set[Domain]) -> Set["Domain"]:
             source_domains.add(domain)
     return source_domains
 
+class DFSState(Enum):
+    discovered = 1
+    finished = 2
 
-def dfs(domain: Domain, visited_domains: Dict[str, int]) -> None:
+def dfs(domain: Domain, visited_domains: Dict[str, DFSState]) -> None:
     """depth first search on the directed graph containing domain."""
-    color = visited_domains.get(domain.name)
+    #TODO: make this iterative with a stack, make visited_domains a local variable,
+    # and return the set of its keys
+    dfs_state = visited_domains.get(domain.name)
 
-    if color == 1:
+    if dfs_state == DFSState.discovered:
+        #TODO: figure out the cycle and give all domain names on it in the error message
         raise ValueError(
             f"A cycle was found in the directed graph containing the domain {domain.name}."
         )
-    elif color is None:
-        visited_domains.update({domain.name: 1})
+    elif dfs_state is None:
+        visited_domains[domain.name] = DFSState.discovered
         for sd in domain.subdomains:
             dfs(sd, visited_domains)
 
         for name in visited_domains:
-            if visited_domains[name] == 1:
-                visited_domains[name] = 2
+            if visited_domains[name] == DFSState.discovered:
+                visited_domains[name] = DFSState.finished
 
 
 def topological_sort_domains(domains: List[Domain]) -> List[Domain]:
-    """returns the list of domains in a topological order."""
+    """returns the list of domains in a topological order.
+
+    Assumes sources are at the start of the list."""
     stack = []
     visited_domains = set()
     for domain in domains:
@@ -2675,6 +2682,8 @@ def topological_sort_round(
         if sd not in visited_domains:
             topological_sort_round(sd, stack, visited_domains)
     stack.append(domain)
+
+
 default_strand_group = 'default_strand_group'
 
 
