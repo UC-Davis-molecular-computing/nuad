@@ -65,7 +65,7 @@ To install nuad, you can either install it using pip (the slightly simpler optio
 
         and then unzip somewhere on your file system.
 
-  2. Install the Python package by changing to the directory where the nuad repository is stored localled and type `pip install -e .` This should install the needed dependencies.
+  2. Install the Python package by changing to the directory where the nuad repository is stored localled and type `pip install -e .` This should install the needed dependencies. An advantage of this approach is that, if there are features available on some branch of the github repo (typically the [dev branch](https://github.com/UC-Davis-molecular-computing/nuad/tree/dev)) that are not yet available in the latest version of nuad, you can check out the branch via `git checkout dev`, and those new features will be available.
 
 If step 2 above does not work, try the following:
 
