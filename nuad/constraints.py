@@ -72,7 +72,7 @@ domain_pools_key = 'domain_pools'
 domain_pools_num_sampled_key = 'domain_pools_num_sampled'
 domain_names_key = 'domain_names'
 starred_domain_indices_key = 'starred_domain_indices'
-group_key = 'group'
+# group_key = 'label'
 domain_pool_name_key = 'pool_name'
 length_key = 'length'
 substring_length_key = 'substring_length'
@@ -2169,8 +2169,7 @@ def domains_not_substrings_of_each_other_constraint(
 @dataclass
 class VendorFields(JSONSerializable):
     """Data required when ordering DNA strands from a synthesis company such as
-    `IDT (Integrated DNA Technologies) <https://www.
-    dna.com/>`_.
+    `IDT (Integrated DNA Technologies) <https://www.idtdna.com/>`_.
     This data is used when automatically generating files used to order DNA from IDT.
 
     When exporting to IDT files via :meth:`Design.write_idt_plate_excel_file`
@@ -2248,7 +2247,7 @@ def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
         raise ValueError(f'field {field_name} in VendorFields cannot be empty')
 
 
-default_strand_group = 'default_strand_group'
+default_strand_label = 'default_strand_label'
 
 
 @dataclass
@@ -2261,9 +2260,6 @@ class Strand(Part, JSONSerializable):
     starred_domain_indices: FrozenSet[int]
     """Set of positions of :any:`Domain`'s in :data:`Strand.domains`
     on this :any:`Strand` that are starred."""
-
-    group: str
-    """Optional "group" field to describe strands that share similar properties."""
 
     _domain_names_concatenated: str
     """Concatenation of domain names; cached for efficiency since these are used in calculating 
@@ -2323,9 +2319,8 @@ class Strand(Part, JSONSerializable):
     def __init__(self,
                  domains: Iterable[Domain] | None = None,
                  starred_domain_indices: Iterable[int] = (),
-                 group: str = default_strand_group,
                  name: str | None = None,
-                 label: str | None = None,
+                 label: str = default_strand_label,
                  vendor_fields: VendorFields | None = None,
                  ) -> None:
         """
@@ -2348,7 +2343,6 @@ class Strand(Part, JSONSerializable):
             methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
         """
         self._all_intersecting_domains = None
-        self.group = group
         self._name = name
 
         # XXX: moved this check to Design constructor to allow subdomain graphs to be
@@ -2402,8 +2396,7 @@ class Strand(Part, JSONSerializable):
         starred_domain_indices = list(self.starred_domain_indices)
         name = name if name is not None else self.name
         vendor_fields = None if self.vendor_fields is None else self.vendor_fields.clone()
-        return Strand(domains=domains, starred_domain_indices=starred_domain_indices, name=name,
-                      group=self.group, label=self.label, vendor_fields=vendor_fields)
+        return Strand(domains=domains, starred_domain_indices=starred_domain_indices, name=name, label=self.label, vendor_fields=vendor_fields)
 
     def compute_derived_fields(self):
         """
@@ -2527,7 +2520,7 @@ class Strand(Part, JSONSerializable):
             Dictionary ``d`` representing this :any:`Strand` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
-        dct: Dict[str, Any] = {name_key: self.name, group_key: self.group}
+        dct: Dict[str, Any] = {name_key: self.name, label_key: self.label}
 
         domains_list = [domain.name for domain in self.domains]
         dct[domain_names_key] = NoIndent(domains_list) if suppress_indent else domains_list
@@ -2570,8 +2563,6 @@ class Strand(Part, JSONSerializable):
         domains: List[Domain] = [domain_with_name[name] for name in domain_names_json]
         starred_domain_indices = mandatory_field(Strand, json_map, starred_domain_indices_key)
 
-        group = json_map.get(group_key, default_strand_group)
-
         label: str = json_map.get(label_key)
 
         vendor_fields_json = json_map.get(vendor_fields_key)
@@ -2580,8 +2571,7 @@ class Strand(Part, JSONSerializable):
             vendor_fields = VendorFields.from_json_serializable(vendor_fields_json)
 
         strand: Strand = Strand(
-            domains=domains, starred_domain_indices=starred_domain_indices,
-            group=group, name=name, label=label, vendor_fields=vendor_fields)
+            domains=domains, starred_domain_indices=starred_domain_indices, name=name, label=label, vendor_fields=vendor_fields)
         return strand
 
     def __repr__(self) -> str:
@@ -3079,7 +3069,7 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
-    strands_by_group_name: Dict[str, List[Strand]] = field(init=False)
+    strands_by_label_name: Dict[str, List[Strand]] = field(init=False)
     """
     Dict mapping each group name to a list of the :any:`Strand`'s in this :any:`Design` in the group.
 
@@ -3134,9 +3124,9 @@ class Design(JSONSerializable):
 
         self.domains = remove_duplicates(domains)
 
-        self.strands_by_group_name = defaultdict(list)
+        self.strands_by_label_name = defaultdict(list)
         for strand in self.strands:
-            self.strands_by_group_name[strand.group].append(strand)
+            self.strands_by_label_name[strand.label].append(strand)
 
         self.store_domain_pools()
 
@@ -3275,7 +3265,6 @@ class Design(JSONSerializable):
                    domain_names: List[str] | None = None,
                    domains: List[Domain] | None = None,
                    starred_domain_indices: Iterable[int] | None = None,
-                   group: str = default_strand_group,
                    name: str | None = None,
                    label: str | None = None,
                    vendor_fields: VendorFields | None = None,
@@ -3355,7 +3344,6 @@ class Design(JSONSerializable):
         domains_of_strand = list(domains)  # type: ignore
         strand = Strand(domains=domains_of_strand,
                         starred_domain_indices=starred_domain_indices,
-                        group=group,
                         name=name,
                         label=label,
                         vendor_fields=vendor_fields)
@@ -3582,7 +3570,7 @@ class Design(JSONSerializable):
         :param use_default_plates:
             Use default values for plate and well (ignoring those in :data:`Strand.vendor_fields`, which
             may be None). If False, each Strand to export must have the field :data:`Strand.vendor_fields`,
-            so in particular the parameter `only_strands_with_idt` must be True.
+            so in particular the parameter `only_strands_with_vendor_fields` must be True.
         :param warn_using_default_plates:
             specifies whether, if `use_default_plates` is True, to print a warning for strands whose
             :data:`Strand.vendor_fields` has the fields :data:`VendorFields.plate` and :data:`VendorFields.well`,
@@ -3709,39 +3697,17 @@ class Design(JSONSerializable):
         strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands] \
             if ignored_strands is not None else sc_design.strands
 
-        # warn if not labels are dicts containing group_name_key on strands
-        for sc_strand in strands_to_include:
-            if (isinstance(sc_strand.label, dict) and group_key not in sc_strand.label) or \
-                    (not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_key)):
-                logger.warning(f'Strand label {sc_strand.label} should be an object with attribute named '
-                               f'"{group_key}" (for instance a dict or namedtuple).\n'
-                               f'  The label is type {type(sc_strand.label)}. '
-                               f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                               f'named "{group_key}" with associated value of type str.')
-            else:
-                label_value = Design.get_group_name_from_strand_label(sc_strand)
-                if not isinstance(label_value, str):
-                    logger.warning(f'Strand label {sc_strand.label} has attribute named '
-                                   f'"{group_key}", but its associated value is not a string.\n'
-                                   f'The value is type {type(label_value)}. '
-                                   f'In order to auto-populate StrandGroups, ensure the label has attribute '
-                                   f'named "{group_key}" with associated value of type str.')
-
-                # raise TypeError(f'strand label {sc_strand.label} must be a dict, '
-                #                 f'but instead is type {type(sc_strand.label)}')
-
         # groups scadnano strands by strand labels
         sc_strand_groups: DefaultDict[str, List[sc.Strand]] = defaultdict(list)
         for sc_strand in strands_to_include:
             assigned = False
-            if hasattr(sc_strand.label, group_key) or (
-                    isinstance(sc_strand.label, dict) and group_key in sc_strand.label):
-                group = Design.get_group_name_from_strand_label(sc_strand)
-                if isinstance(group, str):
-                    sc_strand_groups[group].append(sc_strand)
+            if isinstance(sc_strand.label, dict):
+                label = Design.get_group_name_from_strand_label(sc_strand)
+                if isinstance(label, str):
+                    sc_strand_groups[label].append(sc_strand)
                     assigned = True
             if not assigned:
-                sc_strand_groups[default_strand_group].append(sc_strand)
+                sc_strand_groups[default_strand_label].append(sc_strand)
 
         # make dsd StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
@@ -3759,7 +3725,6 @@ class Design(JSONSerializable):
                 domain_names: List[str] = [domain.name for domain in sc_strand.domains]
                 sequence = sc_strand.dna_sequence
                 nuad_strand: Strand = design.add_strand(domain_names=domain_names,
-                                                        group=group,
                                                         name=sc_strand.name,
                                                         label=sc_strand.label)
                 # assign sequence
@@ -3792,12 +3757,12 @@ class Design(JSONSerializable):
 
     @staticmethod
     def get_group_name_from_strand_label(sc_strand: Strand) -> Any:
-        if hasattr(sc_strand.label, group_key):
-            return getattr(sc_strand.label, group_key)
-        elif isinstance(sc_strand.label, dict) and group_key in sc_strand.label:
-            return sc_strand.label[group_key]
+        if hasattr(sc_strand.label, label_key):
+            return getattr(sc_strand.label, label_key)
+        elif isinstance(sc_strand.label, dict) and label_key in sc_strand.label:
+            return sc_strand.label[label_key]
         else:
-            raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
+            raise AssertionError(f'label does not have either an attribute or a dict key "{label_key}"')
 
     def assign_fields_to_scadnano_design(self, sc_design: sc.Design,
                                          ignored_strands: Iterable[Strand] = (),
@@ -3888,34 +3853,6 @@ class Design(JSONSerializable):
                 pairs.append((nuad_strand, sc_strands))
 
         return pairs
-
-    def assign_strand_groups_to_labels(self, sc_design: sc.Design,
-                                       ignored_strands: Iterable[Strand] = (),
-                                       overwrite: bool = False) -> None:
-        """
-        TODO: document this
-        """
-        strand_pairs = self.shared_strands_with_scadnano_design(sc_design, ignored_strands)
-
-        for nuad_strand, sc_strands in strand_pairs:
-            for sc_strand in sc_strands:
-                if nuad_strand.group is not None:
-                    if sc_strand.label is None:
-                        sc_strand.label = {}
-                    elif not isinstance(sc_strand.label, dict):
-                        raise ValueError(f'cannot assign strand group to strand {sc_strand.name} '
-                                         f'because it already has a label that is not a dict. '
-                                         f'It must either have label None or a dict.')
-
-                    # if we get here, then sc_strand.label is a dict. Need to check whether
-                    # it already has a 'group' key.
-                    if group_key in sc_strand.label is not None and not overwrite:
-                        raise ValueError(f'Cannot assign strand group from nuad strand to scadnano strand '
-                                         f'{sc_strand.name} (through its label field) because the '
-                                         f'scadnano strand already has a label with group key '
-                                         f'\n{sc_strand.label[group_key]}. '
-                                         f'Set overwrite to True to force an overwrite.')
-                    sc_strand.label[group_key] = nuad_strand.group
 
     def assign_idt_fields_to_scadnano_design(self, sc_design: sc.Design,
                                              ignored_strands: Iterable[Strand] = (),
@@ -4761,12 +4698,12 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
         if strand1.name != strand2.name:
             raise ValueError(f'strand names at position {idx} don\'t match: '
                              f'{strand1.name} and {strand2.name}')
-        if (strand1.group is not None
-                and strand2.group is not None
-                and strand1.group != strand2.group):  # noqa
-            raise ValueError(f'strand {strand2.name} group name does not match:'
-                             f'design1 strand {strand1.name} group = {strand1.group},\n'
-                             f'design2 strand {strand2.name} group = {strand2.group}')
+        if (strand1.label is not None
+                and strand2.label is not None
+                and strand1.label != strand2.label):  # noqa
+            raise ValueError(f'strand {strand2.name} label name does not match:'
+                             f'design1 strand {strand1.name} label = {strand1.label},\n'
+                             f'design2 strand {strand2.name} label = {strand2.label}')
         for domain1, domain2 in zip(strand1.domains, strand2.domains):
             if domain1.name != domain2.name:
                 raise ValueError(f'domain of strand {strand2.name} don\'t match: '
