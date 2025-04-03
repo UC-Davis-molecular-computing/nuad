@@ -2870,27 +2870,6 @@ class DFSState(Enum):
     DISCOVERED = 2
 
 
-def dfs(domain: Domain, visited_domains: Dict[str, DFSState]) -> None:
-    """depth first search on the directed graph containing domain."""
-    # TODO: make this iterative with a stack, make visited_domains a local variable,
-    # and return the set of its keys
-    dfs_state = visited_domains.get(domain.name)
-
-    if dfs_state == DFSState.DISCOVERED:
-        # TODO: figure out the cycle and give all domain names on it in the error message
-        raise ValueError(
-            f"A cycle was found in the directed graph containing the domain {domain.name}."
-        )
-    elif dfs_state is None:
-        visited_domains[domain.name] = DFSState.DISCOVERED
-        for sd in domain.subdomains:
-            dfs(sd, visited_domains)
-
-        for name in visited_domains:
-            if visited_domains[name] == DFSState.DISCOVERED:
-                visited_domains[name] = DFSState.finished
-
-
 default_strand_group = "default_strand_group"
 
 
