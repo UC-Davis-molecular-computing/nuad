@@ -733,8 +733,8 @@ def rna_cofold_multiple(
 _wctable = str.maketrans('ACGTacgt', 'TGCAtgca')
 
 
-def wc(seq: str) -> str:
-    """Return reverse Watson-Crick complement of `seq`."""
+def reverse_complement(seq: str) -> str:
+    """Return reverse complement of DNA sequence `seq`."""
     return seq.translate(_wctable)[::-1]
 
 
@@ -752,13 +752,13 @@ def free_energy_single_strand(
 
 def binding_complement(seq: str, temperature: float = default_temperature, sodium: float = default_sodium,
                        magnesium: float = default_magnesium, subtract_indv: bool = True) -> float:
-    """Computes the complex free energy of a strand with its perfect Watson-Crick complement.
+    """Computes the complex free energy of a strand with its perfect reverse complement.
 
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
     seq1 = seq
-    seq2 = wc(seq)
+    seq2 = reverse_complement(seq)
     # this is a hack to save time since (seq1,seq2) and (seq2,seq1) are
     #   considered different tuples hence are cached differently by lrucache;
     #   but pfunc is a symmetric function with only two sequences, so it's safe to swap the order
@@ -821,7 +821,7 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
     if parallel:
         results = [
             global_thread_pool.apply_async(binding_callback, args=(s, s))
-            for s in (seq, wc(seq))]
+            for s in (seq, reverse_complement(seq))]
         energies = [result.get() for result in results]
         if max(energies) > orthogonality:
             return False
@@ -830,7 +830,7 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
         log_energy(ss)
         if ss > orthogonality:
             return False
-        wsws = binding(wc(seq), wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+        wsws = binding(reverse_complement(seq), reverse_complement(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
         log_energy(wsws)
         if wsws > orthogonality:
             return False
@@ -840,7 +840,7 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
             results = [
                 global_thread_pool.apply_async(binding_callback,
                                                args=(seq1, seq2, temperature, sodium, magnesium))
-                for seq1, seq2 in itertools.product((seq, wc(seq)), (altseq, wc(altseq)))]
+                for seq1, seq2 in itertools.product((seq, reverse_complement(seq)), (altseq, reverse_complement(altseq)))]
             energies = [result.get() for result in results]
             if max(energies) > orthogonality:
                 return False
@@ -850,15 +850,15 @@ def domain_orthogonal(seq: str, seqs: Sequence[str], temperature: float, sodium:
             log_energy(sa)
             if sa > orthogonality:
                 return False
-            sw = binding(seq, wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+            sw = binding(seq, reverse_complement(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(sw)
             if sw > orthogonality:
                 return False
-            wa = binding(wc(seq), altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
+            wa = binding(reverse_complement(seq), altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(wa)
             if wa > orthogonality:
                 return False
-            ww = binding(wc(seq), wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+            ww = binding(reverse_complement(seq), reverse_complement(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
             log_energy(ww)
             if ww > orthogonality:
                 return False
@@ -885,8 +885,8 @@ def domain_pairwise_concatenated_no_sec_struct(seq: str, seqs: Sequence[str], te
 
     energy_sum = 0.0
     for altseq in seqs:
-        wc_seq = wc(seq)
-        wc_altseq = wc(altseq)
+        wc_seq = reverse_complement(seq)
+        wc_altseq = reverse_complement(altseq)
         if parallel:
             results = [global_thread_pool.apply_async(free_energy_single_strand,
                                                       args=(seq1 + seq2, temperature, sodium, magnesium)) for

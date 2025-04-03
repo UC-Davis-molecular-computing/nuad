@@ -1046,6 +1046,15 @@ class SearchParameters:
 
 
 def set_memoryviews(design: nc.Design) -> None:
+    # TODO: check if memoryviews already exist; if so we need to save the sequence from them to reassign into the
+    #  new memoryviews. This can happen, for instance, if the user creates a domain called `child`, assigns it
+    #  a sequence, which will create a memoryview, then creates a new domain called `parent` and makes `child`
+    #  a subdomain of `parent`. We will have to create a new memoryview for `child`, since it must be part of
+    #  a longer bytearray belonging to `parent` (or larger), but then we need to assign the saved DNA sequence
+    #  back into the `child` memoryview once done. Probably this means adding a new parameter to the functions
+    #  that is a dict[str, str] mapping each Domain with a preexisting sequence to the sequence, then iterate over
+    #  those after creating all the memoryviews (i.e., probably at the end of the method set_domains_memoryviews?
+    #  not sure) to assign the sequences.
     domains = design.domains
 
     for domain in domains:

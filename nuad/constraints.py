@@ -12,7 +12,7 @@ legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyFi
 and  :any:`SequenceFilter`, an alias for a function taking a string as input and returning a bool.
 
 See the README on the GitHub page for more detailed explanation of these classes:
-https://github.com/UC-Davis-molecular-computing/dsd#data-model
+https://github.com/UC-Davis-molecular-computing/nuad#data-model
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ try:
 except ImportError:
     from typing_extensions import Protocol
 
-# from dsd.stopwatch import Stopwatch
+# from nuad.stopwatch import Stopwatch
 
 try:
     from scadnano import Design as scDesign  # type: ignore
@@ -306,12 +306,12 @@ def default_score_transfer_function(x: float) -> float:
     return max(0.0, x ** 3)
 
 
-logger = logging.Logger("dsd", level=logging.DEBUG)
+logger = logging.Logger("nuad", level=logging.DEBUG)
 """
-Global logger instance used throughout dsd.
+Global logger instance used throughout nuad.
 
 Call ``logger.removeHandler(logger.handlers[0])`` to stop screen output (assuming that you haven't added
-or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and
+or removed any handlers to the nuad logger instance already; by default there is one StreamHandler, and
 removing it will stop screen output).
 
 Call ``logger.addHandler(logging.FileHandler(filename))`` to direct to a file.
@@ -1638,7 +1638,7 @@ class Part(ABC):
 class Domain(Part, JSONSerializable):
     """
     Represents a contiguous substring of the DNA sequence of a :any:`Strand`, which is intended
-    to be either single-stranded, or to bind fully to the Watson-Crick complement of the :any:`Domain`.
+    to be either single-stranded, or to bind fully to the reverse complement of the :any:`Domain`.
 
     If two domains are complementary, they are represented by the same :any:`Domain` object.
     They are distinguished only by whether the :any:`Strand` object containing them has the
@@ -1663,20 +1663,6 @@ class Domain(Part, JSONSerializable):
     """
     Each :any:`Domain` in the same :any:`DomainPool` as this one share a set of properties, such as
     length and individual :any:`DomainConstraint`'s.
-    """
-
-    # TODO: `set_sequence_recursive_up`
-
-    #        - if parent is not none, make recursive call to set_sequence_recursive_up
-    # TODO: `set_sequence_recursive_down`
-    #        - iterate over children, call set_sequence
-    _sequence: str | None = field(
-        init=False, repr=False, default=None, compare=False, hash=False
-    )
-    """
-    DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
-    variant; the starred variant has the Watson-Crick complement,
-    accessible via :data:`Domain.starred_sequence`.
     """
 
     weight: float = 1.0
@@ -1763,8 +1749,6 @@ class Domain(Part, JSONSerializable):
         self._name = name
         self._starred_name = name + "*"
         self._pool = pool
-        self._sequence = sequence
-        self._starred_sequence = None if sequence is None else nv.wc(sequence)
         self.fixed = fixed
         self.label = label
         self.dependent = dependent
@@ -1998,16 +1982,12 @@ class Domain(Part, JSONSerializable):
         :raises ValueError: If no sequence has been assigned.
         """
         if not self.has_sequence():
-            try:
-                raise ValueError(
-                    f"sequence has not been set for Domain {self.name}\n"
-                    f"sequence: {self.memoryview_sequence.tobytes().decode('utf-8') if self.memoryview_sequence is not None else None}"
-                )
-            except ValueError as err:
-                print(err)
-        if self.memoryview_sequence is None:
-            return None
-        return self.memoryview_sequence.tobytes().decode("utf-8")
+            raise ValueError(
+                f"sequence has not been set for Domain {self.name}\n"
+                f"sequence: {self.memoryview_sequence.tobytes().decode('ascii') if self.memoryview_sequence is not None else None}"
+            )
+        assert self.memoryview_sequence is not None
+        return self.memoryview_sequence.tobytes().decode("ascii")
 
     def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
         """
@@ -2017,7 +1997,7 @@ class Domain(Part, JSONSerializable):
         if self.fixed:
             raise ValueError(
                 "cannot assign a new sequence to this Domain; its sequence is fixed as "
-                f"{self.memoryview_sequence.tobytes().decode('utf-8')}"
+                f"{self.memoryview_sequence.tobytes().decode('ascii')}"
             )
         if self.has_length() and len(new_sequence) != self.get_length():
             raise ValueError(
@@ -2032,94 +2012,11 @@ class Domain(Part, JSONSerializable):
         if self.memoryview_sequence is None:
             set_domains_memoryviews(self)
 
-        self.memoryview_sequence[:] = new_sequence.encode()
-        self._starred_sequence = nv.wc(new_sequence)
-
-    def _set_subdomain_sequences(self, new_sequence: str) -> None:
-        """Sets sequence for all subdomains.
-
-        :param new_sequence: Sequence assigned to this domain.
-        :type new_sequence: str
-        """
-
-        sequence_idx = 0
-        for sd in self._subdomains:
-            if sd is not self:
-                sd_len = sd.get_length()
-                # sd._sequence = sd_sequence
-                sd.memoryview_sequence = self.memoryview_sequence[
-                                         sequence_idx: sequence_idx + sd_len
-                                         ]
-
-                # if not sd.memoryview_sequence is None:
-                #     sd.memoryview_sequence[:] = new_sequence.encode()
-                # else:
-                #     sd.memoryview_sequence = memoryview(
-                #         bytearray(sd_sequence.encode("utf-8"))
-                #     )
-                #     sd._starred_sequence = nv.wc(sd_sequence)
-                #     sd._set_subdomain_sequences(sd_sequence)
-                #     sequence_idx += sd_len
-
-    def _set_parent_sequences(self, new_sequence: str) -> None:
-        """Set parent sequence and propagate upwards
-
-        :param new_sequence: new sequence
-        :type new_sequence: str
-        """
-
-        parents = self.parents
-        # parent = self.parent
-        # if parent is not None:
-        for parent in parents:
-            if parent is not self:
-                # Add up lengths of subdomains, add new_sequence
-                idx = 0
-                assert self in parent._subdomains
-                sd: Domain | None = None
-                for sd in parent._subdomains:
-                    if sd == self:
-                        break
-                    else:
-                        idx += sd.get_length()
-                assert sd is not None
-                if parent.memoryview_sequence is None:
-                    parent_sequence = (
-                            "?" * idx
-                            + new_sequence
-                            + "?" * (parent.get_length() - sd.get_length() - idx)
-                    )
-                    parent.memoryview_sequence = memoryview(
-                        bytearray(parent_sequence.encode("utf-8"))
-                    )
-                    parent._starred_sequence = (
-                            "?" * idx
-                            + new_sequence
-                            + "?" * (parent.get_length() - sd.get_length() - idx)
-                    )
-                else:
-
-                    old_sequence = parent.memoryview_sequence.tobytes().decode("utf-8")
-                    parent_sequence = (
-                            old_sequence[:idx]
-                            + new_sequence
-                            + old_sequence[idx + sd.get_length():]
-                    )
-                    parent.memoryview_sequence[idx: idx + sd.get_length()] = (
-                        old_sequence
-                    )
-
-                new_parent_sequence = parent.memoryview_sequence.tobytes().decode(
-                    "utf-8"
-                )
-                # print("parent ", parent.name)
-                # print(new_parent_sequence, idx, idx + sd.get_length())
-                parent._starred_sequence = nv.wc(new_parent_sequence)
-                parent._set_parent_sequences(new_parent_sequence)
+        self.memoryview_sequence[:] = new_sequence.encode(encoding='ascii')
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
-        Set DNA sequence and fix it so it is not changed by the dsd sequence designer.
+        Set DNA sequence and fix it so it is not changed by the nuad sequence designer.
 
         Since it is being fixed, there is no Domain pool, so we don't check the pool or whether it has
         a length. We also bypass the check that it is not fixed.
@@ -2128,7 +2025,7 @@ class Domain(Part, JSONSerializable):
         """
 
         self.set_sequence(fixed_sequence, fixed=True)
-        self._starred_sequence = nv.wc(fixed_sequence)
+        self._starred_sequence = nv.reverse_complement(fixed_sequence)
         self.fixed = True
 
     @property
@@ -2141,12 +2038,9 @@ class Domain(Part, JSONSerializable):
     @property
     def starred_sequence(self) -> str:
         """
-        :return: Watson-Crick complement of DNA sequence assigned to this :any:`Domain`.
+        :return: reverse complement of DNA sequence assigned to this :any:`Domain`.
         """
-        if self.memoryview_sequence is None:
-            raise ValueError("no DNA sequence has been assigned to this Domain")
-        # return dv.wc(self.sequence)
-        return self._starred_sequence
+        return nv.reverse_complement(self.sequence())
 
     def get_name(self, starred: bool) -> str:
         """
@@ -2170,7 +2064,7 @@ class Domain(Part, JSONSerializable):
         if self._starred_sequence is None:
             raise AssertionError(
                 "_starred_sequence should be set to non-None if _sequence is not None. "
-                "Something went wrong in the logic of dsd."
+                "Something went wrong in the logic of nuad."
             )
         # return self._starred_sequence if starred else self._sequence
         return self._starred_sequence if starred else self.sequence()
@@ -2183,7 +2077,7 @@ class Domain(Part, JSONSerializable):
         """
         return (
                 self.memoryview_sequence is not None
-                and "?" not in self.memoryview_sequence.tobytes().decode("utf-8")
+                and "?" not in self.memoryview_sequence.tobytes().decode("ascii")
         )
 
     @staticmethod
@@ -2529,7 +2423,7 @@ def domains_not_substrings_of_each_other_constraint(
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
 
     :param check_complements:
-        whether to also ensure the check for Watson-Crick complements of the sequences
+        whether to also ensure the check for reverse complements of the sequences
     :param short_description:
         short description of constraint suitable for logging to stdout
     :param weight:
@@ -2563,7 +2457,7 @@ def domains_not_substrings_of_each_other_constraint(
         if check_complements:
             # by symmetry, only need to check c1 versus s2 for WC complement, since
             # (s1 not in s2 <==> c1 in c2) and (c1 in s2 <==> s1 in c2)
-            c1 = nv.wc(s1)
+            c1 = nv.reverse_complement(s1)
             if len(c1) >= min_length and c1 in s2:
                 msg = f"{c1} is a length->={min_length} substring of {s2}"
                 if not passed:
@@ -2704,13 +2598,14 @@ def set_domains_memoryviews(
 
     # Normalize intervals if negative indices exist
     if minimum < 0:
-        intervals = [(start - minimum, end - minimum) for start, end in intervals]
-        domain_name_to_interval = dict(zip(domain_name_to_interval.keys(), intervals))
+        for domain_name, interval in domain_name_to_interval.items():
+            start, end = interval
+            domain_name_to_interval[domain_name] = (start - minimum, end - minimum)
 
     # Build initial sequence bytearray and assign a memoryview to it
     max_end = max(end for _, end in intervals)
     # ? shouldn't it be max_end + 1 ?
-    memoryview_full = memoryview(bytearray("?" * (max_end + 1), "utf-8"))
+    memoryview_full = memoryview(bytearray(b"?" * max_end, encoding='ascii'))
 
     # assign the corresponding initial value to each domain's memoryview_sequence field
     for domain_name, domain in domain_name_to_domain.items():
@@ -3641,7 +3536,7 @@ def _export_dummy_scadnano_design_for_idt_export(
         strands: Iterable[Strand],
 ) -> sc.Design:
     """
-    Exports a dummy scadnano design from this dsd :any:`Design`.
+    Exports a dummy scadnano design from this nuad :any:`Design`.
     Useful for reusing scadnano methods such as to_idt_bulk_input_format.
 
     :param strands:
@@ -4492,8 +4387,8 @@ class Design(JSONSerializable):
         :param ignored_strands:
             Strands to ignore; none are ignore if not specified.
         :param warn_existing_domain_labels:
-            If True, logs warning when dsd :any:`Domain` already has a label and so does scadnano domain,
-            since scadnano label will not be assigned to the dsd :any:`Domain`.
+            If True, logs warning when nuad :any:`Domain` already has a label and so does scadnano domain,
+            since scadnano label will not be assigned to the nuad :any:`Domain`.
         :return:
             An equivalent :any:`Design`, ready to be given constraints for DNA sequence design.
         :raises TypeError:
@@ -4563,7 +4458,7 @@ class Design(JSONSerializable):
             if not assigned:
                 sc_strand_groups[default_strand_group].append(sc_strand)
 
-        # make dsd StrandGroups, taking names from Strands and Domains,
+        # make nuad StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
         strand_names: Set[str] = set()
         design: Design = Design()
@@ -4573,7 +4468,7 @@ class Design(JSONSerializable):
                 if sc_strand.name in strand_names:
                     logger.debug(
                         "In scadnano design, found duplicate instance of strand with name "
-                        f"{sc_strand.name}; skipping all but the first when creating dsd design. "
+                        f"{sc_strand.name}; skipping all but the first when creating nuad design. "
                         f"Please ensure that this strand really is supposed to have the same name."
                     )
                     continue
@@ -4588,29 +4483,29 @@ class Design(JSONSerializable):
                 )
                 # assign sequence
                 if sequence is not None:
-                    for dsd_domain, sc_domain in zip(
+                    for nuad_domain, sc_domain in zip(
                             nuad_strand.domains, sc_strand.domains
                     ):
                         domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
-                        # take the WC complement first so the dsd Domain stores the "canonical" sequence
+                        # take the WC complement first so the nuad Domain stores the "canonical" sequence
                         if sc_domain.name[-1] == "*":
-                            domain_sequence = nv.wc(domain_sequence)
+                            domain_sequence = nv.reverse_complement(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
                             if fix_assigned_sequences:
-                                dsd_domain.set_fixed_sequence(domain_sequence)
+                                nuad_domain.set_fixed_sequence(domain_sequence)
                             else:
-                                dsd_domain.set_sequence(domain_sequence)
+                                nuad_domain.set_sequence(domain_sequence)
 
                 # set domain labels
-                for dsd_domain, sc_domain in zip(
+                for nuad_domain, sc_domain in zip(
                         nuad_strand.domains, sc_strand.domains
                 ):
-                    if dsd_domain.label is None:
-                        dsd_domain.label = sc_domain.label
+                    if nuad_domain.label is None:
+                        nuad_domain.label = sc_domain.label
                     elif sc_domain.label is not None and warn_existing_domain_labels:
                         logger.warning(
-                            f"warning; dsd domain already has label {dsd_domain.label}; "
+                            f"warning; nuad domain already has label {nuad_domain.label}; "
                             f"skipping assignment of scadnano label {sc_domain.label}"
                         )
 
@@ -4788,7 +4683,7 @@ class Design(JSONSerializable):
         Assigns :any:`VendorFields` from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
-        IDT fields of the dsd :any:`Strand` with that name.
+        IDT fields of the nuad :any:`Strand` with that name.
 
         :param sc_design:
             a scadnano design.
@@ -4809,7 +4704,7 @@ class Design(JSONSerializable):
                 if nuad_strand.vendor_fields is not None:
                     if sc_strand.vendor_fields is not None and not overwrite:
                         raise ValueError(
-                            f"Cannot assign IDT fields from dsd strand to scadnano strand "
+                            f"Cannot assign IDT fields from nuad strand to scadnano strand "
                             f"{sc_strand.name} because the scadnano strand already has "
                             f"IDT fields assigned:\n{sc_strand.vendor_fields}. "
                             f"Set overwrite to True to force an overwrite."
@@ -4828,7 +4723,7 @@ class Design(JSONSerializable):
         Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
-        modifications of the dsd :any:`Strand` with that name.
+        modifications of the nuad :any:`Strand` with that name.
 
         :param sc_design:
             a scadnano design.
@@ -4854,7 +4749,7 @@ class Design(JSONSerializable):
             if nuad_strand.modification_5p is not None:
                 if sc_strand.modification_5p is not None and not overwrite:
                     raise ValueError(
-                        f"Cannot assign 5' modification from dsd strand to scadnano strand "
+                        f"Cannot assign 5' modification from nuad strand to scadnano strand "
                         f"{sc_strand.name} because the scadnano strand already has a 5'"
                         f"modification assigned:\n{sc_strand.modification_5p}. "
                         f"Set overwrite to True to force an overwrite."
@@ -4866,7 +4761,7 @@ class Design(JSONSerializable):
             if nuad_strand.modification_3p is not None:
                 if sc_strand.modification_3p is not None and not overwrite:
                     raise ValueError(
-                        f"Cannot assign 3' modification from dsd strand to scadnano strand "
+                        f"Cannot assign 3' modification from nuad strand to scadnano strand "
                         f"{sc_strand.name} because the scadnano strand already has a 3'"
                         f"modification assigned:\n{sc_strand.modification_3p}. "
                         f"Set overwrite to True to force an overwrite."
@@ -4878,7 +4773,7 @@ class Design(JSONSerializable):
             for offset, mod_int in nuad_strand.modifications_int.items():
                 if offset in sc_strand.modifications_int is not None and not overwrite:
                     raise ValueError(
-                        f"Cannot assign internal modification from dsd strand to "
+                        f"Cannot assign internal modification from nuad strand to "
                         f"scadnano strand {sc_strand.name} at offset {offset} "
                         f"because the scadnano strand already has an internal "
                         f"modification assigned at that offset:\n"
@@ -4908,13 +4803,13 @@ class Design(JSONSerializable):
             starred = domain_name[-1] == "*"
             if starred:
                 domain_name = domain_name[:-1]
-            dsd_domain = self.domains_by_name.get(domain_name)
-            if dsd_domain is None:
+            nuad_domain = self.domains_by_name.get(domain_name)
+            if nuad_domain is None:
                 raise AssertionError(
                     f"expected domain_name {domain_name} to be a key in domains_by_name "
                     f"{list(self.domains_by_name.keys())}"
                 )
-            domain_sequence = dsd_domain.concrete_sequence(starred)
+            domain_sequence = nuad_domain.concrete_sequence(starred)
             sequence_list.append(domain_sequence)
         strand_sequence = "".join(sequence_list)
         sc_strand.set_dna_sequence(strand_sequence)
@@ -4937,9 +4832,9 @@ class Design(JSONSerializable):
             )
 
         # sigh: we don't have a great way to track which strand in sc_design corresponds to the same
-        # strand in dsd_design (self), so we collect list of domain names in sc_strand and see if there's
-        # a strand in dsd_design with the same domain names in the same order. If not we assume the strand
-        # was not part of dsd_design
+        # strand in nuad_design (self), so we collect list of domain names in sc_strand and see if there's
+        # a strand in nuad_design with the same domain names in the same order. If not we assume the strand
+        # was not part of nuad_design
         domain_name_list: List[str] = []
         for sc_domain in sc_strand.domains:
             domain_name = sc_domain.name
@@ -4948,8 +4843,8 @@ class Design(JSONSerializable):
             domain_name_list.append(domain_name)
 
         domain_names = tuple(domain_name_list)
-        dsd_strand = sc_domain_name_tuples.get(domain_names)
-        if dsd_strand is None:
+        nuad_strand = sc_domain_name_tuples.get(domain_names)
+        if nuad_strand is None:
             logger.warning(
                 "Skipping assignment of DNA sequence to scadnano strand with domains "
                 f'{"-".join(domain_names)}.\n'
@@ -4961,8 +4856,8 @@ class Design(JSONSerializable):
         wildcard: str = sc.DNA_base_wildcard
 
         sequence_list: List[str] = []
-        for sc_domain, dsd_domain, domain_name in zip(
-                sc_strand.domains, dsd_strand.domains, domain_names
+        for sc_domain, nuad_domain, domain_name in zip(
+                sc_strand.domains, nuad_strand.domains, domain_names
         ):
             starred = domain_name[-1] == "*"
             sc_domain_sequence = sc_domain.dna_sequence
@@ -4973,17 +4868,17 @@ class Design(JSONSerializable):
             if wildcard in sc_domain_sequence:
                 # if there are any '?' wildcards, then all of them should be wildcards
                 assert sc_domain_sequence == wildcard * len(sc_domain_sequence)
-                # if not assigned in sc_strand, we assign from dsd
-                domain_sequence = dsd_domain.concrete_sequence(starred)
+                # if not assigned in sc_strand, we assign from nuad
+                domain_sequence = nuad_domain.concrete_sequence(starred)
             else:
                 # otherwise we stick with the sequence that was already assigned in sc_domain
                 domain_sequence = sc_domain_sequence
-                # but let's make sure dsd didn't actually change that sequence; it should have been fixed
-                dsd_domain_sequence = dsd_domain.concrete_sequence(starred)
-                if domain_sequence != dsd_domain_sequence:
+                # but let's make sure nuad didn't actually change that sequence; it should have been fixed
+                nuad_domain_sequence = nuad_domain.concrete_sequence(starred)
+                if domain_sequence != nuad_domain_sequence:
                     raise AssertionError(
                         f"\n    domain_sequence = {domain_sequence} is unequal to\n"
-                        f"dsd_domain_sequence = {dsd_domain_sequence}"
+                        f"nuad_domain_sequence = {nuad_domain_sequence}"
                     )
             sequence_list.append(domain_sequence)
         strand_sequence = "".join(sequence_list)
@@ -5851,7 +5746,7 @@ def _check_nupack_installed() -> None:
         raise ImportError(
             "NUPACK 4 must be installed to create a constraint that uses NUPACK. "
             "Installation instructions can be found at "
-            "https://github.com/UC-Davis-molecular-computing/dsd#installation and "
+            "https://github.com/UC-Davis-molecular-computing/nuad#installation and "
             "https://piercelab-caltech.github.io/nupack-docs/start/"
         )
 
@@ -6013,7 +5908,7 @@ def nupack_domain_pair_constraint(
 ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
-    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
+    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their reverse complements
     are compared.
 
     :param threshold:
@@ -6085,14 +5980,14 @@ def nupack_domain_pair_constraint(
             # If seq1==seq2, don't check d-d* or d*-d in this case, but do check d-d and d*-d*
             seq_pairs = [
                 (seq1, seq2),
-                (nv.wc(seq1), nv.wc(seq2)),
+                (nv.reverse_complement(seq1), nv.reverse_complement(seq2)),
             ]
             if seq1 != seq2:
                 # only check these if domains are not the same
                 seq_pairs.extend(
                     [
-                        (seq1, nv.wc(seq2)),
-                        (nv.wc(seq1), seq2),
+                        (seq1, nv.reverse_complement(seq2)),
+                        (nv.reverse_complement(seq1), seq2),
                     ]
                 )
 
@@ -6408,7 +6303,7 @@ def _check_vienna_rna_installed() -> None:
 Vienna RNA is not installed correctly. Please install it and ensure that 
 executables such as RNAduplex can be called from the command line. 
 Installation instructions can be found at 
-https://github.com/UC-Davis-molecular-computing/dsd#installation and 
+https://github.com/UC-Davis-molecular-computing/nuad#installation and 
 https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
         )
 
