@@ -24,6 +24,8 @@ from multiprocessing.pool import ThreadPool
 from typing import Sequence, Tuple, List, Iterable, TypeVar
 
 import numpy as np
+import RNA
+RNA.params_load_DNA_Mathews2004()
 
 import nuad.constraints as nc
 
@@ -320,11 +322,8 @@ def rna_duplex_multiple(
         list of free energies, in the same order as `pairs`
     """
 
-    import RNA
-
     RNA.cvar.temperature = temperature
     RNA.cvar.noGU = not gu_wobble
-    RNA.params_load_DNA_Mathews2004()
 
     energies = []
     for seq1, seq2 in pairs:
