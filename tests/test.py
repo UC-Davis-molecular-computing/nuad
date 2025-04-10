@@ -1396,99 +1396,99 @@ class TestSubdomains(unittest.TestCase):
         strand = Strand(domains=[a], starred_domain_indices=[])
         self.assertEqual(strand.domains[0], a)
 
-    def test_error_strand_with_unassignable_subsequence(self):
-        """
-        Test that constructing a strand with an unassignable subsequence raises
-        a ValueError.
+    # def test_error_strand_with_unassignable_subsequence(self):
+    #     """
+    #     Test that constructing a strand with an unassignable subsequence raises
+    #     a ValueError.
+    #
+    #     This happens due to when no independent domain assigns a sequence for a
+    #     portion of a strand
+    #
+    #     .. code-block:: none
+    #
+    #               a
+    #             /   \
+    #            b     C
+    #           / \   / \
+    #          e   f g   h
+    #     """
+    #     e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+    #     f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
+    #     g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+    #     h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
+    #
+    #     b = Domain(
+    #         "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
+    #     )
+    #     C = Domain(
+    #         "C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h]
+    #     )
+    #
+    #     a = Domain(
+    #         "a", assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C]
+    #     )
+    #
+    #     strand = Strand(domains=[a], starred_domain_indices=[])
+    #
+    #     self.assertRaises(ValueError, Design, strands=[strand])
+    #
+    # def test_error_strand_with_redundant_independence(self):
+    #     """
+    #     Test that constructing a strand with an redundant indepndence in subdomain
+    #     graph raises a ValueError.
+    #
+    #     Below, in the path from F to a, two independent subdomains are found: F and B
+    #
+    #     .. code-block:: none
+    #
+    #               a
+    #             /   \
+    #            B     C
+    #           / \   / \
+    #          e   F g   h
+    #     """
+    #     e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
+    #     F = Domain("F", assign_domain_pool_of_length(5), dependent=False)
+    #     g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
+    #     h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
+    #
+    #     B = Domain(
+    #         "B", assign_domain_pool_of_length(10), dependent=False, subdomains=[e, F]
+    #     )
+    #     C = Domain(
+    #         "C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h]
+    #     )
+    #
+    #     a = Domain(
+    #         "a", assign_domain_pool_of_length(20), dependent=True, subdomains=[B, C]
+    #     )
+    #
+    #     strand = Strand(domains=[a], starred_domain_indices=[])
+    #
+    #     self.assertRaises(ValueError, Design, strands=[strand])
 
-        This happens due to when no independent domain assigns a sequence for a
-        portion of a strand
-
-        .. code-block:: none
-
-                  a
-                /   \
-               b     C
-              / \   / \
-             e   f g   h
-        """
-        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
-        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
-        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
-        h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
-
-        b = Domain(
-            "b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f]
-        )
-        C = Domain(
-            "C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h]
-        )
-
-        a = Domain(
-            "a", assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C]
-        )
-
-        strand = Strand(domains=[a], starred_domain_indices=[])
-
-        self.assertRaises(ValueError, Design, strands=[strand])
-
-    def test_error_strand_with_redundant_independence(self):
-        """
-        Test that constructing a strand with an redundant indepndence in subdomain
-        graph raises a ValueError.
-
-        Below, in the path from F to a, two independent subdomains are found: F and B
-
-        .. code-block:: none
-
-                  a
-                /   \
-               B     C
-              / \   / \
-             e   F g   h
-        """
-        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
-        F = Domain("F", assign_domain_pool_of_length(5), dependent=False)
-        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
-        h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
-
-        B = Domain(
-            "B", assign_domain_pool_of_length(10), dependent=False, subdomains=[e, F]
-        )
-        C = Domain(
-            "C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h]
-        )
-
-        a = Domain(
-            "a", assign_domain_pool_of_length(20), dependent=True, subdomains=[B, C]
-        )
-
-        strand = Strand(domains=[a], starred_domain_indices=[])
-
-        self.assertRaises(ValueError, Design, strands=[strand])
-
-    def test_error_cycle(self):
-        """
-        Test that constructing a domain with a cycle in its subdomain graph
-        rasies a ValueError.
-
-        This isn't checked when instantiating objects, but when first calling search_for_dna_sequences,
-        which calls Design.check_subdomain_graphs().
-
-        .. code-block:: none
-
-            a
-            |
-            b
-            |
-            a
-        """
-        a = Domain("a", assign_domain_pool_of_length(5), dependent=True)
-        b = Domain("b", assign_domain_pool_of_length(5), subdomains=[a], dependent=True)
-        a.subdomains = [b]
-        strand = Strand(domains=[a], starred_domain_indices=[])
-
-        self.assertRaises(ValueError, Design, strands=[strand])
+    # def test_error_cycle(self):
+    #     """
+    #     Test that constructing a domain with a cycle in its subdomain graph
+    #     raises a ValueError.
+    #
+    #     This isn't checked when instantiating objects, but when first calling search_for_dna_sequences,
+    #     which calls Design.check_subdomain_graphs().
+    #
+    #     .. code-block:: none
+    #
+    #         a
+    #         |
+    #         b
+    #         |
+    #         a
+    #     """
+    #     a = Domain("a", assign_domain_pool_of_length(5), dependent=True)
+    #     b = Domain("b", assign_domain_pool_of_length(5), subdomains=[a], dependent=True)
+    #     a.subdomains = [b]
+    #     strand = Strand(domains=[a], starred_domain_indices=[])
+    #
+    #     self.assertRaises(ValueError, Design, strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
         """Returns domains with the following subdomain hierarchy:

@@ -133,12 +133,12 @@ def find_parts_to_check(
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
-            domains_in_tree = domain.all_domains_in_tree()
-            if len(domains_in_tree) == 1:
+            domains_in_dag = domain.all_domains_in_dag()
+            if len(domains_in_dag) == 1:
                 # no need to add if the "tree" is just this domain
-                assert domains_in_tree[0].name == domain.name
+                assert next(iter(domains_in_dag)).name == domain.name
             else:
-                domains_changed_full.update(domains_in_tree)
+                domains_changed_full.update(domains_in_dag)
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
@@ -1046,15 +1046,7 @@ class SearchParameters:
 
 
 def set_memoryviews(design: nc.Design) -> None:
-    # TODO: check if memoryviews already exist; if so we need to save the sequence from them to reassign into the
-    #  new memoryviews. This can happen, for instance, if the user creates a domain called `child`, assigns it
-    #  a sequence, which will create a memoryview, then creates a new domain called `parent` and makes `child`
-    #  a subdomain of `parent`. We will have to create a new memoryview for `child`, since it must be part of
-    #  a longer bytearray belonging to `parent` (or larger), but then we need to assign the saved DNA sequence
-    #  back into the `child` memoryview once done. Probably this means adding a new parameter to the functions
-    #  that is a dict[str, str] mapping each Domain with a preexisting sequence to the sequence, then iterate over
-    #  those after creating all the memoryviews (i.e., probably at the end of the method set_domains_memoryviews?
-    #  not sure) to assign the sequences.
+
     domains = design.domains
 
     for domain in domains:
@@ -1140,19 +1132,8 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             f"use this same seed to reproduce this run"
         )
 
-    # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
-    # StrandPool that contains them.
-    # domain_to_strand: Dict[dc.Domain, dc.Strand] = _check_design(design)
     design.compute_derived_fields()
-
     design.check_names_unique()
-    # TODO: combine next two into one method check_subdomain_graphs_legal
-    # build graphs (as networkx object) where nodes are domain names by doing DFS
-    # on the implicit undirected graph of Domains where edges are parents and children
-    # then check those networkx graphs are acyclic and singly connected, to avoid redoing work
-
-    # design.check_subdomain_graph_is_dag()
-    # design.check_all_subdomain_dags_singly_connected()
     design.check_subdomain_graphs_legal()
     _check_design(design)
     set_memoryviews(design)
