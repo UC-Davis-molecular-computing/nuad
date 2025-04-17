@@ -1737,7 +1737,6 @@ class Domain(Part, JSONSerializable):
             self,
             name: str,
             pool: DomainPool | None = None,
-            sequence: str | None = None,
             fixed: bool = False,
             label: str | None = None,
             dependent: bool = False,
@@ -1788,8 +1787,6 @@ class Domain(Part, JSONSerializable):
         if weight is not None:
             self.weight = weight
 
-        if sequence:
-            self.set_sequence(sequence)
 
     @staticmethod
     def name_of_part_type(self) -> str:
