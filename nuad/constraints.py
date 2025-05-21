@@ -1191,12 +1191,12 @@ class DomainPool(JSONSerializable):
         seqs = nn.DNASeqList(length=self.length, alphabet=bases, shuffle=True)
         assert len(seqs) == len(bases) ** self.length
         seqs = self._apply_numpy_filters(seqs)
-        seqs_list = self._apply_sequence_filters(seqs)
+        seqs_list = self._apply_sequence_filters_and_convert_to_list(seqs)
         return seqs_list
 
-    def _apply_sequence_filters(self, seqs: nn.DNASeqList) -> list[str]:
+    def _apply_sequence_filters_and_convert_to_list(self, seqs: nn.DNASeqList) -> list[str]:
         if len(self.sequence_filters) == 0:
-            return seqs
+            return seqs.to_list()
 
         seqs_list = []
         for idx in range(seqs.numseqs):
