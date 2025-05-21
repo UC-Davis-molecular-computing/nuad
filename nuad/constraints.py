@@ -1171,6 +1171,35 @@ class DomainPool(JSONSerializable):
         """
         return all(constraint(sequence) for constraint in self.sequence_filters)
 
+    def generate_all_sequences(self) -> list[str]:
+        """
+        Returns all DNA sequences of given length satisfying :data:`DomainPool.numpy_filters` and
+        :data:`DomainPool.sequence_filters`.
+
+        CAUTION: This is prohibitively memory and time intensive if length is larger than 16, because
+        it enumerates all DNA sequences of a given length, then filters out those not passing the
+        filters.
+
+        :return:
+            all DNA sequences of given length satisfying :data:`DomainPool.numpy_filters` and
+            :data:`DomainPool.sequence_filters`
+        """
+        if self.possible_sequences is not None:
+            return list(self.possible_sequences)
+        assert self.length is not None
+        bases = self._bases_to_use()
+        seqs = nn.DNASeqList(length=self.length, alphabet=bases, shuffle=True)
+        assert len(seqs) == len(bases) ** self.length
+        seqs = self._apply_numpy_filters(seqs)
+        seqs = self._apply_sequence_filters(seqs)
+        return seqs.to_list()
+
+    def _apply_sequence_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
+        if len(self.sequence_filters) == 0:
+            return seqs
+        raise NotImplementedError('generate_all_sequences not implemented for sequence filters yet; '
+                                  'only for NumpyFilters')
+
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None,
                           warn_no_seqs_found: bool = False) -> str:
         """
