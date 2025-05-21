@@ -1191,14 +1191,20 @@ class DomainPool(JSONSerializable):
         seqs = nn.DNASeqList(length=self.length, alphabet=bases, shuffle=True)
         assert len(seqs) == len(bases) ** self.length
         seqs = self._apply_numpy_filters(seqs)
-        seqs = self._apply_sequence_filters(seqs)
-        return seqs.to_list()
+        seqs_list = self._apply_sequence_filters(seqs)
+        return seqs_list
 
-    def _apply_sequence_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
+    def _apply_sequence_filters(self, seqs: nn.DNASeqList) -> list[str]:
         if len(self.sequence_filters) == 0:
             return seqs
-        raise NotImplementedError('generate_all_sequences not implemented for sequence filters yet; '
-                                  'only for NumpyFilters')
+
+        seqs_list = []
+        for idx in range(seqs.numseqs):
+            seq = seqs.get_seq_str(idx)
+            if self.satisfies_sequence_constraints(seq):
+                seqs_list.append(seq)
+
+        return seqs_list
 
     def generate_sequence(self, rng: np.random.Generator, previous_sequence: str | None = None,
                           warn_no_seqs_found: bool = False) -> str:
