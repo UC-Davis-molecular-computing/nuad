@@ -1151,7 +1151,7 @@ class DomainPool(JSONSerializable):
                           possible_sequences=possible_sequences,
                           )
 
-    def _first_sequence_satisfying_sequence_constraints(self, seqs: nn.DNASeqList) -> str | None:
+    def _first_sequence_satisfying_sequence_filters(self, seqs: nn.DNASeqList) -> str | None:
         if len(seqs) == 0:
             return None
         if len(self.sequence_filters) == 0:
@@ -1310,7 +1310,7 @@ class DomainPool(JSONSerializable):
 
                 seqs_satisfying_numpy_filters = self._apply_numpy_filters(seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_filters))
-                sequence = self._first_sequence_satisfying_sequence_constraints(
+                sequence = self._first_sequence_satisfying_sequence_filters(
                     seqs_satisfying_numpy_filters)
                 if sequence is not None:
                     return sequence
@@ -1353,7 +1353,7 @@ NumpyFilters and SequenceFilters. Trying another distance.""")
 
             seqs_satisfying_numpy_filters = \
                 self._generate_random_sequences_passing_numpy_filters(rng, num_to_generate)
-            sequence = self._first_sequence_satisfying_sequence_constraints(seqs_satisfying_numpy_filters)
+            sequence = self._first_sequence_satisfying_sequence_filters(seqs_satisfying_numpy_filters)
             if sequence is not None:
                 return sequence
 
