@@ -384,6 +384,36 @@ class TestNumpyFilters(unittest.TestCase):
             nc.NearestNeighborEnergyFilter(-10, -15)
 
 
+class TestDependencyGraphCreation(unittest.TestCase):
+    def test_init(self) -> None:
+        """                  a
+                            |  \
+                            b  bb
+                          | \
+                         c  cc
+                        | \
+                        d  dd
+                    """
+        d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
+        dd = Domain("dd", assign_domain_pool_of_length(5), fixed=True)
+        c = Domain(
+            "c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, dd]
+        )
+        cc = Domain("cc", assign_domain_pool_of_length(5), locked=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, cc]
+        )
+        bb = Domain("bb", assign_domain_pool_of_length(5), assignable=True)
+        a = Domain(
+            "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, bb]
+        )
+
+        design = nc.Design()
+        design.add_strand(domains=[a, b, bb, c, cc, d, dd], starred_domain_indices=[6])
+        design.check_subdomain_graphs_legal()
+        dep = design.check_dependency_graphs_legal()
+
+
 class TestDagObjectCreation(unittest.TestCase):
     def test_init(self) -> None:
         """                        D 20

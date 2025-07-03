@@ -53,6 +53,7 @@ import functools
 
 import networkx as nx
 import numpy as np  # noqa
+from networkx.algorithms.shortest_paths.unweighted import predecessor
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -212,9 +213,9 @@ def m13(rotation: int = 5587, variant: M13Variant = M13Variant.p7249) -> str:
 
 
 def m13_substrings_of_length(
-        length: int,
-        except_indices: Iterable[int] = tuple(range(5514, 5557)),
-        variant: M13Variant = M13Variant.p7249,
+    length: int,
+    except_indices: Iterable[int] = tuple(range(5514, 5557)),
+    variant: M13Variant = M13Variant.p7249,
 ) -> List[str]:
     """
     *WARNING*: This function was previously recommended to use with :any:`DomainPool.possible_sequences`
@@ -303,7 +304,7 @@ def default_score_transfer_function(x: float) -> float:
     :return:
         max(0.0, x^3)
     """
-    return max(0.0, x ** 3)
+    return max(0.0, x**3)
 
 
 logger = logging.Logger("nuad", level=logging.DEBUG)
@@ -328,9 +329,9 @@ _configure_logger()
 
 
 def all_pairs(
-        values: Iterable[T],
-        with_replacement: bool = True,
-        where: Callable[[T, T], bool] = lambda _, __: True,
+    values: Iterable[T],
+    with_replacement: bool = True,
+    where: Callable[[T, T], bool] = lambda _, __: True,
 ) -> List[Tuple[T, T]]:
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
@@ -356,9 +357,9 @@ def all_pairs(
 
 
 def all_pairs_iterator(
-        values: Iterable[T],
-        with_replacement: bool = True,
-        where: Callable[[Tuple[T, T]], bool] = lambda _: True,
+    values: Iterable[T],
+    with_replacement: bool = True,
+    where: Callable[[Tuple[T, T]], bool] = lambda _: True,
 ) -> Iterator[Tuple[T, T]]:
     """
     Strongly typed function to get iterator of all pairs from `iterable`. (for using with mypy)
@@ -775,7 +776,7 @@ class ForbiddenSubstringFilter(NumpyFilter):
         assert isinstance(self.substrings, list)
         sub_len = len(self.substrings[0])
         sub_ints = [[nn.base2bits[base] for base in sub] for sub in self.substrings]
-        pow_arr = [4 ** k for k in range(sub_len)]
+        pow_arr = [4**k for k in range(sub_len)]
         sub_vals = np.dot(sub_ints, pow_arr)  # type: ignore
         toeplitz = nn.create_toeplitz(seqs.seqlen, sub_len, self.indices)
         convolution = np.dot(toeplitz, seqs.seqarr.transpose())
@@ -907,12 +908,12 @@ class SubstringSampler(JSONSerializable):
     Computed in constructor from other arguments."""
 
     def __init__(
-            self,
-            supersequence: str,
-            substring_length: int,
-            except_start_indices: Iterable[int] | None = None,
-            except_overlapping_indices: Iterable[int] | None = None,
-            circular: bool = False,
+        self,
+        supersequence: str,
+        substring_length: int,
+        except_start_indices: Iterable[int] | None = None,
+        except_overlapping_indices: Iterable[int] | None = None,
+        circular: bool = False,
     ) -> None:
         if except_start_indices is not None and except_overlapping_indices is not None:
             raise ValueError(
@@ -952,8 +953,8 @@ class SubstringSampler(JSONSerializable):
 
             # append start of sequence to its end to help with circular condition
             self.extended_supersequence += self.supersequence[
-                                           : self.substring_length - 1
-                                           ]
+                : self.substring_length - 1
+            ]
 
             # add indices beyond supersequence length that correspond to indices near the start
             extended_except_indices = list(self.except_start_indices)
@@ -1000,7 +1001,7 @@ class SubstringSampler(JSONSerializable):
         )
 
     def to_json_serializable(
-            self, suppress_indent: bool = True
+        self, suppress_indent: bool = True
     ) -> Dict[str, Any]:  # noqa
         except_indices = (
             NoIndent(self.except_start_indices)
@@ -1109,7 +1110,7 @@ class DomainPool(JSONSerializable):
 
     def __post_init__(self) -> None:
         if (self.length is None and self.possible_sequences is None) or (
-                self.length is not None and self.possible_sequences is not None
+            self.length is not None and self.possible_sequences is not None
         ):
             raise ValueError(
                 "exactly one of length or possible_sequences should be specified"
@@ -1144,7 +1145,7 @@ class DomainPool(JSONSerializable):
 
         if self.length is not None:
             if (
-                    len(self.hamming_probability) == 0
+                len(self.hamming_probability) == 0
             ):  # sets default probability distribution if the user does not
                 # exponentially decreasing probability of making i+1 (since i starts at 0) base changes
                 # for i in range(self.length):
@@ -1275,7 +1276,7 @@ class DomainPool(JSONSerializable):
         )
 
     def _first_sequence_satisfying_sequence_constraints(
-            self, seqs: nn.DNASeqList
+        self, seqs: nn.DNASeqList
     ) -> str | None:
         if len(seqs) == 0:
             return None
@@ -1297,10 +1298,10 @@ class DomainPool(JSONSerializable):
         return all(constraint(sequence) for constraint in self.sequence_filters)
 
     def generate_sequence(
-            self,
-            rng: np.random.Generator,
-            previous_sequence: str | None = None,
-            warn_no_seqs_found: bool = False,
+        self,
+        rng: np.random.Generator,
+        previous_sequence: str | None = None,
+        warn_no_seqs_found: bool = False,
     ) -> str:
         """
         Returns a DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
@@ -1358,10 +1359,10 @@ class DomainPool(JSONSerializable):
         return sequence
 
     def _sample_hamming_distance_from_sequence(
-            self,
-            previous_sequence: str,
-            rng: np.random.Generator,
-            warn_no_seqs_found: bool = False,
+        self,
+        previous_sequence: str,
+        rng: np.random.Generator,
+        warn_no_seqs_found: bool = False,
     ) -> str:
         # all possible distances from 1 to len(previous_sequence) are calculated.
 
@@ -1380,7 +1381,7 @@ class DomainPool(JSONSerializable):
             available_distances_arr = np.array(available_distances_list)
             existing_hamming_probabilities = hamming_probabilities[
                 available_distances_arr - 1
-                ]
+            ]
             prob_sum = existing_hamming_probabilities.sum()
             assert prob_sum > 0.0
             existing_hamming_probabilities /= prob_sum
@@ -1391,7 +1392,7 @@ class DomainPool(JSONSerializable):
             sequence: str | None = None
 
             while (
-                    sequence is None
+                sequence is None
             ):  # each iteration of this loop tries one value of num_to_generate
                 bases = self._bases_to_use()
                 length = self.length
@@ -1400,9 +1401,9 @@ class DomainPool(JSONSerializable):
                     length, sampled_distance
                 )
                 num_different_bases = len(bases) - 1
-                num_subsequences = num_different_bases ** sampled_distance
+                num_subsequences = num_different_bases**sampled_distance
                 num_sequences_at_sampled_distance = (
-                        num_ways_to_choose_subsequence_indices * num_subsequences
+                    num_ways_to_choose_subsequence_indices * num_subsequences
                 )
 
                 if num_to_generate > num_sequences_at_sampled_distance:
@@ -1445,7 +1446,7 @@ class DomainPool(JSONSerializable):
                 if sequence is not None:
                     return sequence
 
-                max_to_generate_before_moving_on = 10 ** 6
+                max_to_generate_before_moving_on = 10**6
 
                 if warn_no_seqs_found and generated_all_seqs:
                     logger.info(
@@ -1456,8 +1457,8 @@ NumpyFilters and SequenceFilters. Trying another distance."""
                     )
                     available_distances_list.remove(sampled_distance)
                 elif (
-                        warn_no_seqs_found
-                        and num_to_generate >= max_to_generate_before_moving_on
+                    warn_no_seqs_found
+                    and num_to_generate >= max_to_generate_before_moving_on
                 ):
                     logger.info(
                         f"""
@@ -1468,8 +1469,8 @@ NumpyFilters and SequenceFilters. Trying another distance."""
                     available_distances_list.remove(sampled_distance)
 
                 if sequence is None and (
-                        generated_all_seqs
-                        or num_to_generate >= max_to_generate_before_moving_on
+                    generated_all_seqs
+                    or num_to_generate >= max_to_generate_before_moving_on
                 ):
                     # found no sequences passing constraints at distance `sampled_distance`
                     # (either through exhaustive search, or trying at least 1 billion),
@@ -1482,7 +1483,7 @@ NumpyFilters and SequenceFilters. Trying another distance."""
         # raise AssertionError('should be unreachable')
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(
-            self, rng: np.random.Generator
+        self, rng: np.random.Generator
     ) -> str:
         num_to_generate = 100
         num_sequences_total = len(self._bases_to_use()) ** self.length
@@ -1503,7 +1504,7 @@ NumpyFilters and SequenceFilters. Trying another distance."""
             if sequence is not None:
                 return sequence
 
-            if num_to_generate > 10 ** 9:
+            if num_to_generate > 10**9:
                 raise NotImplementedError(
                     "We've generated over 1 billion random DNA sequences of length "
                     f"{self.length} and found none that passed the NumpyConstraints "
@@ -1526,7 +1527,7 @@ NumpyFilters and SequenceFilters. Trying another distance."""
         raise AssertionError("should be unreachable")
 
     def _generate_random_sequences_passing_numpy_filters(
-            self, rng: np.random.Generator, num_to_generate: int
+        self, rng: np.random.Generator, num_to_generate: int
     ) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
@@ -1578,7 +1579,7 @@ def add_quotes(string: str) -> str:
 
 
 def mandatory_field(
-        ret_type: Type, json_map: Dict, main_key: str, *legacy_keys: str
+    ret_type: Type, json_map: Dict, main_key: str, *legacy_keys: str
 ) -> Any:
     # should be called from function whose return type is the type being constructed from JSON, e.g.,
     # Design or Strand, given by ret_type. This helps give a useful error message
@@ -1711,6 +1712,9 @@ class Domain(Part, JSONSerializable):
     Only the entire strand, the root domain, can be assigned at once, changing every domain at once,
     so the domains are dependent on the root domain's assigned sequence.
     """
+    assignable: bool = True
+
+    locked: bool = False
 
     length: int | None = None
     """
@@ -1728,20 +1732,31 @@ class Domain(Part, JSONSerializable):
     on the :data:`Domain.subdomains` of other domains in the same tree.
     """
 
+    dependents: List[Domain, callable] = field(init=False, default_factory=list)
+    """List of domains which their sequence depends on this domain's sequence.
+    """
+
+    locked_dependents: List[Domain] = field(init=False, default_factory=list)
+    """List of locked domains in the subdomains and parents list. When this domain receives a new sequence,
+    their sequences get automatically updated due to shared memory.
+    """
+
     memoryview_sequence: memoryview | None = field(
         init=False, repr=False, default=None, compare=False, hash=False
     )
     """the domains sequence in the union bytearray"""
 
     def __init__(
-            self,
-            name: str,
-            pool: DomainPool | None = None,
-            fixed: bool = False,
-            label: str | None = None,
-            dependent: bool = False,
-            subdomains: List[Domain] | None = None,
-            weight: float | None = None,
+        self,
+        name: str,
+        pool: DomainPool | None = None,
+        fixed: bool = False,
+        dependent: bool = False,
+        assignable: bool = False,
+        locked: bool = False,
+        label: str | None = None,
+        subdomains: List[Domain] | None = None,
+        weight: float | None = None,
     ) -> None:
         if subdomains is None:
             subdomains = []
@@ -1749,21 +1764,29 @@ class Domain(Part, JSONSerializable):
         self._starred_name = name + "*"
         self._pool = pool
         self.fixed = fixed
+        self.dependent = dependent
+        self.assignable = assignable
+        self.locked = locked
         self.label = label
         self.dependent = dependent
         self._subdomains = subdomains
         self.parents = []
+        self.dependents = []
+        self.locked_dependents = []
 
         if self.name.endswith("*"):
             raise ValueError(
                 "Domain name cannot end with *\n" f"domain name = {self.name}"
             )
 
+        if self.dependent or self.fixed or self.locked:
+            self.assignable = False
+
         if self.fixed:
             for sd in self._subdomains:
                 if not sd.fixed:
                     raise ValueError(
-                        f"Domain is fixed, but subdomain {sd} is not fixed"
+                        f"Domain {self.name} is fixed, but subdomain {sd} is not fixed"
                     )
         else:
             contains_no_non_fixed_subdomains = True
@@ -1784,9 +1807,9 @@ class Domain(Part, JSONSerializable):
                 f"since dependent domains cannot be picked to change in the search, "
                 f"which is the probability that DOmain.weight affects"
             )
+
         if weight is not None:
             self.weight = weight
-
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1806,7 +1829,7 @@ class Domain(Part, JSONSerializable):
         return (self,)
 
     def to_json_serializable(
-            self, suppress_indent: bool = True
+        self, suppress_indent: bool = True
     ) -> NoIndent | Dict[str, Any]:
         """
         :return:
@@ -1826,7 +1849,7 @@ class Domain(Part, JSONSerializable):
 
     @staticmethod
     def from_json_serializable(
-            json_map: Dict[str, Any], pool_with_name: Dict[str, DomainPool] | None
+        json_map: Dict[str, Any], pool_with_name: Dict[str, DomainPool] | None
     ) -> Domain:
         """
         :param json_map:
@@ -1937,9 +1960,10 @@ class Domain(Part, JSONSerializable):
             True if this :any:`Domain` has a length, which means either a sequence has been assigned
             to it, or it has a :any:`DomainPool`.
         """
-        return ((self._pool is not None and self._pool.length is not None)
-                or self.length is not None
-                or self.memoryview_sequence is not None
+        return (
+            (self._pool is not None and self._pool.length is not None)
+            or self.length is not None
+            or self.memoryview_sequence is not None
         )
 
     def get_length(self) -> int:
@@ -1951,7 +1975,7 @@ class Domain(Part, JSONSerializable):
         """
         if self.length is not None:
             return self.length
-        if self.fixed and self.has_sequence() is not None:
+        if self.fixed and self.has_sequence():
             return len(self.sequence())
         if self._pool is None:
             raise ValueError(
@@ -1981,13 +2005,16 @@ class Domain(Part, JSONSerializable):
         :raises ValueError: If no sequence has been assigned.
         """
         if not self.has_sequence():
-            raise ValueError(
-                f"sequence has not been set for Domain {self.name}."
-            )
+            raise ValueError(f"sequence has not been set for Domain {self.name}.")
         assert self.memoryview_sequence is not None
         return self.memoryview_sequence.tobytes().decode(encoding="ascii")
 
-    def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
+    def set_sequence(
+        self,
+        new_sequence: str,
+        fixed: bool = False,
+        rng: np.random.Generator = np.random.default_rng(),
+    ) -> None:
         """
         :param new_sequence: new DNA sequence to set
         """
@@ -2010,7 +2037,13 @@ class Domain(Part, JSONSerializable):
         if self.memoryview_sequence is None:
             set_domains_memoryviews(self)
 
-        self.memoryview_sequence[:] = new_sequence.encode(encoding='ascii')
+        self.memoryview_sequence[:] = new_sequence.encode(encoding="ascii")
+
+        domains_to_notify = [
+            item[0] for item in self.dependents
+        ] + self.locked_dependents
+        for domain in domains_to_notify:
+            domain.notify_sequence_changed(rng, self)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -2024,6 +2057,17 @@ class Domain(Part, JSONSerializable):
 
         self.set_sequence(fixed_sequence, fixed=True)
         self.fixed = True
+
+    def notify_sequence_changed(
+        self, rng: np.random.Generator, notifier_domain: Domain
+    ) -> None:
+
+        for dependent, f in self.dependents:
+            new_dependent_sequence = f(self.sequence, rng)
+            dependent.set_sequence(new_dependent_sequence)
+        for locked_dependent in self.locked_dependents:
+            assert locked_dependent != notifier_domain
+            locked_dependent.notify_sequence_changed(rng, self)
 
     @property
     def starred_name(self) -> str:
@@ -2074,9 +2118,10 @@ class Domain(Part, JSONSerializable):
                  If this domain has subdomains, False if any subdomain has not been assigned
                  a sequence.
         """
+
         return (
-                self.memoryview_sequence is not None
-                and "?" not in self.memoryview_sequence.tobytes().decode(encoding="ascii")
+            self.memoryview_sequence is not None
+            and "?" not in self.memoryview_sequence.tobytes().decode(encoding="ascii")
         )
 
     @staticmethod
@@ -2113,7 +2158,6 @@ class Domain(Part, JSONSerializable):
                 return True
 
         return False
-
 
     def all_domains_in_tree(self) -> List["Domain"]:
         """
@@ -2228,7 +2272,7 @@ class Domain(Part, JSONSerializable):
         return domains
 
     def _get_all_domains_from_this_subtree(
-            self, excluded_subdomain: Domain | None = None
+        self, excluded_subdomain: Domain | None = None
     ) -> List[Domain]:
         # includes itself
         domains = [self]
@@ -2318,13 +2362,40 @@ class Domain(Part, JSONSerializable):
 
         return None
 
+    def check_only_one_state(self):
+
+        if self.dependent and self.locked:
+            raise ValueError(
+                f"A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked."
+            )
+        if self.dependent and self.assignable:
+            raise ValueError(
+                f"A domain cannot be both dependent and assignable. Domain{self.name} is defined dependent and assignable."
+            )
+        if self.dependent and self.fixed:
+            raise ValueError(
+                f"A domain cannot be both dependent and fixed. Domain{self.name} is defined dependent and fixed."
+            )
+        if self.fixed and self.locked:
+            raise ValueError(
+                f"A domain cannot be both fixed and locked. Domain{self.name} is defined fixed and locked."
+            )
+        if self.assignable and self.locked:
+            raise ValueError(
+                f"A domain cannot be both assignable and locked. Domain{self.name} is defined assignable and locked."
+            )
+        if self.assignable and self.fixed:
+            raise ValueError(
+                f"A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked."
+            )
+
 
 def domains_not_substrings_of_each_other_constraint(
-        check_complements: bool = True,
-        short_description: str = "dom neq",
-        weight: float = 1.0,
-        min_length: int = 0,
-        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+    check_complements: bool = True,
+    short_description: str = "dom neq",
+    weight: float = 1.0,
+    min_length: int = 0,
+    pairs: Iterable[Tuple[Domain, Domain]] | None = None,
 ) -> DomainPairConstraint:
     """
     Returns constraint ensuring no two domains are substrings of each other.
@@ -2350,7 +2421,7 @@ def domains_not_substrings_of_each_other_constraint(
 
     # def evaluate(s1: str, s2: str, domain1: Domain | None, domain2: Domain | None) -> float:
     def evaluate(
-            seqs: Tuple[str, ...], domains: Optional[Tuple[Domain, Domain]]
+        seqs: Tuple[str, ...], domains: Optional[Tuple[Domain, Domain]]
     ) -> Result:  # noqa
         s1, s2 = seqs
         if len(s1) > len(s2):
@@ -2440,7 +2511,7 @@ class VendorFields(JSONSerializable):
             )
 
     def to_json_serializable(
-            self, suppress_indent: bool = True, **kwargs: Any
+        self, suppress_indent: bool = True, **kwargs: Any
     ) -> NoIndent | Dict[str, Any]:
         dct: Dict[str, Any] = dict(self.__dict__)
         if self.plate is None:
@@ -2484,7 +2555,7 @@ def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
 
 
 def set_domains_memoryviews(
-        initial_domain: Domain,
+    initial_domain: Domain,
 ) -> Tuple[Set, Dict[str, Tuple[int, int]]]:
     """Computes the memoryview fields of all the domains comprising the polytree contaiting initial_domain.
 
@@ -2494,12 +2565,20 @@ def set_domains_memoryviews(
     """
 
     visited_names = set()  # names of the domains contained in this dag
-    domain_name_to_interval = {}  # map each domain name to its indices in the union sequence
+    domain_name_to_interval = (
+        {}
+    )  # map each domain name to its indices in the union sequence
     domain_name_to_domain = {}  # map each domain name to its domain
-    domain_to_existing_sequences = {}  # map each domain with preassigned sequence to its sequence
+    domain_to_existing_sequences = (
+        {}
+    )  # map each domain with preassigned sequence to its sequence
 
     assign_intervals(
-        initial_domain, domain_name_to_interval, domain_name_to_domain, visited_names, domain_to_existing_sequences
+        initial_domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_existing_sequences,
     )
 
     intervals = list(domain_name_to_interval.values())
@@ -2515,29 +2594,32 @@ def set_domains_memoryviews(
     # Build initial sequence bytearray and assign a memoryview to it
     max_end = max(end for _, end in intervals)
     # ? shouldn't it be max_end + 1 ?
-    memoryview_full = memoryview(bytearray("?" * max_end, encoding='ascii'))
+    memoryview_full = memoryview(bytearray("?" * max_end, encoding="ascii"))
 
     # assign the corresponding initial value to each domain's memoryview_sequence field
     for domain_name, domain in domain_name_to_domain.items():
         start, end = domain_name_to_interval[domain_name]
         domain.memoryview_sequence = memoryview_full[start:end]
 
-
     assign_back_preexisting_sequences(domain_to_existing_sequences)
 
     return visited_names, domain_name_to_interval
 
-def assign_back_preexisting_sequences(domain_to_preexisting_sequence: Dict[Domain, str]) -> None:
+
+def assign_back_preexisting_sequences(
+    domain_to_preexisting_sequence: Dict[Domain, str]
+) -> None:
 
     for domain, sequence in domain_to_preexisting_sequence:
-        domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
+        domain.memoryview_sequence[:] = sequence.encode(encoding="ascii")
+
 
 def assign_intervals(
-        domain: Domain,
-        domain_name_to_interval: Dict[str, Tuple[int, int]],
-        domain_name_to_domain: Dict[str, Domain],
-        visited_names: Set[str],
-        domain_to_preexisting_sequence: Dict[Domain, str]
+    domain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set[str],
+    domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
     """recursively traversing the directed acyclic graph by beginning from domain"""
     visited_names.add(domain.name)
@@ -2545,10 +2627,16 @@ def assign_intervals(
     domain_name_to_domain[domain.name] = domain
 
     if domain.memoryview_sequence is not None:
-        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding="ascii")
+        domain_to_preexisting_sequence[domain] = (
+            domain.memoryview_sequence.tobytes().decode(encoding="ascii")
+        )
 
     assign_intervals_to_subdomains_and_parents(
-        domain, domain_name_to_interval, domain_name_to_domain, visited_names, domain_to_preexisting_sequence
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
     )
 
 
@@ -2567,18 +2655,19 @@ def validate_subdomain_lengths(domain: Domain) -> None:
 
 
 def assign_intervals_to_subdomains_and_parents(
-        domain: Domain,
-        domain_name_to_interval: Dict[str, Tuple[int, int]],
-        domain_name_to_domain: Dict[str, Domain],
-        visited_names: Set[str],
-        domain_to_preexisting_sequence: Dict[Domain, str]
+    domain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set[str],
+    domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
 
     validate_subdomain_lengths(domain)
 
     if domain.memoryview_sequence is not None:
-        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding="ascii")
-
+        domain_to_preexisting_sequence[domain] = (
+            domain.memoryview_sequence.tobytes().decode(encoding="ascii")
+        )
 
     for sd in domain.subdomains:
         if sd.name not in visited_names:
@@ -2588,7 +2677,7 @@ def assign_intervals_to_subdomains_and_parents(
                 domain_name_to_interval,
                 domain_name_to_domain,
                 visited_names,
-                domain_to_preexisting_sequence
+                domain_to_preexisting_sequence,
             )
 
     for parent in domain.parents:
@@ -2599,17 +2688,17 @@ def assign_intervals_to_subdomains_and_parents(
                 domain_name_to_interval,
                 domain_name_to_domain,
                 visited_names,
-                domain_to_preexisting_sequence
+                domain_to_preexisting_sequence,
             )
 
 
 def assign_intervals_subdomain(
-        domain: Domain,
-        parent: Domain,
-        domain_name_to_interval: Dict[str, Tuple[int, int]],
-        domain_name_to_domain: Dict[str, Domain],
-        visited_names: Set,
-        domain_to_preexisting_sequence: Dict[Domain, str]
+    domain: Domain,
+    parent: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set,
+    domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
     # domain is the current domain we are processing
     # the interval indices are set based on this domain's parent interval
@@ -2634,17 +2723,21 @@ def assign_intervals_subdomain(
     domain_name_to_domain[domain.name] = domain
 
     assign_intervals_to_subdomains_and_parents(
-        domain, domain_name_to_interval, domain_name_to_domain, visited_names, domain_to_preexisting_sequence
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
     )
 
 
 def assign_intervals_parent(
-        domain: Domain,
-        subdomain: Domain,
-        domain_name_to_interval: Dict[str, Tuple[int, int]],
-        domain_name_to_domain: Dict[str, Domain],
-        visited_names: Set,
-        domain_to_preexisting_sequence: Dict[Domain, str]
+    domain: Domain,
+    subdomain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set,
+    domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
     # domain is the current domain we are processing
     # the interval indices are set based on this domain's subdomain indices
@@ -2667,7 +2760,11 @@ def assign_intervals_parent(
     domain_name_to_domain[domain.name] = domain
 
     assign_intervals_to_subdomains_and_parents(
-        domain, domain_name_to_interval, domain_name_to_domain, visited_names, domain_to_preexisting_sequence
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
     )
 
 
@@ -2744,13 +2841,13 @@ class Strand(Part, JSONSerializable):
     """
 
     def __init__(
-            self,
-            domains: Iterable[Domain] | None = None,
-            starred_domain_indices: Iterable[int] = (),
-            group: str = default_strand_group,
-            name: str | None = None,
-            label: str | None = None,
-            vendor_fields: VendorFields | None = None,
+        self,
+        domains: Iterable[Domain] | None = None,
+        starred_domain_indices: Iterable[int] = (),
+        group: str = default_strand_group,
+        name: str | None = None,
+        label: str | None = None,
+        vendor_fields: VendorFields | None = None,
     ) -> None:
         """
         A :any:`Strand` can be created only by listing explicit :any:`Domain` objects
@@ -2848,11 +2945,11 @@ class Strand(Part, JSONSerializable):
 
     def _compute_all_intersecting_domains(self) -> None:
 
-            self._all_intersecting_domains = []
-            for direct_domain in self.domains:
-                for domain in direct_domain.all_domains_intersecting():
-                    if domain not in self._all_intersecting_domains:
-                        self._all_intersecting_domains.append(domain)
+        self._all_intersecting_domains = []
+        for direct_domain in self.domains:
+            for domain in direct_domain.all_domains_intersecting():
+                if domain not in self._all_intersecting_domains:
+                    self._all_intersecting_domains.append(domain)
 
     def intersects_domain(self, domain: Domain) -> bool:
         """
@@ -2905,15 +3002,15 @@ class Strand(Part, JSONSerializable):
 
         ret_list: List[str] = []
         if (
-                self.modification_5p is not None
-                and self.modification_5p.vendor_code is not None
+            self.modification_5p is not None
+            and self.modification_5p.vendor_code is not None
         ):
             ret_list.append(self.modification_5p.vendor_code)
 
         for offset, base in enumerate(self.sequence(delimiter="")):
             ret_list.append(base)
             if (
-                    offset in self.modifications_int
+                offset in self.modifications_int
             ):  # if internal mod attached to base, replace base
                 mod = self.modifications_int[offset]
                 if mod.vendor_code is not None:
@@ -2933,8 +3030,8 @@ class Strand(Part, JSONSerializable):
                         )  # append modification between two bases
 
         if (
-                self.modification_3p is not None
-                and self.modification_3p.vendor_code is not None
+            self.modification_3p is not None
+            and self.modification_3p.vendor_code is not None
         ):
             ret_list.append(self.modification_3p.vendor_code)
 
@@ -2962,7 +3059,7 @@ class Strand(Part, JSONSerializable):
                 )
 
     def to_json_serializable(
-            self, suppress_indent: bool = True
+        self, suppress_indent: bool = True
     ) -> NoIndent | Dict[str, Any]:
         """
         :return:
@@ -3009,8 +3106,8 @@ class Strand(Part, JSONSerializable):
 
     @staticmethod
     def from_json_serializable(
-            json_map: Dict[str, Any],
-            domain_with_name: Dict[str, Domain],
+        json_map: Dict[str, Any],
+        domain_with_name: Dict[str, Domain],
     ) -> Strand:
         """
         :return:
@@ -3160,7 +3257,7 @@ class Strand(Part, JSONSerializable):
         return StrandDomainAddress(self, domain_idx)
 
     def address_of_nth_domain_occurence(
-            self, domain_name: str, n: int, forward=True
+        self, domain_name: str, n: int, forward=True
     ) -> "StrandDomainAddress":
         """
         Returns :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
@@ -3201,7 +3298,7 @@ class Strand(Part, JSONSerializable):
         return StrandDomainAddress(self, idx)
 
     def address_of_first_domain_occurence(
-            self, domain_name: str
+        self, domain_name: str
     ) -> "StrandDomainAddress":
         """
         Returns :any:`StrandDomainAddress` of the first occurrence of domain named domain_name
@@ -3210,7 +3307,7 @@ class Strand(Part, JSONSerializable):
         return self.address_of_nth_domain_occurence(domain_name, 1)
 
     def address_of_last_domain_occurence(
-            self, domain_name: str
+        self, domain_name: str
     ) -> "StrandDomainAddress":
         """
         Returns :any:`StrandDomainAddress` of the nth occurrence of domain named domain_name
@@ -3283,7 +3380,7 @@ class Strand(Part, JSONSerializable):
         """
         idx = 0
         for domain in self.domains:
-            substring = seq[idx: idx + domain.get_length()]
+            substring = seq[idx : idx + domain.get_length()]
             domain.set_fixed_sequence(substring)
             idx += domain.get_length()
 
@@ -3315,9 +3412,9 @@ class DomainPair(Part, Iterable[Domain]):
     @property
     def name(self) -> str:
         return (
-                self.domain1.get_name(self.starred1)
-                + ", "
-                + self.domain2.get_name(self.starred2)
+            self.domain1.get_name(self.starred1)
+            + ", "
+            + self.domain2.get_name(self.starred2)
         )
 
     def key(self) -> str:
@@ -3445,7 +3542,7 @@ def remove_duplicates(lst: Iterable[T]) -> List[T]:
 
 
 def _export_dummy_scadnano_design_for_idt_export(
-        strands: Iterable[Strand],
+    strands: Iterable[Strand],
 ) -> sc.Design:
     """
     Exports a dummy scadnano design from this nuad :any:`Design`.
@@ -3650,8 +3747,8 @@ class Design(JSONSerializable):
                 for domain_in_dag in domains_in_dag:
                     name = domain_in_dag.name
                     if (
-                            name in self.domains_by_name
-                            and domain_in_dag is not self.domains_by_name[name]
+                        name in self.domains_by_name
+                        and domain_in_dag is not self.domains_by_name[name]
                     ):
                         raise ValueError(
                             f"domain names must be unique, "
@@ -3716,7 +3813,7 @@ class Design(JSONSerializable):
         return dct
 
     def write_design_file(
-            self, directory: str = ".", filename: str | None = None, extension: str = "json"
+        self, directory: str = ".", filename: str | None = None, extension: str = "json"
     ) -> None:
         """
         Write JSON file representing this :any:`Design`,
@@ -3816,14 +3913,14 @@ class Design(JSONSerializable):
         return Design(strands=strands)
 
     def add_strand(
-            self,
-            domain_names: List[str] | None = None,
-            domains: List[Domain] | None = None,
-            starred_domain_indices: Iterable[int] | None = None,
-            group: str = default_strand_group,
-            name: str | None = None,
-            label: str | None = None,
-            vendor_fields: VendorFields | None = None,
+        self,
+        domain_names: List[str] | None = None,
+        domains: List[Domain] | None = None,
+        starred_domain_indices: Iterable[int] | None = None,
+        group: str = default_strand_group,
+        name: str | None = None,
+        label: str | None = None,
+        vendor_fields: VendorFields | None = None,
     ) -> Strand:
         """
         This is an alternative way to create strands instead of calling the :any:`Strand` constructor
@@ -3870,11 +3967,11 @@ class Design(JSONSerializable):
             the :any:`Strand` that is created
         """
         if (
-                domain_names is not None
-                and not (domains is None and starred_domain_indices is None)
+            domain_names is not None
+            and not (domains is None and starred_domain_indices is None)
         ) or (
-                domain_names is None
-                and not (domains is not None and starred_domain_indices is not None)
+            domain_names is None
+            and not (domains is not None and starred_domain_indices is not None)
         ):
             raise ValueError(
                 "exactly one of domain_names or "
@@ -3931,8 +4028,8 @@ class Design(JSONSerializable):
                     self.domains.append(domain)
                 name = domain.name
                 if (
-                        name in self.domains_by_name
-                        and domain is not self.domains_by_name[name]
+                    name in self.domains_by_name
+                    and domain is not self.domains_by_name[name]
                 ):
                     raise ValueError(
                         f"domain names must be unique, "
@@ -3944,9 +4041,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def assign_modifications_to_strands(
-            strands: List[Strand],
-            strand_jsons: List[dict],
-            all_mods: Dict[str, nm.Modification],
+        strands: List[Strand],
+        strand_jsons: List[dict],
+        all_mods: Dict[str, nm.Modification],
     ) -> None:
         for strand, strand_json in zip(strands, strand_jsons):
             if nm.modification_5p_key in strand_json:
@@ -3964,7 +4061,7 @@ class Design(JSONSerializable):
                     )
 
     def modifications(
-            self, mod_type: nm.ModificationType | None = None
+        self, mod_type: nm.ModificationType | None = None
     ) -> Set[nm.Modification]:
         """
         Returns either set of all :any:`modifications.Modification`'s in this :any:`Design`,
@@ -4036,13 +4133,13 @@ class Design(JSONSerializable):
                 )
 
     def to_idt_bulk_input_format(
-            self,
-            delimiter: str = ",",
-            domain_delimiter: str = "",
-            key: KeyFunction[Strand] | None = None,
-            warn_duplicate_name: bool = False,
-            only_strands_with_vendor_fields: bool = False,
-            strands: Iterable[Strand] | None = None,
+        self,
+        delimiter: str = ",",
+        domain_delimiter: str = "",
+        key: KeyFunction[Strand] | None = None,
+        warn_duplicate_name: bool = False,
+        only_strands_with_vendor_fields: bool = False,
+        strands: Iterable[Strand] | None = None,
     ) -> str:
         """Called by :meth:`Design.write_idt_bulk_input_file` to determine what string to write to
         the file. This function can be used to get the string directly without creating a file.
@@ -4064,17 +4161,17 @@ class Design(JSONSerializable):
         )
 
     def write_idt_bulk_input_file(
-            self,
-            *,
-            filename: str = None,
-            directory: str = ".",
-            key: KeyFunction[Strand] | None = None,
-            extension: str | None = None,
-            delimiter: str = ",",
-            domain_delimiter: str = "",
-            warn_duplicate_name: bool = True,
-            only_strands_with_vendor_fields: bool = False,
-            strands: Iterable[Strand] | None = None,
+        self,
+        *,
+        filename: str = None,
+        directory: str = ".",
+        key: KeyFunction[Strand] | None = None,
+        extension: str | None = None,
+        delimiter: str = ",",
+        domain_delimiter: str = "",
+        warn_duplicate_name: bool = True,
+        only_strands_with_vendor_fields: bool = False,
+        strands: Iterable[Strand] | None = None,
     ) -> None:
         """Write ``.idt`` text file encoding the strands of this :any:`Design` with the field
         :data:`Strand.vendor_fields`, suitable for pasting into the "Bulk Input" field of IDT
@@ -4133,17 +4230,17 @@ class Design(JSONSerializable):
         )
 
     def write_idt_plate_excel_file(
-            self,
-            *,
-            filename: str = None,
-            directory: str = ".",
-            key: KeyFunction[Strand] | None = None,
-            warn_duplicate_name: bool = False,
-            only_strands_with_vendor_fields: bool = False,
-            use_default_plates: bool = True,
-            warn_using_default_plates: bool = True,
-            plate_type: PlateType = PlateType.wells96,
-            strands: Iterable[Strand] | None = None,
+        self,
+        *,
+        filename: str = None,
+        directory: str = ".",
+        key: KeyFunction[Strand] | None = None,
+        warn_duplicate_name: bool = False,
+        only_strands_with_vendor_fields: bool = False,
+        use_default_plates: bool = True,
+        warn_using_default_plates: bool = True,
+        plate_type: PlateType = PlateType.wells96,
+        strands: Iterable[Strand] | None = None,
     ) -> None:
         """
         Write ``.xls`` (Microsoft Excel) file encoding the strands of this :any:`Design` with the field
@@ -4240,9 +4337,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def from_scadnano_file(
-            sc_filename: str,
-            fix_assigned_sequences: bool = True,
-            ignored_strands: Iterable[Strand] | None = None,
+        sc_filename: str,
+        fix_assigned_sequences: bool = True,
+        ignored_strands: Iterable[Strand] | None = None,
     ) -> Design:
         """
         Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
@@ -4274,10 +4371,10 @@ class Design(JSONSerializable):
 
     @staticmethod
     def from_scadnano_design(
-            sc_design: sc.Design,
-            fix_assigned_sequences: bool = True,
-            ignored_strands: Iterable[Strand] | None = None,
-            warn_existing_domain_labels: bool = True,
+        sc_design: sc.Design,
+        fix_assigned_sequences: bool = True,
+        ignored_strands: Iterable[Strand] | None = None,
+        warn_existing_domain_labels: bool = True,
     ) -> Design:
         """
         Converts a scadnano Design `sc_design` to a a :any:`Design` for doing DNA sequence design.
@@ -4328,10 +4425,10 @@ class Design(JSONSerializable):
         # warn if not labels are dicts containing group_name_key on strands
         for sc_strand in strands_to_include:
             if (
-                    isinstance(sc_strand.label, dict) and group_key not in sc_strand.label
+                isinstance(sc_strand.label, dict) and group_key not in sc_strand.label
             ) or (
-                    not isinstance(sc_strand.label, dict)
-                    and not hasattr(sc_strand.label, group_key)
+                not isinstance(sc_strand.label, dict)
+                and not hasattr(sc_strand.label, group_key)
             ):
                 logger.warning(
                     f"Strand label {sc_strand.label} should be an object with attribute named "
@@ -4359,7 +4456,7 @@ class Design(JSONSerializable):
         for sc_strand in strands_to_include:
             assigned = False
             if hasattr(sc_strand.label, group_key) or (
-                    isinstance(sc_strand.label, dict) and group_key in sc_strand.label
+                isinstance(sc_strand.label, dict) and group_key in sc_strand.label
             ):
                 group = Design.get_group_name_from_strand_label(sc_strand)
                 if isinstance(group, str):
@@ -4394,7 +4491,7 @@ class Design(JSONSerializable):
                 # assign sequence
                 if sequence is not None:
                     for nuad_domain, sc_domain in zip(
-                            nuad_strand.domains, sc_strand.domains
+                        nuad_strand.domains, sc_strand.domains
                     ):
                         domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
@@ -4409,7 +4506,7 @@ class Design(JSONSerializable):
 
                 # set domain labels
                 for nuad_domain, sc_domain in zip(
-                        nuad_strand.domains, sc_strand.domains
+                    nuad_strand.domains, sc_strand.domains
                 ):
                     if nuad_domain.label is None:
                         nuad_domain.label = sc_domain.label
@@ -4437,10 +4534,10 @@ class Design(JSONSerializable):
             )
 
     def assign_fields_to_scadnano_design(
-            self,
-            sc_design: sc.Design,
-            ignored_strands: Iterable[Strand] = (),
-            overwrite: bool = False,
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ):
         """
         Assigns DNA sequence, VendorFields, and StrandGroups (as a key in a scadnano String.label dict
@@ -4455,10 +4552,10 @@ class Design(JSONSerializable):
         )
 
     def assign_sequences_to_scadnano_design(
-            self,
-            sc_design: sc.Design,
-            ignored_strands: Iterable[Strand] = (),
-            overwrite: bool = False,
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns sequences from this :any:`Design` into `sc_design`.
@@ -4522,7 +4619,7 @@ class Design(JSONSerializable):
                 )
 
     def shared_strands_with_scadnano_design(
-            self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = ()
+        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = ()
     ) -> List[Tuple[Strand, List[sc.Strand]]]:
         """
         Returns a list of pairs (nuad_strand, sc_strands), where nuad_strand has the same name
@@ -4547,10 +4644,10 @@ class Design(JSONSerializable):
         return pairs
 
     def assign_strand_groups_to_labels(
-            self,
-            sc_design: sc.Design,
-            ignored_strands: Iterable[Strand] = (),
-            overwrite: bool = False,
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         TODO: document this
@@ -4584,10 +4681,10 @@ class Design(JSONSerializable):
                     sc_strand.label[group_key] = nuad_strand.group
 
     def assign_idt_fields_to_scadnano_design(
-            self,
-            sc_design: sc.Design,
-            ignored_strands: Iterable[Strand] = (),
-            overwrite: bool = False,
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns :any:`VendorFields` from this :any:`Design` into `sc_design`.
@@ -4624,10 +4721,10 @@ class Design(JSONSerializable):
                     )
 
     def assign_modifications_to_scadnano_design(
-            self,
-            sc_design: sc.Design,
-            ignored_strands: Iterable[Strand] = (),
-            overwrite: bool = False,
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
@@ -4693,7 +4790,7 @@ class Design(JSONSerializable):
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
     def _assign_to_strand_without_checking_existing_sequence(
-            self, sc_strand: sc.Strand, sc_design: sc.Design
+        self, sc_strand: sc.Strand, sc_design: sc.Design
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
@@ -4726,9 +4823,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def _assign_to_strand_with_partial_sequence(
-            sc_strand: sc.Strand,
-            sc_design: sc.Design,
-            sc_domain_name_tuples: Dict[Tuple[str, ...], Strand],
+        sc_strand: sc.Strand,
+        sc_design: sc.Design,
+        sc_domain_name_tuples: Dict[Tuple[str, ...], Strand],
     ) -> None:
 
         # check types
@@ -4767,7 +4864,7 @@ class Design(JSONSerializable):
 
         sequence_list: List[str] = []
         for sc_domain, nuad_domain, domain_name in zip(
-                sc_strand.domains, nuad_strand.domains, domain_names
+            sc_strand.domains, nuad_strand.domains, domain_names
         ):
             starred = domain_name[-1] == "*"
             sc_domain_sequence = sc_domain.dna_sequence
@@ -4841,7 +4938,7 @@ class Design(JSONSerializable):
             pass
 
     def check_subdomain_graph_is_singly_connected(
-            self, subdomain_graph: nx.DiGraph
+        self, subdomain_graph: nx.DiGraph
     ) -> None:
         """
         Check that in all connected DAGs, there's at most one unique path from each source to every node.
@@ -4889,6 +4986,80 @@ class Design(JSONSerializable):
 
         self.check_subdomain_graph_is_singly_connected(subdomain_graph)
 
+        self.check_exactly_one_unlocked_in_every_path(subdomain_graph)
+
+    def traverse_source_to_sink_path(
+        self, original_source: Domain, source: Domain, unlocked_subdomains: list[Domain]
+    ) -> list[Domain]:
+        # No need to define visited_domains, since the singly-connectedness is already verified.
+        if not source.locked:
+            unlocked_subdomains.append(source)
+
+            if source.fixed:
+                # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
+                return unlocked_subdomains
+
+            for subdomain in source.subdomains:
+                unlockeds = self.traverse_source_to_sink_path(
+                    original_source, subdomain, []
+                )
+                if len(unlockeds) > 0:
+
+                    # Guess should add a second check to verify it's not a 'chained' fixed
+                    # subdomains sice they're totally legal.
+
+                    unlocked_domains_str = ", ".join(
+                        subdomain.name for subdomain in unlockeds
+                    )
+                    raise ValueError(
+                        "There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,"
+                        f" but found more in the path with source domain {original_source.name} and "
+                        f"unlocked domains {source.name}, {unlocked_domains_str}"
+                    )
+        else:
+            for subdomain in source.subdomains:
+                self.traverse_source_to_sink_path(
+                    original_source, subdomain, unlocked_subdomains
+                )
+
+        return unlocked_subdomains
+
+    def check_exactly_one_unlocked_in_every_path(
+        self, subdomain_graph: nx.DiGraph
+    ) -> None:
+
+        # first, make sure that every domain has exactly one state:
+        for domain in self.domains:
+            domain.check_only_one_state()
+
+        source_nodes = [
+            self.domains_by_name[node]
+            for node, degree in subdomain_graph.in_degree()
+            if degree == 0
+        ]
+
+        for source in source_nodes:
+            unlocked_subdomains = []
+            unlocked_subdomains = self.traverse_source_to_sink_path(
+                source, source, unlocked_subdomains
+            )
+
+            # To check whether a path didn't have any unlocked node
+            if (
+                sum(domain.get_length() for domain in unlocked_subdomains)
+                != source.get_length()
+            ):
+                raise ValueError(
+                    f"the unlocked domains are not enough: {unlocked_subdomains}."
+                )
+
+    def check_dependency_graphs_legal(self) -> nx.DiGraph:
+
+        dependency_graph = self.create_dependency_graph()
+        self.check_dependency_graph_is_dag(dependency_graph)
+        self.check_each_dependent_exactly_one_dependee(dependency_graph)
+        return dependency_graph
+
     def create_subdomain_digraph(self) -> nx.DiGraph:
         """Create subdomain directed graph of domains"""
 
@@ -4901,8 +5072,80 @@ class Design(JSONSerializable):
             for parent in domain.parents:
                 if (parent.name, domain.name) not in graph.edges:
                     graph.add_edge(parent.name, domain.name)
-        print(graph)
+
         return graph
+
+    def create_dependency_graph(self) -> nx.DiGraph:
+
+        graph = nx.DiGraph()
+
+        unlocked_domains = [domain for domain in self.domains if not domain.locked]
+        # set red edges direction
+
+        for unlocked_domain in unlocked_domains:
+            for sd in unlocked_domain.subdomains:
+                graph.add_edge(unlocked_domain, sd, color="red")
+                self.add_red_edge_pointing_subdomains(sd, graph)
+            for parent in unlocked_domain.parents:
+                graph.add_edge(unlocked_domain, parent, color="red")
+                self.add_red_edge_pointing_parents(parent, graph)
+
+            self.add_blue_edge_pointing_dependents(unlocked_domain, graph)
+
+            return graph
+
+    def add_red_edge_pointing_subdomains(
+        self, domain: Domain, graph: nx.DiGraph
+    ) -> None:
+        for sd in domain.subdomains:
+            graph.add_edge(domain, sd, color="red")
+            self.add_red_edge_pointing_subdomains(sd, graph)
+
+        self.add_blue_edge_pointing_dependents(domain, graph)
+
+    def add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
+        for parent in domain.parents:
+            graph.add_edge(domain, parent, color="red")
+            self.add_red_edge_pointing_parents(parent, graph)
+
+        self.add_blue_edge_pointing_dependents(domain, graph)
+
+    def add_blue_edge_pointing_dependents(
+        self, domain: Domain, graph: nx.DiGraph
+    ) -> None:
+        for dependent in domain.dependents:
+            graph.add_edge(domain, dependent, color="blue")
+            self.add_blue_edge_pointing_dependents(dependent, graph)
+
+    def check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
+        try:
+            print(dependency_graph.edges.data())
+            cycle = nx.find_cycle(dependency_graph, orientation="original")
+            cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
+
+            raise ValueError(
+                f"A cycle was found in the dependency graph: {' - '.join(node for node in cycle_nodes)}"
+            )
+        except nx.NetworkXNoCycle:
+            pass
+
+    def check_each_dependent_exactly_one_dependee(self, graph: nx.Digraph) -> None:
+
+        for domain in self.domains:
+            if domain.dependent:
+                dependees = []
+                for pred in graph.predecessors(domain):
+                    if graph[pred][domain].get("color") == "blue":
+                        dependees.append(pred)
+                if len(dependees) > 1:
+                    raise ValueError(
+                        f"the dependent domain {domain.name} has more than one dependees: "
+                        f"{', '.join([dependee.name for dependee in dependees])}"
+                    )
+                if len(dependees) == 0:
+                    raise ValueError(
+                        f"the dependent domain {domain.name} has no dependees."
+                    )
 
     def check_names_unique(self) -> None:
         # domain names already checked in compute_derived_fields()
@@ -5087,11 +5330,11 @@ class Result(Generic[DesignPart]):
     """
 
     def __init__(
-            self,
-            excess: float,
-            summary: str | None = None,
-            value: float | None = None,
-            unit: str | None = None,
+        self,
+        excess: float,
+        summary: str | None = None,
+        value: float | None = None,
+        unit: str | None = None,
     ) -> None:
         self.excess = excess
         if summary is None:
@@ -5177,10 +5420,10 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
             raise ValueError(f"weight must be positive but it is {self.weight}")
 
     def call_evaluate(
-            self,
-            seqs: Tuple[str, ...],
-            part: DesignPart | None,
-            score_transfer_function: Callable[[float], float],
+        self,
+        seqs: Tuple[str, ...],
+        part: DesignPart | None,
+        score_transfer_function: Callable[[float], float],
     ) -> Result[DesignPart]:
         """
         Evaluates this :any:`Constraint` using function :data:`SingularConstraint.evaluate`
@@ -5214,9 +5457,9 @@ class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     )
 
     def call_evaluate_bulk(
-            self,
-            parts: Sequence[DesignPart],
-            score_transfer_function: Callable[[float], float],
+        self,
+        parts: Sequence[DesignPart],
+        score_transfer_function: Callable[[float], float],
     ) -> List[Result]:
         results: List[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
         # apply weight and transfer scores
@@ -5328,7 +5571,7 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
 
 
 def _check_at_most_one_parameter_specified(
-        param1: Any, param2: Any, name1: str, name2: str
+    param1: Any, param2: Any, name1: str, name2: str
 ) -> None:
     if param1 is not None and param2 is not None:
         raise ValueError(
@@ -5340,7 +5583,7 @@ def _check_at_most_one_parameter_specified(
 
 
 def _check_at_least_one_parameter_specified(
-        param1: Any, param2: Any, name1: str, name2: str
+    param1: Any, param2: Any, name1: str, name2: str
 ) -> None:
     if param1 is None and param2 is None:
         raise ValueError(
@@ -5350,7 +5593,7 @@ def _check_at_least_one_parameter_specified(
 
 
 def _check_exactly_one_parameter_specified(
-        param1: Any, param2: Any, name1: str, name2: str
+    param1: Any, param2: Any, name1: str, name2: str
 ) -> None:
     if param1 is not None and param2 is not None:
         raise ValueError(
@@ -5535,10 +5778,10 @@ class DesignConstraint(Constraint[Design]):
             )
 
     def call_evaluate_design(
-            self,
-            design: Design,
-            domains_changed: Iterable[Domain],
-            score_transfer_function: Callable[[float], float],
+        self,
+        design: Design,
+        domains_changed: Iterable[Domain],
+        score_transfer_function: Callable[[float], float],
     ) -> List[Result]:
         results = (self._evaluate_bulk)(design, domains_changed)  # noqa
         # apply weight and transfer scores
@@ -5555,7 +5798,7 @@ class DesignConstraint(Constraint[Design]):
 
 
 def verify_designs_match(
-        design1: Design, design2: Design, check_fixed: bool = True
+    design1: Design, design2: Design, check_fixed: bool = True
 ) -> None:
     """
     Verifies that two designs match, other than their constraints. This is useful when loading a
@@ -5583,9 +5826,9 @@ def verify_designs_match(
                 f"{strand1.name} and {strand2.name}"
             )
         if (
-                strand1.group is not None
-                and strand2.group is not None
-                and strand1.group != strand2.group
+            strand1.group is not None
+            and strand2.group is not None
+            and strand1.group != strand2.group
         ):  # noqa
             raise ValueError(
                 f"strand {strand2.name} group name does not match:"
@@ -5605,9 +5848,9 @@ def verify_designs_match(
                     f"design2 domain {domain2.name} fixed = {domain2.fixed}"
                 )
             if (
-                    domain1.has_pool()
-                    and domain2.has_pool()
-                    and domain1.pool.name != domain2.pool.name
+                domain1.has_pool()
+                and domain2.has_pool()
+                and domain1.pool.name != domain2.pool.name
             ):
                 raise ValueError(
                     f"domain {domain2.name} pool name does not match:"
@@ -5651,16 +5894,16 @@ def _check_nupack_installed() -> None:
 
 
 def nupack_domain_free_energy_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        parallel: bool = False,
-        description: str | None = None,
-        short_description: str = "strand_ss_nupack",
-        domains: Iterable[Domain] | None = None,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    parallel: bool = False,
+    description: str | None = None,
+    short_description: str = "strand_ss_nupack",
+    domains: Iterable[Domain] | None = None,
 ) -> DomainConstraint:
     """
     Returns constraint that checks individual :any:`Domain`'s for excessive interaction using
@@ -5723,16 +5966,16 @@ def nupack_domain_free_energy_constraint(
 
 
 def nupack_strand_free_energy_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        parallel: bool = False,
-        description: str | None = None,
-        short_description: str = "strand_ss_nupack",
-        strands: Iterable[Strand] | None = None,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    parallel: bool = False,
+    description: str | None = None,
+    short_description: str = "strand_ss_nupack",
+    strands: Iterable[Strand] | None = None,
 ) -> StrandConstraint:
     """
     Returns constraint that checks individual :any:`Strand`'s for excessive interaction using
@@ -5794,16 +6037,16 @@ def nupack_strand_free_energy_constraint(
 
 
 def nupack_domain_pair_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        parallel: bool = False,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "dom_pair_nupack",
-        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    parallel: bool = False,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "dom_pair_nupack",
+    pairs: Iterable[Tuple[Domain, Domain]] | None = None,
 ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -5941,18 +6184,18 @@ def nupack_domain_pair_constraint(
 
 
 def nupack_strand_pair_constraints_by_number_matching_domains(
-        thresholds: Dict[int, float],
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        ignore_missing_thresholds: bool = False,
+    thresholds: Dict[int, float],
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -6005,9 +6248,9 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    _pair_default_description("strand", "NUPACK", threshold, temperature)
-                    + f" for strands with {num_matching} complementary "
-                      f'{"domain" if num_matching == 1 else "domains"}'
+                _pair_default_description("strand", "NUPACK", threshold, temperature)
+                + f" for strands with {num_matching} complementary "
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -6034,7 +6277,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
 
 
 def _pair_default_description(
-        part_name: str, func_name: str, threshold: float, temperature: float
+    part_name: str, func_name: str, threshold: float, temperature: float
 ) -> str:
     return (
         f"{part_name} pair {func_name} energy >= {threshold} kcal/mol at {temperature}C"
@@ -6042,16 +6285,16 @@ def _pair_default_description(
 
 
 def nupack_strand_pair_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "strand_pair_nupack",
-        parallel: bool = False,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "strand_pair_nupack",
+    parallel: bool = False,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
 ) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -6115,9 +6358,9 @@ def nupack_strand_pair_constraint(
 
 
 def chunker(
-        sequence: Sequence[T],
-        chunk_length: int | None = None,
-        num_chunks: int | None = None,
+    sequence: Sequence[T],
+    chunk_length: int | None = None,
+    num_chunks: int | None = None,
 ) -> List[List[T]]:
     """
     Collect data into fixed-length chunks or blocks, e.g., chunker('ABCDEFG', 3) --> ABC DEF G
@@ -6133,10 +6376,10 @@ def chunker(
         `chunk_length` will be calculated from the other).
     """
     if (
-            chunk_length is None
-            and num_chunks is None
-            or chunk_length is not None
-            and num_chunks is not None
+        chunk_length is None
+        and num_chunks is None
+        or chunk_length is not None
+        and num_chunks is not None
     ):
         raise ValueError("exactly one of chunk_length or num_chunks must be None")
 
@@ -6208,14 +6451,14 @@ https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
 
 
 def rna_duplex_domain_pairs_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_dup_dom_pairs",
-        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_dup_dom_pairs",
+    pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -6312,14 +6555,14 @@ def rna_duplex_domain_pairs_constraint(
 
 
 def rna_plex_domain_pairs_constraint(
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_plex_dom_pairs",
-        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_plex_dom_pairs",
+    pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
@@ -6418,9 +6661,9 @@ def rna_plex_domain_pairs_constraint(
 
 
 def get_domain_pairs_from_thresholds_dict(
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ]
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ]
 ) -> Tuple[DomainPair, ...]:
     # gather pairs of domains referenced in `thresholds`
     domain_pairs = []
@@ -6456,18 +6699,18 @@ PairsEvaluationFunction = Callable[
 
 
 def domain_pairs_nonorthogonal_constraint(
-        evaluation_function: PairsEvaluationFunction,
-        tool_name: str,
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_plex_dom_pairs_nonorth",
-        max_energy: float = 0.0,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    evaluation_function: PairsEvaluationFunction,
+    tool_name: str,
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_plex_dom_pairs_nonorth",
+    max_energy: float = 0.0,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
     # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAcofold
 
@@ -6554,18 +6797,18 @@ def domain_pairs_nonorthogonal_constraint(
 
 
 def nupack_domain_pairs_nonorthogonal_constraint(
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ],
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "dom_pair_nupack_nonorth",
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        max_energy: float = 0.0,
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ],
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "dom_pair_nupack_nonorth",
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
     Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses NUPACK instead of RNAplex.
@@ -6598,16 +6841,16 @@ def nupack_domain_pairs_nonorthogonal_constraint(
 
 
 def rna_plex_domain_pairs_nonorthogonal_constraint(
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_plex_dom_pairs_nonorth",
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        max_energy: float = 0.0,
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_plex_dom_pairs_nonorth",
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for interaction energy in a given interval,
@@ -6683,16 +6926,16 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
 
 
 def rna_duplex_domain_pairs_nonorthogonal_constraint(
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_plex_dom_pairs_nonorth",
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        max_energy: float = 0.0,
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_plex_dom_pairs_nonorth",
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
     Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAduplex instead of RNAplex.
@@ -6714,16 +6957,16 @@ def rna_duplex_domain_pairs_nonorthogonal_constraint(
 
 
 def rna_cofold_domain_pairs_nonorthogonal_constraint(
-        thresholds: Dict[
-            Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-        ],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] = lambda x: x,
-        description: str | None = None,
-        short_description: str = "rna_plex_dom_pairs_nonorth",
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        max_energy: float = 0.0,
+    thresholds: Dict[
+        Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
+    ],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] = lambda x: x,
+    description: str | None = None,
+    short_description: str = "rna_plex_dom_pairs_nonorth",
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
     Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAcofold instead of RNAplex.
@@ -6745,7 +6988,7 @@ def rna_cofold_domain_pairs_nonorthogonal_constraint(
 
 
 def _populate_strand_list_and_pairs(
-        strands: Iterable[Strand] | None, pairs: Iterable[Tuple[Strand, Strand]] | None
+    strands: Iterable[Strand] | None, pairs: Iterable[Tuple[Strand, Strand]] | None
 ) -> Tuple[List[Strand], List[Tuple[Strand, Strand]]]:
     # assert exactly one of strands or pairs is None, then populate the other since both are used below
     # also normalize both to be a list instead of iterable
@@ -6778,7 +7021,7 @@ def _populate_strand_list_and_pairs(
 
 
 def strand_pairs_by_lengths(
-        strands: Iterable[Strand],
+    strands: Iterable[Strand],
 ) -> Dict[Tuple[int, int], List[Tuple[Strand, Strand]]]:
     """
     Separates pairs of strands in `strands` by lengths. If there are n different strand lengths
@@ -6800,9 +7043,9 @@ def strand_pairs_by_lengths(
 
 
 def strand_pairs_by_number_matching_domains(
-        *,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    *,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
 ) -> Dict[int, List[Tuple[Strand, Strand]]]:
     """
     Utility function for calculating number of complementary domains betweeen several pairs of strands.
@@ -6839,7 +7082,7 @@ def strand_pairs_by_number_matching_domains(
         domains2_starred = starred_domains_sets[strand2.name]
 
         complementary_domains = (domains1_unstarred & domains2_starred) | (
-                domains2_unstarred & domains1_starred
+            domains2_unstarred & domains1_starred
         )
         complementary_domain_names = [domain.name for domain in complementary_domains]
         num_complementary_domains = len(complementary_domain_names)
@@ -6863,32 +7106,32 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
     # The Protocol class seems to be available in the typing module, even though the above
     # documentation seems to indicate it is only in typing_extensions?
     def __call__(
-            self,
-            *,
-            threshold: float,
-            temperature: float = nv.default_temperature,
-            weight: float = 1.0,
-            score_transfer_function: Optional[Callable[[float], float]] = None,
-            description: str | None = None,
-            short_description: str = "",
-            parallel: bool = False,
-            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        self,
+        *,
+        threshold: float,
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
+        description: str | None = None,
+        short_description: str = "",
+        parallel: bool = False,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
     ) -> SPC: ...
 
 
 def _strand_pairs_constraints_by_number_matching_domains(
-        *,
-        constraint_creator: _StrandPairsConstraintCreator[SPC],
-        thresholds: Dict[int, float],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        ignore_missing_thresholds: bool = False,
+    *,
+    constraint_creator: _StrandPairsConstraintCreator[SPC],
+    thresholds: Dict[int, float],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    ignore_missing_thresholds: bool = False,
 ) -> List[SPC]:
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
@@ -6942,9 +7185,9 @@ but instead the thresholds.keys() is {sorted(list(thres_keys))}"""
 
 
 def _normalize_domains_pairs_disjoint_parameters(
-        domains: Iterable[Domain] | None,
-        pairs: Iterable[Tuple[Domain, Domain]],
-        check_domain_against_itself: bool,
+    domains: Iterable[Domain] | None,
+    pairs: Iterable[Tuple[Domain, Domain]],
+    check_domain_against_itself: bool,
 ) -> Tuple[Tuple[Domain, Domain], ...]:
     # Enforce that exactly one of domains or pairs is not None, and if domains is specified,
     # set pairs to be all pairs from domains. Return those pairs; if pairs is specified,
@@ -6969,9 +7212,9 @@ def _normalize_domains_pairs_disjoint_parameters(
 
 
 def _normalize_strands_pairs_disjoint_parameters(
-        strands: Iterable[Strand] | None,
-        pairs: Iterable[Tuple[Strand, Strand]],
-        check_strand_against_itself: bool,
+    strands: Iterable[Strand] | None,
+    pairs: Iterable[Tuple[Strand, Strand]],
+    check_strand_against_itself: bool,
 ) -> Iterable[Tuple[Strand, Strand]]:
     # Enforce that exactly one of strands or pairs is not None, and if strands is specified,
     # set pairs to be all pairs from strands. Return those pairs; if pairs is specified,
@@ -6996,18 +7239,18 @@ def _normalize_strands_pairs_disjoint_parameters(
 
 
 def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
-        *,
-        thresholds: Dict[int, float],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        ignore_missing_thresholds: bool = False,
+    *,
+    thresholds: Dict[int, float],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     Similar to :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
@@ -7022,9 +7265,9 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    _pair_default_description("strand", "RNAcofold", threshold, temperature)
-                    + f" for strands with {num_matching} complementary "
-                      f'{"domain" if num_matching == 1 else "domains"}'
+                _pair_default_description("strand", "RNAcofold", threshold, temperature)
+                + f" for strands with {num_matching} complementary "
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -7044,18 +7287,18 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
 
 
 def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
-        *,
-        thresholds: Dict[int, float],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        ignore_missing_thresholds: bool = False,
+    *,
+    thresholds: Dict[int, float],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -7107,9 +7350,9 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    _pair_default_description("strand", "RNAduplex", threshold, temperature)
-                    + f" for strands with {num_matching} complementary "
-                      f'{"domain" if num_matching == 1 else "domains"}'
+                _pair_default_description("strand", "RNAduplex", threshold, temperature)
+                + f" for strands with {num_matching} complementary "
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -7136,18 +7379,18 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
 
 
 def rna_plex_strand_pairs_constraints_by_number_matching_domains(
-        *,
-        thresholds: Dict[int, float],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        ignore_missing_thresholds: bool = False,
+    *,
+    thresholds: Dict[int, float],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -7199,9 +7442,9 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    _pair_default_description("strand", "RNAplex", threshold, temperature)
-                    + f" for strands with {num_matching} complementary "
-                      f'{"domain" if num_matching == 1 else "domains"}'
+                _pair_default_description("strand", "RNAplex", threshold, temperature)
+                + f" for strands with {num_matching} complementary "
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -7228,7 +7471,7 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
 
 
 def longest_complementary_subsequences_python_loop(
-        arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
+    arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
 ) -> List[int]:
     """
     Like :func:`longest_complementary_subsequences`, but uses a Python loop instead of numpy operations.
@@ -7256,7 +7499,7 @@ def longest_complementary_subsequences_python_loop(
 
 
 def longest_complementary_subsequences_two_loops(
-        arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
+    arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
 ) -> List[int]:
     """
     Calculate length of longest common subsequences between `arr1[i]` and `arr2[i]`
@@ -7322,7 +7565,7 @@ def longest_complementary_subsequences_two_loops(
 
 
 def longest_complementary_subsequences(
-        arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
+    arr1: np.ndarray, arr2: np.ndarray, gc_double: bool
 ) -> List[int]:
     """
     Calculate length of longest common subsequences between `arr1[i]` and `arr2[i]`
@@ -7418,15 +7661,15 @@ def longest_complementary_subsequences(
 
 
 def update_diagonal(
-        arr1: np.ndarray,
-        arr2: np.ndarray,
-        diag_prev: np.ndarray,
-        diag_prev_prev: np.ndarray,
-        eq_idxs: np.ndarray,
-        gc_idxs: np.ndarray,
-        i: int,
-        prev_prev_larger: bool,
-        gc_double: bool,
+    arr1: np.ndarray,
+    arr2: np.ndarray,
+    diag_prev: np.ndarray,
+    diag_prev_prev: np.ndarray,
+    eq_idxs: np.ndarray,
+    gc_idxs: np.ndarray,
+    i: int,
+    prev_prev_larger: bool,
+    gc_double: bool,
 ) -> np.ndarray:
     s1len = arr1.shape[1]
     s2len = arr2.shape[1]
@@ -7440,8 +7683,8 @@ def update_diagonal(
         sub1 = arr1[:, i::-1]  # indices i, i-1, ..., 0
         sub2 = arr2[:, : i + 1]  # indices 0, 1,   ..., i
     else:
-        sub1 = arr1[:, : i - s1len: -1]  # indices s1len-1,   s1len-2, , ..., s1len-i
-        sub2 = arr2[:, i - s1len + 1:]  # indices s1len-i+1, s1len-i+2, ..., s1len-1
+        sub1 = arr1[:, : i - s1len : -1]  # indices s1len-1,   s1len-2, , ..., s1len-i
+        sub2 = arr2[:, i - s1len + 1 :]  # indices s1len-i+1, s1len-i+2, ..., s1len-1
 
     # need to set eq_idxs only on entries "within" the DP table, not the padded 0s on the edges
     # see https://docs.google.com/spreadsheets/d/1FIOgQYFSJ_6r3ThBivDjf0epUxVLgk0xlQnQS6TUeSw for example
@@ -7458,7 +7701,7 @@ def update_diagonal(
     #  eq_idxs[:, start:end + 1] = True, compared to computing sub1==sub2 allocating new memory for eq
     #  (not sure if the computation or the memory allocation dominates, however)
     eq = sub1 == sub2
-    eq_idxs[:, start: end + 1] = eq
+    eq_idxs[:, start : end + 1] = eq
 
     # don't want to allocate new memory, but give variable a better name
     # to reflect that we are looking at the case where the bases are equal
@@ -7467,7 +7710,7 @@ def update_diagonal(
     diag_cur = diag_prev_prev
     diag_cur[eq_idxs] += 1
     if gc_double:
-        gc_idxs[:, start: end + 1] = np.logical_and(
+        gc_idxs[:, start : end + 1] = np.logical_and(
             np.logical_or(sub1 == 1, sub1 == 2), eq
         )
         diag_cur[gc_idxs] += 1
@@ -7503,16 +7746,16 @@ def lcs_loop(s1: str, s2: str, gc_double: bool) -> int:
 
 
 def lcs_domain_pairs_constraint(
-        *,
-        threshold: int,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "lcs domain pairs",
-        domains: Iterable[Domain] | None = None,
-        pairs: Iterable[Tuple[Domain, Domain]] | None = None,
-        check_domain_against_itself: bool = True,
-        gc_double: bool = True,
+    *,
+    threshold: int,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "lcs domain pairs",
+    domains: Iterable[Domain] | None = None,
+    pairs: Iterable[Tuple[Domain, Domain]] | None = None,
+    check_domain_against_itself: bool = True,
+    gc_double: bool = True,
 ) -> DomainPairsConstraint:
     """
     Checks pairs of domain sequences for longest complementary subsequences.
@@ -7579,15 +7822,15 @@ def lcs_domain_pairs_constraint(
 
 
 def lcs_strand_pairs_constraint(
-        *,
-        threshold: int,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "lcs strand pairs",
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        check_strand_against_itself: bool = True,
-        gc_double: bool = True,
+    *,
+    threshold: int,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "lcs strand pairs",
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    check_strand_against_itself: bool = True,
+    gc_double: bool = True,
 ) -> StrandPairsConstraint:
     """
     Checks pairs of strand sequences for longest complementary subsequences.
@@ -7665,18 +7908,18 @@ def lcs_strand_pairs_constraint(
 
 
 def lcs_strand_pairs_constraints_by_number_matching_domains(
-        *,
-        thresholds: Dict[int, int],
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        descriptions: Dict[int, str] | None = None,
-        short_descriptions: Dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        gc_double: bool = True,
-        parameters_filename: str = "",
-        ignore_missing_thresholds: bool = False,
+    *,
+    thresholds: Dict[int, int],
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    descriptions: Dict[int, str] | None = None,
+    short_descriptions: Dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    gc_double: bool = True,
+    parameters_filename: str = "",
+    ignore_missing_thresholds: bool = False,
 ) -> List[StrandPairsConstraint]:
     """
     TODO
@@ -7690,15 +7933,15 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
         )
 
     def lcs_strand_pairs_constraint_with_dummy_parameters(
-            *,
-            threshold: float,
-            temperature: float = nv.default_temperature,
-            weight: float = 1.0,
-            score_transfer_function: Optional[Callable[[float], float]] = None,
-            description: str | None = None,
-            short_description: str = "lcs strand pairs",
-            parallel: bool = False,
-            pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+        *,
+        threshold: float,
+        temperature: float = nv.default_temperature,
+        weight: float = 1.0,
+        score_transfer_function: Optional[Callable[[float], float]] = None,
+        description: str | None = None,
+        short_description: str = "lcs strand pairs",
+        parallel: bool = False,
+        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
     ) -> StrandPairsConstraint:
         threshold_int = int(threshold)
         return lcs_strand_pairs_constraint(
@@ -7716,9 +7959,9 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    f"Longest complementary subsequence between strands is > {threshold}"
-                    + f" for strands with {num_matching} complementary "
-                      f'{"domain" if num_matching == 1 else "domains"}'
+                f"Longest complementary subsequence between strands is > {threshold}"
+                + f" for strands with {num_matching} complementary "
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -7745,16 +7988,16 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
 
 
 def rna_duplex_strand_pairs_constraint(
-        *,
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "rna_dup_strand_pairs",
-        parallel: bool = False,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    *,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "rna_dup_strand_pairs",
+    parallel: bool = False,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -7841,16 +8084,16 @@ def rna_duplex_strand_pairs_constraint(
 
 
 def rna_plex_strand_pairs_constraint(
-        *,
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "rna_plex_strand_pairs",
-        parallel: bool = False,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    *,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "rna_plex_strand_pairs",
+    parallel: bool = False,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -7942,10 +8185,10 @@ def energy_excess(energy: float, threshold: float) -> float:
 
 
 def energy_excess_domains(
-        energy: float,
-        threshold: float | Dict[Tuple[DomainPool, DomainPool], float],
-        domain1: Domain,
-        domain2: Domain,
+    energy: float,
+    threshold: float | Dict[Tuple[DomainPool, DomainPool], float],
+    domain1: Domain,
+    domain2: Domain,
 ) -> float:
     threshold_value = (
         0.0  # noqa; warns that variable isn't used even though it clearly is
@@ -7959,16 +8202,16 @@ def energy_excess_domains(
 
 
 def rna_cofold_strand_pairs_constraint(
-        *,
-        threshold: float,
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "rna_dup_strand_pairs",
-        parallel: bool = False,
-        pairs: Iterable[Tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    *,
+    threshold: float,
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "rna_dup_strand_pairs",
+    parallel: bool = False,
+    pairs: Iterable[Tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> StrandPairsConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
@@ -8012,7 +8255,7 @@ def rna_cofold_strand_pairs_constraint(
     thread_pool = ThreadPool(processes=num_threads)
 
     def calculate_energies_unparallel(
-            sequence_pairs: Sequence[Tuple[str, str]]
+        sequence_pairs: Sequence[Tuple[str, str]]
     ) -> Tuple[float]:
         return nv.rna_cofold_multiple(
             sequence_pairs, logger, temperature, parameters_filename
@@ -8057,7 +8300,7 @@ def rna_cofold_strand_pairs_constraint(
 
 
 def _all_pairs_domain_sequences_complements_names_from_domains(
-        domain_pairs: Iterable[DomainPair],
+    domain_pairs: Iterable[DomainPair],
 ) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[Domain, Domain]]]:
     """
     :param domain_pairs:
@@ -8126,8 +8369,8 @@ class ComplexConstraint(ConstraintWithComplexes[Complex], SingularConstraint[Com
 
 
 def _alter_scores_by_transfer(
-        sets_excesses: List[Tuple[OrderedSet[Domain], float]],
-        transfer_callback: Callable[[float], float],
+    sets_excesses: List[Tuple[OrderedSet[Domain], float]],
+    transfer_callback: Callable[[float], float],
 ) -> List[Tuple[OrderedSet[Domain], float]]:
     sets_weights: List[Tuple[OrderedSet[Domain], float]] = []
     for set_, excess in sets_excesses:
@@ -8874,8 +9117,8 @@ class StrandDomainAddress:
 
 
 def _exterior_base_type_of_domain_3p_end(
-        domain_addr: StrandDomainAddress,
-        all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress],
+    domain_addr: StrandDomainAddress,
+    all_bound_domain_addresses: Dict[StrandDomainAddress, StrandDomainAddress],
 ) -> BasePairType:
     """Returns the BasePairType that corresponds to the base pair that sits on the
     3' end of provided domain.
@@ -8965,12 +9208,12 @@ def _exterior_base_type_of_domain_3p_end(
                         # it is adjacent to exterior base pair type
                         domain = domain_addr.strand.domains[domain_addr.domain_idx]
                         domain_next_to_interior_base_pair = (
-                                domain_addr.neighbor_5p() is not None
-                                and complementary_addr.neighbor_3p() is not None
+                            domain_addr.neighbor_5p() is not None
+                            and complementary_addr.neighbor_3p() is not None
                         )
                         if (
-                                domain.get_length() == 2
-                                and not domain_next_to_interior_base_pair
+                            domain.get_length() == 2
+                            and not domain_next_to_interior_base_pair
                         ):
                             #   domain_addr == adjacent_5n_addr        adjacent_addr
                             #     |                                       |
@@ -9187,7 +9430,7 @@ def _exterior_base_type_of_domain_3p_end(
             domain_3n_complementary_3n_addr_is_bound: bool | None = None
             if domain_3n_complementary_3n_addr is not None:
                 domain_3n_complementary_3n_addr_is_bound = (
-                        domain_3n_complementary_3n_addr in all_bound_domain_addresses
+                    domain_3n_complementary_3n_addr in all_bound_domain_addresses
                 )
 
             # Not an internal base pair since domain_addr's 3' neighbor is
@@ -9455,8 +9698,8 @@ BoundDomains = Tuple[StrandDomainAddress, StrandDomainAddress]
 
 
 def _get_implicitly_bound_domain_addresses(
-        strand_complex: Iterable[Strand],
-        nonimplicit_base_pairs_domain_names: Set[str] | None = None,
+    strand_complex: Iterable[Strand],
+    nonimplicit_base_pairs_domain_names: Set[str] | None = None,
 ) -> Dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
@@ -9507,7 +9750,7 @@ def _get_implicitly_bound_domain_addresses(
 
 
 def _get_addr_to_starting_base_pair_idx(
-        strand_complex: Complex,
+    strand_complex: Complex,
 ) -> Dict[StrandDomainAddress, int]:
     """Returns a mapping between StrandDomainAddress and the base index of the
     5' end base of the domain
@@ -9548,8 +9791,8 @@ def _leafify_domain(domain: Domain) -> List[Domain]:
 
 
 def _leafify_strand(
-        strand: Strand,
-        addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]],
+    strand: Strand,
+    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]],
 ) -> Strand:
     """Create a new strand that is made of the leaf subdomains. Also updates an
     addr_translation_table which maps StrandDomainAddress from old strand to new
@@ -9571,7 +9814,7 @@ def _leafify_strand(
     for idx, leaf_domain_list in enumerate(leafify_domains):
         new_domain_indices = []
         for i in range(
-                new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)
+            new_starred_domain_idx, new_starred_domain_idx + len(leaf_domain_list)
         ):
             new_domain_indices.append(i)
 
@@ -9599,8 +9842,8 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-        strand_complex: Iterable[Strand],
-        nonimplicit_base_pairs: Iterable[BoundDomains] = None,
+    strand_complex: Iterable[Strand],
+    nonimplicit_base_pairs: Iterable[BoundDomains] = None,
 ) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
@@ -9641,7 +9884,7 @@ def _get_base_pair_domain_endpoints_to_check(
 
 
 def __get_base_pair_domain_endpoints_to_check(
-        strand_complex: Complex, nonimplicit_base_pairs: Iterable[BoundDomains] = None
+    strand_complex: Complex, nonimplicit_base_pairs: Iterable[BoundDomains] = None
 ) -> Set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
@@ -9709,8 +9952,8 @@ def __get_base_pair_domain_endpoints_to_check(
     for domain_name in domain_counts:
         domain_name_complement = Domain.complementary_domain_name(domain_name)
         if (
-                domain_name_complement in domain_counts
-                and domain_counts[domain_name_complement] > 1
+            domain_name_complement in domain_counts
+            and domain_counts[domain_name_complement] > 1
         ):
             assert domain_name not in nonimplicit_base_pairs_domain_names
             raise ValueError(
@@ -9806,23 +10049,23 @@ def __get_base_pair_domain_endpoints_to_check(
 
 
 def nupack_complex_base_pair_probability_constraint(
-        strand_complexes: List[Complex],
-        nonimplicit_base_pairs: Iterable[BoundDomains] | None = None,
-        all_base_pairs: Iterable[BoundDomains] | None = None,
-        base_pair_prob_by_type: Dict[BasePairType, float] | None = None,
-        base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
-        base_pair_prob: Dict[BasePairAddress, float] | None = None,
-        base_unpaired_prob: Dict[BaseAddress, float] | None = None,
-        base_pair_prob_upper_bound: Dict[BasePairAddress, float] | None = None,
-        base_unpaired_prob_upper_bound: Dict[BaseAddress, float] | None = None,
-        temperature: float = nv.default_temperature,
-        sodium: float = nv.default_sodium,
-        magnesium: float = nv.default_magnesium,
-        weight: float = 1.0,
-        score_transfer_function: Optional[Callable[[float], float]] = None,
-        description: str | None = None,
-        short_description: str = "ComplexBPProbs",
-        parallel: bool = False,
+    strand_complexes: List[Complex],
+    nonimplicit_base_pairs: Iterable[BoundDomains] | None = None,
+    all_base_pairs: Iterable[BoundDomains] | None = None,
+    base_pair_prob_by_type: Dict[BasePairType, float] | None = None,
+    base_pair_prob_by_type_upper_bound: Dict[BasePairType, float] = None,
+    base_pair_prob: Dict[BasePairAddress, float] | None = None,
+    base_unpaired_prob: Dict[BaseAddress, float] | None = None,
+    base_pair_prob_upper_bound: Dict[BasePairAddress, float] | None = None,
+    base_unpaired_prob_upper_bound: Dict[BaseAddress, float] | None = None,
+    temperature: float = nv.default_temperature,
+    sodium: float = nv.default_sodium,
+    magnesium: float = nv.default_magnesium,
+    weight: float = 1.0,
+    score_transfer_function: Optional[Callable[[float], float]] = None,
+    description: str | None = None,
+    short_description: str = "ComplexBPProbs",
+    parallel: bool = False,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pair probabilities in tuples of :any:`Strand`'s
 
@@ -10038,11 +10281,11 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
         # eval
         for bp in bps:
             e = (
-                    base_type_probability_threshold[bp.base_pair_type]
-                    - bp.base_pairing_probability
+                base_type_probability_threshold[bp.base_pair_type]
+                - bp.base_pairing_probability
             )
             assert e > 0
-            err_sq += e ** 2
+            err_sq += e**2
         # summary
         if len(bps) == 0:
             summary = "\tAll base pairs satisfy thresholds."
@@ -10108,8 +10351,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
                 d1_5p_d2_3p_ext_bp_type
             ]
             if (
-                    nupack_complex_result[domain1_5p][domain2_3p]
-                    < d1_5p_d2_3p_ext_bp_prob_thres
+                nupack_complex_result[domain1_5p][domain2_3p]
+                < d1_5p_d2_3p_ext_bp_prob_thres
             ):
                 bps.append(
                     _BasePair(
@@ -10126,8 +10369,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
                 d1_3p_d2_5p_ext_bp_type
             ]
             if (
-                    nupack_complex_result[domain1_3p][domain2_5p]
-                    < d1_3p_d2_5p_ext_bp_prob_thres
+                nupack_complex_result[domain1_3p][domain2_5p]
+                < d1_3p_d2_5p_ext_bp_prob_thres
             ):
                 bps.append(
                     _BasePair(
@@ -10162,11 +10405,11 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
                 prob_thres = internal_base_pair_prob
                 bp_type = BasePairType.INTERIOR_TO_STRAND
                 if (
-                        i == 1
-                        and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND
-                        or i == domain_length_ - 2
-                        and d1_3p_d2_5p_ext_bp_prob_thres
-                        is not BasePairType.INTERIOR_TO_STRAND
+                    i == 1
+                    and d1_5p_d2_3p_ext_bp_type is not BasePairType.INTERIOR_TO_STRAND
+                    or i == domain_length_ - 2
+                    and d1_3p_d2_5p_ext_bp_prob_thres
+                    is not BasePairType.INTERIOR_TO_STRAND
                 ):
                     prob_thres = border_internal_base_pair_prob
                     bp_type = BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
@@ -10181,8 +10424,8 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
         # Check base pairs that should not be paired are high probability
         for i in range(len(nupack_complex_result)):
             if (
-                    i not in expected_paired_idxs
-                    and nupack_complex_result[i][i] < unpaired_base_prob
+                i not in expected_paired_idxs
+                and nupack_complex_result[i][i] < unpaired_base_prob
             ):
                 bps.append(
                     _BasePair(i, i, nupack_complex_result[i][i], BasePairType.UNPAIRED)

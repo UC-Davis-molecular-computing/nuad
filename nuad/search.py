@@ -1135,6 +1135,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     design.compute_derived_fields()
     design.check_names_unique()
     design.check_subdomain_graphs_legal()
+    design.check_dependency_graphs_legal()
     _check_design(design)
     set_memoryviews(design)
 

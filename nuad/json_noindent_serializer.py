@@ -13,7 +13,9 @@ class NoIndent:
 
 class JSONSerializable(ABC):
     @abstractmethod
-    def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
+    def to_json_serializable(
+        self, suppress_indent: bool = True
+    ) -> Union[NoIndent, Dict[str, Any]]:
         raise NotImplementedError()
 
 
@@ -33,7 +35,7 @@ class SuppressableIndentEncoder(json.JSONEncoder):
         self.unique_id = 0
         super().__init__(*args, **kwargs)  # type: ignore
         self.kwargs = dict(kwargs)
-        del self.kwargs['indent']
+        del self.kwargs["indent"]
         self._replacement_map: dict = {}
 
     def default(self, obj: Any) -> Any:

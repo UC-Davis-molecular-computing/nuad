@@ -35,9 +35,9 @@ def main() -> None:
     #                         di
     # strand i is    [------------------>
     for i in range(num_strands):
-        design.add_strand([f'd{i}'])
+        design.add_strand([f"d{i}"])
 
-    domain_pool_20 = nc.DomainPool(f'length-20_domains', domain_length)
+    domain_pool_20 = nc.DomainPool(f"length-20_domains", domain_length)
 
     for i, strand in enumerate(design.strands):
         for domain in strand.domains:
@@ -62,12 +62,14 @@ def main() -> None:
         energy_high = target_energy
         thresholds[(d1, d2)] = (energy_low, energy_high)
 
-    domain_nupack_pair_nonorth_constraint = nc.nupack_domain_pairs_nonorthogonal_constraint(
-        thresholds=thresholds)
+    domain_nupack_pair_nonorth_constraint = (
+        nc.nupack_domain_pairs_nonorthogonal_constraint(thresholds=thresholds)
+    )
 
-    params = ns.SearchParameters(constraints=[
-        domain_nupack_pair_nonorth_constraint,
-    ],
+    params = ns.SearchParameters(
+        constraints=[
+            domain_nupack_pair_nonorth_constraint,
+        ],
         out_directory=args.directory,
         restart=args.restart,
         random_seed=random_seed,
@@ -89,25 +91,35 @@ class CLArgs(NamedTuple):
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join('output', ns.script_name_no_ext())
+    default_directory = os.path.join("output", ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(  # noqa
-        description='Small example using nonorthogonal domains.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-o', '--output-dir', type=str, default=default_directory,
-                        help='directory in which to place output files')
-    parser.add_argument('-r', '--restart', action='store_true',
-                        help='If true, then assumes output directory contains output of search that was '
-                             'cancelled, to restart '
-                             'from. Similar to -i option, but will automatically find the most recent design '
-                             '(assuming they are numbered with a number such as -84), and will start the '
-                             'numbering from there (i.e., the next files to be written upon improving the '
-                             'design will have -85).')
+        description="Small example using nonorthogonal domains.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=str,
+        default=default_directory,
+        help="directory in which to place output files",
+    )
+    parser.add_argument(
+        "-r",
+        "--restart",
+        action="store_true",
+        help="If true, then assumes output directory contains output of search that was "
+        "cancelled, to restart "
+        "from. Similar to -i option, but will automatically find the most recent design "
+        "(assuming they are numbered with a number such as -84), and will start the "
+        "numbering from there (i.e., the next files to be written upon improving the "
+        "design will have -85).",
+    )
 
     args = parser.parse_args()
 
     return CLArgs(directory=args.output_dir, restart=args.restart)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
