@@ -5035,17 +5035,17 @@ class Design(JSONSerializable):
         self.check_every_subdomain_overlap_with_a_strand(subdomain_graph)
 
     def traverse_source_to_sink_path(
-        self, original_source: Domain, source: Domain, unlocked_subdomains: list[Domain]
+        self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
     ) -> list[Domain]:
         # No need to define visited_domains, since the singly-connectedness is already verified.
-        if not source.locked:
-            unlocked_subdomains.append(source)
+        if not domain.locked:
+            unlocked_subdomains.append(domain)
 
-            if source.fixed:
+            if domain.fixed:
                 # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
                 return unlocked_subdomains
 
-            for subdomain in source.subdomains:
+            for subdomain in domain.subdomains:
                 unlockeds = self.traverse_source_to_sink_path(
                     original_source, subdomain, []
                 )
@@ -5060,10 +5060,10 @@ class Design(JSONSerializable):
                     raise ValueError(
                         "There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,"
                         f" but found more in the path with source domain {original_source.name} and "
-                        f"unlocked domains {source.name}, {unlocked_domains_str}"
+                        f"unlocked domains {domain.name}, {unlocked_domains_str}"
                     )
         else:
-            for subdomain in source.subdomains:
+            for subdomain in domain.subdomains:
                 self.traverse_source_to_sink_path(
                     original_source, subdomain, unlocked_subdomains
                 )
@@ -5212,36 +5212,35 @@ class Design(JSONSerializable):
     def check_strand_dag_inclusion_legal(self, graph: nx.DiGraph) -> None:
 
         dags = list(nx.weakly_connected_components(graph))
-        dags_indices = [i for i, _ in enumerate(dags)]
-        domain_to_dag = {}
+        domain_to_dag_idx = {}
 
-        for i, dag in zip(dags_indices, dags):
-            for subdomain in dag:
-                domain_to_dag[subdomain] = i
+        for i, dag in enumerate(dags):
+            for domain in dag:
+                domain_to_dag_idx[domain] = i
 
         for strand in self.strands:
-            visited_dags = set()
-            current_dag = -1
-            for subdomain in strand.domains:
-                visiting_dag = domain_to_dag[subdomain]
-                if not current_dag == visiting_dag:
-                    if visiting_dag in visited_dags:
+            visited_dag_idxs = set()
+            prev_dag_idx = -1
+            for domain in strand.domains:
+                visiting_dag_idx = domain_to_dag_idx[domain]
+                if prev_dag_idx != visiting_dag_idx:
+                    if visiting_dag_idx in visited_dag_idxs:
                         dag_subdomains_str = ", ".join(
                             [
                                 sd.name
-                                for sd in dags[visiting_dag].intersection(
+                                for sd in dags[visiting_dag_idx].intersection(
                                     set(strand.domains)
                                 )
                             ]
                         )
                         raise ValueError(
                             f"A strand cannot overlap with a domain discontinuously: "
-                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag].intersection(set(strand.domains))))} non-consecutively"
+                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag_idx].intersection(set(strand.domains))))} non-consecutively"
                         )
                     else:
-                        if not current_dag == -1:
-                            visited_dags.add(current_dag)
-                        current_dag = visiting_dag
+                        if prev_dag_idx != -1:
+                            visited_dag_idxs.add(prev_dag_idx)
+                        prev_dag_idx = visiting_dag_idx
 
     def check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
 
