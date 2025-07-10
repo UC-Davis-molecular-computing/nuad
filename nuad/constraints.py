@@ -53,6 +53,7 @@ import functools
 
 import networkx as nx
 import numpy as np  # noqa
+import numpy.random
 from networkx.algorithms.shortest_paths.unweighted import predecessor
 from ordered_set import OrderedSet
 
@@ -1732,7 +1733,9 @@ class Domain(Part, JSONSerializable):
     on the :data:`Domain.subdomains` of other domains in the same tree.
     """
 
-    dependents: List[Domain, callable] = field(init=False, default_factory=list)
+    dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
+        init=False, default_factory=list
+    )
     """List of domains which their sequence depends on this domain's sequence.
     """
 
@@ -1756,10 +1759,15 @@ class Domain(Part, JSONSerializable):
         locked: bool = False,
         label: str | None = None,
         subdomains: List[Domain] | None = None,
+        dependents: (
+            List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None
+        ) = None,
         weight: float | None = None,
     ) -> None:
         if subdomains is None:
             subdomains = []
+        if dependents is None:
+            dependents = []
         self._name = name
         self._starred_name = name + "*"
         self._pool = pool
@@ -1768,10 +1776,9 @@ class Domain(Part, JSONSerializable):
         self.assignable = assignable
         self.locked = locked
         self.label = label
-        self.dependent = dependent
+        self.dependents = dependents
         self._subdomains = subdomains
         self.parents = []
-        self.dependents = []
         self.locked_dependents = []
 
         if self.name.endswith("*"):
@@ -2009,12 +2016,7 @@ class Domain(Part, JSONSerializable):
         assert self.memoryview_sequence is not None
         return self.memoryview_sequence.tobytes().decode(encoding="ascii")
 
-    def set_sequence(
-        self,
-        new_sequence: str,
-        fixed: bool = False,
-        rng: np.random.Generator = np.random.default_rng(),
-    ) -> None:
+    def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
         """
         :param new_sequence: new DNA sequence to set
         """
@@ -2024,6 +2026,12 @@ class Domain(Part, JSONSerializable):
                 "cannot assign a new sequence to this Domain; its sequence is fixed as "
                 f"{self.memoryview_sequence.tobytes().decode(encoding='ascii')}"
             )
+        if self.locked:
+            raise ValueError(
+                "cannot assign a new sequence to this Domain; its sequence is locked_dependent on "
+                f"{', '.join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}"
+            )
+
         if self.has_length() and len(new_sequence) != self.get_length():
             raise ValueError(
                 f"incorrect length for new_sequence={new_sequence};\n"
@@ -2039,11 +2047,7 @@ class Domain(Part, JSONSerializable):
 
         self.memoryview_sequence[:] = new_sequence.encode(encoding="ascii")
 
-        domains_to_notify = [
-            item[0] for item in self.dependents
-        ] + self.locked_dependents
-        for domain in domains_to_notify:
-            domain.notify_sequence_changed(rng, self)
+        self.notify_sequence_changed(np.random.default_rng(), self)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -2063,11 +2067,11 @@ class Domain(Part, JSONSerializable):
     ) -> None:
 
         for dependent, f in self.dependents:
-            new_dependent_sequence = f(self.sequence, rng)
+            new_dependent_sequence = f(self.sequence(), rng)
             dependent.set_sequence(new_dependent_sequence)
         for locked_dependent in self.locked_dependents:
             assert locked_dependent != notifier_domain
-            locked_dependent.notify_sequence_changed(rng, self)
+            locked_dependent.notify_sequence_changed(rng, notifier_domain)
 
     @property
     def starred_name(self) -> str:
@@ -2137,24 +2141,24 @@ class Domain(Part, JSONSerializable):
         """
         return domain_name[:-1] if domain_name[-1] == "*" else domain_name + "*"
 
-    def _is_independent(self) -> bool:
-        """Return true if self is independent (not dependent or fixed).
+    def _is_assignable(self) -> bool:
+        """Return true if self is assignable (not dependent or fixed or locked).
 
         :return: [description]
         """
-        return not self.dependent or self.fixed
+        return self.assignable
 
-    def _contains_any_independent_subdomain_recursively(self) -> bool:
+    def _contains_any_assignable_subdomain_recursively(self) -> bool:
         """Returns true if the subdomain graph rooted at this domain contains
         at least one independent subdomain.
 
         :rtype: bool
         """
-        if self._is_independent():
+        if self._is_assignable():
             return True
 
         for sd in self._subdomains:
-            if sd._contains_any_independent_subdomain_recursively():
+            if sd._contains_any_assignable_subdomain_recursively():
                 return True
 
         return False
@@ -2308,6 +2312,25 @@ class Domain(Part, JSONSerializable):
 
         return False
 
+    def unlocked_ancestor_or_descendants(self) -> List[Domain]:
+
+        if not self.locked:
+            raise ValueError(
+                "cannot call unlocked_ancestor_or_descendants on non-locked Domain"
+                f" {self.name}"
+            )
+
+        for domain in self.ancestors():
+            if not domain.locked:
+                return [domain]
+
+        unlocked_descendants = []
+        for domain in self._get_all_domains_from_this_subtree():
+            if not domain.locked:
+                unlocked_descendants.append(domain)
+
+        return unlocked_descendants
+
     def independent_source(self) -> Domain:
         """
         Like :meth:`independent_ancestor_or_descendent`,
@@ -2386,8 +2409,21 @@ class Domain(Part, JSONSerializable):
             )
         if self.assignable and self.fixed:
             raise ValueError(
-                f"A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked."
+                f"A domain cannot be both assignable and fixed. Domain{self.name} is defined dependent and locked."
             )
+
+
+def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
+
+    list_of_ancestors = []
+    for domain in list_of_domains[1:]:
+        list_of_ancestors.append(set(domain.ancestors()))
+
+    for item in list_of_domains[0].ancestors():
+        if all(item in ancestor_set for ancestor_set in list_of_ancestors):
+            return item
+
+    return None
 
 
 def domains_not_substrings_of_each_other_constraint(
@@ -2592,7 +2628,7 @@ def set_domains_memoryviews(
             domain_name_to_interval[domain_name] = (start - minimum, end - minimum)
 
     # Build initial sequence bytearray and assign a memoryview to it
-    max_end = max(end for _, end in intervals)
+    max_end = max(end for _, end in domain_name_to_interval.values())
     # ? shouldn't it be max_end + 1 ?
     memoryview_full = memoryview(bytearray("?" * max_end, encoding="ascii"))
 
@@ -2987,6 +3023,12 @@ class Strand(Part, JSONSerializable):
         for idx, domain in enumerate(self.domains):
             is_starred = idx in self.starred_domain_indices
             domain_names.append(domain.get_name(is_starred))
+        return tuple(domain_names)
+
+    def domain_names_tuple_unstarred(self):
+        domain_names: List[str] = []
+        for idx, domain in enumerate(self.domains):
+            domain_names.append(domain.get_name(starred=False))
         return tuple(domain_names)
 
     def vendor_dna_sequence(self) -> str:
@@ -4932,7 +4974,7 @@ class Design(JSONSerializable):
             cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
 
             raise ValueError(
-                f"A cycle was found in the subdomain graph: {' - '.join(node for node in cycle_nodes)}"
+                f"A cycle was found in the subdomain graph: {' - '.join(node.name for node in cycle_nodes)}"
             )
         except nx.NetworkXNoCycle:
             pass
@@ -4968,13 +5010,13 @@ class Design(JSONSerializable):
                                 subdomain_graph, source_node, sd
                             )
                             paths_str = "\n".join(
-                                " - ".join(str(node) for node in path)
+                                " - ".join(str(node.name) for node in path)
                                 for path in all_paths
                             )
 
                             raise ValueError(
                                 f"Subdomain graph is not singly connected."
-                                f" More than one path from {source_node} to {sd}: "
+                                f" More than one path from {source_node.name} to {sd.name}: "
                                 f"\n{paths_str}"
                             )
 
@@ -4987,6 +5029,10 @@ class Design(JSONSerializable):
         self.check_subdomain_graph_is_singly_connected(subdomain_graph)
 
         self.check_exactly_one_unlocked_in_every_path(subdomain_graph)
+
+        self.check_strand_dag_inclusion_legal(subdomain_graph)
+
+        self.check_every_subdomain_overlap_with_a_strand(subdomain_graph)
 
     def traverse_source_to_sink_path(
         self, original_source: Domain, source: Domain, unlocked_subdomains: list[Domain]
@@ -5033,9 +5079,7 @@ class Design(JSONSerializable):
             domain.check_only_one_state()
 
         source_nodes = [
-            self.domains_by_name[node]
-            for node, degree in subdomain_graph.in_degree()
-            if degree == 0
+            node for node, degree in subdomain_graph.in_degree() if degree == 0
         ]
 
         for source in source_nodes:
@@ -5049,16 +5093,16 @@ class Design(JSONSerializable):
                 sum(domain.get_length() for domain in unlocked_subdomains)
                 != source.get_length()
             ):
+                unlocked_subdomains_str = ", ".join(unlocked_subdomains)
                 raise ValueError(
-                    f"the unlocked domains are not enough: {unlocked_subdomains}."
+                    f"the unlocked domains are not enough: {unlocked_subdomains_str}."
                 )
 
-    def check_dependency_graphs_legal(self) -> nx.DiGraph:
+    def check_dependency_graphs_legal(self) -> None:
 
-        dependency_graph = self.create_dependency_graph()
+        dependency_graph = self.create_dependency_digraph()
         self.check_dependency_graph_is_dag(dependency_graph)
         self.check_each_dependent_exactly_one_dependee(dependency_graph)
-        return dependency_graph
 
     def create_subdomain_digraph(self) -> nx.DiGraph:
         """Create subdomain directed graph of domains"""
@@ -5066,33 +5110,43 @@ class Design(JSONSerializable):
         graph = nx.DiGraph()
 
         for domain in self.domains:
+            graph.add_node(domain)
             for sd in domain.subdomains:
-                if (domain.name, sd.name) not in graph.edges:
-                    graph.add_edge(domain.name, sd.name)
+                if (domain, sd) not in graph.edges:
+                    graph.add_edge(domain, sd)
             for parent in domain.parents:
-                if (parent.name, domain.name) not in graph.edges:
-                    graph.add_edge(parent.name, domain.name)
+                if (parent, domain) not in graph.edges:
+                    graph.add_edge(parent, domain)
 
         return graph
 
-    def create_dependency_graph(self) -> nx.DiGraph:
+    def create_dependency_digraph(self) -> nx.DiGraph:
 
         graph = nx.DiGraph()
 
         unlocked_domains = [domain for domain in self.domains if not domain.locked]
-        # set red edges direction
 
         for unlocked_domain in unlocked_domains:
+            graph.add_node(unlocked_domain)
             for sd in unlocked_domain.subdomains:
-                graph.add_edge(unlocked_domain, sd, color="red")
-                self.add_red_edge_pointing_subdomains(sd, graph)
+                if not sd.fixed:
+                    graph.add_edge(unlocked_domain, sd, color="red")
+                    self.add_red_edge_pointing_subdomains(sd, graph)
+                    unlocked_domain.locked_dependents.append(sd)
+                else:
+                    graph.add_node(sd)
             for parent in unlocked_domain.parents:
-                graph.add_edge(unlocked_domain, parent, color="red")
-                self.add_red_edge_pointing_parents(parent, graph)
+                if not parent.fixed:
+                    graph.add_edge(unlocked_domain, parent, color="red")
+                    self.add_red_edge_pointing_parents(parent, graph)
+                    unlocked_domain.locked_dependents.append(parent)
+                else:
+                    graph.add_node(parent)
 
-            self.add_blue_edge_pointing_dependents(unlocked_domain, graph)
+            if unlocked_domain.dependents:
+                self.add_blue_edge_pointing_dependents(unlocked_domain, graph)
 
-            return graph
+        return graph
 
     def add_red_edge_pointing_subdomains(
         self, domain: Domain, graph: nx.DiGraph
@@ -5100,31 +5154,34 @@ class Design(JSONSerializable):
         for sd in domain.subdomains:
             graph.add_edge(domain, sd, color="red")
             self.add_red_edge_pointing_subdomains(sd, graph)
+            domain.locked_dependents.append(sd)
 
-        self.add_blue_edge_pointing_dependents(domain, graph)
+        if domain.dependents:
+            self.add_blue_edge_pointing_dependents(domain, graph)
 
     def add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
         for parent in domain.parents:
             graph.add_edge(domain, parent, color="red")
             self.add_red_edge_pointing_parents(parent, graph)
-
-        self.add_blue_edge_pointing_dependents(domain, graph)
+            domain.locked_dependents.append(parent)
+        if domain.dependents:
+            self.add_blue_edge_pointing_dependents(domain, graph)
 
     def add_blue_edge_pointing_dependents(
         self, domain: Domain, graph: nx.DiGraph
     ) -> None:
-        for dependent in domain.dependents:
+        for dependent, _ in domain.dependents:
             graph.add_edge(domain, dependent, color="blue")
-            self.add_blue_edge_pointing_dependents(dependent, graph)
+            if dependent.dependents:
+                self.add_blue_edge_pointing_dependents(dependent, graph)
 
     def check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
         try:
-            print(dependency_graph.edges.data())
             cycle = nx.find_cycle(dependency_graph, orientation="original")
             cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
 
             raise ValueError(
-                f"A cycle was found in the dependency graph: {' - '.join(node for node in cycle_nodes)}"
+                f"A cycle was found in the dependency graph: {' - '.join(node.name for node in cycle_nodes)}."
             )
         except nx.NetworkXNoCycle:
             pass
@@ -5151,6 +5208,64 @@ class Design(JSONSerializable):
         # domain names already checked in compute_derived_fields()
         self.check_strand_names_unique()
         self.check_domain_pool_names_unique()
+
+    def check_strand_dag_inclusion_legal(self, graph: nx.DiGraph) -> None:
+
+        dags = list(nx.weakly_connected_components(graph))
+        dags_indices = [i for i, _ in enumerate(dags)]
+        domain_to_dag = {}
+
+        for i, dag in zip(dags_indices, dags):
+            for subdomain in dag:
+                domain_to_dag[subdomain] = i
+
+        for strand in self.strands:
+            visited_dags = set()
+            current_dag = -1
+            for subdomain in strand.domains:
+                visiting_dag = domain_to_dag[subdomain]
+                if not current_dag == visiting_dag:
+                    if visiting_dag in visited_dags:
+                        dag_subdomains_str = ", ".join(
+                            [
+                                sd.name
+                                for sd in dags[visiting_dag].intersection(
+                                    set(strand.domains)
+                                )
+                            ]
+                        )
+                        raise ValueError(
+                            f"A strand cannot overlap with a domain discontinuously: "
+                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag].intersection(set(strand.domains))))} non-consecutively"
+                        )
+                    else:
+                        if not current_dag == -1:
+                            visited_dags.add(current_dag)
+                        current_dag = visiting_dag
+
+    def check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
+
+        overlapping_leaves = set()
+        for strand in self.strands:
+            for domain in strand.domains:
+                overlapping_leaves.update(
+                    {
+                        leaf
+                        for leaf in nx.descendants(graph, domain) | {domain}
+                        if graph.out_degree(leaf) == 0
+                    }
+                )
+
+        graph_leaves = {node for node, degree in graph.out_degree() if degree == 0}
+
+        non_overlapping_subdomains = graph_leaves - overlapping_leaves
+        if non_overlapping_subdomains:
+            non_overlapping_subdomains_str = ", ".join(
+                [sd.name for sd in non_overlapping_subdomains]
+            )
+            raise ValueError(
+                f"The subdomain(s) {non_overlapping_subdomains_str} are not overlapping with any strand in the design."
+            )
 
     def check_strand_names_unique(self) -> None:
         strands_by_name = {}

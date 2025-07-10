@@ -10,6 +10,8 @@ import nuad.constraints as nc
 import nuad.search as ns
 import nuad.vienna_nupack as nv
 import scadnano as sc
+
+
 from nuad.constraints import (
     Design,
     Domain,
@@ -385,33 +387,159 @@ class TestNumpyFilters(unittest.TestCase):
 
 
 class TestDependencyGraphCreation(unittest.TestCase):
-    def test_init(self) -> None:
+    def test_dependency_graph_initiation(self) -> None:
         """                  a
                             |  \
                             b  bb
-                          | \
-                         c  cc
+                          | \   \\
+                         c  cc   X
                         | \
                         d  dd
                     """
+
+        def dependency_function(
+            sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
+        ):
+            return sequence[::-1]
+
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         dd = Domain("dd", assign_domain_pool_of_length(5), fixed=True)
         c = Domain(
             "c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, dd]
         )
-        cc = Domain("cc", assign_domain_pool_of_length(5), locked=True)
+        cc = Domain("cc", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
             "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, cc]
         )
-        bb = Domain("bb", assign_domain_pool_of_length(5), assignable=True)
+        X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
+        bb = Domain(
+            "bb",
+            assign_domain_pool_of_length(5),
+            assignable=True,
+            dependents=[(X, dependency_function)],
+        )
         a = Domain(
             "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, bb]
         )
 
         design = nc.Design()
-        design.add_strand(domains=[a, b, bb, c, cc, d, dd], starred_domain_indices=[6])
+        design.add_strand(domains=[bb, c, cc, X], starred_domain_indices=[1])
+        design.compute_derived_fields()
         design.check_subdomain_graphs_legal()
+        print("X", X.dependents)
+        print("bb", bb.dependents)
         dep = design.check_dependency_graphs_legal()
+        print(bb.dependents)
+        cc.set_sequence("ACCGT")
+
+        bb.set_sequence("AGCTC")
+
+        # self.assertEqual({a,b,bb,c,cc,d,dd,X}, set(dep.nodes))
+        self.assertEqual(dependency_function(bb.sequence()), X.sequence())
+
+    def test_cycle_in_dependency_graph(self) -> None:
+        """
+
+                                               p       p depends on d, (d depends on c - checked for cycle detection)
+                                           / \   \\
+                                        a     e   \\
+                                      /  \         \\
+                                    b     c         d
+        """
+
+        def dependency_function1(
+            sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
+        ):
+            return sequence[::-1]
+
+        def dependency_function2(
+            sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
+        ):
+            return sequence[::-1] * 3
+
+        d = Domain("d", assign_domain_pool_of_length(5))
+        b = Domain("b", assign_domain_pool_of_length(5), locked=True)
+        c = Domain("c", assign_domain_pool_of_length(5), locked=True)
+        a = Domain(
+            "a", assign_domain_pool_of_length(10), locked=True, subdomains=[b, c]
+        )
+        e = Domain("e", assign_domain_pool_of_length(5), locked=True)
+        p = Domain(
+            "p", assign_domain_pool_of_length(15), dependent=True, subdomains=[a, e]
+        )
+
+        d.dependents.append((p, dependency_function2))
+        # c.dependents.append((p,dependency_function1)) # to test more than one depndee check
+
+        design2 = nc.Design()
+        design2.add_strand(domains=[a, e, d], starred_domain_indices=[1])
+        design2.compute_derived_fields()
+        design2.check_subdomain_graphs_legal()
+        design2.check_dependency_graphs_legal()
+        d.set_sequence("ACGTC")
+
+        self.assertEqual(p.sequence(), dependency_function2(d.sequence()))
+        self.assertEqual(a.sequence(), p.sequence()[0:10])
+        self.assertEqual(e.sequence(), p.sequence()[10:])
+        self.assertEqual(c.sequence(), a.sequence()[5:])
+
+    def test_check_strand_dag_inclusion_legal(self):
+        """                          a
+                                    |  \
+                                    b  bb
+                                  | \   \\
+                                 c  cc   X
+                                | \
+                                d  dd
+
+                                             p       p depends on d, (d depends on c - checked for cycle detection)
+                                           / \   \\
+                                        a1     e   \\
+                                      /  \         \\
+                                    b1     c1         d1
+        """
+
+        def dependency_function(
+            sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
+        ):
+            return sequence[::-1] * 3
+
+        d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
+        dd = Domain("dd", assign_domain_pool_of_length(5), fixed=True)
+        c = Domain(
+            "c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, dd]
+        )
+        cc = Domain("cc", assign_domain_pool_of_length(5), assignable=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, cc]
+        )
+        X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
+        bb = Domain(
+            "bb",
+            assign_domain_pool_of_length(5),
+            assignable=True,
+            dependents=[(X, dependency_function)],
+        )
+        a = Domain(
+            "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, bb]
+        )
+
+        d1 = Domain("d1", assign_domain_pool_of_length(5))
+        b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
+        c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
+        a1 = Domain(
+            "a1", assign_domain_pool_of_length(10), locked=True, subdomains=[b1, c1]
+        )
+        e = Domain("e", assign_domain_pool_of_length(5), locked=True)
+        p = Domain(
+            "p", assign_domain_pool_of_length(15), dependent=True, subdomains=[a1, e]
+        )
+        d1.dependents.append((p, dependency_function))
+
+        design = nc.Design()
+        design.add_strand(domains=[d, a1, dd], starred_domain_indices=[1])
+
+        # design.check_subdomain_graphs_legal()
 
 
 class TestDagObjectCreation(unittest.TestCase):
