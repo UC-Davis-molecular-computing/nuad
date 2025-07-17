@@ -2049,7 +2049,6 @@ class Domain(Part, JSONSerializable):
 
         self.notify_sequence_changed(np.random.default_rng(), self)
 
-
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
         Set DNA sequence and fix it so it is not changed by the nuad sequence designer.
@@ -2067,7 +2066,6 @@ class Domain(Part, JSONSerializable):
             subdomain.fixed = True
             subdomain.assignable = False
             subdomain.locked = False
-
 
     def notify_sequence_changed(
         self, rng: np.random.Generator, notifier_domain: Domain
@@ -5100,7 +5098,12 @@ class Design(JSONSerializable):
                 sum(domain.get_length() for domain in unlocked_subdomains)
                 != source.get_length()
             ):
-                unlocked_subdomains_str = ", ".join([unlocked_subdomain.name for unlocked_subdomain in unlocked_subdomains])
+                unlocked_subdomains_str = ", ".join(
+                    [
+                        unlocked_subdomain.name
+                        for unlocked_subdomain in unlocked_subdomains
+                    ]
+                )
                 raise ValueError(
                     f"the unlocked domains are not enough: {unlocked_subdomains_str}."
                 )
@@ -5110,7 +5113,6 @@ class Design(JSONSerializable):
         dependency_graph = self._create_dependency_digraph()
         self._check_dependency_graph_is_dag(dependency_graph)
         self._check_each_dependent_exactly_one_dependee(dependency_graph)
-
 
     def _create_subdomain_digraph(self) -> nx.DiGraph:
         """Create subdomain directed graph of domains"""
@@ -5249,7 +5251,6 @@ class Design(JSONSerializable):
                         if prev_dag_idx != -1:
                             visited_dag_idxs.add(prev_dag_idx)
                         prev_dag_idx = visiting_dag_idx
-
 
     def _check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
 
