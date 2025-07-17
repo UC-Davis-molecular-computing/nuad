@@ -422,7 +422,7 @@ def _strands_containing_domains(
 _empty_frozen_set: FrozenSet = frozenset()
 
 
-def _independent_domains_in_part(
+def _assignable_domains_in_part(
     part: DesignPart, exclude_fixed: bool
 ) -> Tuple[Domain, ...]:
     """
@@ -462,13 +462,13 @@ def _independent_domains_in_part(
 
     # Convert direct domains to independent domains.
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
-    independent_domains = []
+    assignable_domains = []
     for domain in domains:
-        independent_domain = domain.independent_source()
-        if independent_domain not in independent_domains:
-            independent_domains.append(independent_domain)
+        assignable_domains_connected_to_domain = domain.assignable_sources()
+        if assignable_domains_connected_to_domain not in assignable_domains:
+            assignable_domains.extend(assignable_domains_connected_to_domain)
 
-    return tuple(independent_domains)
+    return tuple(assignable_domains)
 
 
 T = TypeVar("T")
@@ -1342,9 +1342,9 @@ def _reassign_domains(
 ) -> Tuple[Tuple[Domain, ...], Dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
-    domains: List[Domain] = list(eval_set.domain_to_score.keys())
+    domains: List[Domain] = list(eval_set.assignable_domain_to_score.keys())
     scores_weighted = [
-        score * domain.weight for domain, score in eval_set.domain_to_score.items()
+        score * domain.weight for domain, score in eval_set.assignable_domain_to_score.items()
     ]
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
@@ -1887,7 +1887,7 @@ class EvaluationSet:
     # (after changing domain(s)).
     # Unlike evaluations, only has keys for parts affected by the most recent domain changes.
 
-    domain_to_evaluations: Dict[Domain, List[Evaluation]]
+    assignable_domain_to_evaluations: Dict[Domain, List[Evaluation]]
     # Dict mapping each Domain to the set of all Evaluations for which it is blamed
 
     violations: Dict[Constraint, Dict[nc.Part, Evaluation]]
@@ -1901,19 +1901,19 @@ class EvaluationSet:
     # (after changing domain(s)).
     # Unlike violations, only has keys for parts affected by the most recent domain changes.
 
-    domain_to_evaluations: Dict[Domain, List[Evaluation]]
+    assignable_domain_to_evaluations: Dict[Domain, List[Evaluation]]
     # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
 
-    domain_to_evaluations_new: Dict[Domain, List[Evaluation]]
+    assignable_domain_to_evaluations_new: Dict[Domain, List[Evaluation]]
 
-    domain_to_violations: Dict[Domain, List[Evaluation]]
+    assignable_domain_to_violations: Dict[Domain, List[Evaluation]]
     # Dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
 
-    domain_to_violations_new: Dict[Domain, List[Evaluation]]
+    assignable_domain_to_violations_new: Dict[Domain, List[Evaluation]]
 
-    domain_to_score: Dict[Domain, float]
+    assignable_domain_to_score: Dict[Domain, float]
 
-    domain_to_score_new: Dict[Domain, float]
+    assignable_domain_to_score_new: Dict[Domain, float]
 
     total_score: float
     # sum of scores of all evalutions
@@ -1954,25 +1954,25 @@ class EvaluationSet:
     def reset_all(self) -> None:
         self.evaluations = {constraint: {} for constraint in self.constraints}
         self.violations = {constraint: {} for constraint in self.constraints}
-        self.domain_to_evaluations = defaultdict(list)
-        self.domain_to_violations = defaultdict(list)
-        self.domain_to_score = defaultdict(float)
+        self.assignable_domain_to_evaluations = defaultdict(list)
+        self.assignable_domain_to_violations = defaultdict(list)
+        self.assignable_domain_to_score = defaultdict(float)
         self.reset_new()
 
     def reset_new(self) -> None:
         self.evaluations_new = {constraint: {} for constraint in self.constraints}
         self.violations_new = {constraint: {} for constraint in self.constraints}
-        self.domain_to_evaluations_new = defaultdict(list)
-        self.domain_to_violations_new = defaultdict(list)
-        self.domain_to_score_new = defaultdict(float)
+        self.assignable_domain_to_evaluations_new = defaultdict(list)
+        self.assignable_domain_to_violations_new = defaultdict(list)
+        self.assignable_domain_to_score_new = defaultdict(float)
 
     def evaluate_all(self, design: Design, params: SearchParameters) -> None:
         # called on all parts of the design and sets self.evaluations
         self.reset_all()
         for constraint in self.constraints:
             self.evaluate_constraint(constraint, design, None, None, params)
-        self.domain_to_score = EvaluationSet.sum_domain_scores(
-            self.domain_to_violations
+        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(
+            self.assignable_domain_to_violations
         )
         self.update_scores_and_counts()
         # _assert_violations_are_accurate(self.evaluations, self.violations)
@@ -1992,12 +1992,12 @@ class EvaluationSet:
             )
             if score_gap is not None and _is_significantly_greater(0.0, score_gap):
                 break
-        self.domain_to_score_new = EvaluationSet.sum_domain_scores(
-            self.domain_to_violations_new
+        self.assignable_domain_to_score_new = EvaluationSet.sum_assignable_domain_scores(
+            self.assignable_domain_to_violations_new
         )
 
     @staticmethod
-    def sum_domain_scores(
+    def sum_assignable_domain_scores(
         domain_to_violations: Dict[Domain, List[Evaluation]]
     ) -> Dict[Domain, float]:
         # NOTE: this filters out the fixed domains,
@@ -2144,16 +2144,16 @@ class EvaluationSet:
         if domains_new is not None:
             evals_of_constraint = self.evaluations_new[constraint]
             viols_of_constraint = self.violations_new[constraint]
-            domain_to_evals = self.domain_to_evaluations_new
-            domain_to_viols = self.domain_to_violations_new
+            domain_to_evals = self.assignable_domain_to_evaluations_new
+            domain_to_viols = self.assignable_domain_to_violations_new
         else:
             evals_of_constraint = self.evaluations[constraint]
             viols_of_constraint = self.violations[constraint]
-            domain_to_evals = self.domain_to_evaluations
-            domain_to_viols = self.domain_to_violations
+            domain_to_evals = self.assignable_domain_to_evaluations
+            domain_to_viols = self.assignable_domain_to_violations
 
         for result in results:
-            domains = _independent_domains_in_part(result.part, exclude_fixed=False)
+            domains = _assignable_domains_in_part(result.part, exclude_fixed=False)
             evaluation = Evaluation(
                 constraint=constraint,
                 part=result.part,
@@ -2190,11 +2190,11 @@ class EvaluationSet:
             self.evaluations[constraint][part] = evaluation
 
             # update dict mapping domain to list of evals/violations for which it is blamed
-            for domain in evaluation.domains:
-                self.domain_to_evaluations[domain] = self.domain_to_evaluations_new[
+            for domain in evaluation.assignable_domains:
+                self.assignable_domain_to_evaluations[domain] = self.assignable_domain_to_evaluations_new[
                     domain
                 ]
-                self.domain_to_violations[domain] = self.domain_to_violations_new[
+                self.assignable_domain_to_violations[domain] = self.assignable_domain_to_violations_new[
                     domain
                 ]
 
@@ -2382,7 +2382,7 @@ class Evaluation(Generic[DesignPart]):
     part: DesignPart
     # DesignPart that caused this violation
 
-    domains: FrozenSet[
+    assignable_domains: FrozenSet[
         Domain
     ]  # = field(init=False, hash=False, compare=False, default=None)
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
@@ -2398,7 +2398,7 @@ class Evaluation(Generic[DesignPart]):
         constraint: Constraint,
         violated: bool,
         part: DesignPart,
-        domains: Iterable[Domain],
+        assignable_domains: Iterable[Domain],
         score: float,
         summary: str,
         result: nc.Result,
@@ -2413,7 +2413,7 @@ class Evaluation(Generic[DesignPart]):
         self.constraint = constraint
         self.violated = violated
         self.part = part
-        self.domains = frozenset(domains)
+        self.assignable_domains = frozenset(domains)
         self.score = score
         self.summary = summary
         self.result = result

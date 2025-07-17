@@ -2336,7 +2336,7 @@ class Domain(Part, JSONSerializable):
 
         return unlocked_descendants
 
-    def independent_source(self) -> Domain:
+    def assignable_sources(self) -> list[Domain]:
         """
         Like :meth:`independent_ancestor_or_descendent`,
         but returns this Domain if it is already independent.
@@ -2346,11 +2346,11 @@ class Domain(Part, JSONSerializable):
             which is *itself* if it is already independent
         """
         if self.dependent:
-            return self.independent_ancestor_or_descendent()
+            return self.assignable_ancestor_or_descendents()
         else:
-            return self
+            return [self]
 
-    def independent_ancestor_or_descendent(self) -> Domain:
+    def assignable_ancestor_or_descendents(self) -> list[Domain]:
         """
         Find the independent ancestor or descendent of this dependent :any:`Domain`.
         Raises exception if this is not a dependent :any:`Domain`.
@@ -2365,30 +2365,25 @@ class Domain(Part, JSONSerializable):
             )
 
         # first try ancestors
-
         for domain in self.ancestors():
             if not domain.dependent:
-                return domain
+                return [domain] #XXX: this needs to change since we can have multiple assignable ancestors
+                                # since the subdomain graph is no longer a tree
 
         # then try descendents
-        independent_descendent = self._independent_descendent()
-        if independent_descendent is None:
-            raise ValueError(
-                f"could not find an independent ancestor or descendent of domain {self.name}"
-            )
-        return independent_descendent
+        assignable_descendents = self._assignable_descendents()
+        return assignable_descendents
 
-    def _independent_descendent(self) -> Domain | None:
+    def _assignable_descendents(self) -> list[Domain]:
         if not self.dependent:
-            return self
+            return [self]
 
+        assignable_descendents = []
         if len(self.subdomains) > 0:
             for subdomain in self.subdomains:
-                independent_descendent = subdomain._independent_descendent()
-                if independent_descendent is not None:
-                    return independent_descendent
+                assignable_descendents.extend(subdomain._assignable_descendents())
 
-        return None
+        return assignable_descendents
 
     def check_only_one_state(self):
 
