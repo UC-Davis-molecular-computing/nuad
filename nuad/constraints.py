@@ -5222,7 +5222,6 @@ class Design(JSONSerializable):
         dags = list(nx.weakly_connected_components(graph))
         domain_to_dag_idx = {}
 
-
         for i, dag in enumerate(dags):
             for domain in dag:
                 domain_to_dag_idx[domain] = i
