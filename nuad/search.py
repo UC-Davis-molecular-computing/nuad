@@ -2140,15 +2140,17 @@ class EvaluationSet:
             )
 
         # assign blame for violations to domains by looking up associated domains in each part
-        evals_of_constraint = self.evaluations[constraint]
-        viols_of_constraint = self.violations[constraint]
-        domain_to_evals = self.domain_to_evaluations
-        domain_to_viols = self.domain_to_violations
+
         if domains_new is not None:
             evals_of_constraint = self.evaluations_new[constraint]
             viols_of_constraint = self.violations_new[constraint]
             domain_to_evals = self.domain_to_evaluations_new
             domain_to_viols = self.domain_to_violations_new
+        else:
+            evals_of_constraint = self.evaluations[constraint]
+            viols_of_constraint = self.violations[constraint]
+            domain_to_evals = self.domain_to_evaluations
+            domain_to_viols = self.domain_to_violations
 
         for result in results:
             domains = _independent_domains_in_part(result.part, exclude_fixed=False)
@@ -2222,8 +2224,6 @@ class EvaluationSet:
         _assert_violations_are_accurate(self.evaluations, self.violations)
 
     def update_scores_and_counts(self) -> None:
-        # return: Total score of all evaluations.
-
         self.total_score = self.total_score_fixed = self.total_score_nonfixed = 0.0
         self.num_evaluations = self.num_evaluations_nonfixed = (
             self.num_evaluations_fixed
