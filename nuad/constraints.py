@@ -2049,6 +2049,7 @@ class Domain(Part, JSONSerializable):
 
         self.notify_sequence_changed(np.random.default_rng(), self)
 
+
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
         Set DNA sequence and fix it so it is not changed by the nuad sequence designer.
@@ -2060,7 +2061,13 @@ class Domain(Part, JSONSerializable):
         """
 
         self.set_sequence(fixed_sequence, fixed=True)
-        self.fixed = True
+
+        # making every subdomain of this domain fixed, including self.
+        for subdomain in self._get_all_domains_from_this_subtree():
+            subdomain.fixed = True
+            subdomain.assignable = False
+            subdomain.locked = False
+
 
     def notify_sequence_changed(
         self, rng: np.random.Generator, notifier_domain: Domain
@@ -2393,23 +2400,23 @@ class Domain(Part, JSONSerializable):
             )
         if self.dependent and self.assignable:
             raise ValueError(
-                f"A domain cannot be both dependent and assignable. Domain{self.name} is defined dependent and assignable."
+                f"A domain cannot be both dependent and assignable. Domain {self.name} is defined dependent and assignable."
             )
         if self.dependent and self.fixed:
             raise ValueError(
-                f"A domain cannot be both dependent and fixed. Domain{self.name} is defined dependent and fixed."
+                f"A domain cannot be both dependent and fixed. Domain {self.name} is defined dependent and fixed."
             )
         if self.fixed and self.locked:
             raise ValueError(
-                f"A domain cannot be both fixed and locked. Domain{self.name} is defined fixed and locked."
+                f"A domain cannot be both fixed and locked. Domain {self.name} is defined fixed and locked."
             )
         if self.assignable and self.locked:
             raise ValueError(
-                f"A domain cannot be both assignable and locked. Domain{self.name} is defined assignable and locked."
+                f"A domain cannot be both assignable and locked. Domain {self.name} is defined assignable and locked."
             )
         if self.assignable and self.fixed:
             raise ValueError(
-                f"A domain cannot be both assignable and fixed. Domain{self.name} is defined dependent and locked."
+                f"A domain cannot be both assignable and fixed. Domain {self.name} is defined dependent and locked."
             )
 
 
@@ -4965,7 +4972,7 @@ class Design(JSONSerializable):
         if not computed_derived_fields:
             self.compute_derived_fields()
 
-    def check_subdomain_graph_is_dag(self, subdomain_graph: nx.DiGraph) -> None:
+    def _check_subdomain_graph_is_dag(self, subdomain_graph: nx.DiGraph) -> None:
         """
         Check that all domain graphs (if subdomains are used) are acyclic (form directed acyclic graphs).
         """
@@ -4979,7 +4986,7 @@ class Design(JSONSerializable):
         except nx.NetworkXNoCycle:
             pass
 
-    def check_subdomain_graph_is_singly_connected(
+    def _check_subdomain_graph_is_singly_connected(
         self, subdomain_graph: nx.DiGraph
     ) -> None:
         """
@@ -5022,30 +5029,30 @@ class Design(JSONSerializable):
 
     def check_subdomain_graphs_legal(self) -> None:
 
-        subdomain_graph = self.create_subdomain_digraph()
+        subdomain_graph = self._create_subdomain_digraph()
 
-        self.check_subdomain_graph_is_dag(subdomain_graph)
+        self._check_subdomain_graph_is_dag(subdomain_graph)
 
-        self.check_subdomain_graph_is_singly_connected(subdomain_graph)
+        self._check_subdomain_graph_is_singly_connected(subdomain_graph)
 
-        self.check_exactly_one_unlocked_in_every_path(subdomain_graph)
+        self._check_exactly_one_unlocked_in_every_path(subdomain_graph)
 
-        self.check_strand_dag_inclusion_legal(subdomain_graph)
+        self._check_strand_dag_inclusion_legal(subdomain_graph)
 
-        self.check_every_subdomain_overlap_with_a_strand(subdomain_graph)
+        self._check_every_subdomain_overlap_with_a_strand(subdomain_graph)
 
     def traverse_source_to_sink_path(
-        self, original_source: Domain, source: Domain, unlocked_subdomains: list[Domain]
+        self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
     ) -> list[Domain]:
         # No need to define visited_domains, since the singly-connectedness is already verified.
-        if not source.locked:
-            unlocked_subdomains.append(source)
+        if not domain.locked:
+            unlocked_subdomains.append(domain)
 
-            if source.fixed:
+            if domain.fixed:
                 # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
                 return unlocked_subdomains
 
-            for subdomain in source.subdomains:
+            for subdomain in domain.subdomains:
                 unlockeds = self.traverse_source_to_sink_path(
                     original_source, subdomain, []
                 )
@@ -5059,18 +5066,18 @@ class Design(JSONSerializable):
                     )
                     raise ValueError(
                         "There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,"
-                        f" but found more in the path with source domain {original_source.name} and "
-                        f"unlocked domains {source.name}, {unlocked_domains_str}"
+                        f" but found more in the path(s) with source domain {original_source.name} and "
+                        f"unlocked domains {domain.name}, {unlocked_domains_str}"
                     )
         else:
-            for subdomain in source.subdomains:
+            for subdomain in domain.subdomains:
                 self.traverse_source_to_sink_path(
                     original_source, subdomain, unlocked_subdomains
                 )
 
         return unlocked_subdomains
 
-    def check_exactly_one_unlocked_in_every_path(
+    def _check_exactly_one_unlocked_in_every_path(
         self, subdomain_graph: nx.DiGraph
     ) -> None:
 
@@ -5093,18 +5100,19 @@ class Design(JSONSerializable):
                 sum(domain.get_length() for domain in unlocked_subdomains)
                 != source.get_length()
             ):
-                unlocked_subdomains_str = ", ".join(unlocked_subdomains)
+                unlocked_subdomains_str = ", ".join([unlocked_subdomain.name for unlocked_subdomain in unlocked_subdomains])
                 raise ValueError(
                     f"the unlocked domains are not enough: {unlocked_subdomains_str}."
                 )
 
     def check_dependency_graphs_legal(self) -> None:
 
-        dependency_graph = self.create_dependency_digraph()
-        self.check_dependency_graph_is_dag(dependency_graph)
-        self.check_each_dependent_exactly_one_dependee(dependency_graph)
+        dependency_graph = self._create_dependency_digraph()
+        self._check_dependency_graph_is_dag(dependency_graph)
+        self._check_each_dependent_exactly_one_dependee(dependency_graph)
 
-    def create_subdomain_digraph(self) -> nx.DiGraph:
+
+    def _create_subdomain_digraph(self) -> nx.DiGraph:
         """Create subdomain directed graph of domains"""
 
         graph = nx.DiGraph()
@@ -5120,7 +5128,7 @@ class Design(JSONSerializable):
 
         return graph
 
-    def create_dependency_digraph(self) -> nx.DiGraph:
+    def _create_dependency_digraph(self) -> nx.DiGraph:
 
         graph = nx.DiGraph()
 
@@ -5175,7 +5183,7 @@ class Design(JSONSerializable):
             if dependent.dependents:
                 self.add_blue_edge_pointing_dependents(dependent, graph)
 
-    def check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
+    def _check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
         try:
             cycle = nx.find_cycle(dependency_graph, orientation="original")
             cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
@@ -5186,7 +5194,7 @@ class Design(JSONSerializable):
         except nx.NetworkXNoCycle:
             pass
 
-    def check_each_dependent_exactly_one_dependee(self, graph: nx.Digraph) -> None:
+    def _check_each_dependent_exactly_one_dependee(self, graph: nx.Digraph) -> None:
 
         for domain in self.domains:
             if domain.dependent:
@@ -5209,41 +5217,42 @@ class Design(JSONSerializable):
         self.check_strand_names_unique()
         self.check_domain_pool_names_unique()
 
-    def check_strand_dag_inclusion_legal(self, graph: nx.DiGraph) -> None:
-
+    def _check_strand_dag_inclusion_legal(self, graph: nx.DiGraph) -> None:
+        """This function checks that if two subdomains of a single domain are part of a strand, they appear continuously, not got disconnected by another domain's subdomain."""
         dags = list(nx.weakly_connected_components(graph))
-        dags_indices = [i for i, _ in enumerate(dags)]
-        domain_to_dag = {}
+        domain_to_dag_idx = {}
 
-        for i, dag in zip(dags_indices, dags):
-            for subdomain in dag:
-                domain_to_dag[subdomain] = i
+
+        for i, dag in enumerate(dags):
+            for domain in dag:
+                domain_to_dag_idx[domain] = i
 
         for strand in self.strands:
-            visited_dags = set()
-            current_dag = -1
-            for subdomain in strand.domains:
-                visiting_dag = domain_to_dag[subdomain]
-                if not current_dag == visiting_dag:
-                    if visiting_dag in visited_dags:
+            visited_dag_idxs = set()
+            prev_dag_idx = -1
+            for domain in strand.domains:
+                visiting_dag_idx = domain_to_dag_idx[domain]
+                if prev_dag_idx != visiting_dag_idx:
+                    if visiting_dag_idx in visited_dag_idxs:
                         dag_subdomains_str = ", ".join(
                             [
                                 sd.name
-                                for sd in dags[visiting_dag].intersection(
+                                for sd in dags[visiting_dag_idx].intersection(
                                     set(strand.domains)
                                 )
                             ]
                         )
                         raise ValueError(
                             f"A strand cannot overlap with a domain discontinuously: "
-                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag].intersection(set(strand.domains))))} non-consecutively"
+                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag_idx].intersection(set(strand.domains))))} non-consecutively"
                         )
                     else:
-                        if not current_dag == -1:
-                            visited_dags.add(current_dag)
-                        current_dag = visiting_dag
+                        if prev_dag_idx != -1:
+                            visited_dag_idxs.add(prev_dag_idx)
+                        prev_dag_idx = visiting_dag_idx
 
-    def check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
+
+    def _check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
 
         overlapping_leaves = set()
         for strand in self.strands:
