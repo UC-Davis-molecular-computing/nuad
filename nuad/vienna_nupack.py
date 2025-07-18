@@ -630,7 +630,7 @@ def rna_plex_multiple_parallel(
                        or (num_pairs < num_cores)
                        )
 
-    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
+    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[S, S]]) -> Tuple[float, ...]:
         return rna_plex_multiple(pairs=seq_pairs, logger=logger, temperature=temperature,
                                  parameters_filename=parameters_filename, max_energy=max_energy)
 
