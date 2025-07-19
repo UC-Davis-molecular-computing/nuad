@@ -1688,7 +1688,7 @@ class EvaluationSet:
         }
         return domain_to_score
 
-    def calculate_score_gap(self, fixed: bool | None = None) -> float | None:
+    def calculate_score_gap(self, fixed: bool | None = None) -> float:
         # fixed is None (all violations), True (fixed violations), or False (nonfixed violations)
         # total score of evaluations - total score of new evaluations
         assert len(self.evaluations) > 0
@@ -2519,17 +2519,23 @@ class ConstraintReport(Generic[DesignPart]):
             max_part_name_length = max(len(violation.part.name) for violation in evals)
             num_violations_counted += len(evals)
 
-            lines_and_scores: List[Tuple[str, float]] = []
+            # if no values in Result, we use score instead and then reverse the sort
+            lines_and_values: List[Tuple[str, float]] = []
+            use_value = True
+            if len(evals) > 0:
+                use_value = evals[0].result.value is not None
             for ev in evals:
                 score_str = f';  score: {ev.score:.2f}' if include_scores else ''
                 viol_str = ' !' if ev.violated and not report_only_violations else ''
                 line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: ' \
                        f'{ev.summary}{score_str}{viol_str}'
-                lines_and_scores.append((line, ev.score))
+                value = ev.result.value if use_value else ev.score
+                assert value is not None
+                lines_and_values.append((line, value))
 
-            lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
+            lines_and_values.sort(key=lambda line_and_value: line_and_value[1], reverse=not use_value)
 
-            lines = (line for line, _ in lines_and_scores)
+            lines = (line for line, _ in lines_and_values)
             content = '\n'.join(lines)
 
             # only put header to distinguish fixed from unfixed violations if there are some fixed

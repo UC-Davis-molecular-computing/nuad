@@ -5144,7 +5144,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
     :meth:`nupack_strand_pair_constraint`, one for each threshold specified in parameter `thresholds`,
     based on number of matching (complementary) domains between pairs of strands.
 
-    Optional parameters `description` and `short_description` are also dicts keyed by the same keys.
+    Optional parameters `descriptions` and `short_descriptions` are also dicts keyed by the same keys.
 
     Exactly one of `strands` or `pairs` must be specified. If `strands`, then all pairs of strands
     (including a strand with itself) will be checked; otherwise only those pairs in `pairs` will be checked.
@@ -5195,7 +5195,7 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
     if short_descriptions is None:
         short_descriptions = {
             num_matching: f'NUPACKpair{num_matching}comp'
-            for num_matching, threshold in thresholds.items()
+            for num_matching, _ in thresholds.items()
         }
 
     return _strand_pairs_constraints_by_number_matching_domains(
@@ -5915,6 +5915,7 @@ def strand_pairs_by_number_matching_domains(*, strands: Iterable[Strand] | None 
         dict mapping integer (number of complementary :any:`Domain`'s) to the list of pairs of strands
         in `strands` with that number of complementary domains
     """
+    # exactly one of strands/pairs should be None; the next call populates the empty one from the other
     strands, pairs = _populate_strand_list_and_pairs(strands, pairs)
 
     # This reduces the number of times we have to create these sets from quadratic to linear
@@ -5944,7 +5945,9 @@ def strand_pairs_by_number_matching_domains(*, strands: Iterable[Strand] | None 
 
 SPC = TypeVar('SPC',
               StrandPairConstraint,
-              StrandPairsConstraint)
+              StrandPairsConstraint,
+              covariant=True,
+              )
 
 
 class _StrandPairsConstraintCreator(Protocol[SPC]):
@@ -6008,8 +6011,8 @@ but instead the thresholds.keys() is {sorted(list(thres_keys))}''')
 
         description = None if descriptions is None \
             else descriptions.get(num_matching_domains)
-        short_description = None if short_descriptions is None \
-            else short_descriptions.get(num_matching_domains)
+        short_description = '' if short_descriptions is None \
+            else short_descriptions.get(num_matching_domains, '')
 
         constraint = constraint_creator(
             threshold=threshold,
@@ -6050,7 +6053,7 @@ def _normalize_domains_pairs_disjoint_parameters(
 
 def _normalize_strands_pairs_disjoint_parameters(
         strands: Iterable[Strand] | None,
-        pairs: Iterable[Tuple[Strand, Strand]],
+        pairs: Iterable[Tuple[Strand, Strand]] | None,
         check_strand_against_itself: bool) -> Iterable[Tuple[Strand, Strand]]:
     # Enforce that exactly one of strands or pairs is not None, and if strands is specified,
     # set pairs to be all pairs from strands. Return those pairs; if pairs is specified,
@@ -6066,6 +6069,7 @@ def _normalize_strands_pairs_disjoint_parameters(
         else:
             pairs = itertools.combinations(strands, 2)
 
+    assert pairs is not None
     pairs_tuple = pairs if isinstance(pairs, tuple) else tuple(pairs)
     return pairs_tuple
 
