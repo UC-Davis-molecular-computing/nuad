@@ -22,7 +22,6 @@ import enum
 import os
 import math
 import json
-from tkinter import NO
 from typing import (
     List,
     Set,
