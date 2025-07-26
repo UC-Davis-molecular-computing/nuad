@@ -1676,6 +1676,7 @@ class Domain(Part, JSONSerializable):
         self,
         name: str,
         pool: DomainPool | None = None,
+        *,
         sequence: str | None = None,
         fixed: bool = False,
         label: str | None = None,
