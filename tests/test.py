@@ -388,6 +388,15 @@ class TestNumpyFilters(unittest.TestCase):
             nc.NearestNeighborEnergyFilter(-10, -15)
 
 
+def extract_letters(message_string: str, first_word: str, second_word: str) -> List:
+
+    start = message_string.find(first_word) + len(first_word)
+    end = message_string.find(second_word, start)
+    letters_substring = message_string[start:end]
+
+    return [sub.strip() for sub in letters_substring.split(",")]
+
+
 class TestDependencyRelatedFunctions(unittest.TestCase):
     def test_dependency_graph_initiation(self) -> None:
         """                  a
@@ -404,6 +413,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1]
 
+        # create the design
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
         c = Domain("c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, g])
@@ -424,7 +434,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         design = nc.Design()
 
-        # c - f - e - X
+        # new strand: c - f - e - X
         design.add_strand(domains=[c, f, e, X], starred_domain_indices=[1])
 
         # to add all the subdomains to the design's domain list
@@ -449,7 +459,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
                                               p-15       p depends on d, (d depends on c - checked for cycle detection)
                                            / \     \\
-                                       a-10   e-5   \\
+                                       a-10   h-5   \\
                                       /  \           \\
                                    b-5   c-5          d-5
         """
@@ -459,61 +469,63 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1]
 
-        def dependency_function_reverses_sequence_three_times_longer(
+        def dependency_function_reverses_sequence_then_three_times_longer(
             sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
         ):
             return sequence[::-1] * 3
 
-        d = Domain("d", assign_domain_pool_of_length(5))
+        # create the design
+        d = Domain("d", assign_domain_pool_of_length(5), assignable=True)
         b = Domain("b", assign_domain_pool_of_length(5), locked=True)
         c = Domain("c", assign_domain_pool_of_length(5), locked=True)
         a = Domain(
             "a", assign_domain_pool_of_length(10), locked=True, subdomains=[b, c]
         )
-        e = Domain("e", assign_domain_pool_of_length(5), locked=True)
+        h = Domain("h", assign_domain_pool_of_length(5), locked=True)
         p = Domain(
-            "p", assign_domain_pool_of_length(15), dependent=True, subdomains=[a, e]
+            "p", assign_domain_pool_of_length(15), dependent=True, subdomains=[a, h]
         )
 
         d.dependents.append(
-            (p, dependency_function_reverses_sequence_three_times_longer)
+            (p, dependency_function_reverses_sequence_then_three_times_longer)
         )
         c.dependents.append(
             (p, dependency_function_reverses_sequence)
         )  # to test cycle detection
 
-        design2 = nc.Design()
-        design2.add_strand(domains=[a, e, d], starred_domain_indices=[1])
+        design = nc.Design()
+        design.add_strand(domains=[a, h, d], starred_domain_indices=[1])
 
-        design2.compute_derived_fields()
-        design2.check_subdomain_graphs_legal()
+        # to add all the subdomains in the DAG containing the domains on the design's strands
+        design.compute_derived_fields()
+        design.check_subdomain_graphs_legal()
 
         with self.assertRaisesRegex(
             ValueError, "A cycle was found in the dependency graph: p - a - c - p."
         ):
-            design2.check_dependency_graphs_legal()
+            design.check_dependency_graphs_legal()
 
         c.dependents = []
-        design2.check_dependency_graphs_legal()
+        design.check_dependency_graphs_legal()
 
         # test more than one dependee
-        d2 = Domain("d2", assign_domain_pool_of_length(5))
+        d2 = Domain("d2", assign_domain_pool_of_length(5), assignable=True)
         d2.dependents.append((p, dependency_function_reverses_sequence))
-        design2.domains.append(d2)
+        design.domains.append(d2)
 
         with self.assertRaisesRegex(
             ValueError, "the dependent domain p has more than one dependees: d, d2"
         ):
-            design2.check_dependency_graphs_legal()
+            design.check_dependency_graphs_legal()
 
         d.set_sequence("ACGTC")
 
         self.assertEqual(
             p.sequence(),
-            dependency_function_reverses_sequence_three_times_longer(d.sequence()),
+            dependency_function_reverses_sequence_then_three_times_longer(d.sequence()),
         )
         self.assertEqual(a.sequence(), p.sequence()[0:10])
-        self.assertEqual(e.sequence(), p.sequence()[10:])
+        self.assertEqual(h.sequence(), p.sequence()[10:])
         self.assertEqual(c.sequence(), a.sequence()[5:])
 
     def test_check_check_exactly_one_unlocked_in_every_path(self):
@@ -610,7 +622,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
             "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, e]
         )
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5))
+        d1 = Domain("d1", assign_domain_pool_of_length(5), assignable=True)
         b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
         c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
         a1 = Domain(
@@ -629,11 +641,18 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         design.add_strand(domains=[d, b1, f], starred_domain_indices=[1])
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "A strand cannot overlap with a domain discontinuously.*overlaps with subdomains f, d with shared ancestor b non-consecutively",
-        ):
+        with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
+
+        expected_ancestor = extract_letters(
+            str(error.exception), "ancestor", "non-consecutively"
+        )
+        expected_subdomains = extract_letters(
+            str(error.exception), "subdomains", "with shared"
+        )
+        self.assertIn("b", expected_ancestor)
+        self.assertIn("f", expected_subdomains)
+        self.assertIn("d", expected_subdomains)
 
     def test_every_domain_overlap_with_a_strand(self):
         """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
@@ -669,7 +688,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
             "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, e]
         )
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5))
+        d1 = Domain("d1", assign_domain_pool_of_length(5), assignable=True)
         b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
         c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
         a1 = Domain(
@@ -682,21 +701,31 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         d1.dependents.append((p1, dependency_function))
 
         design = nc.Design()
-        design.add_strand(domains=[d, g, a1], starred_domain_indices=[1])
+        design.add_strand(domains=[d, g, h1], starred_domain_indices=[1])
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "The subdomain(s) e, f, h1 are not overlapping with any strand in the design.",
-        ):
+        with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
+
+        expected_subdomains = extract_letters(
+            str(error.exception), "subdomain(s)", "are"
+        )
+        self.assertIn("e", expected_subdomains)
+        self.assertIn("f", expected_subdomains)
+        self.assertIn("b1", expected_subdomains)
+        self.assertIn("c1", expected_subdomains)
 
         design.strands = []
         design.add_strand(domains=[f, a1], starred_domain_indices={1})
-        with self.assertRaisesRegex(
-            ValueError,
-            "The subdomain(s) d, g, h1 are not overlapping with any strand in the design.",
-        ):
+
+        with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
+
+        expected_subdomains = extract_letters(
+            str(error.exception), "subdomain(s)", "are"
+        )
+        self.assertIn("d", expected_subdomains)
+        self.assertIn("g", expected_subdomains)
+        self.assertIn("h1", expected_subdomains)
 
 
 class TestDagObjectCreation(unittest.TestCase):

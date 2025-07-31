@@ -1344,7 +1344,8 @@ def _reassign_domains(
     # first weight scores by domain's weight
     domains: List[Domain] = list(eval_set.assignable_domain_to_score.keys())
     scores_weighted = [
-        score * domain.weight for domain, score in eval_set.assignable_domain_to_score.items()
+        score * domain.weight
+        for domain, score in eval_set.assignable_domain_to_score.items()
     ]
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
@@ -1992,8 +1993,10 @@ class EvaluationSet:
             )
             if score_gap is not None and _is_significantly_greater(0.0, score_gap):
                 break
-        self.assignable_domain_to_score_new = EvaluationSet.sum_assignable_domain_scores(
-            self.assignable_domain_to_violations_new
+        self.assignable_domain_to_score_new = (
+            EvaluationSet.sum_assignable_domain_scores(
+                self.assignable_domain_to_violations_new
+            )
         )
 
     @staticmethod
@@ -2157,7 +2160,7 @@ class EvaluationSet:
             evaluation = Evaluation(
                 constraint=constraint,
                 part=result.part,
-                domains=domains,
+                assignable_domains=domains,
                 score=result.score,
                 summary=result.summary,
                 violated=result.score > 0,
@@ -2191,12 +2194,12 @@ class EvaluationSet:
 
             # update dict mapping domain to list of evals/violations for which it is blamed
             for domain in evaluation.assignable_domains:
-                self.assignable_domain_to_evaluations[domain] = self.assignable_domain_to_evaluations_new[
-                    domain
-                ]
-                self.assignable_domain_to_violations[domain] = self.assignable_domain_to_violations_new[
-                    domain
-                ]
+                self.assignable_domain_to_evaluations[domain] = (
+                    self.assignable_domain_to_evaluations_new[domain]
+                )
+                self.assignable_domain_to_violations[domain] = (
+                    self.assignable_domain_to_violations_new[domain]
+                )
 
             viols_by_part = self.violations[constraint]
             if evaluation.violated:

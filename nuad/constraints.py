@@ -2338,54 +2338,56 @@ class Domain(Part, JSONSerializable):
 
     def assignable_sources(self) -> list[Domain]:
         """
-        Like :meth:`independent_ancestor_or_descendent`,
-        but returns this Domain if it is already independent.
+        Like :meth:`assignable_ancestor_or_descendant`,
+        but returns this Domain if it is already assignable.
 
         :return:
             the independent :any:`Domain` that this domain depends on,
             which is *itself* if it is already independent
         """
-        if self.dependent:
-            return self.assignable_ancestor_or_descendents()
+        if not self.assignable:
+            return self.assignable_ancestors_or_descendants()
         else:
             return [self]
 
-    def assignable_ancestor_or_descendents(self) -> list[Domain]:
+    def assignable_ancestors_or_descendants(self) -> list[Domain]:
         """
-        Find the independent ancestor or descendent of this dependent :any:`Domain`.
+        Find the assignable ancestor(s) or descendant(s) of this dependent :any:`Domain`.
         Raises exception if this is not a dependent :any:`Domain`.
 
         :return:
-            The independent ancestor or descendent of this :any:`Domain`.
+            The assignable ancestor or descendant of this :any:`Domain`.
         """
-        if not self.dependent:
+        if self.assignable:
             raise ValueError(
-                "cannot call independent_ancestor_or_descendent on non-dependent Domain"
+                "cannot call assignable_ancestors_or_descendants on an assignable Domain"
                 f" {self.name}"
             )
 
         # first try ancestors
+        assignable_ancestors = []
         for domain in self.ancestors():
-            if not domain.dependent:
-                return [domain] #XXX: this needs to change since we can have multiple assignable ancestors
-                                # since the subdomain graph is no longer a tree
+            if domain.assignable:
+                assignable_ancestors.append(domain)
+        if assignable_ancestors:
+            return assignable_ancestors
 
-        # then try descendents
-        assignable_descendents = self._assignable_descendents()
-        return assignable_descendents
+        # then try descendants
+        assignable_descendants = self._assignable_descendants()
+        return assignable_descendants
 
-    def _assignable_descendents(self) -> list[Domain]:
-        if not self.dependent:
+    def _assignable_descendants(self) -> list[Domain]:
+        if self.assignable:
             return [self]
 
-        assignable_descendents = []
+        assignable_descendants = []
         if len(self.subdomains) > 0:
             for subdomain in self.subdomains:
-                assignable_descendents.extend(subdomain._assignable_descendents())
+                assignable_descendants.extend(subdomain._assignable_descendants())
 
-        return assignable_descendents
+        return assignable_descendants
 
-    def check_only_one_state(self):
+    def check_exactly_one_state(self):
 
         if self.dependent and self.locked:
             raise ValueError(
@@ -2410,6 +2412,11 @@ class Domain(Part, JSONSerializable):
         if self.assignable and self.fixed:
             raise ValueError(
                 f"A domain cannot be both assignable and fixed. Domain {self.name} is defined dependent and locked."
+            )
+
+        if not (self.assignable or self.dependent or self.locked or self.fixed):
+            raise ValueError(
+                f"A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state."
             )
 
 
@@ -5076,7 +5083,7 @@ class Design(JSONSerializable):
 
         # first, make sure that every domain has exactly one state:
         for domain in self.domains:
-            domain.check_only_one_state()
+            domain.check_exactly_one_state()
 
         source_nodes = [
             node for node, degree in subdomain_graph.in_degree() if degree == 0
@@ -5224,7 +5231,7 @@ class Design(JSONSerializable):
                 domain_to_dag_idx[domain] = i
 
         for strand in self.strands:
-            visited_dag_idxs = set()
+            visited_dag_idxs = OrderedSet()
             prev_dag_idx = -1
             for domain in strand.domains:
                 visiting_dag_idx = domain_to_dag_idx[domain]
@@ -5249,7 +5256,7 @@ class Design(JSONSerializable):
 
     def _check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
 
-        overlapping_leaves = set()
+        overlapping_leaves = OrderedSet()
         for strand in self.strands:
             for domain in strand.domains:
                 overlapping_leaves.update(
@@ -5260,7 +5267,9 @@ class Design(JSONSerializable):
                     }
                 )
 
-        graph_leaves = {node for node, degree in graph.out_degree() if degree == 0}
+        graph_leaves = OrderedSet(
+            [node for node, degree in graph.out_degree() if degree == 0]
+        )
 
         non_overlapping_subdomains = graph_leaves - overlapping_leaves
         if non_overlapping_subdomains:
