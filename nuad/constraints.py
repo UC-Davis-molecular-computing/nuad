@@ -1764,7 +1764,7 @@ class Domain(Part, JSONSerializable):
         assignable: bool = False,
         locked: bool = False,
         label: str | None = None,
-        subdomains: List[Domain] | None = None,
+        subdomains: Iterable[Domain] = (),
         dependents: (
             List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None
         ) = None,
@@ -1783,7 +1783,7 @@ class Domain(Part, JSONSerializable):
         self.locked = locked
         self.label = label
         self.dependents = dependents
-        self._subdomains = subdomains
+        self._subdomains = list(subdomains)
         self.parents = []
         self.locked_dependents = []
 
@@ -1796,11 +1796,10 @@ class Domain(Part, JSONSerializable):
             self.assignable = False
 
         if self.fixed:
-            for sd in self._subdomains:
-                if not sd.fixed:
-                    raise ValueError(
-                        f"Domain {self.name} is fixed, but subdomain {sd} is not fixed"
-                    )
+            if len(self._subdomains) > 0:
+                raise ValueError(
+                    f"Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed"
+                )
         else:
             contains_no_non_fixed_subdomains = True
             for sd in self._subdomains:
@@ -1812,6 +1811,11 @@ class Domain(Part, JSONSerializable):
 
         # Set parents field for all subdomains.
         for subdomain in self._subdomains:
+            if subdomain.fixed:
+                raise ValueError(
+                    f"Domain {self.name} has subdomain {subdomain.name} which is fixed, "
+                    "but fixed domains cannot be subdomains of other domains"
+                )
             subdomain.parents.append(self)
 
         if self.dependent and weight is not None:
@@ -2069,11 +2073,14 @@ class Domain(Part, JSONSerializable):
 
         self.set_sequence(fixed_sequence, fixed=True)
 
-        # making every subdomain of this domain fixed, including self.
-        for subdomain in self._get_all_domains_from_this_subtree():
-            subdomain.fixed = True
-            subdomain.assignable = False
-            subdomain.locked = False
+        if len(self._subdomains) > 0:
+            raise ValueError(
+                f"Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed"
+            )
+        if len(self.parents) > 0:
+            raise ValueError(
+                f"Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed"
+            )
 
     def notify_sequence_changed(
         self, rng: np.random.Generator, notifier_domain: Domain
