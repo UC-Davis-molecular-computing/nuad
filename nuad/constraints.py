@@ -1740,8 +1740,14 @@ class Domain(Part, JSONSerializable):
     """
 
     locked_dependents: List[Domain] = field(init=False, default_factory=list)
-    """List of locked domains in the subdomains and parents list. When this domain receives a new sequence,
-    their sequences get automatically updated due to shared memory.
+    """
+    List of locked domains in the subdomains or parents list. If this domain is locked, it will be exactly 
+    one or the other. If this domain is unlocked, then all domains in this domain’s parents and subdomains 
+    are in locked_dependents. Otherwise, if this domain is locked, then locked_dependents is all parents 
+    (which will all be unlocked since there is an unlocked descendant) if an unlocked domain is a descendant 
+    of this, otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) 
+    an unlocked domain is an ancestor of this, and then we set locked_dependents equal to all subdomains
+    (which will all be unlocked since there is an unlocked ancestor) of this domain.
     """
 
     memoryview_sequence: memoryview | None = field(
