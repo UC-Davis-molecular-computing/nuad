@@ -4,7 +4,7 @@ This module defines types for helping to define DNA sequence design constraints.
 The key classes are :any:`Design`, :any:`Strand`, :any:`Domain` to define a DNA design,
 and various subclasses of :any:`Constraint`, such as :any:`StrandConstraint` or :any:`StrandPairConstraint`,
 to define constraints on the sequences assigned to each :any:`Domain` when calling
-:meth:`search.search_for_dna_sequences`. 
+:meth:`search.search_for_dna_sequences`.
 
 Also important are two other types of constraints
 (not subclasses of :any:`Constraint`), which are used prior to the search to determine if it is even
@@ -2011,6 +2011,8 @@ class Domain(Part, JSONSerializable):
                     "possible_sequences should be list of strings or SuperSequence but is "
                     f"{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}"
                 )
+        else:
+            assert False, "unreachable"
 
     def sequence(self) -> str:
         """
@@ -2656,7 +2658,7 @@ def set_domains_memoryviews(
 
 
 def assign_back_preexisting_sequences(
-    domain_to_preexisting_sequence: Dict[Domain, str]
+    domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
 
     for domain, sequence in domain_to_preexisting_sequence:
@@ -6797,7 +6799,7 @@ def rna_plex_domain_pairs_constraint(
 def get_domain_pairs_from_thresholds_dict(
     thresholds: Dict[
         Tuple[Domain, bool, Domain, bool] | Tuple[Domain, Domain], Tuple[float, float]
-    ]
+    ],
 ) -> Tuple[DomainPair, ...]:
     # gather pairs of domains referenced in `thresholds`
     domain_pairs = []
@@ -8389,7 +8391,7 @@ def rna_cofold_strand_pairs_constraint(
     thread_pool = ThreadPool(processes=num_threads)
 
     def calculate_energies_unparallel(
-        sequence_pairs: Sequence[Tuple[str, str]]
+        sequence_pairs: Sequence[Tuple[str, str]],
     ) -> Tuple[float]:
         return nv.rna_cofold_multiple(
             sequence_pairs, logger, temperature, parameters_filename
