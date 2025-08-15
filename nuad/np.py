@@ -1491,7 +1491,7 @@ def energy_hist(
         alpha = 0.5
         if "label" in kwargs:
             raise ValueError(
-                f'label (={kwargs["label"]}) '
+                f"label (={kwargs['label']}) "
                 f"should not be specified if multiple lengths are given"
             )
 

@@ -75,7 +75,6 @@ def construct_strand(
 
 
 class TestIntersectingDomains(unittest.TestCase):
-
     def test_strand_intersecting_domains(self) -> None:
         """
         Test strand construction with nested subdomains
@@ -154,7 +153,6 @@ class TestIntersectingDomains(unittest.TestCase):
 
 
 class TestSampleSubstrings(unittest.TestCase):
-
     def test_substrings(self) -> None:
         sampler = nc.SubstringSampler(
             supersequence="abcdefghij",
@@ -309,7 +307,6 @@ class TestFromScadnanoDesign(unittest.TestCase):
 
 
 class TestExportDNASequences(unittest.TestCase):
-
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.VendorFields(scale="100nm", purification="PAGE")
         design = nc.Design()
@@ -389,7 +386,6 @@ class TestNumpyFilters(unittest.TestCase):
 
 
 def extract_letters(message_string: str, first_word: str, second_word: str) -> List:
-
     start = message_string.find(first_word) + len(first_word)
     end = message_string.find(second_word, start)
     letters_substring = message_string[start:end]
@@ -957,7 +953,6 @@ class AllDomainsInTree(unittest.TestCase):
 
 
 class TestSubdomainGraphsLegal(unittest.TestCase):
-
     def test_init(self):
         """                        D 20
                                             /      \
@@ -1067,7 +1062,6 @@ class TestInsertDomains(unittest.TestCase):
 
 
 class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
-
     def test_adjacent_to_exterior_base_pair_on_length_2_domain(self) -> None:
         """Test that base pair on domain of length two is properly classified as
         ADJACENT_TO_EXTERIOR_BASE_PAIR
@@ -1931,8 +1925,8 @@ class TestSubdomains(unittest.TestCase):
         C.set_sequence("TGTTCTGATCGGAAC")
 
         # Assert initial assignment is correct
-        self.assertEqual("CATAG" "CTTTCT" "TGTTCTGATCGGAAC", domains["a"].sequence())
-        self.assertEqual("CATAG" "CTTTCT", domains["b"].sequence())
+        self.assertEqual("CATAGCTTTCTTGTTCTGATCGGAAC", domains["a"].sequence())
+        self.assertEqual("CATAGCTTTCT", domains["b"].sequence())
         self.assertEqual("TGTTCTGATCGGAAC", domains["C"].sequence())
         self.assertEqual("CATAG", domains["E"].sequence())
         self.assertEqual("CTTTCT", domains["F"].sequence())
@@ -1941,8 +1935,8 @@ class TestSubdomains(unittest.TestCase):
 
         # Assert subsequent reassignment to leaf is correct
         F.set_sequence("ATGTTT")
-        self.assertEqual("CATAG" "ATGTTT" "TGTTCTGATCGGAAC", domains["a"].sequence())
-        self.assertEqual("CATAG" "ATGTTT", domains["b"].sequence())
+        self.assertEqual("CATAGATGTTTTGTTCTGATCGGAAC", domains["a"].sequence())
+        self.assertEqual("CATAGATGTTT", domains["b"].sequence())
         self.assertEqual("TGTTCTGATCGGAAC", domains["C"].sequence())
         self.assertEqual("CATAG", domains["E"].sequence())
         self.assertEqual("ATGTTT", domains["F"].sequence())
@@ -1951,8 +1945,8 @@ class TestSubdomains(unittest.TestCase):
 
         # Assert subsequent reassignment to internal node is correct
         C.set_sequence("GGGGGGGGGGGGGGG")
-        self.assertEqual("CATAG" "ATGTTT" "GGGGGGGGGGGGGGG", domains["a"].sequence())
-        self.assertEqual("CATAG" "ATGTTT", domains["b"].sequence())
+        self.assertEqual("CATAGATGTTTGGGGGGGGGGGGGGG", domains["a"].sequence())
+        self.assertEqual("CATAGATGTTT", domains["b"].sequence())
         self.assertEqual("GGGGGGGGGGGGGGG", domains["C"].sequence())
         self.assertEqual("CATAG", domains["E"].sequence())
         self.assertEqual("ATGTTT", domains["F"].sequence())
@@ -2013,7 +2007,6 @@ class TestSubdomains(unittest.TestCase):
 
 
 class TestNUPACK(unittest.TestCase):
-
     def test_pfunc(self) -> None:
         seq = "ACGTACGTAGCTGATCCAGCTGATCG"
         energy = nv.pfunc(seq)

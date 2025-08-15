@@ -300,9 +300,7 @@ def create_tile_no_gggg_constraint(weight: float) -> nc.StrandConstraint:
     #     |
     #     +==========--===========]
 
-    def evaluate(
-        seqs: Tuple[str, ...], strand: Optional[nc.Strand]
-    ) -> nc.Result:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:  # noqa
         sequence = seqs[0]
         if "GGGG" in sequence:
             result = nc.Result(

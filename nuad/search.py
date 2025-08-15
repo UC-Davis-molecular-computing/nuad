@@ -483,8 +483,8 @@ def _sequences_fragile_format_output_to_file(
 ) -> str:
     return "\n".join(
         f"{strand.name}  "
-        f'{strand.group if include_group else ""}  '
-        f'{strand.sequence(delimiter="-")}'
+        f"{strand.group if include_group else ''}  "
+        f"{strand.sequence(delimiter='-')}"
         for strand in design.strands
     )
 
@@ -1046,7 +1046,6 @@ class SearchParameters:
 
 
 def set_memoryviews(design: nc.Design) -> None:
-
     domains = design.domains
 
     for domain in domains:
@@ -1426,10 +1425,8 @@ def _double_check_violations_from_scratch(
             _is_significantly_less(score_new, score_opt)
             and _is_significantly_less(score_opt, score_fs)
         ) or (
-            (
-                _is_significantly_less(score_fs, score_opt)
-                and _is_significantly_less(score_opt, score_new)
-            )
+            _is_significantly_less(score_fs, score_opt)
+            and _is_significantly_less(score_opt, score_new)
         ):
             problem = True
     if problem:
@@ -1690,8 +1687,8 @@ def _log_constraint_summary(
     ]
     # iteration_str = f'{iteration:9}'
     # num_new_optimal_str = f'{num_new_optimal:6}'
-    score_opt_str = f"{score_opt :9.{dec_opt}f}"
-    score_new_str = f"{score_new :9.{dec_new}f}"
+    score_opt_str = f"{score_opt:9.{dec_opt}f}"
+    score_new_str = f"{score_new:9.{dec_new}f}"
     row2 = [
         iteration,
         num_new_optimal,
@@ -2001,7 +1998,7 @@ class EvaluationSet:
 
     @staticmethod
     def sum_assignable_domain_scores(
-        domain_to_violations: Dict[Domain, List[Evaluation]]
+        domain_to_violations: Dict[Domain, List[Evaluation]],
     ) -> Dict[Domain, float]:
         # NOTE: this filters out the fixed domains,
         # but we keep them in eval_set for the sake of reports
@@ -2759,7 +2756,9 @@ def display_report(
     for i, (report, values, units) in enumerate(reports_with_values):
         assert len(values) > 0
 
-        yscale = _value_from_constraint_dict(yscales, report.constraint, _default_yscale, str)  # type: ignore
+        yscale = _value_from_constraint_dict(
+            yscales, report.constraint, _default_yscale, str
+        )  # type: ignore
 
         if layout == "horz":
             plt.subplot(1, num_figs, i + 1)
@@ -2780,18 +2779,14 @@ def display_report(
 
         # see if user set custom x limits for this constraint
         # not sure why getting mypy error on next line
-        xlim = _value_from_constraint_dict(
-            xlims, report.constraint, None, tuple
-        )  # type:ignore
+        xlim = _value_from_constraint_dict(xlims, report.constraint, None, tuple)  # type:ignore
         if xlim is not None:
             plt.xlim(xlim)
 
         if isinstance(ylims, (int, float)):
             plt.ylim(top=ylims)
         else:
-            ylim = _value_from_constraint_dict(
-                ylims, report.constraint, None, tuple
-            )  # type:ignore
+            ylim = _value_from_constraint_dict(ylims, report.constraint, None, tuple)  # type:ignore
             if ylim is not None:
                 plt.ylim(ylim)
 
@@ -2928,7 +2923,6 @@ class ConstraintReport(Generic[DesignPart]):
         evaluation_set: EvaluationSet,
         report_only_violations: bool,
     ) -> None:
-
         if not isinstance(
             constraint,
             (

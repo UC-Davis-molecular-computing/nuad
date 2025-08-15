@@ -94,7 +94,7 @@ class Modification(JSONSerializable, ABC):
 
     @staticmethod
     def from_json(
-        json_map: Dict[str, Any]
+        json_map: Dict[str, Any],
     ) -> "Modification":  # remove quotes when Py3.6 support dropped
         location = json_map[mod_location_key]
         if location == "5'":
