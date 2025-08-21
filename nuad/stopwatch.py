@@ -130,11 +130,11 @@ class Stopwatch:
     ) -> str:
         ns = self.nanoseconds()
         if units == "s":
-            return f"{ns / 10 ** 9:.2f} s"
+            return f"{ns / 10**9:.2f} s"
         elif units == "ms":
-            return f"{ns / 10 ** 6:.2f} ms"
+            return f"{ns / 10**6:.2f} ms"
         elif units == "us":
-            return f"{ns / 10 ** 3:.2f} μs"
+            return f"{ns / 10**3:.2f} μs"
         elif units == "ns":
             return f"{ns:.2f} ns"
         else:

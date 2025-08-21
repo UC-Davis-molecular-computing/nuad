@@ -388,7 +388,7 @@ class TestNumpyFilters(unittest.TestCase):
             nc.NearestNeighborEnergyFilter(-10, -15)
 
 
-def extract_domain_names(message_string: str, first_word: str, second_word: str) -> List:
+def extract_letters(message_string: str, first_word: str, second_word: str) -> List:
 
     start = message_string.find(first_word) + len(first_word)
     end = message_string.find(second_word, start)
@@ -644,10 +644,10 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
 
-        expected_ancestor = extract_domain_names(
+        expected_ancestor = extract_letters(
             str(error.exception), "ancestor", "non-consecutively"
         )
-        expected_subdomains = extract_domain_names(
+        expected_subdomains = extract_letters(
             str(error.exception), "subdomains", "with shared"
         )
         self.assertIn("b", expected_ancestor)
@@ -706,7 +706,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
 
-        expected_subdomains = extract_domain_names(
+        expected_subdomains = extract_letters(
             str(error.exception), "subdomain(s)", "are"
         )
         self.assertIn("e", expected_subdomains)
@@ -720,7 +720,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
 
-        expected_subdomains = extract_domain_names(
+        expected_subdomains = extract_letters(
             str(error.exception), "subdomain(s)", "are"
         )
         self.assertIn("d", expected_subdomains)

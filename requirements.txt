@@ -9,5 +9,5 @@ openpyxl
 viennarna
 scadnano
 pre-commit
-black
+ruff
 typing_extensions; python_version < "3.8"

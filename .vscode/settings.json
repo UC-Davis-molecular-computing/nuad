@@ -1,0 +1,19 @@
+{
+    "python.defaultInterpreterPath": "./venv/bin/python",
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": null,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "never",
+            "source.fixAll.ruff": "explicit"
+        }
+    },
+    "ruff.enable": true,
+    "ruff.organizeImports": false,
+    "ruff.fixAll": false,
+    "ruff.format.enable": true,
+    "python.linting.enabled": false,
+    "python.analysis.autoImportCompletions": false
+}
