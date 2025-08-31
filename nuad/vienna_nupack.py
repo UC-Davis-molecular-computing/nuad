@@ -31,7 +31,9 @@ os_is_windows = sys.platform == "win32"
 
 parameter_set_directory = "nupack_viennaRNA_parameter_files"
 
-default_vienna_rna_parameter_filename = "dna_mathews1999.par"  # closer to nupack than dna_mathews2004.par
+default_vienna_rna_parameter_filename = (
+    "dna_mathews1999.par"  # closer to nupack than dna_mathews2004.par
+)
 # default_vienna_rna_parameter_filename = 'dna_mathews2004.par'
 
 default_temperature = 37
@@ -128,7 +130,9 @@ def pfunc(
     # expensive to create a Model, so don't create the same one twice
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
-        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna")
+        model = Model(
+            celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna"
+        )
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
@@ -143,7 +147,9 @@ def pfunc(
 def tupleize(seqs: S | Iterable[S]) -> Tuple[S, ...]:
     return (
         (seqs,)
-        if isinstance(seqs, str) or isinstance(seqs, bytes) or isinstance(seqs, bytearray)
+        if isinstance(seqs, str)
+        or isinstance(seqs, bytes)
+        or isinstance(seqs, bytearray)
         else tuple(seqs)
     )
 
@@ -183,16 +189,21 @@ try:
             or (num_seqs <= 1)
         )
 
-        def calculate_energies_sequential(all_tuples: Sequence[Tuple[S, ...]]) -> Tuple[float, ...]:
+        def calculate_energies_sequential(
+            all_tuples: Sequence[Tuple[S, ...]],
+        ) -> Tuple[float, ...]:
             return tuple(
-                pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty) for seqs in all_tuples
+                pfunc(seqs, temperature, sodium, magnesium, strand_association_penalty)
+                for seqs in all_tuples
             )
 
         if call_sequential:
             return calculate_energies_sequential(all_seqs)
 
         lists_of_sequence_pairs = nc.chunker(all_seqs, num_chunks=num_cores)
-        lists_of_energies = pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+        lists_of_energies = pool.map(
+            calculate_energies_sequential, lists_of_sequence_pairs
+        )
         energies = nc.flatten(lists_of_energies)
         return tuple(energies)
 
@@ -245,12 +256,17 @@ def nupack_complex_base_pair_probabilities(
 
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
-        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna")
+        model = Model(
+            celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna"
+        )
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
 
-    nupack_strands = [NupackStrand(strand_.sequence(), name=strand_.name) for strand_ in strand_complex]
+    nupack_strands = [
+        NupackStrand(strand_.sequence(), name=strand_.name)
+        for strand_ in strand_complex
+    ]
     nupack_complex: NupackComplex = NupackComplex(nupack_strands)
     nupack_complex_set = NupackComplexSet(
         nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,))
@@ -287,7 +303,9 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     command_strs = (["wsl.exe", "-e"] if os_is_windows else []) + command_strs
 
     try:
-        with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as process:
+        with sub.Popen(
+            command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE
+        ) as process:
             output, stderr = process.communicate(user_input.encode())
     except BaseException as error:
         if process is not None:
@@ -298,6 +316,41 @@ def call_subprocess(command_strs: List[str], user_input: str) -> Tuple[str, str]
     stderr_decoded = stderr.decode()
 
     return output_decoded, stderr_decoded
+
+
+Mathews2004_params_loaded = False
+
+
+def load_params_viennarna():
+    import RNA
+    # loading takes 5-6 ms so skip if unnecessary
+    global Mathews2004_params_loaded
+    if not Mathews2004_params_loaded:
+        RNA.params_load_DNA_Mathews2004()
+        Mathews2004_params_loaded = True
+
+
+def rna_duplex(
+    seq1: S,
+    seq2: S,
+    temperature: float = default_temperature,
+    max_energy: float = 0.0,
+    gu_wobble: bool = False,
+) -> float:
+    """
+    TODO
+    """
+    import RNA
+
+    RNA.cvar.temperature = temperature
+    RNA.cvar.noGU = not gu_wobble
+
+    load_params_viennarna()
+
+    result = RNA.duplexfold(seq1, seq2)
+    energy = min(result.energy, max_energy)
+
+    return energy
 
 
 def rna_duplex_multiple(
@@ -332,12 +385,11 @@ def rna_duplex_multiple(
     :return:
         list of free energies, in the same order as `pairs`
     """
-
     import RNA
 
     RNA.cvar.temperature = temperature
     RNA.cvar.noGU = not gu_wobble
-    RNA.params_load_DNA_Mathews2004()
+    load_params_viennarna()
 
     energies = []
     if progress_bar:
@@ -423,7 +475,9 @@ def rna_duplex_multiple_deprecated(
 
     lines = [line for line in output.split("\n") if line.strip() != ""]
     if len(lines) != len(pairs):
-        raise ValueError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}")
+        raise ValueError(
+            f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}"
+        )
 
     energies = []
     for line in lines:
@@ -466,14 +520,20 @@ def rna_duplex_multiple_parallel(
         or (num_pairs < num_cores)
     )
 
-    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[str, str]]) -> Tuple[float, ...]:
-        return rna_duplex_multiple(pairs=seq_pairs, temperature=temperature, max_energy=max_energy)
+    def calculate_energies_sequential(
+        seq_pairs: Sequence[Tuple[str, str]],
+    ) -> Tuple[float, ...]:
+        return rna_duplex_multiple(
+            pairs=seq_pairs, temperature=temperature, max_energy=max_energy
+        )
 
     if call_sequential:
         return calculate_energies_sequential(pairs)
 
     lists_of_sequence_pairs = nc.chunker(pairs, num_chunks=num_cores)
-    lists_of_energies = thread_pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+    lists_of_energies = thread_pool.map(
+        calculate_energies_sequential, lists_of_sequence_pairs
+    )
     energies = nc.flatten(lists_of_energies)
     return tuple(energies)
 
@@ -564,7 +624,9 @@ def rna_plex_multiple(
     #     f.write(output)
     lines = [line for line in output.split("\n") if line.strip() != ""]
     if len(lines) != len(pairs):
-        raise ValueError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}")
+        raise ValueError(
+            f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}"
+        )
 
     energies = []
     for line in lines:
@@ -620,7 +682,9 @@ def nupack_multiple_with_sodium_magnesium(
 
         energies = []
         for seq1, seq2 in pairs:
-            energy = binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
+            energy = binding(
+                seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium
+            )
             energy = min(energy, max_energy)
             energies.append(energy)
 
@@ -661,7 +725,9 @@ def rna_plex_multiple_parallel(
         or (num_pairs < num_cores)
     )
 
-    def calculate_energies_sequential(seq_pairs: Sequence[Tuple[S, S]]) -> Tuple[float, ...]:
+    def calculate_energies_sequential(
+        seq_pairs: Sequence[Tuple[S, S]],
+    ) -> Tuple[float, ...]:
         return rna_plex_multiple(
             pairs=seq_pairs,
             logger=logger,
@@ -674,7 +740,9 @@ def rna_plex_multiple_parallel(
         return calculate_energies_sequential(pairs)
 
     lists_of_sequence_pairs = nc.chunker(pairs, num_chunks=num_cores)
-    lists_of_energies = thread_pool.map(calculate_energies_sequential, lists_of_sequence_pairs)
+    lists_of_energies = thread_pool.map(
+        calculate_energies_sequential, lists_of_sequence_pairs
+    )
     energies = nc.flatten(lists_of_energies)
     return tuple(energies)
 
@@ -685,7 +753,9 @@ def _fix_filename_windows(parameters_filename: str) -> str:
     #  which expects Linux-style paths (and has no idea what to do with 'C:\'). So we manually translate
     #  the absolute path. But this is fugly, and we should be not using absolute paths in this way.
     for drive in ["C", "c", "D", "d", "E", "e", "F", "f"]:
-        parameters_filename = parameters_filename.replace(f"{drive}:\\", f"/mnt/{drive.lower()}/")
+        parameters_filename = parameters_filename.replace(
+            f"{drive}:\\", f"/mnt/{drive.lower()}/"
+        )
     parameters_filename = parameters_filename.replace("\\", "/")
     return parameters_filename
 
@@ -739,7 +809,9 @@ def rna_cofold_multiple(
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
     # DNA sequences to type after RNAcofold starts up
-    user_input = "\n".join(seqpair[0] + "&" + seqpair[1] for seqpair in seq_pairs) + "\n@\n"
+    user_input = (
+        "\n".join(seqpair[0] + "&" + seqpair[1] for seqpair in seq_pairs) + "\n@\n"
+    )
 
     command_strs: List[str] = [
         "RNAcofold",
@@ -770,7 +842,9 @@ def rna_cofold_multiple(
         dg_list.append(energy)
 
     if len(lines) - 1 != len(seq_pairs):
-        raise AssertionError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}")
+        raise AssertionError(
+            f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}"
+        )
 
     dg_tuple = tuple(dg_list)
 
@@ -855,7 +929,8 @@ def binding(
     if seq1 > seq2:
         seq1, seq2 = seq2, seq1
     return pfunc((seq1, seq2), temperature, sodium, magnesium) - (
-        pfunc(seq1, temperature, sodium, magnesium) + pfunc(seq2, temperature, sodium, magnesium)
+        pfunc(seq1, temperature, sodium, magnesium)
+        + pfunc(seq2, temperature, sodium, magnesium)
     )
 
 
@@ -894,19 +969,32 @@ def domain_orthogonal(
         raise NotImplementedError()
 
     def binding_callback(s1: str, s2: str) -> float:
-        return binding(s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium)
+        return binding(
+            s1, s2, temperature=temperature, sodium=sodium, magnesium=magnesium
+        )
 
     if parallel:
-        results = [global_thread_pool.apply_async(binding_callback, args=(s, s)) for s in (seq, wc(seq))]
+        results = [
+            global_thread_pool.apply_async(binding_callback, args=(s, s))
+            for s in (seq, wc(seq))
+        ]
         energies = [result.get() for result in results]
         if max(energies) > orthogonality:
             return False
     else:
-        ss = binding(seq, seq, temperature=temperature, sodium=sodium, magnesium=magnesium)
+        ss = binding(
+            seq, seq, temperature=temperature, sodium=sodium, magnesium=magnesium
+        )
         log_energy(ss)
         if ss > orthogonality:
             return False
-        wsws = binding(wc(seq), wc(seq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+        wsws = binding(
+            wc(seq),
+            wc(seq),
+            temperature=temperature,
+            sodium=sodium,
+            magnesium=magnesium,
+        )
         log_energy(wsws)
         if wsws > orthogonality:
             return False
@@ -917,26 +1005,48 @@ def domain_orthogonal(
                 global_thread_pool.apply_async(
                     binding_callback, args=(seq1, seq2, temperature, sodium, magnesium)
                 )
-                for seq1, seq2 in itertools.product((seq, wc(seq)), (altseq, wc(altseq)))
+                for seq1, seq2 in itertools.product(
+                    (seq, wc(seq)), (altseq, wc(altseq))
+                )
             ]
             energies = [result.get() for result in results]
             if max(energies) > orthogonality:
                 return False
             energy_sum += sum(energies)
         else:
-            sa = binding(seq, altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
+            sa = binding(
+                seq, altseq, temperature=temperature, sodium=sodium, magnesium=magnesium
+            )
             log_energy(sa)
             if sa > orthogonality:
                 return False
-            sw = binding(seq, wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+            sw = binding(
+                seq,
+                wc(altseq),
+                temperature=temperature,
+                sodium=sodium,
+                magnesium=magnesium,
+            )
             log_energy(sw)
             if sw > orthogonality:
                 return False
-            wa = binding(wc(seq), altseq, temperature=temperature, sodium=sodium, magnesium=magnesium)
+            wa = binding(
+                wc(seq),
+                altseq,
+                temperature=temperature,
+                sodium=sodium,
+                magnesium=magnesium,
+            )
             log_energy(wa)
             if wa > orthogonality:
                 return False
-            ww = binding(wc(seq), wc(altseq), temperature=temperature, sodium=sodium, magnesium=magnesium)
+            ww = binding(
+                wc(seq),
+                wc(altseq),
+                temperature=temperature,
+                sodium=sodium,
+                magnesium=magnesium,
+            )
             log_energy(ww)
             if ww > orthogonality:
                 return False
@@ -974,7 +1084,8 @@ def domain_pairwise_concatenated_no_sec_struct(
         if parallel:
             results = [
                 global_thread_pool.apply_async(
-                    free_energy_single_strand, args=(seq1 + seq2, temperature, sodium, magnesium)
+                    free_energy_single_strand,
+                    args=(seq1 + seq2, temperature, sodium, magnesium),
                 )
                 for (seq1, seq2) in [
                     (seq, altseq),
@@ -994,32 +1105,55 @@ def domain_pairwise_concatenated_no_sec_struct(
                 return False
             energy_sum += sum(energies)
         else:
-            seq_alt = free_energy_single_strand(seq + altseq, temperature, sodium, magnesium)
+            seq_alt = free_energy_single_strand(
+                seq + altseq, temperature, sodium, magnesium
+            )
             if seq_alt > concat:
                 return False
-            seq_wcalt = free_energy_single_strand(seq + wc_altseq, temperature, sodium, magnesium)
+            seq_wcalt = free_energy_single_strand(
+                seq + wc_altseq, temperature, sodium, magnesium
+            )
             if seq_wcalt > concat:
                 return False
-            wcseq_alt = free_energy_single_strand(wc_seq + altseq, temperature, sodium, magnesium)
+            wcseq_alt = free_energy_single_strand(
+                wc_seq + altseq, temperature, sodium, magnesium
+            )
             if wcseq_alt > concat:
                 return False
-            wcseq_wcalt = free_energy_single_strand(wc_seq + wc_altseq, temperature, sodium, magnesium)
+            wcseq_wcalt = free_energy_single_strand(
+                wc_seq + wc_altseq, temperature, sodium, magnesium
+            )
             if wcseq_wcalt > concat:
                 return False
-            alt_seq = free_energy_single_strand(altseq + seq, temperature, sodium, magnesium)
+            alt_seq = free_energy_single_strand(
+                altseq + seq, temperature, sodium, magnesium
+            )
             if alt_seq > concat:
                 return False
-            alt_wcseq = free_energy_single_strand(altseq + wc_seq, temperature, sodium, magnesium)
+            alt_wcseq = free_energy_single_strand(
+                altseq + wc_seq, temperature, sodium, magnesium
+            )
             if alt_wcseq > concat:
                 return False
-            wcalt_seq = free_energy_single_strand(wc_altseq + seq, temperature, sodium, magnesium)
+            wcalt_seq = free_energy_single_strand(
+                wc_altseq + seq, temperature, sodium, magnesium
+            )
             if wcalt_seq > concat:
                 return False
-            wcalt_wcseq = free_energy_single_strand(wc_altseq + wc_seq, temperature, sodium, magnesium)
+            wcalt_wcseq = free_energy_single_strand(
+                wc_altseq + wc_seq, temperature, sodium, magnesium
+            )
             if wcalt_wcseq > concat:
                 return False
             energy_sum += (
-                seq_alt + seq_wcalt + wcseq_alt + wcseq_wcalt + alt_seq + alt_wcseq + wcalt_seq + wcalt_wcseq
+                seq_alt
+                + seq_wcalt
+                + wcseq_alt
+                + wcseq_wcalt
+                + alt_seq
+                + alt_wcseq
+                + wcalt_seq
+                + wcalt_wcseq
             )
     if concat_ave > 0:
         energy_ave = energy_sum / (8 * len(seqs)) if len(seqs) > 0 else 0.0
