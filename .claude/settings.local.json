@@ -10,7 +10,8 @@
       "Bash(cp:*)",
       "Bash(ruff format:*)",
       "Bash(pip install:*)",
-      "WebFetch(domain:docs.astral.sh)"
+      "WebFetch(domain:docs.astral.sh)",
+      "Bash(python test:*)"
     ],
     "defaultMode": "acceptEdits"
   }

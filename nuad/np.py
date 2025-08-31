@@ -944,6 +944,34 @@ class DNASeqList:
             raise ValueError("Cannot concatenate DNASeqList with different number of sequences")
         new_seqarr = np.concatenate((self.seqarr, other.seqarr), axis=1)
         return DNASeqList(seqarr=new_seqarr, rng=self.rng)
+    
+    def __add__(self, other: str) -> DNASeqList:
+        """
+        Append a string to the end of each sequence.
+        
+        Example: seqs + 'TT' appends 'TT' to each sequence.
+        """
+        if not isinstance(other, str):
+            raise TypeError(f"Can only concatenate str (not {type(other).__name__}) to DNASeqList")
+        # Convert string to array and repeat for each sequence
+        other_arr = seq2arr(other)
+        other_repeated = np.tile(other_arr, (self.numseqs, 1))
+        new_seqarr = np.concatenate((self.seqarr, other_repeated), axis=1)
+        return DNASeqList(seqarr=new_seqarr, rng=self.rng)
+    
+    def __radd__(self, other: str) -> DNASeqList:
+        """
+        Prepend a string to the beginning of each sequence.
+        
+        This handles the case of 'TT' + seqs where seqs is a DNASeqList.
+        """
+        if not isinstance(other, str):
+            raise TypeError(f"Can only concatenate str (not {type(other).__name__}) to DNASeqList")
+        # Convert string to array and repeat for each sequence
+        other_arr = seq2arr(other)
+        other_repeated = np.tile(other_arr, (self.numseqs, 1))
+        new_seqarr = np.concatenate((other_repeated, self.seqarr), axis=1)
+        return DNASeqList(seqarr=new_seqarr, rng=self.rng)
 
     def __repr__(self) -> str:
         return "DNASeqSet(seqs={})".format(str([self[i] for i in range(self.numseqs)]))
