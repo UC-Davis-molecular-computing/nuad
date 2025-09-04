@@ -2236,6 +2236,20 @@ class Domain(Part, JSONSerializable):
         # remove_duplicates()
         return domains
 
+    def all_domains_affected_by_sequence_change(self) -> List["Domain"]:
+        """List of all weakly connected domains to this domain in the dependency graph"""
+        domains = self.all_domains_intersecting()
+        stack = domains.copy()
+        while stack:
+            domain = stack.pop()
+            for dependent in domain.dependents:
+                dependent_domain = dependent[0]
+                intersecting_domains = dependent_domain.all_domains_intersecting()
+                stack.extend(intersecting_domains)
+                domains.extend(intersecting_domains)
+
+        return domains
+                
     def remove_duplicates(self, domains: List[Domain]) -> List[Domain]:
         domains_without_duplicates = []
         for candidate_domain in domains:
@@ -2353,8 +2367,8 @@ class Domain(Part, JSONSerializable):
         but returns this Domain if it is already assignable.
 
         :return:
-            the independent :any:`Domain` that this domain depends on,
-            which is *itself* if it is already independent
+            the assignable :any:`Domain` that this domain depends on,
+            which is *itself* if it is already assignable
         """
         if not self.assignable:
             return self.assignable_ancestors_or_descendants()
@@ -2424,10 +2438,10 @@ class Domain(Part, JSONSerializable):
                 f"A domain cannot be both assignable and fixed. Domain {self.name} is defined dependent and locked."
             )
 
-        if not (self.assignable or self.dependent or self.locked or self.fixed):
-            raise ValueError(
-                f"A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state."
-            )
+        # if not (self.assignable or self.dependent or self.locked or self.fixed):
+        #     raise ValueError(
+        #         f"A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state."
+        #     )
 
 
 def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
@@ -3772,6 +3786,13 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    domain_to_affected_domains: Dict[Domain, List[Domain]] = field(init=False)
+    """
+        Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes by key's sequence modification.
+
+        Computed in :data:`Design.compute_derived fields().
+        """
+
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
@@ -3780,6 +3801,7 @@ class Design(JSONSerializable):
         self.strands = strands if isinstance(strands, list) else list(strands)
         self.compute_derived_fields()
         self._domains_interned = {}
+        self.domain_to_affected_domains = {}
 
     def compute_derived_fields(self) -> None:
         """
@@ -3787,7 +3809,7 @@ class Design(JSONSerializable):
         the :any:`Design` was manually modified after being created, before running
         :meth:`search.search_for_dna_sequences`.
         """
-        # Get domains not explicitly listed on strands that are part of domain tree.
+        # Get domains not explicitly listed on strands that are part of domain directed graph.
         # Also set up quick access to domain by name, and ensure each domain name unique.
         self.domains_by_name = {}
         domains = []
@@ -3814,6 +3836,9 @@ class Design(JSONSerializable):
             self.strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
+
+        for domain in self.domains:
+            self.domain_to_affected_domains[domain] = domain.all_domains_affected_by_sequence_change()
 
         for strand in self.strands:
             strand.compute_derived_fields()

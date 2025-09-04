@@ -239,9 +239,6 @@ def create_design(width: int, height: int) -> nc.Design:
             if not w_domain.has_pool():
                 w_domain.pool = inner_pool
 
-            for domain in design.domains:
-                domain.assignable = True
-
     return design
 
 

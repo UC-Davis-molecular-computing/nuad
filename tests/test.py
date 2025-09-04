@@ -403,8 +403,8 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
                             |  \
                            b    e      e is assignable
                           | \   \\
-            c is fixed  *c   f    X    X is dependent on e
-                        | \
+                         c   f    X    X is dependent on e
+
                       *d   *g          g,d are fixed
         """
 
@@ -416,7 +416,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         # create the design
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
-        c = Domain("c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, g])
+        c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
             "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
@@ -446,7 +446,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         design.check_dependency_graphs_legal()
 
         self.assertEqual(e.dependents, [(X, dependency_function_reverses_sequence)])
-        self.assertEqual({a, b, e, c, f, d, g, X}, set(dependency_graph.nodes))
+        self.assertEqual({a, b, e, c, f, X}, set(dependency_graph.nodes))
         self.assertEqual(
             {(c, b), (f, b), (b, a), (e, a), (e, X)}, set(dependency_graph.edges)
         )
@@ -528,14 +528,14 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         self.assertEqual(h.sequence(), p.sequence()[10:])
         self.assertEqual(c.sequence(), a.sequence()[5:])
 
-    def test_check_check_exactly_one_unlocked_in_every_path(self):
+    def test_check_exactly_one_unlocked_in_every_path(self):
         """                  a
                             |  \
                            b    e      e is assignable
                           | \   \\
-            c is fixed  *c   f    X    X is dependent on e
-                        | \
-                      *d   *g          g,d are fixed
+                         c   f   X     X is dependent on e
+
+                       d   g           g,d are fixed
         """
 
         def dependency_function_reverses_sequence(
@@ -545,7 +545,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
-        c = Domain("c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, g])
+        c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
             "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
@@ -592,9 +592,9 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         """                          a                      p1       p1 depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
                                    b    e             a1   h1  \\
-                                  | \   \\          /  \        \\
-                                *c   f   X        b1    c1       d1
-                                | \
+                                  / \   \\          /  \        \\
+                                 c   f   X        b1    c1       d1
+
                               *d   *g
 
         """
@@ -606,7 +606,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
-        c = Domain("c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, g])
+        c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
             "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
@@ -639,7 +639,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         design.add_strand(domains=[b, e, p1], starred_domain_indices=[1])
         design.check_subdomain_graphs_legal()
 
-        design.add_strand(domains=[d, b1, f], starred_domain_indices=[1])
+        design.add_strand(domains=[c, b1, f], starred_domain_indices=[1])
 
         with self.assertRaises(ValueError) as error:
             design.check_subdomain_graphs_legal()
@@ -651,16 +651,16 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
             str(error.exception), "subdomains", "with shared"
         )
         self.assertIn("b", expected_ancestor)
+        self.assertIn("c", expected_subdomains)
         self.assertIn("f", expected_subdomains)
-        self.assertIn("d", expected_subdomains)
 
     def test_every_domain_overlap_with_a_strand(self):
-        """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
+        """                          a                     p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
                                    b    e             a1   h1  \\
-                                  | \   \\          /  \        \\
-                                *c   f   X        b1    c1       d1
-                                | \
+                                  /  \   \\          /  \        \\
+                                 c   f    X        b1    c1       d1
+
                               *d   *g
 
         """
@@ -672,10 +672,83 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
-        c = Domain("c", assign_domain_pool_of_length(10), fixed=True, subdomains=[d, g])
+        c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
-            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c,f]
+        )
+        X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
+        e = Domain(
+            "e",
+            assign_domain_pool_of_length(5),
+            assignable=True,
+            dependents=[(X, dependency_function)],
+        )
+        a = Domain(
+            "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, e]
+        )
+
+        d1 = Domain("d1", assign_domain_pool_of_length(5), assignable=True)
+        b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
+        c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
+        a1 = Domain(
+            "a1", assign_domain_pool_of_length(10), locked=True, subdomains=[b1, c1]
+        )
+        h1 = Domain("h1", assign_domain_pool_of_length(5), locked=True)
+        p1 = Domain(
+            "p1", assign_domain_pool_of_length(15), dependent=True, subdomains=[a1, h1]
+        )
+        d1.dependents.append((p1, dependency_function))
+
+        design = nc.Design()
+        design.add_strand(domains=[d, g, c, h1], starred_domain_indices=[1])
+
+        with self.assertRaises(ValueError) as error:
+            design.check_subdomain_graphs_legal()
+
+        expected_subdomains = extract_letters(
+            str(error.exception), "subdomain(s)", "are"
+        )
+        print(expected_subdomains)
+        self.assertIn("e", expected_subdomains)
+        self.assertIn("f", expected_subdomains)
+        self.assertIn("b1", expected_subdomains)
+        self.assertIn("c1", expected_subdomains)
+
+        design.strands = []
+        design.add_strand(domains=[f, a1], starred_domain_indices={1})
+
+        with self.assertRaises(ValueError) as error:
+            design.check_subdomain_graphs_legal()
+
+        expected_subdomains = extract_letters(
+            str(error.exception), "subdomain(s)", "are"
+        )
+        self.assertIn("c", expected_subdomains)
+        self.assertIn("e", expected_subdomains)
+        self.assertIn("h1", expected_subdomains)
+    def test_all_domains_affected(self):
+        """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
+                                    |  \                / \   \\
+                                   b    e             a1   h1  \\
+                                  / \   \\          /  \        \\
+                                 c   f   X        b1    c1       d1
+
+                              *d   *g
+
+        """
+
+        def dependency_function(
+            sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()
+        ):
+            return sequence[::-1] * 3
+
+        d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
+        g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
+        c = Domain("c", assign_domain_pool_of_length(10), locked=True)
+        f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
+        b = Domain(
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c,f]
         )
         X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
         e = Domain(
@@ -703,30 +776,10 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         design = nc.Design()
         design.add_strand(domains=[d, g, h1], starred_domain_indices=[1])
 
-        with self.assertRaises(ValueError) as error:
-            design.check_subdomain_graphs_legal()
-
-        expected_subdomains = extract_letters(
-            str(error.exception), "subdomain(s)", "are"
-        )
-        self.assertIn("e", expected_subdomains)
-        self.assertIn("f", expected_subdomains)
-        self.assertIn("b1", expected_subdomains)
-        self.assertIn("c1", expected_subdomains)
-
-        design.strands = []
-        design.add_strand(domains=[f, a1], starred_domain_indices={1})
-
-        with self.assertRaises(ValueError) as error:
-            design.check_subdomain_graphs_legal()
-
-        expected_subdomains = extract_letters(
-            str(error.exception), "subdomain(s)", "are"
-        )
-        self.assertIn("d", expected_subdomains)
-        self.assertIn("g", expected_subdomains)
-        self.assertIn("h1", expected_subdomains)
-
+        affected_domains = d1.all_domains_affected_by_sequence_change()
+        self.assertIn(p1, affected_domains)
+        self.assertIn(b1, affected_domains)
+        self.assertIn(c1, affected_domains)
 
 class TestDagObjectCreation(unittest.TestCase):
     def test_init(self) -> None:

@@ -133,12 +133,12 @@ def find_parts_to_check(
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
-            domains_in_dag = domain.all_domains_in_dag()
-            if len(domains_in_dag) == 1:
-                # no need to add if the "tree" is just this domain
-                assert next(iter(domains_in_dag)).name == domain.name
+            domains_affected = design.domain_to_affected_domains[domain]
+            if len(domains_affected) == 1:
+                # no need to add if the "dag" is just this domain
+                assert next(iter(domains_affected)).name == domain.name
             else:
-                domains_changed_full.update(domains_in_dag)
+                domains_changed_full.update(domains_affected)
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
@@ -464,7 +464,7 @@ def _assignable_domains_in_part(
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
     assignable_domains = []
     for domain in domains:
-        assignable_domains_connected_to_domain = domain.assignable_sources()
+        assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
         if assignable_domains_connected_to_domain not in assignable_domains:
             assignable_domains.extend(assignable_domains_connected_to_domain)
 
@@ -768,12 +768,12 @@ def _check_design(design: nc.Design) -> None:
     for strand in design.strands:
         for domain in strand.domains:
             # noinspection PyProtectedMember
-            if domain._pool is None and not (domain.fixed or domain.dependent):
+            if domain._pool is None and not (domain.fixed or domain.dependent or domain.locked):
                 raise ValueError(
                     f"for strand {strand.name}, it has a "
-                    f"non-fixed, non-dependent domain {domain.name} "
+                    f"non-fixed, non-dependent, unlocked domain {domain.name} "
                     f"with pool set to None.\n"
-                    f"For domains that are not fixed and not dependent, "
+                    f"For domains that are not fixed and not dependent and unlocked, "
                     f"exactly one of these must be None."
                 )
             # noinspection PyProtectedMember
@@ -783,11 +783,11 @@ def _check_design(design: nc.Design) -> None:
                     f"domain {domain.name} that is fixed, even though that Domain has a "
                     f"DomainPool.\nA Domain cannot be fixed and have a DomainPool."
                 )
-            elif domain._pool is not None and domain.dependent:
+            elif domain._pool is not None and domain.dependent and domain.locked:
                 raise ValueError(
                     f"for strand {strand.name}, it has a "
-                    f"domain {domain.name} that is dependent, even though that Domain has a "
-                    f"DomainPool.\nA Domain cannot be dependent and have a DomainPool."
+                    f"domain {domain.name} that is dependent or locked, even though that Domain has a "
+                    f"DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool."
                 )
 
 
@@ -1364,8 +1364,9 @@ def _reassign_domains(
     # fixed Domains should never be blamed for constraint violation
     assert all(not domain_changed.fixed for domain_changed in domains_changed)
 
-    # dependent domains also cannot be blamed, since their independent source should have been blamed
+    # dependent and locked domains also cannot be blamed, since their assignable source should have been blamed
     assert all(not domain_changed.dependent for domain_changed in domains_changed)
+    assert all(not domain_changed.locked for domain_changed in domains_changed)
 
     original_sequences: Dict[Domain, str] = {}
 
@@ -1733,8 +1734,8 @@ def assign_sequences_to_domains_randomly_from_pools(
         are subject to change by the subsequent search algorithm.
     """
     at_least_one_domain_unfixed = False
-    independent_domains = [domain for domain in design.domains if not domain.dependent]
-    for domain in independent_domains:
+    assignable_domains = [domain for domain in design.domains if not (domain.dependent or domain.locked or domain.fixed)]
+    for domain in assignable_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
             skip_nonfixed_msg = (
@@ -2413,7 +2414,7 @@ class Evaluation(Generic[DesignPart]):
         self.constraint = constraint
         self.violated = violated
         self.part = part
-        self.assignable_domains = frozenset(domains)
+        self.assignable_domains = frozenset(assignable_domains)
         self.score = score
         self.summary = summary
         self.result = result
