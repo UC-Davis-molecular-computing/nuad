@@ -134,6 +134,7 @@ def find_parts_to_check(
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
             domains_affected = design.domain_to_affected_domains[domain]
+            # domains_affected = domain.all_domains_intersecting()
             if len(domains_affected) == 1:
                 # no need to add if the "dag" is just this domain
                 assert next(iter(domains_affected)).name == domain.name
@@ -433,7 +434,7 @@ def _assignable_domains_in_part(
     :return:
         independent, non-fixed (if exclude_fixed is True) domains associated with part
         (e.g., all domains in :any:`Strand`), with dependent domains substituted with their
-        independent source via Domain.independent_source()
+        independent source via Domain.assignable_ancestors_or_descendants()
     """
     # first compute "direct" domains that appear directly on strands
     domains: List[Domain]
@@ -464,7 +465,13 @@ def _assignable_domains_in_part(
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
     assignable_domains = []
     for domain in domains:
-        assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
+        if domain.assignable:
+            assignable_domains_connected_to_domain = [domain]
+        else:
+            assignable_domains_connected_to_domain = (
+                domain.assignable_ancestors_or_descendants()
+            )
+
         if assignable_domains_connected_to_domain not in assignable_domains:
             assignable_domains.extend(assignable_domains_connected_to_domain)
 
@@ -768,7 +775,9 @@ def _check_design(design: nc.Design) -> None:
     for strand in design.strands:
         for domain in strand.domains:
             # noinspection PyProtectedMember
-            if domain._pool is None and not (domain.fixed or domain.dependent or domain.locked):
+            if domain._pool is None and not (
+                domain.fixed or domain.dependent or domain.locked
+            ):
                 raise ValueError(
                     f"for strand {strand.name}, it has a "
                     f"non-fixed, non-dependent, unlocked domain {domain.name} "
@@ -1734,7 +1743,11 @@ def assign_sequences_to_domains_randomly_from_pools(
         are subject to change by the subsequent search algorithm.
     """
     at_least_one_domain_unfixed = False
-    assignable_domains = [domain for domain in design.domains if not (domain.dependent or domain.locked or domain.fixed)]
+    assignable_domains = [
+        domain
+        for domain in design.domains
+        if not (domain.dependent or domain.locked or domain.fixed)
+    ]
     for domain in assignable_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
@@ -2780,14 +2793,18 @@ def display_report(
 
         # see if user set custom x limits for this constraint
         # not sure why getting mypy error on next line
-        xlim = _value_from_constraint_dict(xlims, report.constraint, None, tuple)  # type:ignore
+        xlim = _value_from_constraint_dict(
+            xlims, report.constraint, None, tuple
+        )  # type:ignore
         if xlim is not None:
             plt.xlim(xlim)
 
         if isinstance(ylims, (int, float)):
             plt.ylim(top=ylims)
         else:
-            ylim = _value_from_constraint_dict(ylims, report.constraint, None, tuple)  # type:ignore
+            ylim = _value_from_constraint_dict(
+                ylims, report.constraint, None, tuple
+            )  # type:ignore
             if ylim is not None:
                 plt.ylim(ylim)
 

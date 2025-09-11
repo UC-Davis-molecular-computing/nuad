@@ -1002,7 +1002,9 @@ class SubstringSampler(JSONSerializable):
             circular=circular,
         )
 
-    def to_json_serializable(self, suppress_indent: bool = True) -> Dict[str, Any]:  # noqa
+    def to_json_serializable(
+        self, suppress_indent: bool = True
+    ) -> Dict[str, Any]:  # noqa
         except_indices = (
             NoIndent(self.except_start_indices)
             if suppress_indent
@@ -1665,6 +1667,45 @@ class Domain(Part, JSONSerializable):
     length and individual :any:`DomainConstraint`'s.
     """
 
+    _subdomains: List[Domain] = field(init=False, default_factory=list)
+    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
+    """
+
+    parents: List[Domain] = field(init=False, default_factory=list)
+    """
+        Domains of which this is a subdomain. Note, this is not set manually, these are set by the library based on the Domain.subdomains of other domains in the same directed graph.
+    """
+    dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
+        init=False, default_factory=list
+    )
+    """
+
+List of tuples of domains and dependency functions which their sequence depends on this Domain's sequence. 
+
+Each tuple pairs a dependent Domain with a user-defined function that computes the dependent Domain's sequence based this Domain's sequence (its dependee) and randomness. 
+
+"""
+
+    locked_dependents: List[Domain] = field(init=False, default_factory=list)
+    """ 
+
+    List of locked Domains in the subdomains or parents list. 
+
+    If this Domain is locked, it will be exactly one or the other. If this Domain is unlocked, then all domains in this Domain's parents and subdomains are in locked_dependents.
+
+    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this domain. 
+
+    """
+    memoryview_sequence: memoryview | None = field(
+        init=False, repr=False, default=None, compare=False, hash=False
+    )
+    """
+
+This Domain's sequence is accessed by this memoryview object. 
+
+In fact, each Domain accesses its portion of the shared buffer (which here a is bytearray created inset_domains_memoryviews()) through memoryview slicing, eliminating data copying.
+
+"""
     weight: float = 1.0
     """
     Weight to apply before picking domain at random to change when re-assigning DNA sequences during search.
@@ -1696,62 +1737,33 @@ class Domain(Part, JSONSerializable):
 
     dependent: bool = False
     """
-    Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
-    However, domains can be subdivided hierarchically into a tree of domains by setting 
-    :data:`Domain.subdomains` to describe the tree. In this case exactly
-    one domain along every path from the root to any leaf must be independent, and the rest dependent:
-    the dependent domains will have their sequences calculated from the indepenedent ones.
 
-    A possible use case is that one strand represents a subsequence of M13 of length 300,
-    of which there are 7249 possible DNA sequences to assign based on the different
-    rotations of M13. If this strand is bound to several other strands, it will have
-    several domains, but they cannot be set independently of each other.
-    This can be done by creating a strand with a single long domain, which is subdivided into many dependent 
-    child domains.
-    Only the entire strand, the root domain, can be assigned at once, changing every domain at once,
-    so the domains are dependent on the root domain's assigned sequence.
+    Whether this Domain’s DNA sequence is dependent on others. The dependent domains will have their sequences calculated from the non-dependent ones.
+
+    A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example, suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of d's sequence are determined by c's. 
+
     """
-    assignable: bool = True
+    assignable: bool = False
+    """
+
+    Whether this Domain’s DNA sequence may be directly selected by the search algorithm for sequence assignment. This property is set to True either by not assigning True to any of the boolean properties locked, dependent, or fixed or by direct assigning.
+
+    """
 
     locked: bool = False
+    """
 
+    Whether this Domain’s DNA sequence is locked. Domains can be subdivided hierarchically into a directed acyclic graph of domains by setting Domain.subdomains to describe it. In this case exactly one domain along every path from the root to any leaf must be unlocked, and the rest locked: the locked domains will have their sequences calculated from the unlocked ones.
+
+    A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are 7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several other strands, it will have several domains, but they cannot be set independently of each other. This can be done by creating a strand with a single long domain, which is subdivided into many locked child domains. Only the entire strand, the root domain, can be assigned at once, changing every domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
+
+    """
     length: int | None = None
     """
     Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
     for the length. However, a :any:`Domain` with :data:`Domain.dependent` set to True has no
     :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
     """
-
-    _subdomains: List[Domain] = field(init=False, default_factory=list)
-    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
-    """
-
-    parents: List[Domain] = field(init=False, default_factory=list)
-    """Domains of which this is a subdomain. Note, this is not set manually, this is set by the library based 
-    on the :data:`Domain.subdomains` of other domains in the same tree.
-    """
-
-    dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
-        init=False, default_factory=list
-    )
-    """List of domains which their sequence depends on this domain's sequence.
-    """
-
-    locked_dependents: List[Domain] = field(init=False, default_factory=list)
-    """
-    List of locked domains in the subdomains or parents list. If this domain is locked, it will be exactly 
-    one or the other. If this domain is unlocked, then all domains in this domain’s parents and subdomains 
-    are in locked_dependents. Otherwise, if this domain is locked, then locked_dependents is all parents 
-    (which will all be unlocked since there is an unlocked descendant) if an unlocked domain is a descendant 
-    of this, otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) 
-    an unlocked domain is an ancestor of this, and then we set locked_dependents equal to all subdomains
-    (which will all be unlocked since there is an unlocked ancestor) of this domain.
-    """
-
-    memoryview_sequence: memoryview | None = field(
-        init=False, repr=False, default=None, compare=False, hash=False
-    )
-    """the domains sequence in the union bytearray"""
 
     def __init__(
         self,
@@ -1790,8 +1802,8 @@ class Domain(Part, JSONSerializable):
                 f"Domain name cannot end with *\ndomain name = {self.name}"
             )
 
-        if self.dependent or self.fixed or self.locked:
-            self.assignable = False
+        if not (self.dependent or self.fixed or self.locked):
+            self.assignable = True
 
         if self.fixed:
             if len(self._subdomains) > 0:
@@ -1940,26 +1952,13 @@ class Domain(Part, JSONSerializable):
     @property
     def subdomains(self) -> List["Domain"]:
         """
-        Subdomains of this :any:`Domain`.
+                Subdomains of this Domain.
 
-        Used in connection with :data:`Domain.dependent` to declare that
-        some :any:`Domain`'s are contained within other domains (forming a tree in general),
-        and domains with :data:`Domain.dependent` set to True automatically take their sequences from
-        independent domains.
+        Used in connection with Domain.lockedto declare that some Domain’s are contained within other domains (forming a directed graph in general), and domains with Domain.locked set to True automatically take their sequences from assignable or dependent domains.
 
-        WARNING: this can be a bit tricky to determine the order when setting these.
-        The subdomains should be listed in 5' to 3' order for UNSTARRED domains.
-        If there is a starred domain with starred subdomains, they would be listed in
-        REVERSE order.
+        WARNING: this can be a bit tricky to determine the order when setting these. The subdomains should be listed in 5’ to 3’ order for UNSTARRED domains. If there is a starred domain with starred subdomains, they would be listed in REVERSE order.
 
-        For example, if there is a domain `dom*`  ``[--------->`` of length 11
-        with two subdomains `sub1*` ``[----->`` of length 7 and `sub2*` ``[-->`` of length 4
-        (put together they look like ``[----->[-->``)
-        that appear
-        in that order left to right (5' to 3'), then one would assign the domain `dom` to have subdomains
-        ``[sub2, sub1]``, since the UNSTARRED domains appear ``<-----]<--]``, i.e., in 5' to 3' order
-        for the unstarred domains, first the length 4 domain `dom2` appears,
-        then the length 7 domain `dom1`.
+        For example, if there is a domain dom* [---------> of length 11 with two subdomains sub1* [-----> of length 7 and sub2* [--> of length 4 (put together they look like [----->[-->) that appear in that order left to right (5’ to 3’), then one would assign the domain dom to have subdomains [sub2, sub1], since the UNSTARRED domains appear <-----]<--], i.e., in 5’ to 3’ order for the unstarred domains, first the length 4 domain dom2 appears, then the length 7 domain dom1.
         """
         return self._subdomains
 
@@ -2028,7 +2027,10 @@ class Domain(Part, JSONSerializable):
 
     def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
         """
-        :param new_sequence: new DNA sequence to set
+
+        :param new_sequence:  new DNA sequence to set
+
+        :param fixed: this method has been called by Domain.set_fixed_sequence()
         """
 
         if self.fixed:
@@ -2068,6 +2070,13 @@ class Domain(Part, JSONSerializable):
 
         :param fixed_sequence: new fixed DNA sequence to set
         """
+        if self.fixed and self.memoryview_sequence.tobytes():
+            raise ValueError(
+                "cannot assign a new sequence to this Domain; its sequence is fixed as "
+                f"{self.memoryview_sequence.tobytes().decode(encoding='ascii')}"
+            )
+        else:
+            self.fixed = False  # temporary
 
         self.set_sequence(fixed_sequence, fixed=True)
 
@@ -2080,9 +2089,17 @@ class Domain(Part, JSONSerializable):
                 f"Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed"
             )
 
+        self.fixed = True
+        self.assignable = False
+
     def notify_sequence_changed(
         self, rng: np.random.Generator, notifier_domain: Domain
     ) -> None:
+        """
+        :param rng:
+        :param notifier_domain: The domain which its sequence has been changed and resulted this function call
+        """
+
         for dependent, f in self.dependents:
             new_dependent_sequence = f(self.sequence(), rng)
             dependent.set_sequence(new_dependent_sequence)
@@ -2167,7 +2184,7 @@ class Domain(Part, JSONSerializable):
 
     def _contains_any_assignable_subdomain_recursively(self) -> bool:
         """Returns true if the subdomain graph rooted at this domain contains
-        at least one independent subdomain.
+        at least one assignable subdomain.
 
         :rtype: bool
         """
@@ -2190,6 +2207,11 @@ class Domain(Part, JSONSerializable):
         return domains
 
     def all_domains_in_dag(self) -> Set["Domain"]:
+        """
+
+        :return: list of all domains in the same connected component (in the subdomain graph) as this domain.
+
+        """
         domains = set()
         stack = [self]
 
@@ -2211,9 +2233,9 @@ class Domain(Part, JSONSerializable):
 
     def all_domains_intersecting(self) -> List["Domain"]:
         """
-        :return:
-            list of all domains intersecting this one, meaning those domains in the subtree rooted
-            at this domain (including itself), plus any ancestors of this domain.
+
+        :return: list of all domains intersecting this one, meaning those domains in the subdomain DAG rooted at this domain (including itself), plus any ancestors of this domain.
+
         """
         domains = self.ancestors()
 
@@ -2237,7 +2259,7 @@ class Domain(Part, JSONSerializable):
         return domains
 
     def all_domains_affected_by_sequence_change(self) -> List["Domain"]:
-        """List of all weakly connected domains to this domain in the dependency graph"""
+        """List of domains that their sequence changes by self sequence modification"""
         domains = self.all_domains_intersecting()
         stack = domains.copy()
         while stack:
@@ -2245,12 +2267,27 @@ class Domain(Part, JSONSerializable):
             for dependent in domain.dependents:
                 dependent_domain = dependent[0]
                 intersecting_domains = dependent_domain.all_domains_intersecting()
+
+                # check any common domains (it happens if the dag has a cycle)
+                common = any(
+                    common_domain in intersecting_domains for common_domain in domains
+                )
+                if common:
+                    continue
+
                 stack.extend(intersecting_domains)
                 domains.extend(intersecting_domains)
 
         return domains
-                
+
     def remove_duplicates(self, domains: List[Domain]) -> List[Domain]:
+        """
+
+        List of domains that their sequence changes by self sequence modification
+
+        :param domains:
+
+        :return: New List derived from domains with no duplicated elements.
         domains_without_duplicates = []
         for candidate_domain in domains:
             duplicate = False
@@ -2262,6 +2299,7 @@ class Domain(Part, JSONSerializable):
                 domains_without_duplicates.append(candidate_domain)
 
             return domains_without_duplicates
+        """
 
     def ancestors(self) -> List["Domain"]:
         """
@@ -2270,9 +2308,6 @@ class Domain(Part, JSONSerializable):
         """
         ancestors = self.parents
         all_ancestors = []
-        # while ancestor is not None:
-        #     all_ancestors.append(ancestor)
-        #     ancestor = ancestor.parent
 
         while ancestors:
             older_ancestors = []
@@ -2288,14 +2323,6 @@ class Domain(Part, JSONSerializable):
         # note that this gets "sibling/cousin" domains as well
         # call _ancestors to get only ancestors
         domains = []
-
-        # parent = self.parent
-        # if parent is not None:
-        #     parent_domains = parent._get_all_domains_from_this_subtree(
-        #         excluded_subdomain=self
-        #     )
-        #     domains.extend(parent_domains)
-        #     domains.extend(parent._get_all_domains_from_parent())
         parents = self.parents
         for parent in parents:
             parent_domains = parent._get_all_domains_from_this_subtree(
@@ -2363,13 +2390,12 @@ class Domain(Part, JSONSerializable):
 
     def assignable_sources(self) -> list[Domain]:
         """
-        Like :meth:`assignable_ancestor_or_descendant`,
-        but returns this Domain if it is already assignable.
 
-        :return:
-            the assignable :any:`Domain` that this domain depends on,
-            which is *itself* if it is already assignable
+        Like :meth:`assignable_ancestor_or_descendant`, but returns this Domain if it is already assignable.
+
+        :return:  the assignable :any:`Domain` that this domain sequence changes if its sequence gets modified, which is *itself* if it is already assignable.
         """
+
         if not self.assignable:
             return self.assignable_ancestors_or_descendants()
         else:
@@ -2377,13 +2403,15 @@ class Domain(Part, JSONSerializable):
 
     def assignable_ancestors_or_descendants(self) -> list[Domain]:
         """
-        Find the assignable ancestor(s) or descendant(s) of this dependent :any:`Domain`.
-        Raises exception if this is not a dependent :any:`Domain`.
 
-        :return:
-            The assignable ancestor or descendant of this :any:`Domain`.
+        Find the assignable ancestor(s) or descendant(s) of this locked :any:`Domain`.
+
+        Raises exception if this is not a locked :any:`Domain`.
+
+        :return: The assignable ancestor or descendant of this :any:`Domain`.
+
         """
-        if self.assignable:
+        if self.assignable or self.dependent or self.fixed:
             raise ValueError(
                 "cannot call assignable_ancestors_or_descendants on an assignable Domain"
                 f" {self.name}"
@@ -2412,7 +2440,7 @@ class Domain(Part, JSONSerializable):
 
         return assignable_descendants
 
-    def check_exactly_one_state(self):
+    def check_exactly_one_state(self) -> None:
         if self.dependent and self.locked:
             raise ValueError(
                 f"A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked."
@@ -2438,13 +2466,21 @@ class Domain(Part, JSONSerializable):
                 f"A domain cannot be both assignable and fixed. Domain {self.name} is defined dependent and locked."
             )
 
-        # if not (self.assignable or self.dependent or self.locked or self.fixed):
-        #     raise ValueError(
-        #         f"A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state."
-        #     )
+        if not (self.assignable or self.dependent or self.locked or self.fixed):
+            raise ValueError(
+                f"A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state."
+            )
 
 
 def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
+    """
+
+    :param list_of_domains: list of domains to calculate if there is any domain having all of them as its descendants.
+
+    :return: The ancestor of all the domains in the list_of_domains, or None if there wasn't any.
+
+    """
+
     list_of_ancestors = []
     for domain in list_of_domains[1:]:
         list_of_ancestors.append(set(domain.ancestors()))
@@ -2631,9 +2667,13 @@ def set_domains_memoryviews(
     """
 
     visited_names = set()  # names of the domains contained in this dag
-    domain_name_to_interval = {}  # map each domain name to its indices in the union sequence
+    domain_name_to_interval = (
+        {}
+    )  # map each domain name to its indices in the union sequence
     domain_name_to_domain = {}  # map each domain name to its domain
-    domain_to_existing_sequences = {}  # map each domain with preassigned sequence to its sequence
+    domain_to_existing_sequences = (
+        {}
+    )  # map each domain with preassigned sequence to its sequence
 
     assign_intervals(
         initial_domain,
@@ -3838,7 +3878,9 @@ class Design(JSONSerializable):
         self.store_domain_pools()
 
         for domain in self.domains:
-            self.domain_to_affected_domains[domain] = domain.all_domains_affected_by_sequence_change()
+            self.domain_to_affected_domains[domain] = (
+                domain.all_domains_affected_by_sequence_change()
+            )
 
         for strand in self.strands:
             strand.compute_derived_fields()
@@ -5054,6 +5096,7 @@ class Design(JSONSerializable):
                             )
 
     def check_subdomain_graphs_legal(self) -> None:
+
         subdomain_graph = self._create_subdomain_digraph()
 
         self._check_subdomain_graph_is_dag(subdomain_graph)
@@ -5082,8 +5125,6 @@ class Design(JSONSerializable):
                     original_source, subdomain, []
                 )
                 if len(unlockeds) > 0:
-                    # Guess should add a second check to verify it's not a 'chained' fixed
-                    # subdomains sice they're totally legal.
 
                     unlocked_domains_str = ", ".join(
                         subdomain.name for subdomain in unlockeds
@@ -5134,6 +5175,7 @@ class Design(JSONSerializable):
                 )
 
     def check_dependency_graphs_legal(self) -> None:
+
         dependency_graph = self._create_dependency_digraph()
         self._check_dependency_graph_is_dag(dependency_graph)
         self._check_each_dependent_exactly_one_dependee(dependency_graph)
@@ -8337,7 +8379,9 @@ def energy_excess_domains(
     domain1: Domain,
     domain2: Domain,
 ) -> float:
-    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
+    threshold_value = (
+        0.0  # noqa; warns that variable isn't used even though it clearly is
+    )
     if isinstance(threshold, Number):
         threshold_value = threshold
     elif isinstance(threshold, dict):
