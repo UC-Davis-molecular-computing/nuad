@@ -76,9 +76,7 @@ def parse_command_line_arguments() -> CLArgs:
         help="directory in which to place output files",
     )
 
-    parser.add_argument(
-        "-s", "--seed", type=int, help="seed for random number generator"
-    )
+    parser.add_argument("-s", "--seed", type=int, help="seed for random number generator")
 
     parser.add_argument(
         "-w",
@@ -175,21 +173,13 @@ def create_design(width: int, height: int) -> nc.Design:
         design with `width` x `height` canvas of SSTs
     """
     numpy_filters = [
-        nc.NearestNeighborEnergyFilter(
-            -9.3, -9.0, 52.0
-        ),  # energies should all be "close"
+        nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),  # energies should all be "close"
         nc.RunsOfBasesFilter(["C", "G"], 4),  # forbid substrings of form {C,G}^4
-        nc.ForbiddenSubstringFilter(
-            ["AAAAA", "TTTTT"]
-        ),  # forbid 5 A's in a row or 5 T's in a row
+        nc.ForbiddenSubstringFilter(["AAAAA", "TTTTT"]),  # forbid 5 A's in a row or 5 T's in a row
     ]
 
-    domain_pool_10 = nc.DomainPool(
-        f"length-10_domains", 10, numpy_filters=numpy_filters
-    )
-    domain_pool_11 = nc.DomainPool(
-        f"length-11_domains", 11, numpy_filters=numpy_filters
-    )
+    domain_pool_10 = nc.DomainPool(f"length-10_domains", 10, numpy_filters=numpy_filters)
+    domain_pool_11 = nc.DomainPool(f"length-11_domains", 11, numpy_filters=numpy_filters)
 
     design = nc.Design()
 
@@ -325,9 +315,7 @@ def create_tile_no_gggg_constraint(weight: float) -> nc.StrandConstraint:
     #     |
     #     +==========--===========]
 
-    def evaluate(
-        seqs: Tuple[str, ...], strand: Optional[nc.Strand]
-    ) -> nc.Result:  # noqa
+    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:  # noqa
         sequence = seqs[0]
         if "GGGG" in sequence:
             result = nc.Result(

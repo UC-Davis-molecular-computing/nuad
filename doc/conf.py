@@ -36,9 +36,7 @@ author = "David Doty and Damien Woods"
 def extract_version(filename: str):
     with open(filename) as f:
         lines = f.readlines()
-    version_comment = (
-        "# version line; WARNING: do not remove or change this line or comment"
-    )
+    version_comment = "# version line; WARNING: do not remove or change this line or comment"
     for line in lines:
         if version_comment in line:
             idx = line.index(version_comment)

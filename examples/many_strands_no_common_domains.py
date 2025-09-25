@@ -121,9 +121,7 @@ def main() -> None:
     )
 
     if some_fixed:
-        for strand in design.strands[
-            1:
-        ]:  # skip all domains on strand 0 since all its domains are fixed
+        for strand in design.strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
             for domain in strand.domains[:2]:
                 if domain.name != "s1":  # skip for s1 since that domain is fixed
                     domain.pool = domain_pool_10

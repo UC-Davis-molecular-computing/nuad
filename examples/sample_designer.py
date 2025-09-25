@@ -99,18 +99,10 @@ def main() -> None:
 
     initial_design = nc.Design()
 
-    strand0: nc.Strand[str] = initial_design.add_strand(
-        ["s1", "w1", "n1", "e1"], name="strand 0"
-    )
-    strand1: nc.Strand[str] = initial_design.add_strand(
-        ["s2", "w2", "n2", "e2"], name="strand 1"
-    )
-    strand2: nc.Strand[None] = initial_design.add_strand(
-        ["n2*", "e1*", "n3*", "e3*"], name="strand 2"
-    )
-    strand3: nc.Strand[str] = initial_design.add_strand(
-        ["s4*", "w4*", "s1*", "w2*"], name="strand 3"
-    )
+    strand0: nc.Strand[str] = initial_design.add_strand(["s1", "w1", "n1", "e1"], name="strand 0")
+    strand1: nc.Strand[str] = initial_design.add_strand(["s2", "w2", "n2", "e2"], name="strand 1")
+    strand2: nc.Strand[None] = initial_design.add_strand(["n2*", "e1*", "n3*", "e3*"], name="strand 2")
+    strand3: nc.Strand[str] = initial_design.add_strand(["s4*", "w4*", "s1*", "w2*"], name="strand 3")
 
     if args.initial_design_filename is not None:
         with open(args.initial_design_filename, "r") as file:
@@ -128,10 +120,7 @@ def main() -> None:
 
     lengths = [9, 10, 11, 12]
     domain_pools = {
-        length: nc.DomainPool(
-            f"length-{length} domains", length, numpy_filters=numpy_filters
-        )
-        for length in lengths
+        length: nc.DomainPool(f"length-{length} domains", length, numpy_filters=numpy_filters) for length in lengths
     }
 
     for strand in [strand0, strand1]:

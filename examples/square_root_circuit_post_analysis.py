@@ -100,56 +100,40 @@ def process_line(line: str) -> None:
         gate_3p = strand_name_split[1]
         gate_5p = strand_name_split[2]
         assert len(line_split) == 5
-        signal_strands.append(
-            SignalStrand(
-                gate_3p=gate_3p, gate_5p=gate_5p, sequence=sequence, name=strand_name
-            )
-        )
+        signal_strands.append(SignalStrand(gate_3p=gate_3p, gate_5p=gate_5p, sequence=sequence, name=strand_name))
     elif strand_name.startswith("fuel"):
         assert len(strand_name_split) == 2
         gate_3p = strand_name_split[1]
         assert len(line_split) == 5
-        fuel_strands.append(
-            FuelStrand(gate_3p=gate_3p, sequence=sequence, name=strand_name)
-        )
+        fuel_strands.append(FuelStrand(gate_3p=gate_3p, sequence=sequence, name=strand_name))
     elif strand_name.startswith("gate_base"):
         assert len(strand_name_split) == 3
         gate = strand_name_split[2]
         assert len(line_split) == 5
-        gate_base_strands.append(
-            GateBaseStrand(gate=gate, sequence=sequence, name=strand_name)
-        )
+        gate_base_strands.append(GateBaseStrand(gate=gate, sequence=sequence, name=strand_name))
     elif strand_name.startswith("threshold_bottom"):
         assert len(strand_name_split) == 4
         input = strand_name_split[2]
         gate = strand_name_split[3]
         assert len(line_split) == 5
         threshold_bottom_strands.append(
-            ThresholdBottomStrand(
-                input=input, gate=gate, sequence=sequence, name=strand_name
-            )
+            ThresholdBottomStrand(input=input, gate=gate, sequence=sequence, name=strand_name)
         )
     elif strand_name.startswith("threshold_top"):
         assert len(strand_name_split) == 3
         gate = strand_name_split[2]
         assert len(line_split) == 3
-        threshold_top_strands.append(
-            ThresholdTopStrand(gate=gate, sequence=sequence, name=strand_name)
-        )
+        threshold_top_strands.append(ThresholdTopStrand(gate=gate, sequence=sequence, name=strand_name))
     elif strand_name.startswith("reporter_bottom"):
         assert len(strand_name_split) == 3
         gate = strand_name_split[2]
         assert len(line_split) == 4
-        reporter_bottom_strands.append(
-            ReporterBottomStrand(gate=gate, sequence=sequence, name=strand_name)
-        )
+        reporter_bottom_strands.append(ReporterBottomStrand(gate=gate, sequence=sequence, name=strand_name))
     elif strand_name.startswith("reporter_top"):
         assert len(strand_name_split) == 3
         gate = strand_name_split[2]
         assert len(line_split) == 3
-        reporter_top_strands.append(
-            ReporterTopStrand(gate=gate, sequence=sequence, name=strand_name)
-        )
+        reporter_top_strands.append(ReporterTopStrand(gate=gate, sequence=sequence, name=strand_name))
     else:
         raise ValueError("Unexpected strand name")
 
@@ -166,9 +150,7 @@ binding_width = 5
 binding_precision = 5
 
 
-def calculate_and_print_binding(
-    strand1: Strand, strand2: Strand, is_expected_to_bind: bool = False
-) -> None:
+def calculate_and_print_binding(strand1: Strand, strand2: Strand, is_expected_to_bind: bool = False) -> None:
     is_expected_to_bind_str = ""
     if is_expected_to_bind:
         is_expected_to_bind_str = "(expected to bind)"
@@ -189,15 +171,11 @@ def calculate_and_print_pairs_and_mfe(strands: Iterable[Strand]) -> None:
     strand_complex = Complex(nupack_strands)
 
     # Define the complex set to contain only one complex
-    complex_set = ComplexSet(
-        strands=nupack_strands, complexes=SetSpec(max_size=0, include=[strand_complex])
-    )
+    complex_set = ComplexSet(strands=nupack_strands, complexes=SetSpec(max_size=0, include=[strand_complex]))
 
     # Analyze the complex
     # Calculate pfunc, pairs, mfe
-    result = complex_analysis(
-        complex_set, compute=["pfunc", "pairs", "mfe"], model=model
-    )
+    result = complex_analysis(complex_set, compute=["pfunc", "pairs", "mfe"], model=model)
 
     complex_result = result[strand_complex]
     print(f"\nMFE proxy structure for complex {strand_complex.name}:")
@@ -214,9 +192,7 @@ def calculate_and_print_pairs_and_mfe(strands: Iterable[Strand]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Runs analysis of square root circuit DNA sequences."
-    )
+    parser = argparse.ArgumentParser(description="Runs analysis of square root circuit DNA sequences.")
     parser.add_argument("filename", help="The sequence.txt file.")
 
     args = parser.parse_args()
@@ -226,9 +202,7 @@ def main():
         for line in f:
             process_line(line)
     global longest_strand_name_length
-    longest_strand_name_length = reduce(
-        lambda acc, cur: max(acc, len(cur.name)), strands(), 0
-    )
+    longest_strand_name_length = reduce(lambda acc, cur: max(acc, len(cur.name)), strands(), 0)
 
     gate_5p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
     gate_3p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
@@ -249,26 +223,20 @@ def main():
     pfunc4_percision = 5
     for strand in strands():
         pfunc4_val = pfunc(strand.sequence)
-        print(
-            f"{format_strand_name(strand.name)} | pfunc: {pfunc4_val: {pfunc4_width}.{pfunc4_percision}}"
-        )
+        print(f"{format_strand_name(strand.name)} | pfunc: {pfunc4_val: {pfunc4_width}.{pfunc4_percision}}")
 
     print("\nCalculating binding between pairs of signal strands (including fuel)...")
     for strand1, strand2 in combinations(chain(signal_strands, fuel_strands), 2):
         calculate_and_print_binding(strand1, strand2)
 
-    print(
-        "\nCalculating base-pairing probabilities and MFE for each input:gate complex"
-    )
+    print("\nCalculating base-pairing probabilities and MFE for each input:gate complex")
     for gate_base_strand in gate_base_strands:
         assert gate_base_strand.gate in gate_5p_to_signal_strands
         output_strands = gate_5p_to_signal_strands[gate_base_strand.gate]
         for output_strand in output_strands:
             calculate_and_print_pairs_and_mfe([output_strand, gate_base_strand])
 
-    print(
-        "\nCalculating base-pairing probabilities and MFE for each gate:output complex"
-    )
+    print("\nCalculating base-pairing probabilities and MFE for each gate:output complex")
     for gate_base_strand in gate_base_strands:
         assert gate_base_strand.gate in gate_3p_to_signal_strands
         input_strands = gate_3p_to_signal_strands[gate_base_strand.gate]
@@ -276,9 +244,7 @@ def main():
             calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
 
     print("\nCalculating base-pairing probabilities and MFE for each gate:fuel complex")
-    gate_to_gate_base_strand: Dict[str, GateBaseStrand] = {
-        s.gate: s for s in gate_base_strands
-    }
+    gate_to_gate_base_strand: Dict[str, GateBaseStrand] = {s.gate: s for s in gate_base_strands}
     for fuel_strand in fuel_strands:
         assert fuel_strand.gate_3p in gate_to_gate_base_strand
         gate_base_strand = gate_to_gate_base_strand[fuel_strand.gate_3p]
@@ -288,38 +254,26 @@ def main():
     gate_to_threshold_top_strand = {s.gate: s for s in threshold_top_strands}
     for threshold_bottom_strand in threshold_bottom_strands:
         assert threshold_bottom_strand.gate in gate_to_threshold_top_strand
-        threshold_top_strand = gate_to_threshold_top_strand[
-            threshold_bottom_strand.gate
-        ]
-        calculate_and_print_pairs_and_mfe(
-            [threshold_top_strand, threshold_bottom_strand]
-        )
+        threshold_top_strand = gate_to_threshold_top_strand[threshold_bottom_strand.gate]
+        calculate_and_print_pairs_and_mfe([threshold_top_strand, threshold_bottom_strand])
 
-    print(
-        "\nCalculating base-pairing probabilities and MFE for each threshold waste complex"
-    )
+    print("\nCalculating base-pairing probabilities and MFE for each threshold waste complex")
     for threshold_bottom_strand in threshold_bottom_strands:
         assert (
             threshold_bottom_strand.input,
             threshold_bottom_strand.gate,
         ) in gate_3p_gate_5p_to_signal_strands
-        signal_strand = gate_3p_gate_5p_to_signal_strands[
-            (threshold_bottom_strand.input, threshold_bottom_strand.gate)
-        ]
+        signal_strand = gate_3p_gate_5p_to_signal_strands[(threshold_bottom_strand.input, threshold_bottom_strand.gate)]
         calculate_and_print_pairs_and_mfe([signal_strand, threshold_bottom_strand])
 
     print("\nCalculating base-pairing probabilities and MFE for each reporter complex")
-    gate_to_reporter_top_strand: Dict[int, ReporterTopStrand] = {
-        s.gate: s for s in reporter_top_strands
-    }
+    gate_to_reporter_top_strand: Dict[int, ReporterTopStrand] = {s.gate: s for s in reporter_top_strands}
     for reporter_bottom_strand in reporter_bottom_strands:
         assert reporter_bottom_strand.gate in gate_to_reporter_top_strand
         reporter_top_strand = gate_to_reporter_top_strand[reporter_bottom_strand.gate]
         calculate_and_print_pairs_and_mfe([reporter_top_strand, reporter_bottom_strand])
 
-    print(
-        "\nCalculating base-pairing probabilities and MFE for each reporter waste complex"
-    )
+    print("\nCalculating base-pairing probabilities and MFE for each reporter waste complex")
     for reporter_bottom_strand in reporter_bottom_strands:
         signal_strands = gate_5p_to_signal_strands[reporter_bottom_strand.gate]
         assert len(signal_strands) == 1

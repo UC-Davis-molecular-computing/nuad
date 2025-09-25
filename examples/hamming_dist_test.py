@@ -37,9 +37,7 @@ def main():
         random_seed=random_seed,
         max_iterations=None,
     )
-    params.force_overwrite = (
-        True  # directly deletes output folder contents w/o user input
-    )
+    params.force_overwrite = True  # directly deletes output folder contents w/o user input
     # params.report_delay = 0.0
 
     design = nc.Design(strands)

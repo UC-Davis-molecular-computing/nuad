@@ -86,9 +86,7 @@ class Modification(JSONSerializable, ABC):
         if self.id == _default_modification_id:
             object.__setattr__(self, "id", self.vendor_code)
 
-    def to_json_serializable(
-        self, suppress_indent: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = {mod_vendor_code_key: self.vendor_code, mod_id_key: self.id}
         return ret
 
@@ -116,9 +114,7 @@ class Modification(JSONSerializable, ABC):
 class Modification5Prime(Modification):
     """5' modification of DNA sequence, e.g., biotin or Cy3."""
 
-    def to_json_serializable(
-        self, suppress_indent: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "5'"
         return ret
@@ -137,18 +133,14 @@ class Modification5Prime(Modification):
         return ModificationType.five_prime
 
     def to_scadnano_modification(self) -> sc.Modification5Prime:
-        return sc.Modification5Prime(
-            display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id
-        )
+        return sc.Modification5Prime(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id)
 
 
 @dataclass(frozen=True, eq=True)
 class Modification3Prime(Modification):
     """3' modification of DNA sequence, e.g., biotin or Cy3."""
 
-    def to_json_serializable(
-        self, suppress_indent: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "3'"
         return ret
@@ -167,9 +159,7 @@ class Modification3Prime(Modification):
         return ModificationType.three_prime
 
     def to_scadnano_modification(self) -> sc.Modification3Prime:
-        return sc.Modification3Prime(
-            display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id
-        )
+        return sc.Modification3Prime(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id)
 
 
 @dataclass(frozen=True, eq=True)
@@ -185,21 +175,15 @@ class ModificationInternal(Modification):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.allowed_bases is not None and not isinstance(
-            self.allowed_bases, frozenset
-        ):
+        if self.allowed_bases is not None and not isinstance(self.allowed_bases, frozenset):
             object.__setattr__(self, "allowed_bases", frozenset(self.allowed_bases))
 
-    def to_json_serializable(
-        self, suppress_indent: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "internal"
         if self.allowed_bases is not None:
             ret[mod_allowed_bases_key] = (
-                NoIndent(list(self.allowed_bases))
-                if suppress_indent
-                else list(self.allowed_bases)
+                NoIndent(list(self.allowed_bases)) if suppress_indent else list(self.allowed_bases)
             )
         return ret
 
@@ -211,12 +195,8 @@ class ModificationInternal(Modification):
         assert location == "internal"
         idt_text = json_map.get(mod_vendor_code_key)
         allowed_bases_list = json_map.get(mod_allowed_bases_key)
-        allowed_bases = (
-            frozenset(allowed_bases_list) if allowed_bases_list is not None else None
-        )
-        return ModificationInternal(
-            vendor_code=idt_text, id=id_, allowed_bases=allowed_bases
-        )
+        allowed_bases = frozenset(allowed_bases_list) if allowed_bases_list is not None else None
+        return ModificationInternal(vendor_code=idt_text, id=id_, allowed_bases=allowed_bases)
 
     @staticmethod
     def modification_type() -> ModificationType:

@@ -57,11 +57,7 @@ class Stopwatch:
     @property
     def duration_ns(self) -> int:
         # not supported in Python 3.6
-        return (
-            self._end - self._start
-            if self._end
-            else _current_nanoseconds() - self._start
-        )
+        return self._end - self._start if self._end else _current_nanoseconds() - self._start
 
     @property
     def running(self) -> bool:
@@ -138,10 +134,7 @@ class Stopwatch:
         elif units == "ns":
             return f"{ns:.2f} ns"
         else:
-            raise ValueError(
-                f"units = {units} is not a legal unit, please choose one of "
-                f"'s', 'ms', 'us', 'ns'"
-            )
+            raise ValueError(f"units = {units} is not a legal unit, please choose one of 's', 'ms', 'us', 'ns'")
 
     def log(
         self,

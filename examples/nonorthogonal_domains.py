@@ -62,9 +62,7 @@ def main() -> None:
         energy_high = target_energy
         thresholds[(d1, d2)] = (energy_low, energy_high)
 
-    domain_nupack_pair_nonorth_constraint = (
-        nc.nupack_domain_pairs_nonorthogonal_constraint(thresholds=thresholds)
-    )
+    domain_nupack_pair_nonorth_constraint = nc.nupack_domain_pairs_nonorthogonal_constraint(thresholds=thresholds)
 
     params = ns.SearchParameters(
         constraints=[

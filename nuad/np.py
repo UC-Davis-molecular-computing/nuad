@@ -133,17 +133,13 @@ def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndar
     digits = np.array(digits, dtype=np.ubyte)
 
     arr = np.zeros((num_seqs, length), dtype=np.ubyte)
-    for i, j, c in zip(
-        reversed(powers_num_digits), powers_num_digits, list(range(length))
-    ):
+    for i, j, c in zip(reversed(powers_num_digits), powers_num_digits, list(range(length))):
         arr[:, c] = np.tile(np.repeat(digits, i), j)
 
     return arr
 
 
-def make_array_with_all_dna_seqs(
-    length: int, bases: Collection[str] = ("A", "C", "G", "T")
-) -> np.ndarray:
+def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ("A", "C", "G", "T")) -> np.ndarray:
     """Return 2D numpy array with all DNA sequences of given length in
     lexicographic order. Bases contains bases to be used: ('A','C','G','T') by
     default, but can be set to a subset of these.
@@ -220,9 +216,7 @@ def make_array_with_random_subset_of_dna_seqs(
     if num_random_seqs <= 0:
         raise ValueError(f"num_seqs = {num_random_seqs} must be positive")
     if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(
-            f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}"
-        )
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
     if len(bases) == 0:
         raise ValueError("bases cannot be empty")
     elif len(bases) == 1:
@@ -328,9 +322,7 @@ def make_array_with_all_dna_seqs_hamming_distance(
     if num_bases == 0:
         raise ValueError("bases cannot be empty")
     if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(
-            f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}"
-        )
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
 
     num_ways_to_choose_subsequence_indices = comb(length, dist)
     num_different_bases = len(bases) - 1
@@ -342,9 +334,9 @@ def make_array_with_all_dna_seqs_hamming_distance(
     offsets = range(1, num_different_bases + 1)
     subseq_offsets = make_array_with_all_sequences(length=dist, digits=offsets)
     assert len(subseq_offsets) == num_subsequences
-    subseq_offsets_repeats = np.tile(
-        subseq_offsets.flatten(), num_ways_to_choose_subsequence_indices
-    ).reshape(num_seqs, dist)
+    subseq_offsets_repeats = np.tile(subseq_offsets.flatten(), num_ways_to_choose_subsequence_indices).reshape(
+        num_seqs, dist
+    )
 
     # all (length choose dist) indices where we could change the bases
     idxs = combnr_idxs(length, dist)
@@ -421,9 +413,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
         2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
     """
     if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(
-            f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}"
-        )
+        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
     if len(bases) == 0:
         raise ValueError("bases cannot be empty")
     elif len(bases) == 1:
@@ -434,9 +424,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     if dist < 1:
         raise ValueError(f"dist must be positive, but dist = {dist}")
     if dist > length:
-        raise ValueError(
-            f'should have dist <= len("{seq}") = {length}, but dist = {dist}'
-        )
+        raise ValueError(f'should have dist <= len("{seq}") = {length}, but dist = {dist}')
 
     num_different_bases = len(bases) - 1
 
@@ -447,9 +435,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
     # for simplicity of modular arithmetic, we use integers 0,...,len(bases)-1 to represent the bases,
     # then map these back to the correct subset of 0,1,2,3 when we are done
-    subseq_offsets = rng.integers(
-        low=1, high=num_different_bases + 1, size=(num_seqs, dist)
-    )
+    subseq_offsets = rng.integers(low=1, high=num_different_bases + 1, size=(num_seqs, dist))
     assert len(subseq_offsets) == num_seqs
 
     # all (length choose dist) indices where we could change the bases
@@ -485,9 +471,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
 
 
 # https://stackoverflow.com/a/59328647/5339430
-def random_choice_noreplace(
-    lst: np.ndarray, n_sample: int, num_draw: int, rng: np.random.Generator
-) -> np.ndarray:
+def random_choice_noreplace(lst: np.ndarray, n_sample: int, num_draw: int, rng: np.random.Generator) -> np.ndarray:
     # lst: 1-D array or list
     # n_sample: sample size for each draw
     # num_draw: number of draws
@@ -495,15 +479,11 @@ def random_choice_noreplace(
     # Intuition: Randomly generate numbers, get the index of the smallest n_sample number for each row.
     lst = np.array(lst)
     random_array_floats = rng.random((num_draw, len(lst)))
-    return lst[
-        np.argpartition(random_array_floats, n_sample - 1, axis=-1)[:, :n_sample]
-    ]
+    return lst[np.argpartition(random_array_floats, n_sample - 1, axis=-1)[:, :n_sample]]
 
 
 # @lru_cache(maxsize=10000000)
-def longest_common_substring(
-    a1: np.ndarray, a2: np.ndarray, vectorized: bool = True
-) -> Tuple[int, int, int]:
+def longest_common_substring(a1: np.ndarray, a2: np.ndarray, vectorized: bool = True) -> Tuple[int, int, int]:
     """Return start and end indices (a1start, a2start, length) of longest common
     substring (subarray) of 1D arrays a1 and a2."""
     assert len(a1.shape) == 1
@@ -537,9 +517,7 @@ def longest_common_substring(
 
 
 # @lru_cache(maxsize=10000000)
-def longest_common_substrings_singlea1(
-    a1: np.ndarray, a2s: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def longest_common_substrings_singlea1(a1: np.ndarray, a2s: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return start and end indices (a1starts, a2starts, lengths) of longest common
     substring (subarray) of 1D array a1 and rows of 2D array a2s.
 
@@ -571,9 +549,7 @@ def longest_common_substrings_singlea1(
 
 
 # @lru_cache(maxsize=10000000)
-def longest_common_substrings_product(
-    a1s: np.ndarray, a2s: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def longest_common_substrings_product(a1s: np.ndarray, a2s: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return start and end indices (a1starts, a2starts, lengths) of longest common
     substring (subarray) of each pair in the cross product of rows of a1s and a2s.
 
@@ -584,9 +560,7 @@ def longest_common_substrings_product(
     a1s_cp = np.repeat(a1s, numa2s, axis=0)
     a2s_cp = np.tile(a2s, (numa1s, 1))
 
-    a1idx_longest, a2idx_longest, len_longest = _longest_common_substrings_pairs(
-        a1s_cp, a2s_cp
-    )
+    a1idx_longest, a2idx_longest, len_longest = _longest_common_substrings_pairs(a1s_cp, a2s_cp)
 
     a1idx_longest = a1idx_longest.reshape(numa1s, numa2s)
     a2idx_longest = a2idx_longest.reshape(numa1s, numa2s)
@@ -596,15 +570,11 @@ def longest_common_substrings_product(
 
 
 def pair_index(n: int) -> np.ndarray:
-    index = np.fromiter(
-        it.chain.from_iterable(it.combinations(range(n), 2)), int, count=n * (n - 1)
-    )
+    index = np.fromiter(it.chain.from_iterable(it.combinations(range(n), 2)), int, count=n * (n - 1))
     return index.reshape(-1, 2)
 
 
-def _longest_common_substrings_pairs(
-    a1s: np.ndarray, a2s: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _longest_common_substrings_pairs(a1s: np.ndarray, a2s: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     assert len(a1s.shape) == 2
     assert len(a2s.shape) == 2
     assert a1s.shape[0] == a2s.shape[0]
@@ -670,9 +640,7 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
 
         # find matching chars and extend length of substring
         match_idxs = a2s == a1s_col_rp
-        match_shifted_idxs = np.hstack(
-            [np.zeros(shape=(numpairs, 1), dtype=bool), match_idxs]
-        )
+        match_shifted_idxs = np.hstack([np.zeros(shape=(numpairs, 1), dtype=bool), match_idxs])
         counter[i1 + 1, match_shifted_idxs] = counter[i1, match_idxs] + 1
 
         if i1 > 0:
@@ -682,16 +650,12 @@ def _strongest_common_substrings_all_pairs_return_energies_and_counter(
             loops = (prev_bases << 2) + cur_bases
             latest_energies = loop_energies[loops].reshape(numpairs, 1)
             latest_energies_rp = np.repeat(latest_energies, len_a2, axis=1)
-            match_idxs_false_at_end = np.hstack(
-                [match_idxs, np.zeros(shape=(numpairs, 1), dtype=bool)]
-            )
+            match_idxs_false_at_end = np.hstack([match_idxs, np.zeros(shape=(numpairs, 1), dtype=bool)])
             both_match_idxs = match_idxs_false_at_end & prev_match_shifted_idxs
             prev_match_shifted_shifted_idxs = np.hstack(
                 [np.zeros(shape=(numpairs, 1), dtype=bool), prev_match_shifted_idxs]
             )[:, :-1]
-            both_match_shifted_idxs = (
-                match_shifted_idxs & prev_match_shifted_shifted_idxs
-            )
+            both_match_shifted_idxs = match_shifted_idxs & prev_match_shifted_shifted_idxs
             energies[i1 + 1, both_match_shifted_idxs] = (
                 energies[i1, both_match_idxs] + latest_energies_rp[both_match_idxs]
             )
@@ -716,26 +680,16 @@ def _strongest_common_substrings_all_pairs(
     len_a1 = a1s.shape[1]
     len_a2 = a2s.shape[1]
 
-    counter, energies = (
-        _strongest_common_substrings_all_pairs_return_energies_and_counter(
-            a1s, a2s, temperature
-        )
-    )
+    counter, energies = _strongest_common_substrings_all_pairs_return_energies_and_counter(a1s, a2s, temperature)
 
     counter_flat = counter.reshape(numpairs, (len_a1 + 1) * (len_a2 + 1))
     energies_flat = energies.reshape(numpairs, (len_a1 + 1) * (len_a2 + 1))
 
     idx_strongest_raveled = np.argmax(energies_flat, axis=1)
-    len_strongest = counter_flat[
-        np.arange(counter_flat.shape[0]), idx_strongest_raveled
-    ]
-    energy_strongest = energies_flat[
-        np.arange(counter_flat.shape[0]), idx_strongest_raveled
-    ]
+    len_strongest = counter_flat[np.arange(counter_flat.shape[0]), idx_strongest_raveled]
+    energy_strongest = energies_flat[np.arange(counter_flat.shape[0]), idx_strongest_raveled]
 
-    idx_strongest = np.unravel_index(
-        idx_strongest_raveled, shape=(len_a1 + 1, len_a2 + 1)
-    )
+    idx_strongest = np.unravel_index(idx_strongest_raveled, shape=(len_a1 + 1, len_a2 + 1))
     a1idx_strongest = idx_strongest[0] - len_strongest
     a2idx_strongest = idx_strongest[1] - len_strongest
 
@@ -750,8 +704,8 @@ def strongest_common_substrings_all_pairs_string(
     indices lengths, and energies of strongest complementary substrings."""
     a1s = seqs2arr(seqs1)
     a2s = seqs2arr(seqs2)
-    a1idx_strongest, a2idx_strongest, len_strongest, energy_strongest = (
-        _strongest_common_substrings_all_pairs(a1s, wc_arr(a2s), temperature)
+    a1idx_strongest, a2idx_strongest, len_strongest, energy_strongest = _strongest_common_substrings_all_pairs(
+        a1s, wc_arr(a2s), temperature
     )
     return (
         list(a1idx_strongest),
@@ -761,13 +715,11 @@ def strongest_common_substrings_all_pairs_string(
     )
 
 
-def energies_strongest_common_substrings(
-    seqs1: Sequence[str], seqs2: Sequence[str], temperature: float
-) -> List[float]:
+def energies_strongest_common_substrings(seqs1: Sequence[str], seqs2: Sequence[str], temperature: float) -> List[float]:
     a1s = seqs2arr(seqs1)
     a2s = seqs2arr(seqs2)
-    a1idx_strongest, a2idx_strongest, len_strongest, energy_strongest = (
-        _strongest_common_substrings_all_pairs(a1s, wc_arr(a2s), temperature)
+    a1idx_strongest, a2idx_strongest, len_strongest, energy_strongest = _strongest_common_substrings_all_pairs(
+        a1s, wc_arr(a2s), temperature
     )
     return list(energy_strongest)
 
@@ -854,13 +806,10 @@ class DNASeqList:
         :param rng:
             numpy random number generator (type returned by numpy.random.default_rng())
         """
-        for v1, v2 in it.combinations(
-            [length, seqs, seqarr, filename, hamming_distance_from_sequence], 2
-        ):
+        for v1, v2 in it.combinations([length, seqs, seqarr, filename, hamming_distance_from_sequence], 2):
             if v1 is not None and v2 is not None:
                 raise ValueError(
-                    "exactly one of length, seqs, seqarr, filename, or "
-                    "hamming_distance_from_sequence must be non-None"
+                    "exactly one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be non-None"
                 )
         self.rng = rng
         if seqarr is not None:
@@ -882,9 +831,7 @@ class DNASeqList:
 
         elif length is not None:
             if num_random_seqs is None:
-                self.seqarr = make_array_with_all_dna_seqs(
-                    length=length, bases=alphabet
-                )
+                self.seqarr = make_array_with_all_dna_seqs(length=length, bases=alphabet)
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs(
                     length=length,
@@ -898,26 +845,21 @@ class DNASeqList:
         elif hamming_distance_from_sequence is not None:
             dist, seq = hamming_distance_from_sequence
             if num_random_seqs is None:
-                self.seqarr = make_array_with_all_dna_seqs_hamming_distance(
-                    dist=dist, seq=seq, bases=alphabet
-                )
+                self.seqarr = make_array_with_all_dna_seqs_hamming_distance(dist=dist, seq=seq, bases=alphabet)
             else:
-                self.seqarr = (
-                    make_array_with_random_subset_of_dna_seqs_hamming_distance(
-                        num_seqs=num_random_seqs,
-                        dist=dist,
-                        seq=seq,
-                        rng=self.rng,
-                        bases=alphabet,
-                    )
+                self.seqarr = make_array_with_random_subset_of_dna_seqs_hamming_distance(
+                    num_seqs=num_random_seqs,
+                    dist=dist,
+                    seq=seq,
+                    rng=self.rng,
+                    bases=alphabet,
                 )
             self.seqlen = len(seq)
             self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
 
         else:
             raise ValueError(
-                "at least one of length, seqs, seqarr, filename, or "
-                "hamming_distance_from_sequence must be specified"
+                "at least one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be specified"
             )
 
         self.shift = np.arange(2 * (self.seqlen - 1), -1, -2)
@@ -925,9 +867,7 @@ class DNASeqList:
         if shuffle:
             self.shuffle()
 
-    def random_choice(
-        self, num: int, rng: np.random.Generator = default_rng, replace: bool = False
-    ) -> List[str]:
+    def random_choice(self, num: int, rng: np.random.Generator = default_rng, replace: bool = False) -> List[str]:
         """
         Returns random choice of `num` DNA sequence(s) (represented as list of Python strings).
 
@@ -1180,18 +1120,8 @@ class DNASeqList:
         good = (
             ((left == cbits) | (left == gbits))
             & ((right == cbits) | (right == gbits))
-            & (
-                (left_p1 == abits)
-                | (left_p1 == tbits)
-                | (left_p2 == abits)
-                | (left_p2 == tbits)
-            )
-            & (
-                (right_m1 == abits)
-                | (right_m1 == tbits)
-                | (right_m2 == abits)
-                | (right_m2 == tbits)
-            )
+            & ((left_p1 == abits) | (left_p1 == tbits) | (left_p2 == abits) | (left_p2 == tbits))
+            & ((right_m1 == abits) | (right_m1 == tbits) | (right_m2 == abits) | (right_m2 == tbits))
         )
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
@@ -1204,9 +1134,7 @@ class DNASeqList:
         right = self.seqarr[:, -1]
         abits = base2bits["A"]
         tbits = base2bits["T"]
-        good = ((left == abits) | (left == tbits)) & (
-            (right == abits) | (right == tbits)
-        )
+        good = ((left == abits) | (left == tbits)) & ((right == abits) | (right == tbits))
         if gc_near_end:
             cbits = base2bits["C"]
             gbits = base2bits["G"]
@@ -1216,18 +1144,8 @@ class DNASeqList:
             right_m2 = self.seqarr[:, -3]
             good = (
                 good
-                & (
-                    (left_p1 == cbits)
-                    | (left_p1 == gbits)
-                    | (left_p2 == cbits)
-                    | (left_p2 == gbits)
-                )
-                & (
-                    (right_m1 == cbits)
-                    | (right_m1 == gbits)
-                    | (right_m2 == cbits)
-                    | (right_m2 == gbits)
-                )
+                & ((left_p1 == cbits) | (left_p1 == gbits) | (left_p2 == cbits) | (left_p2 == gbits))
+                & ((right_m1 == cbits) | (right_m1 == gbits) | (right_m2 == cbits) | (right_m2 == gbits))
             )
         seqarrpass = self.seqarr[good]
         return DNASeqList(seqarr=seqarrpass)
@@ -1265,9 +1183,7 @@ class DNASeqList:
         return int(first_index)
 
 
-def create_toeplitz(
-    seqlen: int, sublen: int, indices: Sequence[int] | None = None
-) -> np.ndarray:
+def create_toeplitz(seqlen: int, sublen: int, indices: Sequence[int] | None = None) -> np.ndarray:
     """Creates a toeplitz matrix, useful for finding subsequences.
 
     `seqlen` is length of larger sequence; `sublen` is length of substring we're checking for.
@@ -1280,13 +1196,10 @@ def create_toeplitz(
         rows = sorted(list(set(indices)))
         for idx in rows:
             if idx < 0:
-                raise ValueError(
-                    f"index must be nonnegative, but {idx} is not; all indices = {indices}"
-                )
+                raise ValueError(f"index must be nonnegative, but {idx} is not; all indices = {indices}")
             if idx >= seqlen - (sublen - 1):
                 raise ValueError(
-                    f"index must be less than {seqlen - (sublen - 1)}, "
-                    f"but {idx} is not; all indices = {indices}"
+                    f"index must be less than {seqlen - (sublen - 1)}, but {idx} is not; all indices = {indices}"
                 )
     num_rows = len(rows)
     num_cols = seqlen
@@ -1389,15 +1302,11 @@ _dS = np.array(
 #                  # GA/CA GA/CG    AG    AT    CA    CC    CG    CT   GA    GC    GG    GT    TA   TC    TG   TT
 # _nndGsmm = np.array([0.17,-1.44,-1.28,-0.88,-1.45,-1.84,-2.17,-1.28,-1.3,-2.24,-1.84,-1.44,-0.58,-1.3,-1.45,-1.0], dtype=np.float32)
 
-_all_pairs = [
-    ((i << 2) + j, bits2base[i] + bits2base[j]) for i in range(4) for j in range(4)
-]
+_all_pairs = [((i << 2) + j, bits2base[i] + bits2base[j]) for i in range(4) for j in range(4)]
 
 
 @lru_cache(maxsize=32)
-def calculate_loop_energies_dict(
-    temperature: float, negate: bool = False
-) -> Dict[str, float]:
+def calculate_loop_energies_dict(temperature: float, negate: bool = False) -> Dict[str, float]:
     loop_energies = calculate_loop_energies(temperature, negate)
     return {pair[1]: loop_energies[pair[0]] for pair in _all_pairs}
 
@@ -1409,9 +1318,7 @@ def wcenergy(seq: str, temperature: float, negate: bool = False) -> float:
     return sum(loop_energies[seq[i : i + 2]] for i in range(len(seq) - 1))
 
 
-def wcenergies_str(
-    seqs: Sequence[str], temperature: float, negate: bool = False
-) -> List[float]:
+def wcenergies_str(seqs: Sequence[str], temperature: float, negate: bool = False) -> List[float]:
     seqarr = seqs2arr(seqs)
     return list(calculate_wc_energies(seqarr, temperature, negate))
 
@@ -1420,9 +1327,7 @@ def wcenergy_str(seq: str, temperature: float, negate: bool = False) -> float:
     return wcenergies_str([seq], temperature, negate)[0]
 
 
-def calculate_wc_energies(
-    seqarr: np.ndarray, temperature: float, negate: bool = False
-) -> np.ndarray:
+def calculate_wc_energies(seqarr: np.ndarray, temperature: float, negate: bool = False) -> np.ndarray:
     """Calculate and store in an array all energies of all sequences in seqarr
     with their Watson-Crick complements."""
     loop_energies = calculate_loop_energies(temperature, negate)
@@ -1476,10 +1381,7 @@ def energy_hist(
     import matplotlib.pyplot as plt
 
     if combine_lengths and isinstance(length, int):
-        raise ValueError(
-            f"length must be an iterable if combine_lengths is False, "
-            f"but it is the int {length}"
-        )
+        raise ValueError(f"length must be an iterable if combine_lengths is False, but it is the int {length}")
 
     plt.figure(figsize=figsize)
     plt.xlabel(f"Nearest-neighbor energy (kcal/mol)")
@@ -1490,10 +1392,7 @@ def energy_hist(
     if len(lengths) > 1:
         alpha = 0.5
         if "label" in kwargs:
-            raise ValueError(
-                f"label (={kwargs['label']}) "
-                f"should not be specified if multiple lengths are given"
-            )
+            raise ValueError(f"label (={kwargs['label']}) should not be specified if multiple lengths are given")
 
     bins = kwargs.pop("bins", 20)
 
@@ -1524,7 +1423,5 @@ def energy_hist(
         _ = plt.hist(all_energies, alpha=alpha, label=label, bins=bins, **kwargs)
 
     plt.legend(loc="upper right")
-    title = kwargs.pop(
-        "title", f"Nearest-neighbor energies of DNA sequences at {temperature} C"
-    )
+    title = kwargs.pop("title", f"Nearest-neighbor energies of DNA sequences at {temperature} C")
     plt.title(title)
