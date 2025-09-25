@@ -1731,6 +1731,7 @@ class Domain(Part, JSONSerializable):
     Whether this :any:`Domain`’s DNA sequence is dependent on others. The dependent domains will have their sequences calculated from the non-dependent ones.
     A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example, suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of d's sequence are determined by c's. 
     """
+
     assignable: bool = False
     """
     Whether this :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for sequence assignment. This property is set to True either by not assigning True to any of the boolean properties locked, dependent, or fixed or by direct assigning.
