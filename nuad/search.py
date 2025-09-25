@@ -10,53 +10,49 @@ https://github.com/UC-Davis-molecular-computing/nuad#data-model
 
 from __future__ import annotations
 
-import json
-import math
-import itertools
-import os
-import shutil
-import sys
-import logging
-from collections import defaultdict, deque
 import collections.abc as abc
+import datetime
+import itertools
+import json
+import logging
+import math
+import os
+import re
+import shutil
+import statistics
+import sys
+import textwrap
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import (
+    Any,
+    Callable,
+    Deque,
+    Dict,
+    FrozenSet,
+    Generic,
+    Iterable,
+    Iterator,
     List,
     Tuple,
-    FrozenSet,
-    Dict,
-    Callable,
-    Iterable,
-    Deque,
     TypeVar,
-    Generic,
-    Iterator,
-    Any,
 )
-import statistics
-import textwrap
-import re
-import datetime
-from functools import lru_cache
 
 try:
     from typing import Literal
 except ImportError:
     try:
         from typing_extensions import Literal
-    except ImportError as err:
+    except ImportError:
         print(
             "If you are using Python prior to version 3.8, you need to install the typing_extensions\n"
             "package in order to use nuad. Exiting."
         )
         sys.exit(-1)
 
-from tabulate import tabulate
-import numpy.random
-from ordered_set import OrderedSet
 import numpy as np  # noqa
-
-import nuad.np as nn
+import numpy.random
 
 # XXX: If I understand ThreadPool versus Pool, ThreadPool will get no benefit from multiple cores,
 # but Pool will. However, when I check the core usage, all of them spike when using ThreadPool, which
@@ -72,39 +68,41 @@ import nuad.np as nn
 # from multiprocessing.pool import Pool
 # from multiprocessing.pool import ThreadPool
 import pathos
+from ordered_set import OrderedSet
+from tabulate import tabulate
 
-from nuad.constraints import (
-    Domain,
-    Strand,
-    Design,
-    Constraint,
-    DomainConstraint,
-    StrandConstraint,
-    DomainPairConstraint,
-    StrandPairConstraint,
-    ConstraintWithDomainPairs,
-    ConstraintWithStrandPairs,
-    logger,
-    all_pairs,
-    ConstraintWithDomains,
-    ConstraintWithStrands,
-    ComplexConstraint,
-    ConstraintWithComplexes,
-    Complex,
-    DomainsConstraint,
-    StrandsConstraint,
-    DomainPairsConstraint,
-    StrandPairsConstraint,
-    ComplexesConstraint,
-    DesignPart,
-    DesignConstraint,
-    DomainPair,
-    StrandPair,
-    SingularConstraint,
-    BulkConstraint,
-)
 import nuad.constraints as nc
-
+import nuad.np as nn
+from nuad.constraints import (
+    BulkConstraint,
+    Complex,
+    ComplexConstraint,
+    ComplexesConstraint,
+    Constraint,
+    ConstraintWithComplexes,
+    ConstraintWithDomainPairs,
+    ConstraintWithDomains,
+    ConstraintWithStrandPairs,
+    ConstraintWithStrands,
+    Design,
+    DesignConstraint,
+    DesignPart,
+    Domain,
+    DomainConstraint,
+    DomainPair,
+    DomainPairConstraint,
+    DomainPairsConstraint,
+    DomainsConstraint,
+    SingularConstraint,
+    Strand,
+    StrandConstraint,
+    StrandPair,
+    StrandPairConstraint,
+    StrandPairsConstraint,
+    StrandsConstraint,
+    all_pairs,
+    logger,
+)
 from nuad.stopwatch import Stopwatch
 
 
@@ -134,6 +132,7 @@ def find_parts_to_check(
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
             domains_affected = design.domain_to_affected_domains[domain]
+            # domains_affected = domain.all_domains_intersecting()
             if len(domains_affected) == 1:
                 # no need to add if the "dag" is just this domain
                 assert next(iter(domains_affected)).name == domain.name
@@ -433,7 +432,7 @@ def _assignable_domains_in_part(
     :return:
         independent, non-fixed (if exclude_fixed is True) domains associated with part
         (e.g., all domains in :any:`Strand`), with dependent domains substituted with their
-        independent source via Domain.independent_source()
+        independent source via Domain.assignable_ancestors_or_descendants()
     """
     # first compute "direct" domains that appear directly on strands
     domains: List[Domain]
@@ -464,7 +463,13 @@ def _assignable_domains_in_part(
     # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
     assignable_domains = []
     for domain in domains:
-        assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
+        if domain.assignable:
+            assignable_domains_connected_to_domain = [domain]
+        else:
+            assignable_domains_connected_to_domain = (
+                domain.assignable_ancestors_or_descendants()
+            )
+
         if assignable_domains_connected_to_domain not in assignable_domains:
             assignable_domains.extend(assignable_domains_connected_to_domain)
 
@@ -768,7 +773,9 @@ def _check_design(design: nc.Design) -> None:
     for strand in design.strands:
         for domain in strand.domains:
             # noinspection PyProtectedMember
-            if domain._pool is None and not (domain.fixed or domain.dependent or domain.locked):
+            if domain._pool is None and not (
+                domain.fixed or domain.dependent or domain.locked
+            ):
                 raise ValueError(
                     f"for strand {strand.name}, it has a "
                     f"non-fixed, non-dependent, unlocked domain {domain.name} "
@@ -1735,7 +1742,11 @@ def assign_sequences_to_domains_randomly_from_pools(
         are subject to change by the subsequent search algorithm.
     """
     at_least_one_domain_unfixed = False
-    assignable_domains = [domain for domain in design.domains if not (domain.dependent or domain.locked or domain.fixed)]
+    assignable_domains = [
+        domain
+        for domain in design.domains
+        if not (domain.dependent or domain.locked or domain.fixed)
+    ]
     for domain in assignable_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
@@ -2568,7 +2579,7 @@ def create_text_report(
     )
 
     return (
-        f"""\
+        """\
 Report on constraints
 =====================
 """
@@ -2612,7 +2623,7 @@ def summary_of_constraints(
     )
 
     return (
-        f"""\
+        """\
 Report on constraints
 =====================
 """
@@ -2715,7 +2726,7 @@ def display_report(
         with the same rules as `xlims`
     """
     import matplotlib.pyplot as plt
-    from IPython.display import display, Markdown  # noqa
+    from IPython.display import Markdown, display  # noqa
 
     def dm(obj):
         display(Markdown(obj))

@@ -413,7 +413,6 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1]
 
-        # create the design
         d = Domain("d", assign_domain_pool_of_length(5), fixed=True)
         g = Domain("g", assign_domain_pool_of_length(5), fixed=True)
         c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
@@ -474,8 +473,8 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1] * 3
 
-        # create the design
-        d = Domain("d", assign_domain_pool_of_length(5), assignable=True)
+        # create design
+        d = Domain("d", assign_domain_pool_of_length(5))
         b = Domain("b", assign_domain_pool_of_length(5), locked=True)
         c = Domain("c", assign_domain_pool_of_length(5), locked=True)
         a = Domain(
@@ -498,6 +497,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         # to add all the subdomains in the DAG containing the domains on the design's strands
         design.compute_derived_fields()
+
         design.check_subdomain_graphs_legal()
 
         with self.assertRaisesRegex(
@@ -622,7 +622,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
             "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, e]
         )
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5), assignable=True)
+        d1 = Domain("d1", assign_domain_pool_of_length(5))
         b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
         c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
         a1 = Domain(
@@ -675,7 +675,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         c = Domain("c", assign_domain_pool_of_length(10), assignable=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
-            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c,f]
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
         )
         X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
         e = Domain(
@@ -727,6 +727,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         self.assertIn("c", expected_subdomains)
         self.assertIn("e", expected_subdomains)
         self.assertIn("h1", expected_subdomains)
+
     def test_all_domains_affected(self):
         """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
@@ -748,7 +749,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         c = Domain("c", assign_domain_pool_of_length(10), locked=True)
         f = Domain("f", assign_domain_pool_of_length(5), assignable=True)
         b = Domain(
-            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c,f]
+            "b", assign_domain_pool_of_length(15), locked=True, subdomains=[c, f]
         )
         X = Domain("X", assign_domain_pool_of_length(5), dependent=True)
         e = Domain(
@@ -761,7 +762,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
             "a", assign_domain_pool_of_length(20), locked=True, subdomains=[b, e]
         )
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5), assignable=True)
+        d1 = Domain("d1", assign_domain_pool_of_length(5))
         b1 = Domain("b1", assign_domain_pool_of_length(5), locked=True)
         c1 = Domain("c1", assign_domain_pool_of_length(5), locked=True)
         a1 = Domain(
@@ -780,6 +781,7 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         self.assertIn(p1, affected_domains)
         self.assertIn(b1, affected_domains)
         self.assertIn(c1, affected_domains)
+
 
 class TestDagObjectCreation(unittest.TestCase):
     def test_init(self) -> None:
