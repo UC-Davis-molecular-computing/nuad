@@ -1672,6 +1672,7 @@ class Domain(Part, JSONSerializable):
     """
         :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
     """
+    
     dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
         init=False, default_factory=list
     )
