@@ -2463,7 +2463,7 @@ def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
 
     :param list_of_domains: list of :any:`Domain`'s to calculate if there is any :any:`Domain` having all of them as its descendants.
 
-    :return: The ancestor of all the domains in the :param:list_of_domains, or None if there wasn't any.
+    :return: The ancestor of all the domains in the `list_of_domains`, or None if there wasn't any.
 
     """
 
@@ -2646,7 +2646,7 @@ def set_domains_memoryviews(
     initial_domain: Domain,
 ) -> Tuple[Set, Dict[str, Tuple[int, int]]]:
     """
-    Computes the memoryview fields of all the domains comprising the polytree contaiting :param:initial_domain.
+    Computes the memoryview fields of all the domains comprising the polytree contaiting `initial_domain`.
     :param initial_domain:The domain for which a memoryview has not been set and the memoryview assin
     :return:A set of all the subdomains for which memoryviews have been calcualted in this method as well as a dictionary
     of them as keys and their intervals as values.
@@ -10626,3 +10626,4 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
         complexes=tuple(strand_complexes),
         evaluate=evaluate,
     )
+
