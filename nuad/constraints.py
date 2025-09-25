@@ -1668,48 +1668,43 @@ class Domain(Part, JSONSerializable):
     """
 
     _subdomains: List[Domain] = field(init=False, default_factory=list)
-    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
+    """
+    List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
     """
 
     parents: List[Domain] = field(init=False, default_factory=list)
     """
-        Domains of which this is a subdomain. Note, this is not set manually, these are set by the library based on the Domain.subdomains of other domains in the same directed graph.
+        :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
     """
     dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
         init=False, default_factory=list
     )
     """
-
-List of tuples of domains and dependency functions which their sequence depends on this Domain's sequence. 
-
-Each tuple pairs a dependent Domain with a user-defined function that computes the dependent Domain's sequence based this Domain's sequence (its dependee) and randomness. 
-
-"""
+    List of tuples of :any:`Domain`'s and dependency functions which their sequence depends on this :any:`Domain`'s sequence. 
+    Each tuple pairs a dependent :any:`Domain` with a user-defined function that computes the dependent :any:`Domain`'s sequence based this :any:`Domain` sequence (its dependee) and randomness. 
+    """
 
     locked_dependents: List[Domain] = field(init=False, default_factory=list)
     """ 
+    List of locked :any:`Domain`'s in the :any:`Domain.subdomains` or :any:`Domain.parents` list. 
 
-    List of locked Domains in the subdomains or parents list. 
+    If this :any:`Domain` is locked, it will be exactly one or the other. If this :any:`Domain`' is unlocked, then all domains in this Domain's parents and subdomains are in :any:`Domain.locked_dependents`.
 
-    If this Domain is locked, it will be exactly one or the other. If this Domain is unlocked, then all domains in this Domain's parents and subdomains are in locked_dependents.
-
-    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this domain. 
-
+    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this domain.
     """
+
     memoryview_sequence: memoryview | None = field(
         init=False, repr=False, default=None, compare=False, hash=False
     )
     """
+    This :any:`Domain`'s sequence is accessed by this memoryview object. 
+    In fact, each :any:`Domain` accesses its portion of the shared buffer (which here a is bytearray created in :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
+    """
 
-This Domain's sequence is accessed by this memoryview object. 
-
-In fact, each Domain accesses its portion of the shared buffer (which here a is bytearray created inset_domains_memoryviews()) through memoryview slicing, eliminating data copying.
-
-"""
     weight: float = 1.0
     """
     Weight to apply before picking domain at random to change when re-assigning DNA sequences during search.
-    Should only be changed for independent domains. (those with :data:`Domain.dependent` set to False)
+    Should only be changed for assignable domains.
 
     Normally a domain's probability of being changed is proportional to the total score of violations it
     causes, but that total score is first multiplied by :data:`Domain.weight`. This is useful,
@@ -1717,6 +1712,13 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
     for example if a domain represents an M13 strand. It may be more efficient to pick such a domain
     less often since changing it will change many strands in the design and, when the design gets
     close to optimized, this will likely cause the score to go up.
+    """
+
+    label: str | None = None
+    """
+    Optional "label" string to associate to this :any:`Domain`.
+    Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
+    for DNA sequence design.
     """
 
     fixed: bool = False
@@ -1727,37 +1729,22 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
     Note: If a domain is fixed then all of its subdomains must also be fixed.
     """
 
-    label: str | None = None
-    """
-    Optional "label" string to associate to this :any:`Domain`.
-
-    Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
-    for DNA sequence design.
-    """
-
     dependent: bool = False
     """
-
-    Whether this Domain’s DNA sequence is dependent on others. The dependent domains will have their sequences calculated from the non-dependent ones.
-
+    Whether this :any:`Domain`’s DNA sequence is dependent on others. The dependent domains will have their sequences calculated from the non-dependent ones.
     A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example, suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of d's sequence are determined by c's. 
-
     """
     assignable: bool = False
     """
-
-    Whether this Domain’s DNA sequence may be directly selected by the search algorithm for sequence assignment. This property is set to True either by not assigning True to any of the boolean properties locked, dependent, or fixed or by direct assigning.
-
+    Whether this :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for sequence assignment. This property is set to True either by not assigning True to any of the boolean properties locked, dependent, or fixed or by direct assigning.
     """
 
     locked: bool = False
     """
-
-    Whether this Domain’s DNA sequence is locked. Domains can be subdivided hierarchically into a directed acyclic graph of domains by setting Domain.subdomains to describe it. In this case exactly one domain along every path from the root to any leaf must be unlocked, and the rest locked: the locked domains will have their sequences calculated from the unlocked ones.
-
+    Whether this :any:`Domain`’s DNA sequence is locked. :any:`Domain`’s can be subdivided hierarchically into a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked domains will have their sequences calculated from the unlocked ones.
     A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are 7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several other strands, it will have several domains, but they cannot be set independently of each other. This can be done by creating a strand with a single long domain, which is subdivided into many locked child domains. Only the entire strand, the root domain, can be assigned at once, changing every domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
-
     """
+
     length: int | None = None
     """
     Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
@@ -1951,10 +1938,9 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
 
     @property
     def subdomains(self) -> List["Domain"]:
-        """
-                Subdomains of this Domain.
+        """Subdomains of this :any:`Domain`.
 
-        Used in connection with Domain.lockedto declare that some Domain’s are contained within other domains (forming a directed graph in general), and domains with Domain.locked set to True automatically take their sequences from assignable or dependent domains.
+        Used in connection with :attr:`Domain.locked` to declare that some :any:`Domain`’s are contained within other domains (forming a directed graph in general), and domains with :attr:`Domain.locked` set to True automatically take their sequences from assignable or dependent domains.
 
         WARNING: this can be a bit tricky to determine the order when setting these. The subdomains should be listed in 5’ to 3’ order for UNSTARRED domains. If there is a starred domain with starred subdomains, they would be listed in REVERSE order.
 
@@ -2030,7 +2016,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
 
         :param new_sequence:  new DNA sequence to set
 
-        :param fixed: this method has been called by Domain.set_fixed_sequence()
+        :param fixed: this method has been called by :meth:`Domain.set_fixed_sequence`.
         """
 
         if self.fixed:
@@ -2096,8 +2082,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
         self, rng: np.random.Generator, notifier_domain: Domain
     ) -> None:
         """
-        :param rng:
-        :param notifier_domain: The domain which its sequence has been changed and resulted this function call
+        :param notifier_domain: The domain which its sequence has been changed and resulted this function call.
         """
 
         for dependent, f in self.dependents:
@@ -2209,7 +2194,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
     def all_domains_in_dag(self) -> Set["Domain"]:
         """
 
-        :return: list of all domains in the same connected component (in the subdomain graph) as this domain.
+        :return: list of all :any:`Domain`'s in the same connected component (in the subdomain graph) as this :any:`Domain`.
 
         """
         domains = set()
@@ -2234,7 +2219,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
     def all_domains_intersecting(self) -> List["Domain"]:
         """
 
-        :return: list of all domains intersecting this one, meaning those domains in the subdomain DAG rooted at this domain (including itself), plus any ancestors of this domain.
+        :return: list of all :any:`Domain` intersecting this one, meaning those domains in the subdomain DAG rooted at this :any:`Domain` (including itself), plus any ancestors of this :any:`Domain`.
 
         """
         domains = self.ancestors()
@@ -2259,7 +2244,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
         return domains
 
     def all_domains_affected_by_sequence_change(self) -> List["Domain"]:
-        """List of domains that their sequence changes by self sequence modification"""
+        """:return: List of :any:`Domain`'s that their sequence changes by this :any:`Domain` sequence modification."""
         domains = self.all_domains_intersecting()
         stack = domains.copy()
         while stack:
@@ -2285,9 +2270,10 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
 
         List of domains that their sequence changes by self sequence modification
 
-        :param domains:
+        :param domains: List of :any:`Domain`'s to remove dupliactes from.
 
         :return: New List derived from domains with no duplicated elements.
+        """
         domains_without_duplicates = []
         for candidate_domain in domains:
             duplicate = False
@@ -2299,7 +2285,6 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
                 domains_without_duplicates.append(candidate_domain)
 
             return domains_without_duplicates
-        """
 
     def ancestors(self) -> List["Domain"]:
         """
@@ -2441,6 +2426,7 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
         return assignable_descendants
 
     def check_exactly_one_state(self) -> None:
+
         if self.dependent and self.locked:
             raise ValueError(
                 f"A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked."
@@ -2475,9 +2461,9 @@ In fact, each Domain accesses its portion of the shared buffer (which here a is 
 def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
     """
 
-    :param list_of_domains: list of domains to calculate if there is any domain having all of them as its descendants.
+    :param list_of_domains: list of :any:`Domain`'s to calculate if there is any :any:`Domain` having all of them as its descendants.
 
-    :return: The ancestor of all the domains in the list_of_domains, or None if there wasn't any.
+    :return: The ancestor of all the domains in the :param:list_of_domains, or None if there wasn't any.
 
     """
 
@@ -2659,11 +2645,11 @@ def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
 def set_domains_memoryviews(
     initial_domain: Domain,
 ) -> Tuple[Set, Dict[str, Tuple[int, int]]]:
-    """Computes the memoryview fields of all the domains comprising the polytree contaiting initial_domain.
-
-    :return:
-        A set of all the subdomains for which memoryviews have been calcualted in this method as well as a dictionary
-        of them as keys and their intervals as values.
+    """
+    Computes the memoryview fields of all the domains comprising the polytree contaiting :param:initial_domain.
+    :param initial_domain:The domain for which a memoryview has not been set and the memoryview assin
+    :return:A set of all the subdomains for which memoryviews have been calcualted in this method as well as a dictionary
+    of them as keys and their intervals as values.
     """
 
     visited_names = set()  # names of the domains contained in this dag
@@ -2675,7 +2661,7 @@ def set_domains_memoryviews(
         {}
     )  # map each domain with preassigned sequence to its sequence
 
-    assign_intervals(
+    _assign_intervals(
         initial_domain,
         domain_name_to_interval,
         domain_name_to_domain,
@@ -2703,19 +2689,19 @@ def set_domains_memoryviews(
         start, end = domain_name_to_interval[domain_name]
         domain.memoryview_sequence = memoryview_full[start:end]
 
-    assign_back_preexisting_sequences(domain_to_existing_sequences)
+    _assign_back_preexisting_sequences(domain_to_existing_sequences)
 
     return visited_names, domain_name_to_interval
 
 
-def assign_back_preexisting_sequences(
+def _assign_back_preexisting_sequences(
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
     for domain, sequence in domain_to_preexisting_sequence:
         domain.memoryview_sequence[:] = sequence.encode(encoding="ascii")
 
 
-def assign_intervals(
+def _assign_intervals(
     domain: Domain,
     domain_name_to_interval: Dict[str, Tuple[int, int]],
     domain_name_to_domain: Dict[str, Domain],
@@ -2732,7 +2718,7 @@ def assign_intervals(
             domain.memoryview_sequence.tobytes().decode(encoding="ascii")
         )
 
-    assign_intervals_to_subdomains_and_parents(
+    _assign_intervals_to_subdomains_and_parents(
         domain,
         domain_name_to_interval,
         domain_name_to_domain,
@@ -2755,7 +2741,7 @@ def validate_subdomain_lengths(domain: Domain) -> None:
         )
 
 
-def assign_intervals_to_subdomains_and_parents(
+def _assign_intervals_to_subdomains_and_parents(
     domain: Domain,
     domain_name_to_interval: Dict[str, Tuple[int, int]],
     domain_name_to_domain: Dict[str, Domain],
@@ -2771,7 +2757,7 @@ def assign_intervals_to_subdomains_and_parents(
 
     for sd in domain.subdomains:
         if sd.name not in visited_names:
-            assign_intervals_subdomain(
+            _assign_intervals_subdomain(
                 sd,
                 domain,
                 domain_name_to_interval,
@@ -2782,7 +2768,7 @@ def assign_intervals_to_subdomains_and_parents(
 
     for parent in domain.parents:
         if parent.name not in visited_names:
-            assign_intervals_parent(
+            _assign_intervals_parent(
                 parent,
                 domain,
                 domain_name_to_interval,
@@ -2792,7 +2778,7 @@ def assign_intervals_to_subdomains_and_parents(
             )
 
 
-def assign_intervals_subdomain(
+def _assign_intervals_subdomain(
     domain: Domain,
     parent: Domain,
     domain_name_to_interval: Dict[str, Tuple[int, int]],
@@ -2822,7 +2808,7 @@ def assign_intervals_subdomain(
     domain_name_to_interval[domain.name] = (start, end)
     domain_name_to_domain[domain.name] = domain
 
-    assign_intervals_to_subdomains_and_parents(
+    _assign_intervals_to_subdomains_and_parents(
         domain,
         domain_name_to_interval,
         domain_name_to_domain,
@@ -2831,7 +2817,7 @@ def assign_intervals_subdomain(
     )
 
 
-def assign_intervals_parent(
+def _assign_intervals_parent(
     domain: Domain,
     subdomain: Domain,
     domain_name_to_interval: Dict[str, Tuple[int, int]],
@@ -2859,7 +2845,7 @@ def assign_intervals_parent(
     domain_name_to_interval[domain.name] = (start, end)
     domain_name_to_domain[domain.name] = domain
 
-    assign_intervals_to_subdomains_and_parents(
+    _assign_intervals_to_subdomains_and_parents(
         domain,
         domain_name_to_interval,
         domain_name_to_domain,
@@ -3830,7 +3816,7 @@ class Design(JSONSerializable):
     """
         Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes by key's sequence modification.
 
-        Computed in :data:`Design.compute_derived fields().
+        Computed in :meth:`Design.compute_derived fields`.
         """
 
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
@@ -5096,6 +5082,12 @@ class Design(JSONSerializable):
                             )
 
     def check_subdomain_graphs_legal(self) -> None:
+        """Check that all subdomain graphs are consistent and the relevant error raises if not.: being acyclic,
+         singly_connected (polytree), having exactly one assignable or dependent subdomain in source_to_sink path,
+          strands including subdomains validly, and overlapping of every subdomain in the design with a strand.
+
+        A subdomain graph's nodes are representative of subdomains and its directed edges indicate parent-subdomain relationship.
+        """
 
         subdomain_graph = self._create_subdomain_digraph()
 
@@ -5109,7 +5101,7 @@ class Design(JSONSerializable):
 
         self._check_every_subdomain_overlap_with_a_strand(subdomain_graph)
 
-    def traverse_source_to_sink_path(
+    def _traverse_source_to_sink_path(
         self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
     ) -> list[Domain]:
         # No need to define visited_domains, since the singly-connectedness is already verified.
@@ -5121,7 +5113,7 @@ class Design(JSONSerializable):
                 return unlocked_subdomains
 
             for subdomain in domain.subdomains:
-                unlockeds = self.traverse_source_to_sink_path(
+                unlockeds = self._traverse_source_to_sink_path(
                     original_source, subdomain, []
                 )
                 if len(unlockeds) > 0:
@@ -5136,7 +5128,7 @@ class Design(JSONSerializable):
                     )
         else:
             for subdomain in domain.subdomains:
-                self.traverse_source_to_sink_path(
+                self._traverse_source_to_sink_path(
                     original_source, subdomain, unlocked_subdomains
                 )
 
@@ -5155,7 +5147,7 @@ class Design(JSONSerializable):
 
         for source in source_nodes:
             unlocked_subdomains = []
-            unlocked_subdomains = self.traverse_source_to_sink_path(
+            unlocked_subdomains = self._traverse_source_to_sink_path(
                 source, source, unlocked_subdomains
             )
 
@@ -5175,13 +5167,16 @@ class Design(JSONSerializable):
                 )
 
     def check_dependency_graphs_legal(self) -> None:
+        """Check dependency graphs are consistent and the relevant error raises if not: being acyclic and
+        every dependent :any:`Domain` must be dependent on exactly one :any:`Domain`'s.
+        """
 
         dependency_graph = self._create_dependency_digraph()
         self._check_dependency_graph_is_dag(dependency_graph)
         self._check_each_dependent_exactly_one_dependee(dependency_graph)
 
     def _create_subdomain_digraph(self) -> nx.DiGraph:
-        """Create subdomain directed graph of domains"""
+        """Create subdomain directed graph of :any:`Domain`'s"""
 
         graph = nx.DiGraph()
 
@@ -5206,49 +5201,49 @@ class Design(JSONSerializable):
             for sd in unlocked_domain.subdomains:
                 if not sd.fixed:
                     graph.add_edge(unlocked_domain, sd, color="red")
-                    self.add_red_edge_pointing_subdomains(sd, graph)
+                    self._add_red_edge_pointing_subdomains(sd, graph)
                     unlocked_domain.locked_dependents.append(sd)
                 else:
                     graph.add_node(sd)
             for parent in unlocked_domain.parents:
                 if not parent.fixed:
                     graph.add_edge(unlocked_domain, parent, color="red")
-                    self.add_red_edge_pointing_parents(parent, graph)
+                    self._add_red_edge_pointing_parents(parent, graph)
                     unlocked_domain.locked_dependents.append(parent)
                 else:
                     graph.add_node(parent)
 
             if unlocked_domain.dependents:
-                self.add_blue_edge_pointing_dependents(unlocked_domain, graph)
+                self._add_blue_edge_pointing_dependents(unlocked_domain, graph)
 
         return graph
 
-    def add_red_edge_pointing_subdomains(
+    def _add_red_edge_pointing_subdomains(
         self, domain: Domain, graph: nx.DiGraph
     ) -> None:
         for sd in domain.subdomains:
             graph.add_edge(domain, sd, color="red")
-            self.add_red_edge_pointing_subdomains(sd, graph)
+            self._add_red_edge_pointing_subdomains(sd, graph)
             domain.locked_dependents.append(sd)
 
         if domain.dependents:
-            self.add_blue_edge_pointing_dependents(domain, graph)
+            self._add_blue_edge_pointing_dependents(domain, graph)
 
-    def add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
+    def _add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
         for parent in domain.parents:
             graph.add_edge(domain, parent, color="red")
-            self.add_red_edge_pointing_parents(parent, graph)
+            self._add_red_edge_pointing_parents(parent, graph)
             domain.locked_dependents.append(parent)
         if domain.dependents:
-            self.add_blue_edge_pointing_dependents(domain, graph)
+            self._add_blue_edge_pointing_dependents(domain, graph)
 
-    def add_blue_edge_pointing_dependents(
+    def _add_blue_edge_pointing_dependents(
         self, domain: Domain, graph: nx.DiGraph
     ) -> None:
         for dependent, _ in domain.dependents:
             graph.add_edge(domain, dependent, color="blue")
             if dependent.dependents:
-                self.add_blue_edge_pointing_dependents(dependent, graph)
+                self._add_blue_edge_pointing_dependents(dependent, graph)
 
     def _check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
         try:

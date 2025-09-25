@@ -988,7 +988,7 @@ class SearchParameters:
 
     warn_no_seqs_found: bool = True
     """
-    Whether to log a warning if no sequences are found that satisfy the :any:`NumpyFilter`'s and :any:`SequenceFilters`.
+    Whether to log a warning if no sequences are found that satisfy the :any:`NumpyFilter`'s and :any:`SequenceFilter`'s.
     This is on by default to warn the user if their filters are too restrictive, since this could cause the search 
     to freeze. However, it usually only appears with very restrictive filters and Hamming distance 1,
     and a larger Hamming distance is picked after, so the search is not actually frozen. If you are confident
