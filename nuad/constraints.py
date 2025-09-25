@@ -145,7 +145,7 @@ class M13Variant(enum.Enum):
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7560
     """
-
+    
     p8064 = "p8064"
     """Variant of M13mp18 that is 8064 bases long. Available from, for example
 
@@ -1672,7 +1672,7 @@ class Domain(Part, JSONSerializable):
     """
         :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
     """
-    
+
     dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(
         init=False, default_factory=list
     )

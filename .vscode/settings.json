@@ -13,7 +13,5 @@
     "ruff.enable": true,
     "ruff.organizeImports": false,
     "ruff.fixAll": false,
-    "ruff.format.enable": true,
-    "python.linting.enabled": false,
     "python.analysis.autoImportCompletions": false
 }
