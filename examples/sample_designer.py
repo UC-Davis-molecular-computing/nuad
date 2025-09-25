@@ -16,50 +16,50 @@ class CLArgs(NamedTuple):
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join("output", ns.script_name_no_ext())
+    default_directory = os.path.join('output', ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(  # noqa
-        description="Small example design for testing.",
+        description='Small example design for testing.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-o",
-        "--output-dir",
+        '-o',
+        '--output-dir',
         type=str,
         default=default_directory,
-        help="directory in which to place output files",
+        help='directory in which to place output files',
     )
     parser.add_argument(
-        "-we",
-        "--weigh_violations_equally",
-        action="store_true",
-        help="Weigh violations of each constraint equally (only pay attention to whether "
-        "constraint returns 0.0 or a positive value, converting all positive values "
-        "to 1.0).",
+        '-we',
+        '--weigh_violations_equally',
+        action='store_true',
+        help='Weigh violations of each constraint equally (only pay attention to whether '
+        'constraint returns 0.0 or a positive value, converting all positive values '
+        'to 1.0).',
     )
     parser.add_argument(
-        "-r",
-        "--restart",
-        action="store_true",
-        help="If true, then assumes output directory contains output of search that was "
-        "cancelled, to restart "
-        "from. Similar to -i option, but will automatically find the most recent design "
-        "(assuming they are numbered with a number such as -84), and will start the "
-        "numbering from there (i.e., the next files to be written upon improving the "
-        "design will have -85).",
+        '-r',
+        '--restart',
+        action='store_true',
+        help='If true, then assumes output directory contains output of search that was '
+        'cancelled, to restart '
+        'from. Similar to -i option, but will automatically find the most recent design '
+        '(assuming they are numbered with a number such as -84), and will start the '
+        'numbering from there (i.e., the next files to be written upon improving the '
+        'design will have -85).',
     )
     parser.add_argument(
-        "-i",
-        "--initial_design",
+        '-i',
+        '--initial_design',
         type=str,
         default=None,
         help="(Probably you don't want this option, and would prefer -r/--restart.)"
-        "name of JSON filename of initial design. If specified, then the DNA sequences "
-        "of domains will start equal to what they are in the design. This is useful, "
-        "for instance, when starting a DNA sequence design search from a sequence "
-        "assignment that was saved during a prior execution of the dsd sequence "
-        "designer. The strands and domains of the saved design will be compared to "
-        "the scadnano design (though not the DNA sequences).",
+        'name of JSON filename of initial design. If specified, then the DNA sequences '
+        'of domains will start equal to what they are in the design. This is useful, '
+        'for instance, when starting a DNA sequence design search from a sequence '
+        'assignment that was saved during a prior execution of the dsd sequence '
+        'designer. The strands and domains of the saved design will be compared to '
+        'the scadnano design (though not the DNA sequences).',
     )
 
     args = parser.parse_args()
@@ -99,13 +99,13 @@ def main() -> None:
 
     initial_design = nc.Design()
 
-    strand0: nc.Strand[str] = initial_design.add_strand(["s1", "w1", "n1", "e1"], name="strand 0")
-    strand1: nc.Strand[str] = initial_design.add_strand(["s2", "w2", "n2", "e2"], name="strand 1")
-    strand2: nc.Strand[None] = initial_design.add_strand(["n2*", "e1*", "n3*", "e3*"], name="strand 2")
-    strand3: nc.Strand[str] = initial_design.add_strand(["s4*", "w4*", "s1*", "w2*"], name="strand 3")
+    strand0: nc.Strand[str] = initial_design.add_strand(['s1', 'w1', 'n1', 'e1'], name='strand 0')
+    strand1: nc.Strand[str] = initial_design.add_strand(['s2', 'w2', 'n2', 'e2'], name='strand 1')
+    strand2: nc.Strand[None] = initial_design.add_strand(['n2*', 'e1*', 'n3*', 'e3*'], name='strand 2')
+    strand3: nc.Strand[str] = initial_design.add_strand(['s4*', 'w4*', 's1*', 'w2*'], name='strand 3')
 
     if args.initial_design_filename is not None:
-        with open(args.initial_design_filename, "r") as file:
+        with open(args.initial_design_filename, 'r') as file:
             design_json_str: str = file.read()
         design = nc.Design.from_json(design_json_str)
     else:
@@ -113,14 +113,14 @@ def main() -> None:
 
     numpy_filters = [
         nc.NearestNeighborEnergyFilter(-9.5, -9.0, 52.0),
-        nc.BaseCountFilter(bases="G", high=1),
-        nc.RunsOfBasesFilter(["C", "G"], 4),
-        nc.RunsOfBasesFilter(["A", "T"], 4),
+        nc.BaseCountFilter(bases='G', high=1),
+        nc.RunsOfBasesFilter(['C', 'G'], 4),
+        nc.RunsOfBasesFilter(['A', 'T'], 4),
     ]
 
     lengths = [9, 10, 11, 12]
     domain_pools = {
-        length: nc.DomainPool(f"length-{length} domains", length, numpy_filters=numpy_filters) for length in lengths
+        length: nc.DomainPool(f'length-{length} domains', length, numpy_filters=numpy_filters) for length in lengths
     }
 
     for strand in [strand0, strand1]:
@@ -137,13 +137,13 @@ def main() -> None:
     strand_pairs_no_comp_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-1.0,
         temperature=52,
-        short_description="StrandPairNoCompl",
+        short_description='StrandPairNoCompl',
         pairs=((strand0, strand1), (strand2, strand3)),
     )
     strand_pairs_comp_constraint = nc.rna_duplex_strand_pairs_constraint(
         threshold=-7.0,
         temperature=52,
-        short_description="StrandPairCompl",
+        short_description='StrandPairCompl',
         pairs=[
             (strand0, strand2),
             (strand0, strand3),
@@ -152,7 +152,7 @@ def main() -> None:
         ],
     )
     strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
-        threshold=-0.0, temperature=52, short_description="StrandSS"
+        threshold=-0.0, temperature=52, short_description='StrandSS'
     )
 
     params = ns.SearchParameters(
@@ -180,5 +180,5 @@ def main() -> None:
 
 
 # Press the green button in the gutter to run the script.
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -22,26 +22,26 @@ import numpy as np
 
 default_rng: np.random.Generator = np.random.default_rng()  # noqa
 
-bits2base = ["A", "C", "G", "T"]
+bits2base = ['A', 'C', 'G', 'T']
 base2bits = {
-    "A": 0b00,
-    "C": 0b01,
-    "G": 0b10,
-    "T": 0b11,
-    "a": 0b00,
-    "c": 0b01,
-    "g": 0b10,
-    "t": 0b11,
+    'A': 0b00,
+    'C': 0b01,
+    'G': 0b10,
+    'T': 0b11,
+    'a': 0b00,
+    'c': 0b01,
+    'g': 0b10,
+    't': 0b11,
 }
 
 
 def idx2seq(idx: int, length: int) -> str:
     """Return the lexicographic idx'th DNA sequence of given length."""
-    seq = ["x"] * length
+    seq = ['x'] * length
     for i in range(length - 1, -1, -1):
         seq[i] = bits2base[idx & 0b11]
         idx >>= 2
-    return "".join(seq)
+    return ''.join(seq)
 
 
 def seq2arr(seq: str, base2bits_local: Dict[str, int] | None = None) -> np.ndarray:
@@ -74,7 +74,7 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     if len(seqs) == 0:
         return np.empty((0, 0), dtype=np.ubyte)
     if isinstance(seqs, str):
-        raise ValueError("seqs must be a sequence of strings, not a single string")
+        raise ValueError('seqs must be a sequence of strings, not a single string')
 
     # check equal length of each sequence (a bit faster than a Python loop,
     # e.g., 3.5 ms for 10^5 seqs compared to 5 ms with Python loop)
@@ -82,12 +82,12 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
     lengths_it = map(len, seqs)
     lengths_arr = np.fromiter(lengths_it, dtype=int)
     if np.any(lengths_arr != seq_len):
-        raise ValueError("All sequences in seqs must be equal length")
+        raise ValueError('All sequences in seqs must be equal length')
 
     num_seqs = len(seqs)
 
     # the code below is about 5 times faster than the old implementation (commented out above)
-    seqs_cat = "".join(seqs)
+    seqs_cat = ''.join(seqs)
     seqs_cat = seqs_cat.upper()
 
     seqs_cat_bytes = seqs_cat.encode()
@@ -99,7 +99,7 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
 
     # code below is magical to me, but it works and is slightly faster than more obvious ways:
     # https://stackoverflow.com/a/35464758
-    from_values = np.array([ord(base) for base in ["A", "C", "G", "T"]])
+    from_values = np.array([ord(base) for base in ['A', 'C', 'G', 'T']])
     to_values = np.arange(4)
     sort_idx = np.argsort(from_values)
     idx = np.searchsorted(from_values, arr1d, sorter=sort_idx)
@@ -117,13 +117,13 @@ def seqs2arr(seqs: Sequence[str]) -> np.ndarray:
 
 def arr2seqs(arr: np.ndarray) -> List[str]:
     """Return list of strings converting the given numpy array of integers to DNA sequences."""
-    return ["".join(bits2base[base] for base in row) for row in arr]
+    return [''.join(bits2base[base] for base in row) for row in arr]
 
 
 def arr2seq(arr: np.ndarray) -> str:
     """Return string converting the given numpy array of integers to DNA sequence."""
     bases_ch = [bits2base[base] for base in arr]
-    return "".join(bases_ch)
+    return ''.join(bases_ch)
 
 
 def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndarray:
@@ -139,7 +139,7 @@ def make_array_with_all_sequences(length: int, digits: Sequence[int]) -> np.ndar
     return arr
 
 
-def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ("A", "C", "G", "T")) -> np.ndarray:
+def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ('A', 'C', 'G', 'T')) -> np.ndarray:
     """Return 2D numpy array with all DNA sequences of given length in
     lexicographic order. Bases contains bases to be used: ('A','C','G','T') by
     default, but can be set to a subset of these.
@@ -149,9 +149,9 @@ def make_array_with_all_dna_seqs(length: int, bases: Collection[str] = ("A", "C"
     has one byte per base."""
 
     if len(bases) == 0:
-        raise ValueError("bases cannot be empty")
-    if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(f"bases must be a subset of {{A, C, G, T}}; cannot be {bases}")
+        raise ValueError('bases cannot be empty')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f'bases must be a subset of {{A, C, G, T}}; cannot be {bases}')
 
     base_bits = [base2bits[base] for base in bases]
     digits = np.array(base_bits, dtype=np.ubyte)
@@ -187,7 +187,7 @@ def make_array_with_random_subset_of_dna_seqs(
     length: int,
     num_random_seqs: int,
     rng: np.random.Generator = default_rng,
-    bases: Collection[str] = ("A", "C", "G", "T"),
+    bases: Collection[str] = ('A', 'C', 'G', 'T'),
 ) -> np.ndarray:
     """
     Return 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length.
@@ -210,17 +210,17 @@ def make_array_with_random_subset_of_dna_seqs(
         2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
     """
     if length < 0:
-        raise ValueError(f"length = {num_random_seqs} must be nonnegative")
+        raise ValueError(f'length = {num_random_seqs} must be nonnegative')
     elif length == 0:
         return np.array([[]], dtype=np.ubyte)
     if num_random_seqs <= 0:
-        raise ValueError(f"num_seqs = {num_random_seqs} must be positive")
-    if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+        raise ValueError(f'num_seqs = {num_random_seqs} must be positive')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f'bases must be a subset of {"A", "C", "G", "T"}; cannot be {bases}')
     if len(bases) == 0:
-        raise ValueError("bases cannot be empty")
+        raise ValueError('bases cannot be empty')
     elif len(bases) == 1:
-        raise ValueError("bases must have at least two elements")
+        raise ValueError('bases must have at least two elements')
 
     max_possible = len(bases) ** length
     if num_random_seqs > max_possible:
@@ -278,8 +278,8 @@ that many unique sequences. Please set num_random_seqs <= {max_possible}."""
         unique_sorted_arr = np.unique(arr, axis=0)
         if len(unique_sorted_arr) < num_random_seqs:
             print(
-                f"WARNING: did not find {num_random_seqs} unique sequences. If you are seeing this warning "
-                f"repeatedly, check the parameters to make_array_with_random_subset_of_dna_seqs."
+                f'WARNING: did not find {num_random_seqs} unique sequences. If you are seeing this warning '
+                f'repeatedly, check the parameters to make_array_with_random_subset_of_dna_seqs.'
             )
 
     # We probably have too many, so pick a random subset of sequences to return.
@@ -305,7 +305,7 @@ def comb(n: int, k: int) -> int:
 
 
 def make_array_with_all_dna_seqs_hamming_distance(
-    dist: int, seq: str, bases: Collection[str] = ("A", "C", "G", "T")
+    dist: int, seq: str, bases: Collection[str] = ('A', 'C', 'G', 'T')
 ) -> np.ndarray:
     """
     Return 2D numpy array with all DNA sequences of given length in lexicographic order. Bases contains
@@ -320,9 +320,9 @@ def make_array_with_all_dna_seqs_hamming_distance(
     num_bases = len(bases)
 
     if num_bases == 0:
-        raise ValueError("bases cannot be empty")
-    if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+        raise ValueError('bases cannot be empty')
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f'bases must be a subset of {"A", "C", "G", "T"}; cannot be {bases}')
 
     num_ways_to_choose_subsequence_indices = comb(length, dist)
     num_different_bases = len(bases) - 1
@@ -353,7 +353,7 @@ def make_array_with_all_dna_seqs_hamming_distance(
     new_arr %= num_bases
 
     # now map back to correct subset of 0,1,2,3 to represent bases
-    for base, digit in zip(["A", "C", "G", "T"], range(4)):
+    for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
         if base not in bases:
             idxs_to_inc = new_arr >= digit
             new_arr[idxs_to_inc] += 1
@@ -388,7 +388,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     dist: int,
     seq: str,
     rng: np.random.Generator = default_rng,
-    bases: Collection[str] = ("A", "C", "G", "T"),
+    bases: Collection[str] = ('A', 'C', 'G', 'T'),
 ) -> np.ndarray:
     """
     Return 2D numpy array with random subset of size `num_seqs` of DNA sequences of given length.
@@ -412,17 +412,17 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     :return:
         2D numpy array with random subset of size `num_seqs` of DNA sequences of given length
     """
-    if not set(bases) <= {"A", "C", "G", "T"}:
-        raise ValueError(f"bases must be a subset of {'A', 'C', 'G', 'T'}; cannot be {bases}")
+    if not set(bases) <= {'A', 'C', 'G', 'T'}:
+        raise ValueError(f'bases must be a subset of {"A", "C", "G", "T"}; cannot be {bases}')
     if len(bases) == 0:
-        raise ValueError("bases cannot be empty")
+        raise ValueError('bases cannot be empty')
     elif len(bases) == 1:
-        raise ValueError("bases must have at least two elements")
+        raise ValueError('bases must have at least two elements')
 
     length = len(seq)
 
     if dist < 1:
-        raise ValueError(f"dist must be positive, but dist = {dist}")
+        raise ValueError(f'dist must be positive, but dist = {dist}')
     if dist > length:
         raise ValueError(f'should have dist <= len("{seq}") = {length}, but dist = {dist}')
 
@@ -446,7 +446,7 @@ def make_array_with_random_subset_of_dna_seqs_hamming_distance(
     seqs = np.mod(seqs, num_different_bases + 1)
 
     # now map back to correct subset of 0,1,2,3 to represent bases
-    for base, digit in zip(["A", "C", "G", "T"], range(4)):
+    for base, digit in zip(['A', 'C', 'G', 'T'], range(4)):
         if base not in bases:
             idxs_to_inc = seqs >= digit
             seqs[idxs_to_inc] += 1
@@ -755,7 +755,7 @@ class DNASeqList:
         length: int | None = None,
         num_random_seqs: int | None = None,
         shuffle: bool = False,
-        alphabet: Collection[str] = ("A", "C", "G", "T"),
+        alphabet: Collection[str] = ('A', 'C', 'G', 'T'),
         seqs: Sequence[str] | None = None,
         seqarr: np.ndarray | None = None,
         filename: str | None = None,
@@ -809,7 +809,7 @@ class DNASeqList:
         for v1, v2 in it.combinations([length, seqs, seqarr, filename, hamming_distance_from_sequence], 2):
             if v1 is not None and v2 is not None:
                 raise ValueError(
-                    "exactly one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be non-None"
+                    'exactly one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be non-None'
                 )
         self.rng = rng
         if seqarr is not None:
@@ -818,11 +818,11 @@ class DNASeqList:
 
         elif seqs is not None:
             if len(seqs) == 0:
-                raise ValueError("seqs must have positive length")
+                raise ValueError('seqs must have positive length')
             self.seqlen = len(seqs[0])
             for seq in seqs:
                 if len(seq) != self.seqlen:
-                    raise ValueError("All sequences in seqs must be equal length")
+                    raise ValueError('All sequences in seqs must be equal length')
             self.numseqs = len(seqs)
             self.seqarr = seqs2arr(seqs)
 
@@ -859,7 +859,7 @@ class DNASeqList:
 
         else:
             raise ValueError(
-                "at least one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be specified"
+                'at least one of length, seqs, seqarr, filename, or hamming_distance_from_sequence must be specified'
             )
 
         self.shift = np.arange(2 * (self.seqlen - 1), -1, -2)
@@ -910,7 +910,7 @@ class DNASeqList:
     def _read_from_file(self, filename: str) -> None:
         """Reads from fileName in the format defined in writeToFile.
         Only meant to be called from constructor."""
-        with open(filename, "r+") as f:
+        with open(filename, 'r+') as f:
             first_line = f.readline()
             num_seqs_str, seq_len_str, temperature = first_line.split()
             self.numseqs = int(num_seqs_str)
@@ -932,25 +932,25 @@ class DNASeqList:
 
         where numseqs, seqlen are integers, and seq1,
         ... are strings from {A,C,G,T}"""
-        with open(filename, "w+") as f:
-            f.write(str(self.numseqs) + " " + str(self.seqlen) + "\n")
+        with open(filename, 'w+') as f:
+            f.write(str(self.numseqs) + ' ' + str(self.seqlen) + '\n')
             for i in range(self.numseqs):
-                f.write(self.get_seq_str(i) + "\n")
+                f.write(self.get_seq_str(i) + '\n')
 
     def __repr__(self) -> str:
-        return "DNASeqSet(seqs={})".format(str([self[i] for i in range(self.numseqs)]))
+        return 'DNASeqSet(seqs={})'.format(str([self[i] for i in range(self.numseqs)]))
 
     def __str__(self) -> str:
         if self.numseqs <= 256:
             ret = [self.get_seq_str(i) for i in range(self.numseqs)]
-            return ",".join(ret)
+            return ','.join(ret)
         else:
             ret = (
                 [self.get_seq_str(i) for i in range(3)]
-                + ["..."]
+                + ['...']
                 + [self.get_seq_str(i) for i in range(self.numseqs - 3, self.numseqs)]
             )
-            return ",".join(ret)
+            return ','.join(ret)
 
     def shuffle(self) -> None:
         self.rng.shuffle(self.seqarr)
@@ -969,7 +969,7 @@ class DNASeqList:
         ret = []
         for bases in bases_lst:
             bases_ch = [bits2base[base] for base in bases]
-            ret.append("".join(bases_ch))
+            ret.append(''.join(bases_ch))
         return ret
 
     def keep_seqs_at_indices(self, indices: Iterable[int]) -> None:
@@ -985,7 +985,7 @@ class DNASeqList:
         elif isinstance(slice_, slice):
             return self.get_seqs_str_list(slice_)
         else:
-            raise ValueError("slice_ must be int or slice")
+            raise ValueError('slice_ must be int or slice')
 
     def __setitem__(self, idx: int, seq: str) -> None:
         # cannot set on slice
@@ -1113,10 +1113,10 @@ class DNASeqList:
         left_p2 = self.seqarr[:, 2]
         right_m1 = self.seqarr[:, -2]
         right_m2 = self.seqarr[:, -3]
-        abits = base2bits["A"]
-        cbits = base2bits["C"]
-        gbits = base2bits["G"]
-        tbits = base2bits["T"]
+        abits = base2bits['A']
+        cbits = base2bits['C']
+        gbits = base2bits['G']
+        tbits = base2bits['T']
         good = (
             ((left == cbits) | (left == gbits))
             & ((right == cbits) | (right == gbits))
@@ -1132,12 +1132,12 @@ class DNASeqList:
         or one away, to prevent breathing."""
         left = self.seqarr[:, 0]
         right = self.seqarr[:, -1]
-        abits = base2bits["A"]
-        tbits = base2bits["T"]
+        abits = base2bits['A']
+        tbits = base2bits['T']
         good = ((left == abits) | (left == tbits)) & ((right == abits) | (right == tbits))
         if gc_near_end:
-            cbits = base2bits["C"]
-            gbits = base2bits["G"]
+            cbits = base2bits['C']
+            gbits = base2bits['G']
             left_p1 = self.seqarr[:, 1]
             left_p2 = self.seqarr[:, 2]
             right_m1 = self.seqarr[:, -2]
@@ -1196,10 +1196,10 @@ def create_toeplitz(seqlen: int, sublen: int, indices: Sequence[int] | None = No
         rows = sorted(list(set(indices)))
         for idx in rows:
             if idx < 0:
-                raise ValueError(f"index must be nonnegative, but {idx} is not; all indices = {indices}")
+                raise ValueError(f'index must be nonnegative, but {idx} is not; all indices = {indices}')
             if idx >= seqlen - (sublen - 1):
                 raise ValueError(
-                    f"index must be less than {seqlen - (sublen - 1)}, but {idx} is not; all indices = {indices}"
+                    f'index must be less than {seqlen - (sublen - 1)}, but {idx} is not; all indices = {indices}'
                 )
     num_rows = len(rows)
     num_cols = seqlen
@@ -1381,20 +1381,20 @@ def energy_hist(
     import matplotlib.pyplot as plt
 
     if combine_lengths and isinstance(length, int):
-        raise ValueError(f"length must be an iterable if combine_lengths is False, but it is the int {length}")
+        raise ValueError(f'length must be an iterable if combine_lengths is False, but it is the int {length}')
 
     plt.figure(figsize=figsize)
-    plt.xlabel(f"Nearest-neighbor energy (kcal/mol)")
+    plt.xlabel(f'Nearest-neighbor energy (kcal/mol)')
 
     lengths = [length] if isinstance(length, int) else length
 
     alpha = 1
     if len(lengths) > 1:
         alpha = 0.5
-        if "label" in kwargs:
-            raise ValueError(f"label (={kwargs['label']}) should not be specified if multiple lengths are given")
+        if 'label' in kwargs:
+            raise ValueError(f'label (={kwargs["label"]}) should not be specified if multiple lengths are given')
 
-    bins = kwargs.pop("bins", 20)
+    bins = kwargs.pop('bins', 20)
 
     all_energies = []
     for length in lengths:
@@ -1407,21 +1407,21 @@ def energy_hist(
         if combine_lengths:
             all_energies.extend(energies)
         else:
-            label = kwargs["label"] if "label" in kwargs else f"length {length}"
+            label = kwargs['label'] if 'label' in kwargs else f'length {length}'
             _ = plt.hist(energies, alpha=alpha, label=label, bins=bins, **kwargs)
 
     if combine_lengths:
-        if "label" in kwargs:
-            label = kwargs["label"]
-            del kwargs["label"]
+        if 'label' in kwargs:
+            label = kwargs['label']
+            del kwargs['label']
         else:
             if len(lengths) == 1:
-                label = f"length {length}"
+                label = f'length {length}'
             else:
-                lengths_delimited = ", ".join(map(str, lengths))
-                label = f"lengths {lengths_delimited} combined"
+                lengths_delimited = ', '.join(map(str, lengths))
+                label = f'lengths {lengths_delimited} combined'
         _ = plt.hist(all_energies, alpha=alpha, label=label, bins=bins, **kwargs)
 
-    plt.legend(loc="upper right")
-    title = kwargs.pop("title", f"Nearest-neighbor energies of DNA sequences at {temperature} C")
+    plt.legend(loc='upper right')
+    title = kwargs.pop('title', f'Nearest-neighbor energies of DNA sequences at {temperature} C')
     plt.title(title)

@@ -7,18 +7,18 @@ def main():
     domain_length = 15
     # energy_constraint = dc.NearestNeighborEnergyFilter(low_energy=-9.2, high_energy=-7)
     numpy_filters = [  # energy_constraint,
-        nc.RunsOfBasesFilter(["C", "G"], 4),
-        nc.RunsOfBasesFilter(["A", "T"], 4),
+        nc.RunsOfBasesFilter(['C', 'G'], 4),
+        nc.RunsOfBasesFilter(['A', 'T'], 4),
     ]
     domain_pool = nc.DomainPool(
-        f"length-{domain_length} domains",
+        f'length-{domain_length} domains',
         domain_length,
         numpy_filters=numpy_filters,
         replace_with_close_sequences=True,
     )
 
     random_seed = 0
-    strands = [nc.Strand([f"{i}" for i in range(1, 50)])]
+    strands = [nc.Strand([f'{i}' for i in range(1, 50)])]
     for strand in strands:
         for domain in strand.domains:
             domain.pool = domain_pool
@@ -27,11 +27,11 @@ def main():
             nc.nupack_strand_free_energy_constraint(
                 threshold=-1.5,
                 temperature=52,
-                short_description="StrandSS",
+                short_description='StrandSS',
                 parallel=False,
             )
         ],
-        out_directory="output/hamming_dist_test",
+        out_directory='output/hamming_dist_test',
         # weigh_violations_equally=True
         report_only_violations=False,
         random_seed=random_seed,
@@ -44,5 +44,5 @@ def main():
     ns.search_for_sequences(design, params)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

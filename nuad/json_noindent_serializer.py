@@ -33,7 +33,7 @@ class SuppressableIndentEncoder(json.JSONEncoder):
         self.unique_id = 0
         super().__init__(*args, **kwargs)  # type: ignore
         self.kwargs = dict(kwargs)
-        del self.kwargs["indent"]
+        del self.kwargs['indent']
         self._replacement_map: dict = {}
 
     def default(self, obj: Any) -> Any:
@@ -43,7 +43,7 @@ class SuppressableIndentEncoder(json.JSONEncoder):
             self.unique_id += 1
             value_str: str = json.dumps(obj.value, **self.kwargs)  # type: ignore
             self._replacement_map[key] = value_str
-            return f"@@{key}@@"
+            return f'@@{key}@@'
         else:
             return super().default(obj)
 

@@ -10,44 +10,44 @@ NON_SUB_LONG_DOMAIN_LENGTH = LONG_DOMAIN_LENGTH - SUB_LONG_DOMAIN_LENGTH
 
 TOEHOLD_LENGTH = 5
 
-SIGNAL_DOMAIN_PREFIX = "S"
-SIGNAL_DOMAIN_SUB_PREFIX = "s"
-TOEHOLD_DOMAIN = "T"
-COMPLEMENT_SUFFIX = "*"
-TOEHOLD_COMPLEMENT = f"{TOEHOLD_DOMAIN}{COMPLEMENT_SUFFIX}"
+SIGNAL_DOMAIN_PREFIX = 'S'
+SIGNAL_DOMAIN_SUB_PREFIX = 's'
+TOEHOLD_DOMAIN = 'T'
+COMPLEMENT_SUFFIX = '*'
+TOEHOLD_COMPLEMENT = f'{TOEHOLD_DOMAIN}{COMPLEMENT_SUFFIX}'
 
 # Domain pools
 forbidden_substring_filters = [
-    nc.ForbiddenSubstringFilter(["G" * 4, "C" * 4]),
+    nc.ForbiddenSubstringFilter(['G' * 4, 'C' * 4]),
 ]
 
 non_sub_long_domain_filters = [
-    nc.RestrictBasesFilter(("A", "C", "T")),
+    nc.RestrictBasesFilter(('A', 'C', 'T')),
     *forbidden_substring_filters,
 ]
 sub_long_domain_filters: List[nc.NumpyFilter] = [
-    nc.RestrictBasesFilter(("A", "C", "T")),
+    nc.RestrictBasesFilter(('A', 'C', 'T')),
 ]
 
 if SUB_LONG_DOMAIN_LENGTH > 3:
     sub_long_domain_filters.extend(forbidden_substring_filters)
 
 SUB_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    "sub_long_domain_pool",
+    'sub_long_domain_pool',
     SUB_LONG_DOMAIN_LENGTH,
     numpy_filters=sub_long_domain_filters,
 )
 NON_SUB_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    "non_sub_long_domain_pool",
+    'non_sub_long_domain_pool',
     NON_SUB_LONG_DOMAIN_LENGTH,
     numpy_filters=non_sub_long_domain_filters,
 )
 
 toehold_domain_contraints = [
-    nc.ForbiddenSubstringFilter("G" * 4),
-    nc.ForbiddenSubstringFilter("C" * 4),
+    nc.ForbiddenSubstringFilter('G' * 4),
+    nc.ForbiddenSubstringFilter('C' * 4),
 ]
-TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool("toehold_domain_pool", 5)
+TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool('toehold_domain_pool', 5)
 
 design = nc.Design()
 
@@ -55,11 +55,11 @@ design = nc.Design()
 #  s2       S2          T    s1      S1
 # [==--=============--=====--==-=============>
 def seesaw_signal_strand(gate1: int, gate2: int) -> nc.Strand:
-    d1 = f"{SIGNAL_DOMAIN_PREFIX}{gate1}"
-    d1_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}"
-    d2 = f"{SIGNAL_DOMAIN_PREFIX}{gate2}"
-    d2_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}"
-    s: nc.Strand = design.add_strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f"signal {gate1} {gate2}")
+    d1 = f'{SIGNAL_DOMAIN_PREFIX}{gate1}'
+    d1_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}'
+    d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}'
+    d2_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}'
+    s: nc.Strand = design.add_strand([d2_sub, d2, TOEHOLD_DOMAIN, d1_sub, d1], name=f'signal {gate1} {gate2}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     s.domains[2].pool = TOEHOLD_DOMAIN_POOL
@@ -72,9 +72,9 @@ def seesaw_signal_strand(gate1: int, gate2: int) -> nc.Strand:
 #    T*         S1*      s1*   T*
 # [=====--=============--==--=====>
 def gate_base_strand(gate: int) -> nc.Strand:
-    d = f"{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
-    d_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
-    s: nc.Strand = design.add_strand([TOEHOLD_COMPLEMENT, d, d_sub, TOEHOLD_COMPLEMENT], name=f"gate {gate}")
+    d = f'{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
+    d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
+    s: nc.Strand = design.add_strand([TOEHOLD_COMPLEMENT, d, d_sub, TOEHOLD_COMPLEMENT], name=f'gate {gate}')
     s.domains[0].pool = TOEHOLD_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     s.domains[2].pool = SUB_LONG_DOMAIN_POOL
@@ -85,9 +85,9 @@ def gate_base_strand(gate: int) -> nc.Strand:
 #  s1      S1
 # [==--=============>
 def waste_strand(gate: int) -> nc.Strand:
-    d = f"{SIGNAL_DOMAIN_PREFIX}{gate}"
-    d_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate}"
-    s: nc.Strand = design.add_strand([d_sub, d], name=f"waste {gate}")
+    d = f'{SIGNAL_DOMAIN_PREFIX}{gate}'
+    d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}'
+    s: nc.Strand = design.add_strand([d_sub, d], name=f'waste {gate}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     return s
@@ -96,12 +96,12 @@ def waste_strand(gate: int) -> nc.Strand:
 #  s1*   T*        S2*       s2*
 # [==--=====--=============--==>
 def threshold_base_strand(gate1: int, gate2: int) -> nc.Strand:
-    d1_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}{COMPLEMENT_SUFFIX}"
+    d1_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate1}{COMPLEMENT_SUFFIX}'
 
-    d2 = f"{SIGNAL_DOMAIN_PREFIX}{gate2}{COMPLEMENT_SUFFIX}"
-    d2_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}{COMPLEMENT_SUFFIX}"
+    d2 = f'{SIGNAL_DOMAIN_PREFIX}{gate2}{COMPLEMENT_SUFFIX}'
+    d2_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate2}{COMPLEMENT_SUFFIX}'
 
-    s: nc.Strand = design.add_strand([d1_sub, TOEHOLD_COMPLEMENT, d2, d2_sub], name=f"threshold {gate1} {gate2}")
+    s: nc.Strand = design.add_strand([d1_sub, TOEHOLD_COMPLEMENT, d2, d2_sub], name=f'threshold {gate1} {gate2}')
     s.domains[0].pool = SUB_LONG_DOMAIN_POOL
 
     s.domains[1].pool = TOEHOLD_DOMAIN_POOL
@@ -115,10 +115,10 @@ def threshold_base_strand(gate1: int, gate2: int) -> nc.Strand:
 #    T*        S1*       s1*
 # [=====--=============--==>
 def reporter_base_strand(gate) -> nc.Strand:
-    d = f"{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
-    d_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
+    d = f'{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
+    d_sub = f'{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}'
 
-    s: nc.Strand = design.add_strand([TOEHOLD_COMPLEMENT, d, d_sub], name=f"reporter {gate}")
+    s: nc.Strand = design.add_strand([TOEHOLD_COMPLEMENT, d, d_sub], name=f'reporter {gate}')
     s.domains[0].pool = TOEHOLD_DOMAIN_POOL
     s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
     s.domains[2].pool = SUB_LONG_DOMAIN_POOL
@@ -385,19 +385,19 @@ f_waste_6_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
 
 def four_g_constraint_evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
     seq = seqs[0]
-    excess = 1000 if "GGGG" in seq else 0
-    violation_str = "" if "GGGG" not in strand.sequence() else "** violation**"
-    return nc.Result(excess=excess, summary=f"{strand.name}: {strand.sequence()}{violation_str}")
+    excess = 1000 if 'GGGG' in seq else 0
+    violation_str = '' if 'GGGG' not in strand.sequence() else '** violation**'
+    return nc.Result(excess=excess, summary=f'{strand.name}: {strand.sequence()}{violation_str}')
 
 
 def four_g_constraint_summary(strand: nc.Strand):
-    violation_str = "" if "GGGG" not in strand.sequence() else "** violation**"
-    return f"{strand.name}: {strand.sequence()}{violation_str}"
+    violation_str = '' if 'GGGG' not in strand.sequence() else '** violation**'
+    return f'{strand.name}: {strand.sequence()}{violation_str}'
 
 
 four_g_constraint = nc.StrandConstraint(
-    description="4GConstraint",
-    short_description="4GConstraint",
+    description='4GConstraint',
+    short_description='4GConstraint',
     evaluate=four_g_constraint_evaluate,
     strands=tuple(strands),
 )
@@ -418,7 +418,7 @@ seesaw_design = nc.Design(strands=strands)
 params = ns.SearchParameters(  # weigh_violations_equally=True,
     constraints=constraints,
     # report_delay=0.0,
-    out_directory="output/seesaw_gate",
+    out_directory='output/seesaw_gate',
     report_only_violations=False,
 )
 

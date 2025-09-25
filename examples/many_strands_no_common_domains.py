@@ -17,29 +17,29 @@ class CLArgs(NamedTuple):
 
 
 def parse_command_line_arguments() -> CLArgs:
-    default_directory = os.path.join("output", ns.script_name_no_ext())
+    default_directory = os.path.join('output', ns.script_name_no_ext())
 
     parser = argparse.ArgumentParser(  # noqa
-        description="Small example design for testing.",
+        description='Small example design for testing.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-o",
-        "--output-dir",
+        '-o',
+        '--output-dir',
         type=str,
         default=default_directory,
-        help="directory in which to place output files",
+        help='directory in which to place output files',
     )
     parser.add_argument(
-        "-r",
-        "--restart",
-        action="store_true",
-        help="If true, then assumes output directory contains output of search that was "
-        "cancelled, to restart "
-        "from. Similar to -i option, but will automatically find the most recent design "
-        "(assuming they are numbered with a number such as -84), and will start the "
-        "numbering from there (i.e., the next files to be written upon improving the "
-        "design will have -85).",
+        '-r',
+        '--restart',
+        action='store_true',
+        help='If true, then assumes output directory contains output of search that was '
+        'cancelled, to restart '
+        'from. Similar to -i option, but will automatically find the most recent design '
+        '(assuming they are numbered with a number such as -84), and will start the '
+        'numbering from there (i.e., the next files to be written upon improving the '
+        'design will have -85).',
     )
 
     args = parser.parse_args()
@@ -69,15 +69,15 @@ def main() -> None:
     #                     si         wi         ni         ei
     # strand i is    [----------|----------|----------|---------->
     for i in range(num_strands):
-        design.add_strand([f"s{i}", f"w{i}", f"n{i}", f"e{i}"])
+        design.add_strand([f's{i}', f'w{i}', f'n{i}', f'e{i}'])
 
     some_fixed = False
     # some_fixed = True
     if some_fixed:
         # fix all domains of strand 0 and one domain of strand 1
         for domain in design.strands[0].domains:
-            domain.set_fixed_sequence("ACGTACGTAC")
-        design.strands[1].domains[0].set_fixed_sequence("ACGTACGTAC")
+            domain.set_fixed_sequence('ACGTACGTAC')
+        design.strands[1].domains[0].set_fixed_sequence('ACGTACGTAC')
 
     parallel = False
     # parallel = True
@@ -108,13 +108,13 @@ def main() -> None:
     replace_with_close_sequences = True
     # replace_with_close_sequences = False
     domain_pool_10 = nc.DomainPool(
-        f"length-10_domains",
+        f'length-10_domains',
         10,
         numpy_filters=numpy_filters,
         replace_with_close_sequences=replace_with_close_sequences,
     )
     domain_pool_11 = nc.DomainPool(
-        f"length-11_domains",
+        f'length-11_domains',
         11,
         numpy_filters=numpy_filters,
         replace_with_close_sequences=replace_with_close_sequences,
@@ -123,7 +123,7 @@ def main() -> None:
     if some_fixed:
         for strand in design.strands[1:]:  # skip all domains on strand 0 since all its domains are fixed
             for domain in strand.domains[:2]:
-                if domain.name != "s1":  # skip for s1 since that domain is fixed
+                if domain.name != 's1':  # skip for s1 since that domain is fixed
                     domain.pool = domain_pool_10
             for domain in strand.domains[2:]:
                 domain.pool = domain_pool_11
@@ -139,40 +139,40 @@ def main() -> None:
     #     strand_complexes=strand_complexes)
 
     domain_nupack_ss_constraint = nc.nupack_domain_free_energy_constraint(
-        threshold=-0.0, temperature=52, short_description="DomainSS"
+        threshold=-0.0, temperature=52, short_description='DomainSS'
     )
 
     domain_pairs_rna_duplex_constraint = nc.rna_duplex_domain_pairs_constraint(
-        threshold=-2.0, temperature=52, short_description="DomainPairRNAduplex"
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAduplex'
     )
 
     domain_pairs_rna_plex_constraint = nc.rna_plex_domain_pairs_constraint(
-        threshold=-2.0, temperature=52, short_description="DomainPairRNAplex"
+        threshold=-2.0, temperature=52, short_description='DomainPairRNAplex'
     )
 
     domain_pair_nupack_constraint = nc.nupack_domain_pair_constraint(
         threshold=-0.5,
         temperature=52,
-        short_description="DomainPairNUPACK",
+        short_description='DomainPairNUPACK',
         parallel=parallel,
     )
 
     strand_pairs_rna_duplex_constraint = nc.rna_duplex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description="RNAduplex", parallel=parallel
+        threshold=-1.0, temperature=52, short_description='RNAduplex', parallel=parallel
     )
 
     strand_pairs_rna_plex_constraint = nc.rna_plex_strand_pairs_constraint(
-        threshold=-1.0, temperature=52, short_description="RNAplex", parallel=parallel
+        threshold=-1.0, temperature=52, short_description='RNAplex', parallel=parallel
     )
 
     strand_individual_ss_constraint = nc.nupack_strand_free_energy_constraint(
-        threshold=-1.0, temperature=52, short_description="StrandSS", parallel=parallel
+        threshold=-1.0, temperature=52, short_description='StrandSS', parallel=parallel
     )
 
     strand_pair_nupack_constraint = nc.nupack_strand_pair_constraint(
         threshold=3.0,
         temperature=52,
-        short_description="StrandPairNUPACK",
+        short_description='StrandPairNUPACK',
         parallel=parallel,
         weight=0.1,
     )
@@ -206,5 +206,5 @@ def main() -> None:
     ns.search_for_sequences(design, params)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

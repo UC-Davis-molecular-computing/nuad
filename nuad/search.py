@@ -46,8 +46,8 @@ except ImportError:
         from typing_extensions import Literal
     except ImportError:
         print(
-            "If you are using Python prior to version 3.8, you need to install the typing_extensions\n"
-            "package in order to use nuad. Exiting."
+            'If you are using Python prior to version 3.8, you need to install the typing_extensions\n'
+            'package in order to use nuad. Exiting.'
         )
         sys.exit(-1)
 
@@ -117,7 +117,7 @@ pprint_indent = 4
 
 
 def default_output_directory() -> str:
-    return os.path.join("output", f"{script_name_no_ext()}--{timestamp()}")
+    return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
 # This function takes a lot of time if we don't cache results; but there's not too many different
@@ -156,9 +156,9 @@ def find_parts_to_check(
         parts_to_check = tuple()  # not used when checking DesignConstraint
     else:
         raise AssertionError(
-            "should be unreachable; type of constraint not recognized:\n"
-            f"type(constraint) = {type(constraint)}\n"
-            f"constraint = {constraint}"
+            'should be unreachable; type of constraint not recognized:\n'
+            f'type(constraint) = {type(constraint)}\n'
+            f'constraint = {constraint}'
         )
 
     return parts_to_check
@@ -401,8 +401,8 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> Tuple[
         domains = list(domain_iterable)
     else:
         raise AssertionError(
-            f"part {part} not recognized as one of Domain, Strand, "
-            f"DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}"
+            f'part {part} not recognized as one of Domain, Strand, '
+            f'DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}'
         )
 
     # Convert direct domains to independent domains.
@@ -420,7 +420,7 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> Tuple[
     return tuple(assignable_domains)
 
 
-T = TypeVar("T")
+T = TypeVar('T')
 
 
 def remove_none_from_list(lst: Iterable[T | None]) -> List[T]:
@@ -428,8 +428,8 @@ def remove_none_from_list(lst: Iterable[T | None]) -> List[T]:
 
 
 def _sequences_fragile_format_output_to_file(design: Design, include_group: bool = True) -> str:
-    return "\n".join(
-        f"{strand.name}  {strand.group if include_group else ''}  {strand.sequence(delimiter='-')}"
+    return '\n'.join(
+        f'{strand.name}  {strand.group if include_group else ""}  {strand.sequence(delimiter="-")}'
         for strand in design.strands
     )
 
@@ -444,7 +444,7 @@ def _write_intermediate_files(
     eval_set: EvaluationSet,
 ) -> None:
     num_new_optimal_padded = (
-        f"{num_new_optimal}" if params.num_digits_update is None else f"{num_new_optimal:0{params.num_digits_update}d}"
+        f'{num_new_optimal}' if params.num_digits_update is None else f'{num_new_optimal:0{params.num_digits_update}d}'
     )
 
     _write_design(
@@ -547,10 +547,10 @@ def _write_report(
 
 
 def _write_text_intermediate_and_final_files(content: str, best_filename: str, idx_filename: str | None) -> None:
-    with open(best_filename, "w") as file:
+    with open(best_filename, 'w') as file:
         file.write(content)
     if idx_filename is not None:
-        with open(idx_filename, "w") as file:
+        with open(idx_filename, 'w') as file:
             file.write(content)
 
 
@@ -569,12 +569,12 @@ call search_for_sequences with the parameter restart=True.
         print(warning)
         done = False
         while not done:
-            ans = input(f"Are you sure you wish to proceed with deleting the contents of\n{directory} ([n]/y)? ")
+            ans = input(f'Are you sure you wish to proceed with deleting the contents of\n{directory} ([n]/y)? ')
             ans = ans.strip().lower()
-            if ans in ["n", ""]:
-                print("No problem! Exiting...")
+            if ans in ['n', '']:
+                print('No problem! Exiting...')
                 sys.exit(0)
-            if ans == "y":
+            if ans == 'y':
                 done = True
             else:
                 print(f'I don\'t understand the response "{ans}". Please respond n (for no) or y (for yes).')
@@ -582,10 +582,10 @@ call search_for_sequences with the parameter restart=True.
     files = [file for file in files_and_directories if os.path.isfile(file)]
     subdirs = [subdir for subdir in files_and_directories if not os.path.isfile(subdir)]
     for file in files:
-        logger.info(f"deleting file {file}")
+        logger.info(f'deleting file {file}')
         os.remove(file)
     for sub in subdirs:
-        logger.info(f"deleting subdirectory {sub}")
+        logger.info(f'deleting subdirectory {sub}')
         shutil.rmtree(sub)
 
 
@@ -604,16 +604,16 @@ class _Directories:
     sequence: str = field(init=False)
 
     # relative to out directory
-    design_subdirectory: str = field(init=False, default="designs")
-    rng_state_subdirectory: str = field(init=False, default="rng")
-    report_subdirectory: str = field(init=False, default="reports")
-    sequence_subdirectory: str = field(init=False, default="sequences")
+    design_subdirectory: str = field(init=False, default='designs')
+    rng_state_subdirectory: str = field(init=False, default='rng')
+    report_subdirectory: str = field(init=False, default='reports')
+    sequence_subdirectory: str = field(init=False, default='sequences')
 
     # names of files to write (in subdirectories, and also "current-best" versions in out
-    design_filename_no_ext: str = field(init=False, default="design")
-    rng_state_filename_no_ext: str = field(init=False, default="rng")
-    sequences_filename_no_ext: str = field(init=False, default="sequences")
-    report_filename_no_ext: str = field(init=False, default="report")
+    design_filename_no_ext: str = field(init=False, default='design')
+    rng_state_filename_no_ext: str = field(init=False, default='rng')
+    sequences_filename_no_ext: str = field(init=False, default='sequences')
+    report_filename_no_ext: str = field(init=False, default='report')
 
     debug_file_handler: logging.FileHandler | None = field(init=False, default=None)
     info_file_handler: logging.FileHandler | None = field(init=False, default=None)
@@ -636,49 +636,49 @@ class _Directories:
         self.sequence = os.path.join(self.out, self.sequence_subdirectory)
 
         if debug:
-            self.debug_file_handler = logging.FileHandler(os.path.join(self.out, "log_debug.log"))
+            self.debug_file_handler = logging.FileHandler(os.path.join(self.out, 'log_debug.log'))
             self.debug_file_handler.setLevel(logging.DEBUG)
             nc.logger.addHandler(self.debug_file_handler)
 
         if info:
-            self.info_file_handler = logging.FileHandler(os.path.join(self.out, "log_info.log"))
+            self.info_file_handler = logging.FileHandler(os.path.join(self.out, 'log_info.log'))
             self.info_file_handler.setLevel(logging.INFO)
             nc.logger.addHandler(self.info_file_handler)
 
     @staticmethod
     def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int | str, ext: str) -> str:
-        relative_filename = f"{filename_no_ext}-{idx}.{ext}"
+        relative_filename = f'{filename_no_ext}-{idx}.{ext}'
         full_filename = os.path.join(directory, relative_filename)
         return full_filename
 
     def best_full_filename_noext(self, filename_no_ext: str, ext: str) -> str:
-        relative_filename = f"{filename_no_ext}_best.{ext}"
+        relative_filename = f'{filename_no_ext}_best.{ext}'
         full_filename = os.path.join(self.out, relative_filename)
         return full_filename
 
     def indexed_design_full_filename_noext(self, idx: int | str) -> str:
-        return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx, "json")
+        return self.indexed_full_filename_noext(self.design_filename_no_ext, self.design, idx, 'json')
 
     def indexed_rng_full_filename_noext(self, idx: int | str) -> str:
-        return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx, "json")
+        return self.indexed_full_filename_noext(self.rng_state_filename_no_ext, self.rng_state, idx, 'json')
 
     def indexed_sequences_full_filename_noext(self, idx: int | str) -> str:
-        return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx, "txt")
+        return self.indexed_full_filename_noext(self.sequences_filename_no_ext, self.sequence, idx, 'txt')
 
     def indexed_report_full_filename_noext(self, idx: int | str) -> str:
-        return self.indexed_full_filename_noext(self.report_filename_no_ext, self.report, idx, "txt")
+        return self.indexed_full_filename_noext(self.report_filename_no_ext, self.report, idx, 'txt')
 
     def best_design_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.design_filename_no_ext, "json")
+        return self.best_full_filename_noext(self.design_filename_no_ext, 'json')
 
     def best_rng_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.rng_state_filename_no_ext, "json")
+        return self.best_full_filename_noext(self.rng_state_filename_no_ext, 'json')
 
     def best_sequences_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.sequences_filename_no_ext, "txt")
+        return self.best_full_filename_noext(self.sequences_filename_no_ext, 'txt')
 
     def best_report_full_filename_noext(self) -> str:
-        return self.best_full_filename_noext(self.report_filename_no_ext, "txt")
+        return self.best_full_filename_noext(self.report_filename_no_ext, 'txt')
 
 
 def _check_design(design: nc.Design) -> None:
@@ -689,24 +689,24 @@ def _check_design(design: nc.Design) -> None:
             # noinspection PyProtectedMember
             if domain._pool is None and not (domain.fixed or domain.dependent or domain.locked):
                 raise ValueError(
-                    f"for strand {strand.name}, it has a "
-                    f"non-fixed, non-dependent, unlocked domain {domain.name} "
-                    f"with pool set to None.\n"
-                    f"For domains that are not fixed and not dependent and unlocked, "
-                    f"exactly one of these must be None."
+                    f'for strand {strand.name}, it has a '
+                    f'non-fixed, non-dependent, unlocked domain {domain.name} '
+                    f'with pool set to None.\n'
+                    f'For domains that are not fixed and not dependent and unlocked, '
+                    f'exactly one of these must be None.'
                 )
             # noinspection PyProtectedMember
             elif domain._pool is not None and domain.fixed:
                 raise ValueError(
-                    f"for strand {strand.name}, it has a "
-                    f"domain {domain.name} that is fixed, even though that Domain has a "
-                    f"DomainPool.\nA Domain cannot be fixed and have a DomainPool."
+                    f'for strand {strand.name}, it has a '
+                    f'domain {domain.name} that is fixed, even though that Domain has a '
+                    f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.'
                 )
             elif domain._pool is not None and domain.dependent and domain.locked:
                 raise ValueError(
-                    f"for strand {strand.name}, it has a "
-                    f"domain {domain.name} that is dependent or locked, even though that Domain has a "
-                    f"DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool."
+                    f'for strand {strand.name}, it has a '
+                    f'domain {domain.name} that is dependent or locked, even though that Domain has a '
+                    f'DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool.'
                 )
 
 
@@ -957,8 +957,8 @@ class SearchParameters:
         for constraint in self.constraints:
             if not isinstance(constraint, Constraint):
                 raise ValueError(
-                    "each element of constraints must be an instance of Constraint, "
-                    f"but the element at index {idx} is of type {type(constraint)}"
+                    'each element of constraints must be an instance of Constraint, '
+                    f'but the element at index {idx} is of type {type(constraint)}'
                 )
             idx += 1
 
@@ -1044,7 +1044,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
 
     if params.random_seed is not None:
-        logger.info(f"using random seed of {params.random_seed}; use this same seed to reproduce this run")
+        logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
 
     design.compute_derived_fields()
     design.check_names_unique()
@@ -1070,7 +1070,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     assert params.never_increase_score is not None
 
     cpu_count = nc.cpu_count()
-    logger.info(f"number of processes in system: {cpu_count}")
+    logger.info(f'number of processes in system: {cpu_count}')
 
     # need to assign to local function variable so it doesn't look like a method call
     on_improved_design: Callable[[int], None] = params.on_improved_design
@@ -1205,7 +1205,7 @@ def _check_cpu_count(cpu_count: int) -> None:
     # in Amazon web services, without stopping the program.)
     if cpu_count != nc.cpu_count():
         logger.info(
-            f"number of processes in system changed from {cpu_count} to {nc.cpu_count()}\nallocating new ThreadPool"
+            f'number of processes in system changed from {cpu_count} to {nc.cpu_count()}\nallocating new ThreadPool'
         )
         cpu_count = nc.cpu_count()
         global _process_pool
@@ -1335,7 +1335,7 @@ def script_name_no_ext() -> str:
     :return: Name of the Python script currently running, without the .py extension.
     """
     script_name = os.path.basename(sys.argv[0])
-    last_dot_idx = script_name.rfind(".")
+    last_dot_idx = script_name.rfind('.')
     if last_dot_idx >= 0:
         script_name = script_name[:last_dot_idx]
     return script_name
@@ -1343,7 +1343,7 @@ def script_name_no_ext() -> str:
 
 def timestamp() -> str:
     now = datetime.datetime.now(datetime.timezone.utc)
-    time_str = now.strftime("%Y-%m-%dT%H.%M.%S")
+    time_str = now.strftime('%Y-%m-%dT%H.%M.%S')
     return time_str
 
 
@@ -1360,7 +1360,7 @@ def _restart_from_directory(
 
     if os.path.isdir(directories.design):
         # returns highest index found in design subdirectory
-        highest_idx = _find_highest_index_in_directory(directories.design, directories.design_filename_no_ext, "json")
+        highest_idx = _find_highest_index_in_directory(directories.design, directories.design_filename_no_ext, 'json')
         design_filename = directories.indexed_design_full_filename_noext(highest_idx)
         rng_filename = directories.indexed_rng_full_filename_noext(highest_idx)
     else:
@@ -1372,17 +1372,17 @@ def _restart_from_directory(
         # so that future written files will have the correct number
         if os.path.isdir(directories.sequence):
             highest_idx = _find_highest_index_in_directory(
-                directories.sequence, directories.sequences_filename_no_ext, "txt"
+                directories.sequence, directories.sequences_filename_no_ext, 'txt'
             )
         elif os.path.isdir(directories.report):
             highest_idx = _find_highest_index_in_directory(
-                directories.report, directories.report_filename_no_ext, "txt"
+                directories.report, directories.report_filename_no_ext, 'txt'
             )
         else:
             highest_idx = 0
 
     # read design
-    with open(design_filename, "r") as file:
+    with open(design_filename, 'r') as file:
         design_json_str = file.read()
     design_stored = nc.Design.from_json(design_json_str)
     nc.verify_designs_match(design_stored, design, check_fixed=False)
@@ -1400,7 +1400,7 @@ run of the search algorithm had been allowed to continue."""
         )
     else:
         # read RNG state
-        with open(rng_filename, "r") as file:
+        with open(rng_filename, 'r') as file:
             rng_state_json = file.read()
         rng_state = json.loads(rng_state_json)
         rng = numpy.random.default_rng()
@@ -1432,15 +1432,15 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
     else:
         raise ValueError(f'no files in directory "{directory}" match the pattern "{filename_start}-<index>.{ext}";\n')
 
-    pattern = re.compile(filename_start + r"-(\d+)\." + ext)
+    pattern = re.compile(filename_start + r'-(\d+)\.' + ext)
     filenames_matching = [filename for filename in filenames if pattern.search(filename)]
 
     if len(filenames_matching) == 0:
         raise ValueError(
             f'no files in directory "{directory}" '
             f'match the pattern "{filename_start}-<index>.{ext}";\n'
-            f"files:\n"
-            f"{filenames}"
+            f'files:\n'
+            f'{filenames}'
         )
 
     max_index_str = pattern.search(filenames_matching[0]).group(1)
@@ -1487,18 +1487,18 @@ def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
         time_last_n_calls.append(stopwatch.milliseconds())
         ave_time = statistics.mean(time_last_n_calls)
         content = (
-            f"| time: {stopwatch.milliseconds_str(1, 6)} ms "
-            + f"| last {len(time_last_n_calls)} calls average: {ave_time:.1f} ms |"
+            f'| time: {stopwatch.milliseconds_str(1, 6)} ms '
+            + f'| last {len(time_last_n_calls)} calls average: {ave_time:.1f} ms |'
         )
         if include_median:
             med_time = statistics.median(time_last_n_calls)
-            content += f" median: {med_time:.1f} ms |"
+            content += f' median: {med_time:.1f} ms |'
         content_width = len(content)
-        logger.info("\n" + content)
+        logger.info('\n' + content)
     else:
         # skip appending first time, since it is much larger and skews the average
-        content = f"| time for first call: {stopwatch.milliseconds_str()} ms |"
-        logger.info("\n" + content)
+        content = f'| time for first call: {stopwatch.milliseconds_str()} ms |'
+        logger.info('\n' + content)
         time_last_n_calls_available = True
 
 
@@ -1508,7 +1508,7 @@ def _flatten(list_of_lists: Iterable[Iterable[T]]) -> Iterable[T]:
 
 
 def _remove_first_lines_from_string(s: str, num_lines: int) -> str:
-    return "\n".join(s.split("\n")[num_lines:])
+    return '\n'.join(s.split('\n')[num_lines:])
 
 
 def _log_constraint_summary(
@@ -1520,10 +1520,10 @@ def _log_constraint_summary(
 ) -> None:
     # If output is not scrolling, only print this once on first iteration.
     if params.scrolling_output or iteration == 0:
-        row1 = ["iteration", "update", "opt score", "new score"] + [
-            f"{constraint.short_description}" for constraint in params.constraints
+        row1 = ['iteration', 'update', 'opt score', 'new score'] + [
+            f'{constraint.short_description}' for constraint in params.constraints
         ]
-        header = tabulate([row1], tablefmt="github")
+        header = tabulate([row1], tablefmt='github')
         if params.scrolling_output and iteration > 0:
             print()
         print(header)
@@ -1543,27 +1543,27 @@ def _log_constraint_summary(
         score = eval_set.score_of_constraint(constraint, True)
         length = len(constraint.short_description)
         num_decimals = _dec(score)
-        constraint_str = f"{score:{length}.{num_decimals}f}"
+        constraint_str = f'{score:{length}.{num_decimals}f}'
         # round further if this would exceed length
         if len(constraint_str) > length:
             excess = len(constraint_str) > length
             num_decimals -= excess
             if num_decimals < 0:
                 num_decimals = 0
-            constraint_str = f"{score:{length}.{num_decimals}f}"
+            constraint_str = f'{score:{length}.{num_decimals}f}'
         all_constraints_strs.append(constraint_str)
     # all_constraints_str = '|'.join(all_constraints_strs)
 
     # logger.info(header + '\n' + score_str + all_constraints_str)
 
     # TODO: use floatfmt per column to adjust decimal places
-    row1 = ["iteration", "update", "opt score", "new score"] + [
-        f"{constraint.short_description}" for constraint in params.constraints
+    row1 = ['iteration', 'update', 'opt score', 'new score'] + [
+        f'{constraint.short_description}' for constraint in params.constraints
     ]
     # iteration_str = f'{iteration:9}'
     # num_new_optimal_str = f'{num_new_optimal:6}'
-    score_opt_str = f"{score_opt:9.{dec_opt}f}"
-    score_new_str = f"{score_new:9.{dec_new}f}"
+    score_opt_str = f'{score_opt:9.{dec_opt}f}'
+    score_new_str = f'{score_new:9.{dec_new}f}'
     row2 = [
         iteration,
         num_new_optimal,
@@ -1571,11 +1571,11 @@ def _log_constraint_summary(
         score_new_str,
     ] + all_constraints_strs  # type:ignore
     table = [row1, row2]
-    table_str = tabulate(table, tablefmt="github", numalign="right", stralign="right")
+    table_str = tabulate(table, tablefmt='github', numalign='right', stralign='right')
     table_str = _remove_first_lines_from_string(table_str, 2)
     # logger.info(table_str)
-    first_newline = "" if params.scrolling_output else "\r"
-    print(first_newline + table_str, end="")
+    first_newline = '' if params.scrolling_output else '\r'
+    print(first_newline + table_str, end='')
 
 
 def assign_sequences_to_domains_randomly_from_pools(
@@ -1615,14 +1615,14 @@ def assign_sequences_to_domains_randomly_from_pools(
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
             skip_nonfixed_msg = (
-                f"Skipping initial assignment of DNA sequence to domain {domain.name}. "
-                f"That domain currently has a non-fixed sequence {domain.sequence()}, "
-                f"which the search will attempt to replace."
+                f'Skipping initial assignment of DNA sequence to domain {domain.name}. '
+                f'That domain currently has a non-fixed sequence {domain.sequence()}, '
+                f'which the search will attempt to replace.'
             )
             skip_fixed_msg = (
-                f"Skipping initial assignment of DNA sequence to domain {domain.name}. "
-                f"That domain has a fixed sequence {domain.sequence()}, "
-                f"and the search will not replace it."
+                f'Skipping initial assignment of DNA sequence to domain {domain.name}. '
+                f'That domain has a fixed sequence {domain.sequence()}, '
+                f'and the search will not replace it.'
             )
         if overwrite_existing_sequences:
             if not domain.fixed:
@@ -1651,7 +1651,7 @@ def assign_sequences_to_domains_randomly_from_pools(
 
     if not at_least_one_domain_unfixed:
         raise ValueError(
-            "No domains are unfixed, so we cannot do any sequence design. Please make at least one domain not fixed."
+            'No domains are unfixed, so we cannot do any sequence design. Please make at least one domain not fixed.'
         )
 
 
@@ -1704,9 +1704,9 @@ def default_probability_of_keeping_change_function(
     # return keep_change_only_if_better
 
 
-K1 = TypeVar("K1")
-K2 = TypeVar("K2")
-V = TypeVar("V")
+K1 = TypeVar('K1')
+K2 = TypeVar('K2')
+V = TypeVar('V')
 
 
 # convenience methods for iterating over 2D dicts
@@ -1811,8 +1811,8 @@ class EvaluationSet:
         all_evals: List[Evaluation] = [
             evaluation for part_to_eval in self.evaluations.values() for evaluation in part_to_eval.values()
         ]
-        lines = "\n  ".join(map(str, all_evals))
-        return f"EvaluationSet(\n  {lines})"
+        lines = '\n  '.join(map(str, all_evals))
+        return f'EvaluationSet(\n  {lines})'
 
     def __str__(self):
         return repr(self)
@@ -1979,7 +1979,7 @@ class EvaluationSet:
             if score_gap is not None:
                 score_gap -= total_score
         else:
-            raise AssertionError(f"constraint {constraint} of unrecognized type {constraint.__class__.__name__}")
+            raise AssertionError(f'constraint {constraint} of unrecognized type {constraint.__class__.__name__}')
 
         # assign blame for violations to domains by looking up associated domains in each part
 
@@ -2094,7 +2094,7 @@ class EvaluationSet:
         elif fixed is False:
             total_score_old = self.total_score_nonfixed
         else:
-            raise AssertionError(f"fixed should be None, True, or False, but is {fixed}")
+            raise AssertionError(f'fixed should be None, True, or False, but is {fixed}')
 
         total_score_new = total_score_old - self.calculate_score_gap(fixed)
         return total_score_new
@@ -2236,8 +2236,8 @@ class Evaluation(Generic[DesignPart]):
 
     def __repr__(self) -> str:
         return (
-            f"Evaluation({self.constraint.short_description}, score={self.score:.2f}, "
-            f"summary={self.summary}, violated={self.violated})"
+            f'Evaluation({self.constraint.short_description}, score={self.score:.2f}, '
+            f'summary={self.summary}, violated={self.violated})'
         )
 
     def __str__(self) -> str:
@@ -2344,18 +2344,18 @@ def create_text_report(
 
     score = constraints_report.total_score
     score_unfixed = constraints_report.total_score_nonfixed
-    score_total_summary = f"total score of constraint violations:         {score:.2f}"
-    score_unfixed_summary = f"total score of unfixed constraint violations: {score_unfixed:.2f}"
+    score_total_summary = f'total score of constraint violations:         {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
     score_summaries = (
-        (score_total_summary + "\n" + (score_unfixed_summary + "\n\n" if score_unfixed != score else "\n"))
+        (score_total_summary + '\n' + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n'))
         if include_scores
-        else "\n"
+        else '\n'
     )
 
     summary = (
-        f"total evaluations: {constraints_report.num_evaluations}\n"
-        f"total violations:  {constraints_report.num_violations}\n" + score_summaries + "\n\n".join(summaries)
+        f'total evaluations: {constraints_report.num_evaluations}\n'
+        f'total violations:  {constraints_report.num_violations}\n' + score_summaries + '\n\n'.join(summaries)
     )
 
     return (
@@ -2386,16 +2386,16 @@ def summary_of_constraints(
 
     score = eval_set.total_score
     score_unfixed = eval_set.total_score_nonfixed
-    score_total_summary = f"total score of constraint violations: {score:.2f}"
-    score_unfixed_summary = f"total score of unfixed constraint violations: {score_unfixed:.2f}"
+    score_total_summary = f'total score of constraint violations: {score:.2f}'
+    score_unfixed_summary = f'total score of unfixed constraint violations: {score_unfixed:.2f}'
 
     summary = (
-        f"total evaluations: {eval_set.num_evaluations}\n"
-        f"total violations: {eval_set.num_violations}\n"
+        f'total evaluations: {eval_set.num_evaluations}\n'
+        f'total violations: {eval_set.num_violations}\n'
         + score_total_summary
-        + "\n"
-        + (score_unfixed_summary + "\n\n" if score_unfixed != score else "\n")
-        + "\n\n".join(summaries)
+        + '\n'
+        + (score_unfixed_summary + '\n\n' if score_unfixed != score else '\n')
+        + '\n\n'.join(summaries)
     )
 
     return (
@@ -2435,18 +2435,18 @@ def _value_from_constraint_dict(
 
 
 _default_num_bins = 10
-_default_yscale = "linear"
+_default_yscale = 'linear'
 
 
 def display_report(
     design: nc.Design,
     constraints: Iterable[Constraint],
     report_only_violations: bool = False,
-    layout: Literal["horz", "vert"] = "vert",
+    layout: Literal['horz', 'vert'] = 'vert',
     xlims: (None | Tuple[float, float] | Dict[str | Constraint, None | Tuple[float, float]]) = None,
     ylims: (None | Tuple[float, float] | Dict[str | Constraint, None | Tuple[float, float]]) = None,
     yscales: (
-        Literal["log", "linear", "symlog"] | Dict[str | Constraint, Literal["log", "linear", "symlog"]]
+        Literal['log', 'linear', 'symlog'] | Dict[str | Constraint, Literal['log', 'linear', 'symlog']]
     ) = _default_yscale,
     bins: int | Dict[str | Constraint, int] = _default_num_bins,
 ) -> None:
@@ -2507,7 +2507,7 @@ def display_report(
     if ylims is None:
         ylims = {}
 
-    assert layout in ["horz", "vert"]
+    assert layout in ['horz', 'vert']
     constraints_report = create_constraints_report(
         design, constraints, report_only_violations, include_only_with_values=False
     )
@@ -2526,17 +2526,17 @@ def display_report(
 
     for report in reports_without_values:
         part_type_name = report.constraint.part_name()
-        dm(f"## {report.constraint.description}")
-        dm(f"### {report.num_violations}/{report.num_evaluations}  (#violations/#evaluations)")  # noqa
+        dm(f'## {report.constraint.description}')
+        dm(f'### {report.num_violations}/{report.num_evaluations}  (#violations/#evaluations)')  # noqa
         for viol in report.violations:
-            print(f"  {part_type_name} {viol.part.name}: {viol.summary}")
+            print(f'  {part_type_name} {viol.part.name}: {viol.summary}')
 
     for i, (report, values, units) in enumerate(reports_with_values):
         assert len(values) > 0
 
         yscale = _value_from_constraint_dict(yscales, report.constraint, _default_yscale, str)  # type: ignore
 
-        if layout == "horz":
+        if layout == 'horz':
             plt.subplot(1, num_figs, i + 1)
 
         num_bins = _value_from_constraint_dict(bins, report.constraint, _default_num_bins, int)
@@ -2546,7 +2546,7 @@ def display_report(
         _, __, ___ = plt.hist(
             values,
             bins=num_bins,
-            edgecolor="black",
+            edgecolor='black',
         )
 
         plt.yscale(yscale)
@@ -2571,10 +2571,10 @@ def display_report(
 
         plt.title(report.constraint.description)
 
-        if layout == "vert":
+        if layout == 'vert':
             plt.show()
 
-    if layout == "horz":
+    if layout == 'horz':
         plt.tight_layout(rect=(0, 0, max(1, num_figs), 1))
         plt.show()
 
@@ -2713,7 +2713,7 @@ class ConstraintReport(Generic[DesignPart]):
                 DesignConstraint,
             ),
         ):
-            raise NotImplementedError(f"unrecognized type {type(constraint)}")
+            raise NotImplementedError(f'unrecognized type {type(constraint)}')
 
         self.constraint = constraint
         self.report_only_violations = report_only_violations
@@ -2735,18 +2735,18 @@ class ConstraintReport(Generic[DesignPart]):
 
     def header(self, include_scores: bool) -> str:
         if self.score != self.score_nonfixed:
-            summary_score_unfixed = f"\n* unfixed score of violations: {self.score_nonfixed:.2f}"
+            summary_score_unfixed = f'\n* unfixed score of violations: {self.score_nonfixed:.2f}'
         else:
             summary_score_unfixed = None
 
-        summary_unfixed_content = "" if summary_score_unfixed is None else summary_score_unfixed
+        summary_unfixed_content = '' if summary_score_unfixed is None else summary_score_unfixed
         score_summary_str = (
-            f"\n* score of violations: {self.score:.2f}{summary_unfixed_content}" if include_scores else ""
+            f'\n* score of violations: {self.score:.2f}{summary_unfixed_content}' if include_scores else ''
         )
 
         summary = (
             f"""\
-**{"*" * len(self.constraint.description)}
+**{'*' * len(self.constraint.description)}
 * {self.constraint.description}
 * evaluations: {self.num_evaluations}
 * violations:  {self.num_violations}"""
@@ -2762,8 +2762,8 @@ class ConstraintReport(Generic[DesignPart]):
         summaries = []
         num_violations_counted = 0
         for evals, header_name in [
-            (self.evaluations_nonfixed, f"unfixed {part_type_name}s"),
-            (self.evaluations_fixed, f"fixed {part_type_name}s"),
+            (self.evaluations_nonfixed, f'unfixed {part_type_name}s'),
+            (self.evaluations_fixed, f'fixed {part_type_name}s'),
         ]:
             if len(evals) == 0:
                 continue
@@ -2773,19 +2773,19 @@ class ConstraintReport(Generic[DesignPart]):
 
             lines_and_scores: List[Tuple[str, float]] = []
             for ev in evals:
-                score_str = f";  score: {ev.score:.2f}" if include_scores else ""
-                viol_str = " !" if ev.violated and not report_only_violations else ""
-                line = f"{part_type_name} {ev.part.name:{max_part_name_length}}: {ev.summary}{score_str}{viol_str}"
+                score_str = f';  score: {ev.score:.2f}' if include_scores else ''
+                viol_str = ' !' if ev.violated and not report_only_violations else ''
+                line = f'{part_type_name} {ev.part.name:{max_part_name_length}}: {ev.summary}{score_str}{viol_str}'
                 lines_and_scores.append((line, ev.score))
 
             lines_and_scores.sort(key=lambda line_and_score: line_and_score[1], reverse=True)
 
             lines = (line for line, _ in lines_and_scores)
-            content = "\n".join(lines)
+            content = '\n'.join(lines)
 
             # only put header to distinguish fixed from unfixed violations if there are some fixed
-            full_header = _small_header(header_name, "=") if some_fixed_evals else ""
-            summary = full_header + f"\n{content}\n"
+            full_header = _small_header(header_name, '=') if some_fixed_evals else ''
+            summary = full_header + f'\n{content}\n'
             summaries.append(summary)
 
         if self.report_only_violations:
@@ -2793,15 +2793,15 @@ class ConstraintReport(Generic[DesignPart]):
         else:
             assert num_violations_counted == self.num_evaluations
 
-        return "\n".join(summaries)
+        return '\n'.join(summaries)
 
     def content(self, include_scores: bool, report_only_violations: bool) -> str:
         header = self.header(include_scores)
         content_no_header = self.content_no_header(include_scores, report_only_violations)
-        indented_content = textwrap.indent(content_no_header, "  ")
-        return header + "\n" + indented_content
+        indented_content = textwrap.indent(content_no_header, '  ')
+        return header + '\n' + indented_content
 
 
 def _small_header(header: str, delim: str) -> str:
     width = len(header)
-    return f"\n{header}\n{delim * width}"
+    return f'\n{header}\n{delim * width}'

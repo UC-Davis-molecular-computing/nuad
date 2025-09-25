@@ -16,19 +16,19 @@ import sphinx.ext.autodoc as auto
 import os
 import sys
 
-project_directory = "nuad"
+project_directory = 'nuad'
 
-sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(0, os.path.abspath(f"../{project_directory}"))
+sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath(f'../{project_directory}'))
 
 # Type "make html" at the command line to generate the documentation.
 
 
 # -- Project information -----------------------------------------------------
 
-project = "nuad: NUcleic Acid Designer"
-copyright = "2020, David Doty and Damien Woods"
-author = "David Doty and Damien Woods"
+project = 'nuad: NUcleic Acid Designer'
+copyright = '2020, David Doty and Damien Woods'
+author = 'David Doty and Damien Woods'
 
 
 # this is ugly, but appears to be standard practice:
@@ -36,22 +36,22 @@ author = "David Doty and Damien Woods"
 def extract_version(filename: str):
     with open(filename) as f:
         lines = f.readlines()
-    version_comment = "# version line; WARNING: do not remove or change this line or comment"
+    version_comment = '# version line; WARNING: do not remove or change this line or comment'
     for line in lines:
         if version_comment in line:
             idx = line.index(version_comment)
             line_prefix = line[:idx]
-            parts = line_prefix.split("=")
+            parts = line_prefix.split('=')
             parts = [part.strip() for part in parts]
             version_str = parts[-1]
-            version_str = version_str.replace('"', "")
-            version_str = version_str.replace("'", "")
+            version_str = version_str.replace('"', '')
+            version_str = version_str.replace("'", '')
             version_str = version_str.strip()
             return version_str
-    raise AssertionError(f"could not find version in {filename}")
+    raise AssertionError(f'could not find version in {filename}')
 
 
-version = extract_version(f"../{project_directory}/__version__.py")
+version = extract_version(f'../{project_directory}/__version__.py')
 
 # The full version, including alpha/beta/rc tags
 release = version
@@ -64,29 +64,29 @@ release = version
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.napoleon",
+    'sphinx.ext.autodoc',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.napoleon',
     # 'sphinxcontrib.napoleon', # found this online but 'sphinx.ext.napoleon' seems to work
 ]
 
-autodoc_typehints = "description"
-autodoc_mock_imports = ["nupack"]
+autodoc_typehints = 'description'
+autodoc_mock_imports = ['nupack']
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-html_theme = "sphinx_rtd_theme"
+html_theme = 'sphinx_rtd_theme'
 # html_theme = 'alabaster'
 # html_theme = "classic"
 
@@ -96,7 +96,7 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = []
 
 # use order in source rather than alphabetical order
-autodoc_member_order = "bysource"
+autodoc_member_order = 'bysource'
 
 # intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}
 
@@ -114,13 +114,13 @@ length_limit = 50
 # below is for documenting __init__ with automodule
 # https://stackoverflow.com/questions/5599254/how-to-use-sphinxs-autodoc-to-document-a-classs-init-self-method
 def skip(app, what, name, obj, would_skip, options):
-    if name == "__init__":
+    if name == '__init__':
         return False
     return would_skip
 
 
 def setup(app):
-    app.connect("autodoc-skip-member", skip)
+    app.connect('autodoc-skip-member', skip)
 
 
 #
@@ -136,19 +136,19 @@ def add_directive_header(self, sig):
 
             # PATCH: truncate the value if longer than length_limit characters
             if len(objrepr) > length_limit:
-                objrepr = objrepr[:length_limit] + "..."
+                objrepr = objrepr[:length_limit] + '...'
 
         except ValueError:
             pass
         else:
-            self.add_line("   :annotation: = " + objrepr, "<autodoc>")
+            self.add_line('   :annotation: = ' + objrepr, '<autodoc>')
     elif self.options.annotation is auto.SUPPRESS:
         pass
     else:
-        self.add_line("   :annotation: %s" % self.options.annotation, "<autodoc>")
+        self.add_line('   :annotation: %s' % self.options.annotation, '<autodoc>')
 
 
 auto.DataDocumenter.add_directive_header = add_directive_header
 
 # https://stackoverflow.com/questions/56336234/build-fail-sphinx-error-contents-rst-not-found
-master_doc = "index"
+master_doc = 'index'
