@@ -3788,10 +3788,11 @@ class Design(JSONSerializable):
 
     domain_to_affected_domains: Dict[Domain, List[Domain]] = field(init=False)
     """
-        Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes by key's sequence modification.
+    Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes 
+    by key's sequence modification.
 
-        Computed in :data:`Design.compute_derived fields().
-        """
+    Computed in :meth:`Design.compute_derived fields`.
+    """
 
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
