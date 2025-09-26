@@ -1366,8 +1366,9 @@ class DomainPool(JSONSerializable):
                 # do floating-point arithmetic to avoid integer overflow with long sequences
                 import scipy.special
                 num_ways_to_choose_subsequence_indices = scipy.special.comb(length, sampled_distance)
+                assert isinstance(num_ways_to_choose_subsequence_indices, float)
                 # num_ways_to_choose_subsequence_indices = nn.comb(length, sampled_distance)
-                num_different_bases = len(bases) - 1
+                num_different_bases = float(len(bases) - 1)
                 num_subsequences = num_different_bases**sampled_distance
                 num_sequences_at_sampled_distance = num_ways_to_choose_subsequence_indices * num_subsequences
 
