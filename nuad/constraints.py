@@ -52,6 +52,7 @@ from enum import Enum, auto, unique
 import functools
 
 import numpy as np  # noqa
+import scipy
 from ordered_set import OrderedSet
 
 import scadnano as sc  # type: ignore
@@ -1362,10 +1363,15 @@ class DomainPool(JSONSerializable):
                 bases = self._bases_to_use()
                 length = self.length
 
-                num_ways_to_choose_subsequence_indices = nn.comb(length, sampled_distance)
+                # do floating-point arithmetic to avoid integer overflow with long sequences
+                import scipy.special
+                num_ways_to_choose_subsequence_indices = scipy.special.comb(length, sampled_distance)
+                # num_ways_to_choose_subsequence_indices = nn.comb(length, sampled_distance)
                 num_different_bases = len(bases) - 1
                 num_subsequences = num_different_bases**sampled_distance
                 num_sequences_at_sampled_distance = num_ways_to_choose_subsequence_indices * num_subsequences
+
+                assert num_sequences_at_sampled_distance > 0
 
                 if num_to_generate > num_sequences_at_sampled_distance:
                     num_to_generate = num_sequences_at_sampled_distance
