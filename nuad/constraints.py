@@ -3466,7 +3466,7 @@ class Design(JSONSerializable):
             name of JSON file describing the :any:`Design`
         :return:
             :any:`Design` described by the JSON file with name `filename`, assuming it was created using
-            :py:meth`Design.to_json`.
+            :meth:`Design.write_design_file`.
         """
         with open(filename, "r") as f:
             json_str = f.read()
