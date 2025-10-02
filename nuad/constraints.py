@@ -230,14 +230,14 @@ def m13_substrings_of_length(
     :any:`Design` represents a small portion of the full M13 sequence,
     and part of the sequence design process is to choose a rotation of M13 to use.
     One can set that strand to have a single :any:`Domain`,
-    which contains dependent subdomains (those with :data:`Domain.dependent` set to True).
+    which contains locked subdomains (those with :attr:`Domain.state` set to `State.LOCKED`).
     These subdomains are the smaller domains where M13 attaches to other :any:`Strand`'s in the
     :any:`Design`. Then, give the parent :any:`Domain` a :any:`DomainPool` with
     :data:`DomainPool.possible_sequences` set to the return value of this function,
     to allow the search to explore different rotations of M13.
 
     For example, suppose `m13_subdomains` is a list containing :any:`Domain`'s from the :any:`Design`,
-    which are consecutive subdomains of M13 from 5' to 3' (all with :data:`Domain.dependent` set to True),
+    which are consecutive subdomains of M13 from 5' to 3' (all with :attr:Domain.state` set to `State.LOCKED`),
     and `m13_length` is the sum of their lengths (note this needs to be calculated manually since the
     following code assumes no :any:`Domain` in `m13_subdomains` has a :any:`DomainPool` yet, thus none
     yet have a length).
@@ -1523,6 +1523,12 @@ class Part(ABC):
         # individual domains/strands
         pass
 
+class State(Enum):
+    """The four mutually states of Domain"""
+    ASSIGNABLE = 1
+    DEPENDENT = 2
+    LOCKED = 3
+    FIXED = 4
 
 @dataclass
 class Domain(Part, JSONSerializable):
@@ -1560,28 +1566,37 @@ class Domain(Part, JSONSerializable):
 
     parents: List[Domain] = field(init=False, default_factory=list)
     """
-        :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
+        :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library
+         based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
     """
 
     dependents: List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(init=False, default_factory=list)
     """
-    List of tuples of :any:`Domain`'s and dependency functions which their sequence depends on this :any:`Domain`'s sequence. 
-    Each tuple pairs a dependent :any:`Domain` with a user-defined function that computes the dependent :any:`Domain`'s sequence based this :any:`Domain` sequence (its dependee) and randomness. 
+    List of tuples of :any:`Domain`'s and dependency functions which their sequence depends on this :any:`Domain`'s
+     sequence. 
+    Each tuple pairs a dependent :any:`Domain` with a user-defined function that computes the dependent :any:`Domain`'s
+     sequence based this :any:`Domain` sequence (its dependee) and randomness. 
     """
 
     locked_dependents: List[Domain] = field(init=False, default_factory=list)
     """ 
     List of locked :any:`Domain`'s in the :any:`Domain.subdomains` or :any:`Domain.parents` list. 
 
-    If this :any:`Domain` is locked, it will be exactly one or the other. If this :any:`Domain`' is unlocked, then all domains in this Domain's parents and subdomains are in :any:`Domain.locked_dependents`.
+    If this :any:`Domain` is locked, it will be exactly one or the other. If this :any:`Domain`' is unlocked,
+    then all domains in this Domain's parents and subdomains are in :any:`Domain.locked_dependents`.
 
-    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this domain.
+    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is
+    all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since
+    all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set
+    locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this
+    domain.
     """
 
     memoryview_sequence: memoryview | None = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
     This :any:`Domain`'s sequence is accessed by this memoryview object. 
-    In fact, each :any:`Domain` accesses its portion of the shared buffer (which here a is bytearray created in :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
+    In fact, each :any:`Domain` accesses its portion of the shared buffer (which here a is bytearray created in
+     :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
     """
 
     weight: float = 1.0
@@ -1604,35 +1619,38 @@ class Domain(Part, JSONSerializable):
     for DNA sequence design.
     """
 
-    fixed: bool = False
+    state: State = State.ASSIGNABLE
     """
-    Whether this :any:`Domain`'s DNA sequence is fixed, i.e., cannot be changed by the
-    search algorithm :py:meth:`search.search_for_dna_sequences`.
-
-    Note: If a domain is fixed then all of its subdomains must also be fixed.
-    """
-
-    dependent: bool = False
-    """
-    Whether this :any:`Domain`’s DNA sequence is dependent on others. The dependent domains will have their sequences calculated from the non-dependent ones.
-    A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example, suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of d's sequence are determined by c's. 
-    """
-
-    assignable: bool = False
-    """
-    Whether this :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for sequence assignment. This property is set to True either by not assigning True to any of the boolean properties locked, dependent, or fixed or by direct assigning.
-    """
-
-    locked: bool = False
-    """
-    Whether this :any:`Domain`’s DNA sequence is locked. :any:`Domain`’s can be subdivided hierarchically into a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked domains will have their sequences calculated from the unlocked ones.
-    A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are 7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several other strands, it will have several domains, but they cannot be set independently of each other. This can be done by creating a strand with a single long domain, which is subdivided into many locked child domains. Only the entire strand, the root domain, can be assigned at once, changing every domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
+    A :any:`Domain` can either be assignable, fixed, dependent, or locked:
+    
+    - fixed: this :any:`Domain`'s DNA sequence cannot be changed by the search algorithm
+    :py:meth:`search.search_for_dna_sequences`
+    
+    - dependent: The dependent domains will have their sequences
+    calculated from the non-dependent ones.
+    A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example,
+    suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of
+    d's sequence are determined by c's.
+    
+    - assignable: Such :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for 
+    sequence assignment. The default value for :attr:`Domain.state` is `State.ASSIGNABLE`.
+    
+    - locked: :any:`Domain`’s can be subdivided hierarchically into
+    a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly
+    one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked
+    domains will have their sequences calculated from the unlocked ones.
+    A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are
+    7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several
+    other strands, it will have several domains, but they cannot be set independently of each other. This can be
+    done by creating a strand with a single long domain, which is subdivided into many locked child domains 
+    (i.e. :any:`Domain.subdomains`). Only the entire strand, the root domain, can be assigned at once, changing every
+    domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
     """
 
     length: int | None = None
     """
     Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
-    for the length. However, a :any:`Domain` with :data:`Domain.dependent` set to True has no
+    for the length. However, a :any:`Domain` with :attr:`Domain.state` set to `state.LOCKED` or `state.DEPENDNET` has no
     :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
     """
 
@@ -1640,10 +1658,11 @@ class Domain(Part, JSONSerializable):
         self,
         name: str,
         pool: DomainPool | None = None,
-        fixed: bool = False,
-        dependent: bool = False,
-        assignable: bool = False,
-        locked: bool = False,
+        state: State | None = State.ASSIGNABLE,
+        # fixed: bool = False,
+        # dependent: bool = False,
+        # assignable: bool = False,
+        # locked: bool = False,
         label: str | None = None,
         subdomains: Iterable[Domain] = (),
         dependents: (List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
@@ -1656,10 +1675,7 @@ class Domain(Part, JSONSerializable):
         self._name = name
         self._starred_name = name + '*'
         self._pool = pool
-        self.fixed = fixed
-        self.dependent = dependent
-        self.assignable = assignable
-        self.locked = locked
+        self.state = state
         self.label = label
         self.dependents = dependents
         self._subdomains = list(subdomains)
@@ -1669,10 +1685,7 @@ class Domain(Part, JSONSerializable):
         if self.name.endswith('*'):
             raise ValueError(f'Domain name cannot end with *\ndomain name = {self.name}')
 
-        if not (self.dependent or self.fixed or self.locked):
-            self.assignable = True
-
-        if self.fixed:
+        if self.state == State.FIXED:
             if len(self._subdomains) > 0:
                 raise ValueError(
                     f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
@@ -1680,7 +1693,7 @@ class Domain(Part, JSONSerializable):
         else:
             contains_no_non_fixed_subdomains = True
             for sd in self._subdomains:
-                if not sd.fixed:
+                if not sd.state == State.FIXED:
                     contains_no_non_fixed_subdomains = False
                     break
             if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
@@ -1688,18 +1701,18 @@ class Domain(Part, JSONSerializable):
 
         # Set parents field for all subdomains.
         for subdomain in self._subdomains:
-            if subdomain.fixed:
+            if subdomain.state == State.FIXED:
                 raise ValueError(
                     f'Domain {self.name} has subdomain {subdomain.name} which is fixed, '
                     'but fixed domains cannot be subdomains of other domains'
                 )
             subdomain.parents.append(self)
 
-        if self.dependent and weight is not None:
+        if self.state != State.ASSIGNABLE and weight is not None:
             raise ValueError(
-                'cannot set Domain.weight when Domain.dependent is True, '
-                'since dependent domains cannot be picked to change in the search, '
-                'which is the probability that DOmain.weight affects'
+                'cannot set Domain.weight when it is not assignable, '
+                'since non-assignable domains (locked or dependent) cannot be picked to change in the search, '
+                'which is the probability that Domain.weight affects'
             )
 
         if weight is not None:
@@ -1733,7 +1746,7 @@ class Domain(Part, JSONSerializable):
             dct[domain_pool_name_key] = self._pool.name
         if self.has_sequence():
             dct[sequence_key] = self.sequence()
-            if self.fixed:
+            if self.state == State.FIXED:
                 dct[fixed_key] = True
         if self.label is not None:
             dct[label_key] = self.label
@@ -1812,13 +1825,23 @@ class Domain(Part, JSONSerializable):
     def subdomains(self) -> List['Domain']:
         """Subdomains of this :any:`Domain`.
 
-        Used in connection with :attr:`Domain.locked` to declare that some :any:`Domain`’s are contained within other domains (forming a directed graph in general), and domains with :attr:`Domain.locked` set to True automatically take their sequences from assignable or dependent domains.
+        Used in connection with :attr:`Domain.state` to declare that some :any:`Domain`’s are contained within other
+        domains (forming a directed graph in general), and domains with :attr:`Domain.state` set to `State.LOCKED`
+        automatically take their sequences from assignable or dependent domains.
 
-        WARNING: this can be a bit tricky to determine the order when setting these. The subdomains should be listed in 5’ to 3’ order for UNSTARRED domains. If there is a starred domain with starred subdomains, they would be listed in REVERSE order.
+        WARNING: this can be a bit tricky to determine the order when setting these. The subdomains should be listed
+         in 5’ to 3’ order for UNSTARRED domains. If there is a starred domain with starred subdomains, they would be
+          listed in REVERSE order.
 
-        For example, if there is a domain dom* [---------> of length 11 with two subdomains sub1* [-----> of length 7 and sub2* [--> of length 4 (put together they look like [----->[-->) that appear in that order left to right (5’ to 3’), then one would assign the domain dom to have subdomains [sub2, sub1], since the UNSTARRED domains appear <-----]<--], i.e., in 5’ to 3’ order for the unstarred domains, first the length 4 domain dom2 appears, then the length 7 domain dom1.
+        For example, if there is a domain dom* [---------> of length 11 with two subdomains sub1* [-----> of length 7
+        and sub2* [--> of length 4 (put together they look like [----->[-->) that appear in that order left to right
+        (5’ to 3’), then one would assign the domain dom to have subdomains [sub2, sub1], since the UNSTARRED domains appear <-----]<--], i.e., in 5’ to 3’ order for the unstarred domains, first the length 4 domain dom2 appears, then the length 7 domain dom1.
         """
         return self._subdomains
+
+    @property
+    def fixed(self):
+        return self.state == State.FIXED
 
     @subdomains.setter
     def subdomains(self, new_subdomains: List['Domain']) -> None:
@@ -1847,7 +1870,7 @@ class Domain(Part, JSONSerializable):
         """
         if self.length is not None:
             return self.length
-        if self.fixed and self.has_sequence():
+        if self.state == State.FIXED and self.has_sequence():
             return len(self.sequence())
         if self._pool is None:
             raise ValueError(
@@ -1873,6 +1896,9 @@ class Domain(Part, JSONSerializable):
         else:
             assert False, 'unreachable'
 
+    def set_state(self, new_state: State):
+        self.state = new_state
+
     def sequence(self) -> str:
         """
         :return: DNA sequence of this domain (unstarred version)
@@ -1891,12 +1917,12 @@ class Domain(Part, JSONSerializable):
         :param fixed: this method has been called by :meth:`Domain.set_fixed_sequence`.
         """
 
-        if self.fixed:
+        if self.state == State.FIXED:
             raise ValueError(
                 'cannot assign a new sequence to this Domain; its sequence is fixed as '
                 f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
-        if self.locked:
+        if self.state == State.LOCKED:
             raise ValueError(
                 'cannot assign a new sequence to this Domain; its sequence is locked_dependent on '
                 f'{", ".join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}'
@@ -1928,13 +1954,13 @@ class Domain(Part, JSONSerializable):
 
         :param fixed_sequence: new fixed DNA sequence to set
         """
-        if self.fixed and self.memoryview_sequence.tobytes():
+        if self.state == State.FIXED and self.memoryview_sequence.tobytes():
             raise ValueError(
                 'cannot assign a new sequence to this Domain; its sequence is fixed as '
                 f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
         else:
-            self.fixed = False  # temporary
+            self.state = None  # temporary
 
         self.set_sequence(fixed_sequence, fixed=True)
 
@@ -1947,8 +1973,7 @@ class Domain(Part, JSONSerializable):
                 f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
             )
 
-        self.fixed = True
-        self.assignable = False
+        self.state = State.FIXED
 
     def notify_sequence_changed(self, rng: np.random.Generator, notifier_domain: Domain) -> None:
         """
@@ -1981,7 +2006,7 @@ class Domain(Part, JSONSerializable):
     def get_name(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the name
-        :return: The value :data:`Domain.name` or :data:`Domain.starred_name`, depending on
+        :return: The value :data:`Domain.name` or :attr:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
         return self._starred_name if starred else self._name
@@ -2031,10 +2056,8 @@ class Domain(Part, JSONSerializable):
 
     def _is_assignable(self) -> bool:
         """Return true if self is assignable (not dependent or fixed or locked).
-
-        :return: [description]
         """
-        return self.assignable
+        return True if self.state == State.ASSIGNABLE else False
 
     def _contains_any_assignable_subdomain_recursively(self) -> bool:
         """Returns true if the subdomain graph rooted at this domain contains
@@ -2217,16 +2240,16 @@ class Domain(Part, JSONSerializable):
         return False
 
     def unlocked_ancestor_or_descendants(self) -> List[Domain]:
-        if not self.locked:
+        if not self.state == State.LOCKED:
             raise ValueError(f'cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}')
 
         for domain in self.ancestors():
-            if not domain.locked:
+            if not self.state == State.LOCKED:
                 return [domain]
 
         unlocked_descendants = []
         for domain in self._get_all_domains_from_this_subtree():
-            if not domain.locked:
+            if not self.state == State.LOCKED:
                 unlocked_descendants.append(domain)
 
         return unlocked_descendants
@@ -2239,7 +2262,7 @@ class Domain(Part, JSONSerializable):
         :return:  the assignable :any:`Domain` that this domain sequence changes if its sequence gets modified, which is *itself* if it is already assignable.
         """
 
-        if not self.assignable:
+        if self.state != State.ASSIGNABLE:
             return self.assignable_ancestors_or_descendants()
         else:
             return [self]
@@ -2254,13 +2277,13 @@ class Domain(Part, JSONSerializable):
         :return: The assignable ancestor or descendant of this :any:`Domain`.
 
         """
-        if self.assignable or self.dependent or self.fixed:
-            raise ValueError(f'cannot call assignable_ancestors_or_descendants on an assignable Domain {self.name}')
+        if self.state != State.LOCKED:
+            raise ValueError(f'cannot call assignable_ancestors_or_descendants on an unlocked domain Domain {self.name}')
 
         # first try ancestors
         assignable_ancestors = []
         for domain in self.ancestors():
-            if domain.assignable:
+            if domain.state == State.ASSIGNABLE:
                 assignable_ancestors.append(domain)
         if assignable_ancestors:
             return assignable_ancestors
@@ -2270,7 +2293,7 @@ class Domain(Part, JSONSerializable):
         return assignable_descendants
 
     def _assignable_descendants(self) -> list[Domain]:
-        if self.assignable:
+        if self.state == State.ASSIGNABLE:
             return [self]
 
         assignable_descendants = []
@@ -2279,38 +2302,6 @@ class Domain(Part, JSONSerializable):
                 assignable_descendants.extend(subdomain._assignable_descendants())
 
         return assignable_descendants
-
-    def check_exactly_one_state(self) -> None:
-        if self.dependent and self.locked:
-            raise ValueError(
-                f'A domain cannot be both dependent and locked. Domain{self.name} is defined dependent and locked.'
-            )
-        if self.dependent and self.assignable:
-            raise ValueError(
-                f'A domain cannot be both dependent and assignable. Domain {self.name} is defined dependent and assignable.'
-            )
-        if self.dependent and self.fixed:
-            raise ValueError(
-                f'A domain cannot be both dependent and fixed. Domain {self.name} is defined dependent and fixed.'
-            )
-        if self.fixed and self.locked:
-            raise ValueError(
-                f'A domain cannot be both fixed and locked. Domain {self.name} is defined fixed and locked.'
-            )
-        if self.assignable and self.locked:
-            raise ValueError(
-                f'A domain cannot be both assignable and locked. Domain {self.name} is defined assignable and locked.'
-            )
-        if self.assignable and self.fixed:
-            raise ValueError(
-                f'A domain cannot be both assignable and fixed. Domain {self.name} is defined dependent and locked.'
-            )
-
-        if not (self.assignable or self.dependent or self.locked or self.fixed):
-            raise ValueError(
-                f'A domain must have exactly one of the states: assignable, dependent, locked, or fixed. Domain {self.name} has no state.'
-            )
-
 
 def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
     """
@@ -3103,13 +3094,13 @@ class Strand(Part, JSONSerializable):
     @property
     def fixed(self) -> bool:
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
-        return all(domain.fixed for domain in self.domains)
+        return all(domain.state == State.FIXED for domain in self.domains)
 
     def unfixed_domains(self) -> Tuple[Domain, ...]:
         """
-        :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.fixed` is False
+        :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.state` is not `State.FIXED`
         """
-        return tuple(domain for domain in self.domains if not domain.fixed)
+        return tuple(domain for domain in self.domains if domain.state != State.FIXED)
 
     @property
     def name(self) -> str:
@@ -3298,7 +3289,7 @@ class DomainPair(Part, Iterable[Domain]):
 
     @property
     def fixed(self) -> bool:
-        return self.domain1.fixed and self.domain2.fixed
+        return self.domain1.state == State.FIXED and self.domain2.state == State.FIXED
 
     def __iter__(self) -> Iterator[Domain]:
         yield self.domain1
@@ -4676,7 +4667,7 @@ class Design(JSONSerializable):
         # copy sequences
         for domain in self.domains:
             other_domain = other.domains_by_name[domain.name]
-            if other_domain.fixed:
+            if other_domain.state == State.FIXED:
                 domain.set_fixed_sequence(other_domain.sequence())
             elif other_domain.has_sequence():
                 domain.set_sequence(other_domain.sequence())
@@ -4756,10 +4747,10 @@ class Design(JSONSerializable):
         self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
     ) -> list[Domain]:
         # No need to define visited_domains, since the singly-connectedness is already verified.
-        if not domain.locked:
+        if domain.state != State.LOCKED:
             unlocked_subdomains.append(domain)
 
-            if domain.fixed:
+            if domain.state == State.FIXED:
                 # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
                 return unlocked_subdomains
 
@@ -4781,7 +4772,8 @@ class Design(JSONSerializable):
     def _check_exactly_one_unlocked_in_every_path(self, subdomain_graph: nx.DiGraph) -> None:
         # first, make sure that every domain has exactly one state:
         for domain in self.domains:
-            domain.check_exactly_one_state()
+            if domain.state is None:
+                raise ValueError(f'domain {domain.name} has no states.')
 
         source_nodes = [node for node, degree in subdomain_graph.in_degree() if degree == 0]
 
@@ -4824,19 +4816,19 @@ class Design(JSONSerializable):
     def _create_dependency_digraph(self) -> nx.DiGraph:
         graph = nx.DiGraph()
 
-        unlocked_domains = [domain for domain in self.domains if not domain.locked]
+        unlocked_domains = [domain for domain in self.domains if domain.state != State.LOCKED]
 
         for unlocked_domain in unlocked_domains:
             graph.add_node(unlocked_domain)
             for sd in unlocked_domain.subdomains:
-                if not sd.fixed:
+                if sd.state != State.FIXED:
                     graph.add_edge(unlocked_domain, sd, color='red')
                     self._add_red_edge_pointing_subdomains(sd, graph)
                     unlocked_domain.locked_dependents.append(sd)
                 else:
                     graph.add_node(sd)
             for parent in unlocked_domain.parents:
-                if not parent.fixed:
+                if parent.state != State.FIXED:
                     graph.add_edge(unlocked_domain, parent, color='red')
                     self._add_red_edge_pointing_parents(parent, graph)
                     unlocked_domain.locked_dependents.append(parent)
@@ -4884,7 +4876,7 @@ class Design(JSONSerializable):
 
     def _check_each_dependent_exactly_one_dependee(self, graph: nx.Digraph) -> None:
         for domain in self.domains:
-            if domain.dependent:
+            if domain.state == State.DEPENDENT:
                 dependees = []
                 for pred in graph.predecessors(domain):
                     if graph[pred][domain].get('color') == 'blue':
@@ -5566,7 +5558,7 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
         Here is what is checked:
         - strand names and group names appear in the same order
         - domain names and pool names appear in the same order in strands with the same name
-        - :data:`Domain.fixed` matches between :any:`Domain`'s
+        - :any:`Domain.fixed` matches between :any:`Domain`'s
     """
     for idx, (strand1, strand2) in enumerate(zip(design1.strands, design2.strands)):
         if strand1.name != strand2.name:
@@ -5582,11 +5574,11 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 raise ValueError(
                     f"domain of strand {strand2.name} don't match: {strand1.domains} and {strand2.domains}"
                 )
-            if check_fixed and domain1.fixed != domain2.fixed:
+            if check_fixed and domain1.state != domain2.state and (domain1.state == State.FIXED or domain2.state == State.FIXED):
                 raise ValueError(
                     f'domain {domain2.name} is fixed in one but not the other:\n'
-                    f'design1 domain {domain1.name} fixed = {domain1.fixed},\n'
-                    f'design2 domain {domain2.name} fixed = {domain2.fixed}'
+                    f'design1 domain {domain1.name} fixed = {True if domain1.state == State.FIXED else False},\n'
+                    f'design2 domain {domain2.name} fixed = {True if domain2.state == State.FIXED else False}'
                 )
             if domain1.has_pool() and domain2.has_pool() and domain1.pool.name != domain2.pool.name:
                 raise ValueError(
