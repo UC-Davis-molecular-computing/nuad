@@ -1661,11 +1661,14 @@ class Domain(Part, JSONSerializable):
         state: State | None = State.ASSIGNABLE,
         label: str | None = None,
         subdomains: Iterable[Domain] = (),
+        parents: Iterable[Domain] = (),
         dependents: (List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
         weight: float | None = None,
     ) -> None:
         if subdomains is None:
             subdomains = []
+        if parents is None:
+            parents = []
         if dependents is None:
             dependents = []
         self._name = name
@@ -1675,7 +1678,7 @@ class Domain(Part, JSONSerializable):
         self.label = label
         self.dependents = dependents
         self._subdomains = list(subdomains)
-        self.parents = []
+        self.parents= list(parents)
         self.locked_dependents = []
 
         if self.name.endswith('*'):
@@ -2107,7 +2110,8 @@ class Domain(Part, JSONSerializable):
     def all_domains_intersecting(self) -> List['Domain']:
         """
 
-        :return: list of all :any:`Domain` intersecting this one, meaning those domains in the subdomain DAG rooted at this :any:`Domain` (including itself), plus any ancestors of this :any:`Domain`.
+        :return: list of all :any:`Domain` intersecting this one, meaning those domains in the subdomain DAG
+         rooted at this :any:`Domain` (including itself), plus any ancestors of this :any:`Domain`.
 
         """
         domains = self.ancestors()
@@ -3828,11 +3832,11 @@ class Design(JSONSerializable):
 
                 # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
                 domain: Domain
-                if domain_name not in self._domains_interned:
+                if domain_name not in self.domains_by_name:
                     domain = Domain(name=domain_name)
-                    self._domains_interned[domain_name] = domain
+                    self.domains_by_name[domain_name] = domain
                 else:
-                    domain = self._domains_interned[domain_name]
+                    domain = self.domains_by_name[domain_name]
 
                 domains.append(domain)
                 if is_starred:
@@ -3857,7 +3861,6 @@ class Design(JSONSerializable):
                     f'  {strand}'
                 )
         self.strands.append(strand)
-
         for domain_in_strand in strand.domains:
             domains_in_dag = domain_in_strand.all_domains_in_dag()
             for domain in domains_in_dag:

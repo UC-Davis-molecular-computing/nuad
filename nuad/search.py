@@ -412,10 +412,10 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> Tuple[
     for domain in domains:
         if domain.state == State.ASSIGNABLE:
             assignable_domains_connected_to_domain = [domain]
-        else:
+        elif domain.state == State.LOCKED:
             assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
 
-        if assignable_domains_connected_to_domain not in assignable_domains:
+        if (domain.state == State.ASSIGNABLE or domain.state == State.LOCKED) and assignable_domains_connected_to_domain not in assignable_domains:
             assignable_domains.extend(assignable_domains_connected_to_domain)
 
     return tuple(assignable_domains)
