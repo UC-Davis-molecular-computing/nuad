@@ -1869,7 +1869,9 @@ class Domain(Part, JSONSerializable):
         """
         if self.length is not None:
             return self.length
-        if self.state == State.FIXED and self.has_sequence():
+        if self.state == State.FIXED:
+            if not self.has_sequence():
+                raise ValueError(f'Domain {self.name} is fixed but has no sequence assigned yet')
             return len(self.sequence())
         if self._pool is None:
             raise ValueError(
