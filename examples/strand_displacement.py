@@ -17,63 +17,6 @@ FULL_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
     FULL_DOMAIN_LENGTH,
 )
 
-design = nc.Design()
-
-def input_strand() -> nc.Strand:  #X
-
-    #        X1               X2               X3
-    # [===============--===============--===============>
-
-    x1, x2, x3 = 'x1', 'x2', 'x3'
-    s: nc.Strand = design.add_strand([x1, x2, x3], name=f'input_strand')
-    for domain in s.domains:
-        domain.pool = s.domains[0].pool = FULL_LONG_DOMAIN_POOL
-
-    return s
-
-def arbitrary_strand(name: str, domains: List[str]) -> nc.Strand: # fuel or reporter
-    s: nc.Strand = design.add_strand(domain_names=domains, name=name)
-
-    return s
-
-def output_strand(almost_long_domain: nc.Domain) -> nc.Strand:   #Y
-
-    #        Delta_X3          Y1              Y2              Y3
-    #      <==========--===============--===============--===============]
-
-    y1, y2, y3 = 'y1', 'y2', 'y3'
-    s: nc.Strand = design.add_strand([almost_long_domain.name, y1, y2, y3], name=f'output_strand')
-    for d in s.domains[1:]:
-        d.state = nc.State.DEPENDENT
-    # s.domains[1].pool= FULL_LONG_DOMAIN_POOL
-    # s.domains[2].pool= FULL_LONG_DOMAIN_POOL
-    # s.domains[3].pool = FULL_LONG_DOMAIN_POOL
-
-    return s
-
-def create_subdomains(domain: nc.Domain) -> None:
-
-    #         Delta          non_Delta
-    #                               clamp
-    # [= = = = = = = = = = | = = = | = =>
-    #                      non_clamp
-    non_Delta = nc.Domain(name=f'non_Delta_{domain.name}', parents=[domain], state=nc.State.LOCKED)
-    clamp = nc.Domain(name=f'clamp_{domain.name}', parents=[non_Delta], state=nc.State.LOCKED)
-    non_clamp = nc.Domain(name=f'non_clamp_{domain.name}', parents=[non_Delta], state=nc.State.LOCKED)
-
-    Delta = nc.Domain(name=f'Delta_{domain.name}', parents=[domain], state=nc.State.LOCKED)
-
-    non_Delta.length = TOEHOLD_DOMAIN_LENGTH
-    clamp.length = CLAMP_LENGTH
-    non_clamp.length = TOEHOLD_DOMAIN_LENGTH - CLAMP_LENGTH
-    Delta.length = ALMOST_FULL_DOMAINS
-
-    domain.subdomains = [Delta, non_Delta]
-    non_Delta.subdomains = [non_clamp, clamp]
-
-    design.compute_derived_fields()
-
-
 def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()) -> str:
 
     if sequence[2] == 'A' or sequence[2] == 'T':
@@ -85,79 +28,128 @@ def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.rando
 
 
 
-# X
-#        X1               X2               X3
-# [===============--===============--===============>
-X = input_strand()
-for domain in X.domains:
-    create_subdomains(domain)
+design = nc.Design()
 
-X1, X2, X3 = X.domains[0], X.domains[1], X.domains[2]
+# input strand
+# X
+#        X3               X2               X1
+# [===============--===============--===============>
+
+
+domain_to_subdomains = {}
+for x in ['x3', 'x2', 'x1']:
+    #         Delta         non_Delta
+    # [= = = = = = = = = = | = = = = =>
+
+    Delta = nc.Domain(name=f'Delta_{x}')
+    non_Delta = nc.Domain(name=f'non_Delta_{x}')
+    Delta.set_locked()
+    non_Delta.set_locked()
+    Delta.length = ALMOST_FULL_DOMAINS
+    non_Delta.length = TOEHOLD_DOMAIN_LENGTH
+    domain_to_subdomains[x] = [Delta, non_Delta]
+
+X: nc.Strand = design.add_strand(domain_names=['x3', 'x2', 'x1'],
+                                 domain_name_to_subdomains=domain_to_subdomains, name=f'input_strand')
+
+for domain in X.domains:
+    domain.pool = FULL_LONG_DOMAIN_POOL
+
+X1, X2, X3 = X.domains[2], X.domains[1], X.domains[0]
 non_Delta_X1, Delta_X1 = X1.subdomains[0], X1.subdomains[1]
 non_Delta_X2, Delta_X2 = X2.subdomains[0], X2.subdomains[1]
 non_Delta_X3, Delta_X3 = X3.subdomains[0], X3.subdomains[1]
 
-# Y
-#    Delta_X3        Y1               Y2               Y3
-# [==========--===============--===============--===============>
-Y = output_strand(Delta_X3)
-for Y_domain in Y.domains[1:]:
-    create_subdomains(Y_domain)
-Y1, Y2, Y3 = Y.domains[1], Y.domains[2], Y.domains[3]
-non_Delta_Y1, Delta_Y1 = Y1.subdomains[0], Y1.subdomains[1]
-non_Delta_Y2, Delta_Y2 = Y2.subdomains[0], Y2.subdomains[1]
-non_Delta_Y3, Delta_Y3 = Y3.subdomains[0], Y3.subdomains[1]
+# to include the subdomains (Delta and non_Delta) in the design
+design.compute_derived_fields()
 
-X1.dependents.append((Y1, dependency_function))
-Y1.length = X1.get_length()
-X2.dependents.append((Y2, dependency_function))
-Y2.length = X2.get_length()
-X3.dependents.append((Y3, dependency_function))
-Y3.length = X3.get_length()
+# output strand
+# Y
+#        Y3               Y2               Y1          Delta_X3
+# [===============--===============--===============--==========>
+
+Y1 = X1.create_domain_with_mismatches(name='y1', pick_dependent_seq=dependency_function)
+Y2 = X2.create_domain_with_mismatches(name='y2', pick_dependent_seq=dependency_function)
+Y3 = X3.create_domain_with_mismatches(name='y3', pick_dependent_seq=dependency_function)
+Y: nc.Strand = design.add_strand(domains=[Y3, Y2, Y1, Delta_X3], starred_domain_indices=[], name=f'output_strand')
+
+
+# Y1
+#         Delta
+#                               clamp
+# [= = = = = = = = = = | = = = | = =>
+#                          |
+#                          |
+#                    non_clamp_and_Delta
+Delta_Y1 = nc.Domain(name=f'Delta_y1', locked=True)
+clamp_Y1 = nc.Domain(name=f'clamp_y1', locked=True)
+non_clamp_and_Delta_Y1 = nc.Domain(name=f'non_clamp_y1', locked=True)
+clamp_Y1.length = CLAMP_LENGTH
+non_clamp_and_Delta_Y1.length = TOEHOLD_DOMAIN_LENGTH - CLAMP_LENGTH
+Delta_Y1.length = ALMOST_FULL_DOMAINS
+
+Y1.subdomains = [Delta_Y1, non_clamp_and_Delta_Y1, clamp_Y1]
+
+# Y2, Y3
+#         non_clamp           clamp
+# [= = = = = = = = = = = = = | = =>
+
+for domain in [Y2, Y3]:
+    clamp = nc.Domain(name=f'clamp_{domain.name}', locked=True)
+    non_clamp = nc.Domain(name=f'non_clamp_{domain.name}', locked=True)
+    clamp.length = CLAMP_LENGTH
+    non_clamp.length = FULL_DOMAIN_LENGTH - CLAMP_LENGTH
+
+    domain.subdomains = [non_clamp, clamp]
+
+design.compute_derived_fields()
 
 # F1
-#          Delta_X1        X2             X3               Y1
-#      <==========--===============--===============--===============]
-#        X1*               X2*            X3*
-#  [===============--===============--===============>
-fuel_1_top = arbitrary_strand('fuel_1_top',[Delta_X1.name, X2.name, X3.name, Y1.name])
-fuel_1_bottom = arbitrary_strand('fuel_1_bottom',
-                                 [nc.Domain.complementary_domain_name(X1.name),
-                                  nc.Domain.complementary_domain_name(X2.name),
-                                  nc.Domain.complementary_domain_name(X3.name)])
+#           Delta_X1        X2             X3               Y1
+#       <==========--===============--===============--===============]
+#        X1*               X2*            X3*        clamp_Y1*
+#  [===============--===============--===============--==>
+
+starred_X1 = nc.Domain.complementary_domain_name(X1.name)
+starred_X2 = nc.Domain.complementary_domain_name(X2.name)
+starred_X3 = nc.Domain.complementary_domain_name(X3.name)
+starred_clamp_Y1 = nc.Domain.complementary_domain_name(clamp_Y1.name)
+fuel_1_top = design.add_strand(name='fuel_1_top', domain_names=[Y1.name, X3.name, X2.name, Delta_X1.name])
+fuel_1_bottom = design.add_strand(name='fuel_1_bottom',
+                                  domain_names=[starred_X1, starred_X2, starred_X3, starred_clamp_Y1])
 
 # F2
-#          Delta_X2         X3             Y1                 Y2
-#      <==========--===============--===============--===============]
-#        X2*                X3*            Y1*
-#  [===============--===============--===============>
-fuel_2_top = arbitrary_strand('fuel_2_top',[Delta_X2.name, X3.name, Y1.name, Y2.name])
-fuel_2_bottom = arbitrary_strand('fuel_2_bottom',
-                                 [nc.Domain.complementary_domain_name(X2.name),
-                                  nc.Domain.complementary_domain_name(X3.name),
-                                  nc.Domain.complementary_domain_name(Y1.name)])
+#         Delta_X2         X3             Y1                 Y2
+#       <==========--===============--===============--===============]
+#         X2*                X3*            Y1*      clamp_Y2*
+#  [===============--===============--===============--==>
+
+starred_Y1 = nc.Domain.complementary_domain_name(Y1.name)
+starred_clamp_Y2 = nc.Domain.complementary_domain_name(Y2.subdomains[1].name)
+fuel_2_top = design.add_strand(name='fuel_2_top',domain_names=[Y2.name, Y1.name, X3.name, Delta_X2.name])
+fuel_2_bottom = design.add_strand(name='fuel_2_bottom',
+                                 domain_names=[starred_X2, starred_X3, starred_Y1, starred_clamp_Y2])
 
 # F3
-#        Delta_X3          Y1              Y2              Y3
-#      <==========--===============--===============--===============]
-#        X3*                Y1*            Y2*
-#  [===============--===============--===============>
-fuel_3_top = arbitrary_strand('fuel_3_top',[Delta_X3.name, Y1.name, Y2.name, Y3.name])
-fuel_3_bottom = arbitrary_strand('fuel_3_bottom',
-                                 [nc.Domain.complementary_domain_name(X3.name),
-                                  nc.Domain.complementary_domain_name(Y1.name),
-                                  nc.Domain.complementary_domain_name(Y2.name)])
+#         Delta_X3          Y1              Y2              Y3
+#       <==========--===============--===============--===============]
+#        X3*                Y1*            Y2*       clamp_Y3*
+#  [===============--===============--===============--==>
+starred_Y2 = nc.Domain.complementary_domain_name(Y2.name)
+starred_clamp_Y3 = nc.Domain.complementary_domain_name(Y3.subdomains[1].name)
+fuel_3_top = design.add_strand(name='fuel_3_top',domain_names=[Y3.name, Y2.name, Y1.name, Delta_X3.name])
+fuel_3_bottom = design.add_strand(name='fuel_3_bottom',
+                                 domain_names=[starred_X3, starred_Y1, starred_Y2, starred_clamp_Y3])
 
 # reporter
 #        Delta_Y1          Y2              Y3
 #      <==========--===============--===============]
 #        Y1*                Y2*            Y3*
 #  [===============--===============--===============>
-reporter_top = arbitrary_strand('reporter_top',[Delta_Y1.name, Y2.name, Y3.name])
-reporter_bottom = arbitrary_strand('reporter_bottom',
-                                 [nc.Domain.complementary_domain_name(Y1.name),
-                                  nc.Domain.complementary_domain_name(Y2.name),
-                                  nc.Domain.complementary_domain_name(Y3.name)])
+starred_Y3 = nc.Domain.complementary_domain_name(Y3.name)
+reporter_top = design.add_strand(name='reporter_top',domain_names=[Y3.name, Y2.name,  Delta_Y1.name])
+reporter_bottom = design.add_strand(name='reporter_bottom',
+                                 domain_names=[starred_Y1, starred_Y2, starred_Y3])
 
 # All strands
 strands = [
@@ -167,6 +159,7 @@ strands = [
     fuel_3_top, fuel_3_bottom,
     reporter_top, reporter_bottom
 ]
+
 
 X_complex = nc.Complex(X)
 X_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(
