@@ -1699,11 +1699,11 @@ class Domain(Part, JSONSerializable):
 
         # Set parents field for all subdomains.
         for subdomain in self._subdomains:
-            if subdomain.type == DomainType.FIXED:
-                raise ValueError(
-                    f'Domain {self.name} has subdomain {subdomain.name} which is fixed, '
-                    'but fixed domains cannot be subdomains of other domains'
-                )
+            # if subdomain.type == DomainType.FIXED:
+            #     raise ValueError(
+            #         f'Domain {self.name} has subdomain {subdomain.name} which is fixed, '
+            #         'but fixed domains cannot be subdomains of other domains'
+            #     )
             subdomain.parents.append(self)
 
         if self.type != DomainType.ASSIGNABLE and weight is not None:
@@ -1883,11 +1883,12 @@ class Domain(Part, JSONSerializable):
                 raise ValueError(f'Domain {self.name} is fixed but has no sequence assigned yet')
             return len(self.sequence())
         if self._pool is None:
-            raise ValueError(
-                f'No DomainPool has been set for domain {self.name}, '
-                f'so it has no length yet.\n'
-                'Assign a DomainPool (which has a length field) to give this Domain a length.'
-            )
+            # raise ValueError(
+            #     f'No DomainPool has been set for domain {self.name}, '
+            #     f'so it has no length yet.\n'
+            #     'Assign a DomainPool (which has a length field) to give this Domain a length.'
+            # )
+            return None
         if self._pool.length is not None:
             return self._pool.length
         elif self._pool.possible_sequences is not None:
@@ -2565,7 +2566,8 @@ def set_domains_memoryviews(
 def _assign_back_preexisting_sequences(
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
-    for domain, sequence in domain_to_preexisting_sequence:
+    print(domain_to_preexisting_sequence)
+    for domain, sequence in domain_to_preexisting_sequence.items():
         domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
 
 
@@ -3638,6 +3640,8 @@ class Design(JSONSerializable):
         domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
+                print(domain_in_strand)
+                print(domain_in_strand.subdomains)
                 domains_in_dag = domain_in_strand.all_domains_in_dag()
                 domains.extend(domains_in_dag)
                 for domain_in_dag in domains_in_dag:
@@ -3797,7 +3801,6 @@ class Design(JSONSerializable):
         domain_names: List[str] | None = None,
         domains: List[Domain] | None = None,
         starred_domain_indices: Iterable[int] | None = None,
-        domain_name_to_subdomains: Dict[str, List[Domain]] | None = None,
         group: str = default_strand_group,
         name: str | None = None,
         label: str | None = None,
@@ -3835,8 +3838,6 @@ class Design(JSONSerializable):
             Indices of :any:`Domain`'s in `domains` that are starred.
             Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
             :data:`Strand.domains`.
-        :param domain_name_to_subdomains:
-            mapping of each domain to the list of its subdomains appearing in order.
         :param group:
             name of group of this :any:`Strand`.
         :param name:
@@ -3860,48 +3861,48 @@ class Design(JSONSerializable):
                 f'starred_domain_indices: {starred_domain_indices}'
             )
 
-        elif domain_names is not None:
-            if domain_name_to_subdomains is not None:
-                for domain in domain_name_to_subdomains:
-                    if domain not in domain_names:
-                        raise ValueError(f"Domain {domain} is not listed in domain_names of the strand {name}: "
-                                         f"{domain_names}.")
+        # elif domain_names is not None:
+        #     if domain_name_to_subdomains is not None:
+        #         for domain in domain_name_to_subdomains:
+        #             if domain not in domain_names:
+        #                 raise ValueError(f"Domain {domain} is not listed in domain_names of the strand {name}: "
+        #                                  f"{domain_names}.")
 
-            domains = []
-            starred_domain_indices = OrderedSet()
-            for idx, domain_name in enumerate(domain_names):
-                is_starred = domain_name.endswith('*')
-                if is_starred:
-                    domain_name = domain_name[:-1]
+        domains = []
+        starred_domain_indices = OrderedSet()
+        for idx, domain_name in enumerate(domain_names):
+            is_starred = domain_name.endswith('*')
+            if is_starred:
+                domain_name = domain_name[:-1]
 
-                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
-                domain: Domain
-                if domain_name not in self.domains_by_name:
-                    domain = Domain(name=domain_name)
-                    self.domains_by_name[domain_name] = domain
-                else:
-                    domain = self.domains_by_name[domain_name]
+            # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
+            domain: Domain
+            if domain_name not in self.domains_by_name:
+                domain = Domain(name=domain_name)
+                self.domains_by_name[domain_name] = domain
+            else:
+                domain = self.domains_by_name[domain_name]
 
-                if domain_name_to_subdomains is not None:
-                    subdomains = domain_name_to_subdomains[domain_name]
-                    domain.subdomains = list(subdomains)
+            # if domain_name_to_subdomains is not None:
+            #     subdomains = domain_name_to_subdomains[domain_name]
+            #     domain.subdomains = list(subdomains)
 
-                domains.append(domain)
-                if is_starred:
-                    starred_domain_indices.add(idx)
+            domains.append(domain)
+            if is_starred:
+                starred_domain_indices.add(idx)
 
-        if domain_names is None and domain_name_to_subdomains is not None:
-            names = [domain.name for domain in domains]
-            for domain in domain_name_to_subdomains:
-                if domain not in names:
-                    raise ValueError(f"Domain {domain} is not listed in domains of the strand {name}:"
-                                     f"{domains}.")
-                else:
-                    for d in domains:
-                        if d.name == domain:
-                            subdomains = list(domain_name_to_subdomains[domain])
-                            d.subdomains = subdomains
-
+        # if domain_names is None and domain_name_to_subdomains is not None:
+        #     names = [domain.name for domain in domains]
+        #     for domain in domain_name_to_subdomains:
+        #         if domain not in names:
+        #             raise ValueError(f"Domain {domain} is not listed in domains of the strand {name}:"
+        #                              f"{domains}.")
+        #         else:
+        #             for d in domains:
+        #                 if d.name == domain:
+        #                     subdomains = list(domain_name_to_subdomains[domain])
+        #                     d.subdomains = subdomains
+        #
 
         domains_of_strand = list(domains)  # type: ignore
         strand = Strand(
@@ -3936,6 +3937,70 @@ class Design(JSONSerializable):
 
                 
         return strand
+
+    def add_subdomains(self, domain_name: str, subdomains_and_lengths: List[Tuple[str, int]],
+                       domain_type: DomainType = None) -> None:
+
+        domain: Domain
+        if domain_name in self.domains_by_name:
+            domain = self.domains_by_name[domain_name]
+            if domain.type == DomainType.FIXED:
+                raise ValueError(f"The fixed domain {domain_name} cannot have subdomains.")
+
+        else:
+            domain = Domain(name=domain_name)
+            self.domains_by_name[domain_name] = domain
+
+        if domain_type:
+            domain.type = domain_type
+        else:
+            if domain.type == DomainType.ASSIGNABLE:
+                domain.type = DomainType.LOCKED
+
+        subdomains = []
+        for (subdomain_name, length) in subdomains_and_lengths:
+            subdomain: Domain
+            if subdomain_name in self.domains_by_name:
+                subdomain = self.domains_by_name[subdomain_name]
+                if subdomain.has_length() and subdomain.length != length:
+                    raise ValueError(f"The subdomain {subdomain_name} has already the length {subdomain.length}"
+                                     f" which is different from the new length {length}.")
+            else:
+                subdomain = Domain(name=subdomain_name)
+                self.domains_by_name[subdomain_name] = subdomain
+
+            subdomains.append(subdomain)
+            subdomain.length = length
+
+            if subdomain.type != DomainType.ASSIGNABLE: # if its type is already assigned and is not assignable
+                # in case there is a predefined unlocked ancestor for domain
+                unlocked_ancestor = [anc for anc in domain.ancestors()+[domain] if anc.type != DomainType.LOCKED]
+                if unlocked_ancestor and subdomain.type != DomainType.LOCKED:
+                    raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
+                                     f" in a subdomain graph, but found more in the path(s) "
+                                     f"with domain {domain.name} and unlocked domains "
+                                     f"{unlocked_ancestor}, {subdomain_name}")
+
+            elif domain.type == DomainType.LOCKED:
+                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
+                if unlocked_ancestor:
+                    subdomain.type = DomainType.LOCKED
+                else:
+                    subdomain.type = DomainType.ASSIGNABLE
+            else:
+                subdomain.type = DomainType.LOCKED
+
+
+        subdomains_total_length = sum(element[1] for element in subdomains_and_lengths)
+        if domain.has_length() and domain.length != subdomains_total_length:
+            raise ValueError(f"The domain {domain.name} has length {domain.length}, "
+                             f"but its subdomains total length is {subdomains_total_length}")
+        elif not domain.has_length():
+            domain.length = subdomains_total_length
+
+        domain.subdomains = list(subdomains)
+
+        # self.compute_derived_fields()
 
     @staticmethod
     def assign_modifications_to_strands(
@@ -9564,13 +9629,13 @@ def __get_base_pair_domain_endpoints_to_check(
     # Check final counts of each domain for competition
     for domain_name in domain_counts:
         domain_name_complement = Domain.complementary_domain_name(domain_name)
-        if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
-            assert domain_name not in nonimplicit_base_pairs_domain_names
-            raise ValueError(
-                f'Multiple instances of domain in a complex is not allowed '
-                f'when its complement is also in the complex. '
-                f'Violating domain: {domain_name_complement}'
-            )
+        # if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+        #     assert domain_name not in nonimplicit_base_pairs_domain_names
+        #     raise ValueError(
+        #         f'Multiple instances of domain in a complex is not allowed '
+        #         f'when its complement is also in the complex. '
+        #         f'Violating domain: {domain_name_complement}'
+        #     )
     # End Input Validation #
 
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = _get_addr_to_starting_base_pair_idx(strand_complex)
