@@ -3938,15 +3938,16 @@ class Design(JSONSerializable):
                 
         return strand
 
-    def add_subdomains(self, domain_name: str, subdomains_and_lengths: List[Tuple[str, int]],
+    def add_subdomains(self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]],
                        domain_type: DomainType = None) -> None:
-
+        """
+        TODO: add docstring
+        """
         domain: Domain
         if domain_name in self.domains_by_name:
             domain = self.domains_by_name[domain_name]
             if domain.type == DomainType.FIXED:
                 raise ValueError(f"The fixed domain {domain_name} cannot have subdomains.")
-
         else:
             domain = Domain(name=domain_name)
             self.domains_by_name[domain_name] = domain
@@ -3957,8 +3958,11 @@ class Design(JSONSerializable):
             if domain.type == DomainType.ASSIGNABLE:
                 domain.type = DomainType.LOCKED
 
+        # If assignable or locked before, now domain is locked;
+        # what if it was dependent?
+
         subdomains = []
-        for (subdomain_name, length) in subdomains_and_lengths:
+        for subdomain_name, length in subdomain_names_and_lengths:
             subdomain: Domain
             if subdomain_name in self.domains_by_name:
                 subdomain = self.domains_by_name[subdomain_name]
@@ -3972,9 +3976,10 @@ class Design(JSONSerializable):
             subdomains.append(subdomain)
             subdomain.length = length
 
-            if subdomain.type != DomainType.ASSIGNABLE: # if its type is already assigned and is not assignable
+            if subdomain.type != DomainType.ASSIGNABLE:
+                # if its type is already assigned and is not assignable
                 # in case there is a predefined unlocked ancestor for domain
-                unlocked_ancestor = [anc for anc in domain.ancestors()+[domain] if anc.type != DomainType.LOCKED]
+                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
                 if unlocked_ancestor and subdomain.type != DomainType.LOCKED:
                     raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
                                      f" in a subdomain graph, but found more in the path(s) "
@@ -3988,10 +3993,12 @@ class Design(JSONSerializable):
                 else:
                     subdomain.type = DomainType.ASSIGNABLE
             else:
+                # This means parent is not locked, so subdomain must be locked 
+                # to enforce exactly one unlocked domain on each path.
                 subdomain.type = DomainType.LOCKED
 
 
-        subdomains_total_length = sum(element[1] for element in subdomains_and_lengths)
+        subdomains_total_length = sum(length for _, length in subdomain_names_and_lengths)
         if domain.has_length() and domain.length != subdomains_total_length:
             raise ValueError(f"The domain {domain.name} has length {domain.length}, "
                              f"but its subdomains total length is {subdomains_total_length}")

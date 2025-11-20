@@ -54,13 +54,13 @@ design = nc.Design()
 
 
 design.add_subdomains(domain_name='x1',
-                      subdomains_and_lengths=[('x1_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x1_toe', TOEHOLD_DOMAIN_LENGTH)],
+                      subdomain_names_and_lengths=[('x1_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x1_toe', TOEHOLD_DOMAIN_LENGTH)],
                       domain_type=nc.DomainType.ASSIGNABLE)
 design.add_subdomains(domain_name='x2',
-                      subdomains_and_lengths=[('x2_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x2_toe', TOEHOLD_DOMAIN_LENGTH)],
+                      subdomain_names_and_lengths=[('x2_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x2_toe', TOEHOLD_DOMAIN_LENGTH)],
                       domain_type=nc.DomainType.ASSIGNABLE)
 design.add_subdomains(domain_name='x3',
-                      subdomains_and_lengths=[('x3_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x3_toe', TOEHOLD_DOMAIN_LENGTH)],
+                      subdomain_names_and_lengths=[('x3_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x3_toe', TOEHOLD_DOMAIN_LENGTH)],
                       domain_type=nc.DomainType.ASSIGNABLE)
 X: nc.Strand = design.add_strand(domain_names=['x3', 'x2', 'x1'], name=f'input_strand')
 # print(X.domains)
