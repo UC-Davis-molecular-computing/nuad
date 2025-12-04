@@ -690,22 +690,20 @@ def _check_design(design: nc.Design) -> None:
             # noinspection PyProtectedMember
             if domain._pool is None and domain.type == DomainType.ASSIGNABLE:
                 raise ValueError(
-                    f'for strand {strand.name}, it has a '
-                    f'non-fixed, non-dependent, unlocked domain {domain.name} '
-                    f'with pool set to None.\n'
-                    f'For domains that are not fixed and not dependent and unlocked, '
-                    f'exactly one of these must have a value.'
+                    f'The strand {strand.name} has an '
+                    f'assignable domain {domain.name} '
+                    f'with pool set to None.'
                 )
             # noinspection PyProtectedMember
             elif domain._pool is not None and domain.type == DomainType.FIXED:
                 raise ValueError(
-                    f'for strand {strand.name}, it has a '
+                    f'The strand {strand.name} has a '
                     f'domain {domain.name} that is fixed, even though that Domain has a '
                     f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.'
                 )
             elif domain._pool is not None and domain.type == DomainType.DEPENDENT and domain.type == DomainType.LOCKED:
                 raise ValueError(
-                    f'for strand {strand.name}, it has a '
+                    f'The strand {strand.name} has a '
                     f'domain {domain.name} that is dependent or locked, even though that Domain has a '
                     f'DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool.'
                 )

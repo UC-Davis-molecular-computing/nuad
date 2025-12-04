@@ -2566,7 +2566,6 @@ def set_domains_memoryviews(
 def _assign_back_preexisting_sequences(
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
-    print(domain_to_preexisting_sequence)
     for domain, sequence in domain_to_preexisting_sequence.items():
         domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
 
@@ -3640,8 +3639,6 @@ class Design(JSONSerializable):
         domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
-                print(domain_in_strand)
-                print(domain_in_strand.subdomains)
                 domains_in_dag = domain_in_strand.all_domains_in_dag()
                 domains.extend(domains_in_dag)
                 for domain_in_dag in domains_in_dag:
@@ -3985,7 +3982,6 @@ class Design(JSONSerializable):
                                      f" in a subdomain graph, but found more in the path(s) "
                                      f"with domain {domain.name} and unlocked domains "
                                      f"{unlocked_ancestor}, {subdomain_name}")
-
             elif domain.type == DomainType.LOCKED:
                 unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
                 if unlocked_ancestor:

@@ -28,7 +28,12 @@ CLAMP_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
     'clamp_domain_pool',
     CLAMP_LENGTH,
 )
-pool_list = [FULL_LONG_DOMAIN_POOL, ALMOST_FULL_DOMAINS_POOL, TOEHOLD_DOMAIN_POOL, CLAMP_DOMAIN_POOL]
+NON_CLAMP_POOL: nc.DomainPool = nc.DomainPool(
+    'non_clamp_domain_pool',
+    FULL_DOMAIN_LENGTH-CLAMP_LENGTH
+)
+
+pool_list = [FULL_LONG_DOMAIN_POOL, ALMOST_FULL_DOMAINS_POOL, TOEHOLD_DOMAIN_POOL, CLAMP_DOMAIN_POOL, NON_CLAMP_POOL]
 
 def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()) -> str:
 
@@ -93,7 +98,8 @@ design.add_subdomains('y1',
                       [('y1_delta', ALMOST_FULL_DOMAINS_LENGTH), ('y1_toe', TOEHOLD_DOMAIN_LENGTH)])
 design.add_subdomains('y1_toe',
                       [('y1_toe_non_clamp', TOEHOLD_DOMAIN_LENGTH-CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
-
+design.domains_by_name['y1_toe_non_clamp'].pool = nc.DomainPool('toe_non_clamp_domain_pool',
+                                                                TOEHOLD_DOMAIN_LENGTH-CLAMP_LENGTH)
 # Y2, Y3
 #         non_clamp           clamp
 # [= = = = = = = = = = = = = | = =>
@@ -102,6 +108,9 @@ design.add_subdomains('y2',
                       [('y2_non_clamp', FULL_DOMAIN_LENGTH-CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
 design.add_subdomains('y3',
                       [('y3_non_clamp', FULL_DOMAIN_LENGTH-CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
+
+design.domains_by_name['y2_non_clamp'].pool = NON_CLAMP_POOL
+design.domains_by_name['y3_non_clamp'].pool = NON_CLAMP_POOL
 
 # output strand
 # Y
