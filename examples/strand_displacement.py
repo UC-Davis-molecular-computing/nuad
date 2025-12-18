@@ -6,11 +6,14 @@ import nuad.search as ns  # type: ignore
 import numpy as np  # noqa
 import numpy.random
 
+# Implementation of 'Effective design principles for leakless strand displacement systems' paper: Figure 4
+# https://www.pnas.org/doi/full/10.1073/pnas.1806859115
 
 FULL_DOMAIN_LENGTH = 15
 TOEHOLD_DOMAIN_LENGTH = 5
 ALMOST_FULL_DOMAINS_LENGTH = FULL_DOMAIN_LENGTH - TOEHOLD_DOMAIN_LENGTH
 CLAMP_LENGTH = 2
+NON_CLAMP_LENGTH = FULL_DOMAIN_LENGTH-CLAMP_LENGTH
 
 FULL_LONG_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
     'full_domain_pool',
@@ -67,6 +70,7 @@ design.add_subdomains(domain_name='x2',
 design.add_subdomains(domain_name='x3',
                       subdomain_names_and_lengths=[('x3_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x3_toe', TOEHOLD_DOMAIN_LENGTH)],
                       domain_type=nc.DomainType.ASSIGNABLE)
+
 X: nc.Strand = design.add_strand(domain_names=['x3', 'x2', 'x1'], name=f'input_strand')
 # print(X.domains)
 X1, X2, X3 = X.domains[2], X.domains[1], X.domains[0]
@@ -105,9 +109,9 @@ design.domains_by_name['y1_toe_non_clamp'].pool = nc.DomainPool('toe_non_clamp_d
 # [= = = = = = = = = = = = = | = =>
 
 design.add_subdomains('y2',
-                      [('y2_non_clamp', FULL_DOMAIN_LENGTH-CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
+                      [('y2_non_clamp', NON_CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
 design.add_subdomains('y3',
-                      [('y3_non_clamp', FULL_DOMAIN_LENGTH-CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
+                      [('y3_non_clamp', NON_CLAMP_LENGTH), ('clamp', CLAMP_LENGTH)])
 
 design.domains_by_name['y2_non_clamp'].pool = NON_CLAMP_POOL
 design.domains_by_name['y3_non_clamp'].pool = NON_CLAMP_POOL
