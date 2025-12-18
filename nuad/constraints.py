@@ -1658,7 +1658,7 @@ class Domain(Part, JSONSerializable):
         self,
         name: str,
         pool: DomainPool | None = None,
-        locked: bool | None = False,
+        locked: bool = False,
         label: str | None = None,
         subdomains: Iterable[Domain] = (),
         parents: Iterable[Domain] = (),
@@ -3936,9 +3936,15 @@ class Design(JSONSerializable):
         return strand
 
     def add_subdomains(self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]],
-                       domain_type: DomainType = None) -> None:
+                       keep_domain_assignable: bool = False) -> None:
         """
         TODO: add docstring
+
+        :param keep_domain_assignable:
+            This means: 1) an assertion that the domain with name `domain_name` (if it already exists)
+            is currently assignable (an exception will be raised if not), and 2) that we should keep it
+            assignable, and make the subdomains locked, rather than the default behavior of changing
+            domain.type to locked and making the subdomains assignable.
         """
         domain: Domain
         if domain_name in self.domains_by_name:
@@ -3949,11 +3955,21 @@ class Design(JSONSerializable):
             domain = Domain(name=domain_name)
             self.domains_by_name[domain_name] = domain
 
-        if domain_type:
-            domain.type = domain_type
-        else:
-            if domain.type == DomainType.ASSIGNABLE:
-                domain.type = DomainType.LOCKED
+        # if domain_type:
+        #     domain.type = domain_type
+        # else:
+        #     if domain.type == DomainType.ASSIGNABLE:
+        #         domain.type = DomainType.LOCKED
+
+        assert domain.type != DomainType.FIXED
+        if keep_domain_assignable:
+            if domain.type == DomainType.DEPENDENT:
+                raise ValueError(f"The dependent domain {domain_name} cannot be assignable.")
+            elif domain.type == DomainType.LOCKED:
+                raise ValueError(f"The domain {domain_name} is already locked, so cannot be made assignable.")
+            assert domain.type == DomainType.ASSIGNABLE
+
+
 
         # If assignable or locked before, now domain is locked;
         # what if it was dependent?
@@ -3974,15 +3990,19 @@ class Design(JSONSerializable):
             subdomain.length = length
 
             if subdomain.type != DomainType.ASSIGNABLE:
-                # if its type is already assigned and is not assignable
                 # in case there is a predefined unlocked ancestor for domain
-                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
-                if unlocked_ancestor and subdomain.type != DomainType.LOCKED:
-                    raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
-                                     f" in a subdomain graph, but found more in the path(s) "
-                                     f"with domain {domain.name} and unlocked domains "
-                                     f"{unlocked_ancestor}, {subdomain_name}")
+                if subdomain.type != DomainType.LOCKED:
+                    unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
+                    if unlocked_ancestor:
+                        raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
+                                         f" in a subdomain graph, but found more in the path(s) "
+                                         f"with domain {domain.name} and unlocked domains "
+                                         f"{unlocked_ancestor}, {subdomain_name}")
             elif domain.type == DomainType.LOCKED:
+                # Now we know subdomain.type is Assignable, and domain.type is Locked,
+                # Default would normally be to made each subdomain Assignable,
+                # but only if there is no unlocked ancestor; otherwise we make all subdomains Locked
+                # to maintain the rule of one unlocked domain per path.
                 unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
                 if unlocked_ancestor:
                     subdomain.type = DomainType.LOCKED
@@ -9613,6 +9633,10 @@ def __get_base_pair_domain_endpoints_to_check(
     #   starred domain for every domain, unless given as nonimplicit_base_pair)
     #   Count number of occuruences of each domain
     seen_strands: Set[Strand] = set()
+
+    # TODO: redo this logic so that domain_counts contains the count of each domain in the
+    # complex (considering domain and its complement different), SUBJECT TO the constraint that
+    # this domain is a longest ancestor of this domain contained within the strand.
     domain_counts: Dict[str, int] = defaultdict(int)
     for strand in strand_complex:
         if strand in seen_strands:

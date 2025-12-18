@@ -157,9 +157,9 @@ fuel_3_bottom = design.add_strand(name='fuel_3_bottom',
                                  domain_names=[starred_X3, starred_Y1, starred_Y2, starred_clamp])
 
 # reporter
-#        Y1_Delta          Y2              Y3
-#      <==========--===============--===============]
-#        Y1*                Y2*            Y3*
+#        Y1_Delta    c      Y2        c      Y3
+#       <==========--===============--===============]
+#        Y1*         c*      Y2*      c*       Y3*
 #  [===============--===============--===============>
 starred_Y3 = nc.Domain.complementary_domain_name('y3')
 reporter_top = design.add_strand(name='reporter_top',domain_names=['y3', 'y2', 'y1_delta'])
