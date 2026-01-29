@@ -352,10 +352,11 @@ def rna_duplex(
 
     return energy
 
-
 def rna_duplex_multiple(
     pairs: Sequence[Tuple[S, S]],
+    logger: logging.Logger = logging.root,
     temperature: float = default_temperature,
+    parameters_filename: str = default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
     gu_wobble: bool = False,
     progress_bar: bool = False,
