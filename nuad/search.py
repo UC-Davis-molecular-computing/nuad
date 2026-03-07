@@ -1413,7 +1413,7 @@ def _log_time(stopwatch: Stopwatch, include_median: bool = False) -> None:
         if include_median:
             med_time = statistics.median(time_last_n_calls)
             content += f" median: {med_time:.1f} ms |"
-        content_width = len(content)
+        # content_width = len(content)
         logger.info("\n" + content)
     else:
         # skip appending first time, since it is much larger and skews the average
