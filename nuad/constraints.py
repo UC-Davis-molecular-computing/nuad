@@ -8836,7 +8836,7 @@ class _BasePair:
     base_pair_type: BasePairType
 
 
-from typing import Union  # seems the | notation doesn't work here despite from __future__ import annotations
+from typing import Union  # noqa # seems the | notation doesn't work here despite from __future__ import annotations
 
 BaseAddress = Union[int, tuple[StrandDomainAddress, int]]
 """Represents a reference to a base. Can be either specified as a NUPACK base
