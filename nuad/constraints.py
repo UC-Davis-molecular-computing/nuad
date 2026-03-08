@@ -3257,17 +3257,8 @@ class Design(JSONSerializable):
     strands: list[Strand]
     """List of all :any:`Strand`'s in this :any:`Design`."""
 
-    _domains_interned: dict[str, Domain]
-
     #################################################
     # derived fields, so not specified in constructor
-
-    domains: list[Domain] = field(init=False)
-    """
-    List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
-
-    Computed from :data:`Design.strands`, so not specified in constructor.
-    """
 
     strands_by_group_name: dict[str, list[Strand]] = field(init=False)
     """
@@ -3290,16 +3281,34 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    @property
+    def domains(self) -> list[Domain]:
+        """
+        List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
+
+        Computed from :data:`Design.strands`, so not specified in constructor.
+        """
+        return list(self.domains_by_name.keys())
+
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
+        self.domains_by_name = {}
+        if len(self.strands) > 0:
+            for strand in self.strands:
+                for domain_in_strand in strand.domains:
+                    domains_in_tree = domain_in_strand.all_domains_in_tree()
+                    for domain_in_tree in domains_in_tree:
+                        name = domain_in_tree.name
+                        if name not in self.domains_by_name:
+                            self.domains_by_name[name] = domain_in_tree
+
         self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
-        self._domains_interned = {}
 
     def compute_derived_fields(self) -> None:
         """
@@ -3308,13 +3317,11 @@ class Design(JSONSerializable):
         :meth:`search.search_for_dna_sequences`.
         """
         # Get domains not explicitly listed on strands that are part of domain tree.
-        # Also set up quick access to domain by name, and ensure each domain name unique.
+        # Set up quick access to domain by name, and ensure each domain name unique.
         self.domains_by_name = {}
-        domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
                 domains_in_tree = domain_in_strand.all_domains_in_tree()
-                domains.extend(domains_in_tree)
                 for domain_in_tree in domains_in_tree:
                     name = domain_in_tree.name
                     if name in self.domains_by_name and domain_in_tree is not self.domains_by_name[name]:
@@ -3323,8 +3330,6 @@ class Design(JSONSerializable):
                             f"but I found two different domains with name {domain_in_tree.name}"
                         )
                     self.domains_by_name[domain_in_tree.name] = domain_in_tree
-
-        self.domains = remove_duplicates(domains)
 
         self.strands_by_group_name = defaultdict(list)
         for strand in self.strands:
@@ -3464,6 +3469,47 @@ class Design(JSONSerializable):
 
         return Design(strands=strands)
 
+    def add_domain(
+        self,
+        name: str,
+        pool: DomainPool | None = None,
+        fixed_sequence: str | None = None,
+        allow_if_exists: bool = False,
+    ) -> Domain:
+        """
+        Adds a :any:`Domain` with name `name` to this :any:`Design`, and returns it.
+
+        This is useful in combination with :meth:`Design.add_strand` for creating strands by giving domain names instead of explicit :any:`Domain` objects.
+        This way, the domains can be associated to a :any:`DomainPool` or have a fixed sequence assigned at the time of creation,
+        without needing to modify the :any:`Domain` objects after they are created by :meth:`Design.add_strand`.
+
+        :param name:
+            name of the :any:`Domain` to add. Raises exception if this domain has already been added to this :any:`Design`.
+        :param pool:
+            :any:`DomainPool` to associate with this :any:`Domain`. Exactly one of `pool` and `fixed_sequence` can be specified.
+        :param fixed_sequence:
+            fixed sequence to assign to this :any:`Domain`. Exactly one of `pool` and `fixed_sequence` can be specified.
+        :param allow_if_exists:
+            if False (default), raises exception if a :any:`Domain` with name `name` already exists in this :any:`Design` (or its complement).
+        """
+        if pool is not None and fixed_sequence is not None:
+            raise ValueError("exactly one of pool and fixed_sequence can be specified, but both were specified")
+        elif pool is None and fixed_sequence is None:
+            raise ValueError("exactly one of pool and fixed_sequence must be specified, but neither was specified")
+        name_without_star = name
+        if name_without_star.endswith("*"):
+            name_without_star = name_without_star[:-1]
+        if not allow_if_exists and name_without_star in self.domains_by_name:
+            raise ValueError(
+                f"domain with name {name} already exists in this design: {self.domains_by_name[name_without_star]}"
+            )
+
+        domain = Domain(name=name_without_star, pool=pool)
+        if fixed_sequence is not None:
+            domain.set_fixed_sequence(fixed_sequence)
+        self.domains_by_name[name] = domain
+        self.domains.append(domain)
+
     def add_strand(
         self,
         domain_names: list[str] | None = None,
@@ -3518,6 +3564,14 @@ class Design(JSONSerializable):
         :return:
             the :any:`Strand` that is created
         """
+        for existing_strand in self.strands:
+            if name == existing_strand.name:
+                raise ValueError(
+                    f"strand name {name} already exists for this strand:\n"
+                    f"  {existing_strand}\n"
+                    f"so it cannot be used for the new strand"
+                )
+
         if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
             domain_names is None and not (domains is not None and starred_domain_indices is not None)
         ):
@@ -3539,11 +3593,11 @@ class Design(JSONSerializable):
 
                 # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
                 domain: Domain
-                if domain_name not in self._domains_interned:
+                if domain_name not in self.domains_by_name:
                     domain = Domain(name=domain_name)
-                    self._domains_interned[domain_name] = domain
+                    self.domains_by_name[domain_name] = domain
                 else:
-                    domain = self._domains_interned[domain_name]
+                    domain = self.domains_by_name[domain_name]
 
                 domains.append(domain)
                 if is_starred:
@@ -3558,28 +3612,21 @@ class Design(JSONSerializable):
             label=label,
             vendor_fields=vendor_fields,
         )
-
-        for existing_strand in self.strands:
-            if strand.name == existing_strand.name:
-                raise ValueError(
-                    f"strand name {strand.name} already exists for this strand:\n"
-                    f"  {existing_strand}\n"
-                    f"so it cannot be used for the new strand\n"
-                    f"  {strand}"
-                )
         self.strands.append(strand)
 
         for domain_in_strand in strand.domains:
             domains_in_tree = domain_in_strand.all_domains_in_tree()
             for domain in domains_in_tree:
-                if domain not in self.domains:
+                if domain.name not in self.domains_by_name:
                     self.domains.append(domain)
                 name = domain.name
                 if name in self.domains_by_name and domain is not self.domains_by_name[name]:
                     raise ValueError(
                         f"domain names must be unique, but I found two different domains with name {domain.name}"
                     )
-                self.domains_by_name[domain.name] = domain
+                if name not in self.domains_by_name:
+                    self.domains_by_name[domain.name] = domain
+                    self.domains.append(domain)
 
         return strand
 
