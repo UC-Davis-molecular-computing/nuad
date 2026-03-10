@@ -1,39 +1,41 @@
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import Any, Dict, AbstractSet
+from dataclasses import dataclass
+from typing import AbstractSet, Any, Dict
 
 import scadnano as sc
+
 from nuad.json_noindent_serializer import JSONSerializable, NoIndent
 
 _default_modification_id = "WARNING: no id assigned to modification"
 default_connector_length = 4
 
 # Design keys
-design_modifications_key = 'modifications_in_design'
+design_modifications_key = "modifications_in_design"
 
 # Strand keys
-modification_5p_key = '5prime_modification'
-modification_3p_key = '3prime_modification'
-modifications_int_key = 'internal_modifications'
+modification_5p_key = "5prime_modification"
+modification_3p_key = "3prime_modification"
+modifications_int_key = "internal_modifications"
 
 # Modification keys
-mod_location_key = 'location'
-mod_display_text_key = 'display_text'
-mod_id_key = 'id'
-mod_vendor_code_key = 'vendor_code'
-mod_font_size_key = 'font_size'
-mod_display_connector_key = 'display_connector'
-mod_allowed_bases_key = 'allowed_bases'
-mod_connector_length_key = 'connector_length'
+mod_location_key = "location"
+mod_display_text_key = "display_text"
+mod_id_key = "id"
+mod_vendor_code_key = "vendor_code"
+mod_font_size_key = "font_size"
+mod_display_connector_key = "display_connector"
+mod_allowed_bases_key = "allowed_bases"
+mod_connector_length_key = "connector_length"
 
 
 class ModificationType(enum.Enum):
     """
     Type of modification (5', 3', or internal).
     """
+
     five_prime = "5'"
     """5' modification type"""
 
@@ -83,15 +85,14 @@ class Modification(JSONSerializable, ABC):
 
     def __post_init__(self) -> None:
         if self.id == _default_modification_id:
-            object.__setattr__(self, 'id', self.vendor_code)
+            object.__setattr__(self, "id", self.vendor_code)
 
     def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = {mod_vendor_code_key: self.vendor_code, mod_id_key: self.id}
         return ret
 
     @staticmethod
-    def from_json(
-            json_map: Dict[str, Any]) -> 'Modification':  # remove quotes when Py3.6 support dropped
+    def from_json(json_map: Dict[str, Any]) -> "Modification":  # remove quotes when Py3.6 support dropped
         location = json_map[mod_location_key]
         if location == "5'":
             return Modification5Prime.from_json(json_map)
@@ -119,7 +120,7 @@ class Modification5Prime(Modification):
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'Modification5Prime':
+    def from_json(json_map: Dict[str, Any]) -> "Modification5Prime":
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "5'"
@@ -145,7 +146,7 @@ class Modification3Prime(Modification):
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'Modification3Prime':
+    def from_json(json_map: Dict[str, Any]) -> "Modification3Prime":
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "3'"
@@ -174,19 +175,20 @@ class ModificationInternal(Modification):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.allowed_bases is not None and not isinstance(self.allowed_bases, frozenset):
-            object.__setattr__(self, 'allowed_bases', frozenset(self.allowed_bases))
+            object.__setattr__(self, "allowed_bases", frozenset(self.allowed_bases))
 
     def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "internal"
         if self.allowed_bases is not None:
-            ret[mod_allowed_bases_key] = NoIndent(
-                list(self.allowed_bases)) if suppress_indent else list(self.allowed_bases)
+            ret[mod_allowed_bases_key] = (
+                NoIndent(list(self.allowed_bases)) if suppress_indent else list(self.allowed_bases)
+            )
         return ret
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'ModificationInternal':
+    def from_json(json_map: Dict[str, Any]) -> "ModificationInternal":
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "internal"
@@ -200,5 +202,6 @@ class ModificationInternal(Modification):
         return ModificationType.internal
 
     def to_scadnano_modification(self) -> sc.ModificationInternal:
-        return sc.ModificationInternal(display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id,
-                                       allowed_bases=self.allowed_bases)
+        return sc.ModificationInternal(
+            display_text=self.vendor_code, idt_text=self.vendor_code, id=self.id, allowed_bases=self.allowed_bases
+        )

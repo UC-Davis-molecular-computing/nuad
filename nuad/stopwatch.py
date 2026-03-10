@@ -17,11 +17,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Callable, Any
+from typing import Any, Callable
 
 
 def _current_nanoseconds() -> int:
@@ -34,6 +35,7 @@ def _current_nanoseconds() -> int:
 
 
 # taken from https://github.com/ravener/stopwatch.py/blob/master/stopwatch/stopwatch.py
+
 
 # Ported from https://github.com/dirigeants/klasa/blob/master/src/lib/util/Stopwatch.js
 class Stopwatch:
@@ -95,17 +97,17 @@ class Stopwatch:
         return self.duration_ns / 1_000_000_000.0
 
     def nanoseconds_str(self) -> str:
-        return f'{self.nanoseconds()}'
+        return f"{self.nanoseconds()}"
 
     def microseconds_str(self, precision: int = 2) -> str:
-        return f'{self.microseconds():.{precision}f}'
+        return f"{self.microseconds():.{precision}f}"
 
     def milliseconds_str(self, precision: int = 2, width: int | None = None) -> str:
-        width_spec = '' if width is None else width
-        return f'{self.milliseconds():{width_spec}.{precision}f}'
+        width_spec = "" if width is None else width
+        return f"{self.milliseconds():{width_spec}.{precision}f}"
 
     def seconds_str(self, precision: int = 2) -> str:
-        return f'{self.seconds():.{precision}f}'
+        return f"{self.seconds():.{precision}f}"
 
     def __str__(self) -> str:
         time_ = self.milliseconds()
@@ -117,28 +119,31 @@ class Stopwatch:
             return "{:.2f} μs".format(time_ * 1000)
         return "{:.2f} ns".format(time_ * 1_000_000)
 
-    def time_in_units(self,
-                      # units: Literal['s', 'ms', 'us', 'ns']) -> str: # Literal not supported in Python 3.7
-                      units: str) -> str:
+    def time_in_units(
+        self,
+        # units: Literal['s', 'ms', 'us', 'ns']) -> str: # Literal not supported in Python 3.7
+        units: str,
+    ) -> str:
         ns = self.nanoseconds()
-        if units == 's':
-            return f'{ns / 10 ** 9:.2f} s'
-        elif units == 'ms':
-            return f'{ns / 10 ** 6:.2f} ms'
-        elif units == 'us':
-            return f'{ns / 10 ** 3:.2f} μs'
-        elif units == 'ns':
-            return f'{ns:.2f} ns'
+        if units == "s":
+            return f"{ns / 10**9:.2f} s"
+        elif units == "ms":
+            return f"{ns / 10**6:.2f} ms"
+        elif units == "us":
+            return f"{ns / 10**3:.2f} μs"
+        elif units == "ns":
+            return f"{ns:.2f} ns"
         else:
-            raise ValueError(f"units = {units} is not a legal unit, please choose one of "
-                             f"'s', 'ms', 'us', 'ns'")
+            raise ValueError(f"units = {units} is not a legal unit, please choose one of 's', 'ms', 'us', 'ns'")
 
-    def log(self, msg: str,
-            # units: Optional[Literal['s', 'ms', 'us', 'ns']] = None, # Literal not supported in Python 3.7
-            units: str | None = None,
-            restart: bool = True,
-            logger: logging.Logger | None = None,
-            ) -> None:
+    def log(
+        self,
+        msg: str,
+        # units: Optional[Literal['s', 'ms', 'us', 'ns']] = None, # Literal not supported in Python 3.7
+        units: str | None = None,
+        restart: bool = True,
+        logger: logging.Logger | None = None,
+    ) -> None:
         """
         Useful for timing statements/blocks of statements via the following:
 
@@ -165,13 +170,14 @@ class Stopwatch:
         if logger is None:
             print_local = print
         else:
+
             def print_local(the_msg: str) -> None:
                 logger.info(the_msg)
 
         if units is None:
-            print_local(f'time for {msg}: {self}')
+            print_local(f"time for {msg}: {self}")
         else:
-            print_local(f'time for {msg}: {self.time_in_units(units)}')
+            print_local(f"time for {msg}: {self.time_in_units(units)}")
 
         if restart:
             self.restart()

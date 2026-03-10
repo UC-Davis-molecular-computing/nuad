@@ -238,19 +238,19 @@ def _determine_domain_pairs_to_check(
             domain_pairs_to_check = tuple(DomainPair(domain1, domain2) for domain1, domain2 in constraint.domain_pairs)
         else:
             pairs = all_pairs(
-                design.domains, with_replacement=constraint.check_domain_against_itself, where=nc.not_strict_subdomain
+                design.domains,
+                with_replacement=constraint.check_domain_against_itself,
+                where=nc.not_strict_subdomain,
             )
-            domain_pairs_to_check = tuple(
-                DomainPair(domain1, domain2) for domain1, domain2 in pairs if not (domain1.fixed and domain2.fixed)
-            )
+            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.fixed and d2.fixed))
 
     else:
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
             domain_pairs_to_check = tuple(
-                DomainPair(domain1, domain2)
-                for domain1, domain2 in constraint.domain_pairs
-                if domain1 in domains_changed or domain2 in domains_changed
+                DomainPair(d1, d2)
+                for d1, d2 in constraint.domain_pairs
+                if d1 in domains_changed or d2 in domains_changed
             )
         else:
             domain_pairs_to_check = []
@@ -425,7 +425,10 @@ def _write_intermediate_files(
     _write_sequences(design, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
 
     _write_report(
-        params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded, eval_set=eval_set
+        params=params,
+        directories=directories,
+        num_new_optimal_padded=num_new_optimal_padded,
+        eval_set=eval_set,
     )
 
 
@@ -444,7 +447,10 @@ def _write_design(
 
 
 def _write_rng_state(
-    rng: numpy.random.Generator, params: SearchParameters, directories: _Directories, num_new_optimal_padded: str
+    rng: numpy.random.Generator,
+    params: SearchParameters,
+    directories: _Directories,
+    num_new_optimal_padded: str,
 ) -> None:
     state = rng.bit_generator.state
     content = json.dumps(state, indent=2)
@@ -847,7 +853,7 @@ class SearchParameters:
     of this, then you can turn this off to clean up the console output.
     """
 
-    scrolling_output: bool = True
+    scrolling_output: bool = False
     r"""
     If True, then screen output "scrolls" on the screen, i.e., a newline is printed after each iteration,
     e.g.,
@@ -1273,7 +1279,7 @@ def timestamp() -> str:
 
 def _restart_from_directory(
     directories: _Directories, design: nc.Design, params: SearchParameters
-) -> tuple[int, np.random.Generator]:
+) -> tuple[int, np.random.Generator | None]:
     # NOTE: If the subdirectory design/ exists, then this restarts from highest index found in the
     # subdirectory, NOT from "design_best.json" file, which is ignored in that case.
     # It is only used if the design/ subdirectory is missing.
@@ -1309,6 +1315,7 @@ def _restart_from_directory(
     with open(design_filename, "r") as file:
         design_json_str = file.read()
     design_stored = nc.Design.from_json(design_json_str)
+    design_stored.compute_derived_fields()
     nc.verify_designs_match(design_stored, design, check_fixed=False)
 
     rng = None
@@ -1329,7 +1336,7 @@ run of the search algorithm had been allowed to continue.""")
         rng.bit_generator.state = rng_state
         logger.warning(f"""\
 Using stored random seed from file {rng_filename} to produce search results
-identical to those that would have happened if the search had not be stopped.""")
+identical to those that would have happened if the search had not been stopped.""")
 
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
@@ -1337,7 +1344,7 @@ identical to those that would have happened if the search had not be stopped."""
     # is the Design being modified by the search (not the Design that is read in from the stored .json)
     design.copy_sequences_from(design_stored)
 
-    return highest_idx, (rng if rng is not None else None)
+    return highest_idx, rng
 
 
 def _find_highest_index_in_directory(directory: str, filename_start: str, ext: str) -> int:
@@ -2051,7 +2058,8 @@ class EvaluationSet:
 
 
 def _assert_violations_are_accurate(
-    evaluations: dict[Constraint, dict[nc.Part, Evaluation]], violations: dict[Constraint, dict[nc.Part, Evaluation]]
+    evaluations: dict[Constraint, dict[nc.Part, Evaluation]],
+    violations: dict[Constraint, dict[nc.Part, Evaluation]],
 ) -> None:
     # go through all violations and ensure the violations in it are all in evaluations
     for (constraint, part), viol in items_2d(violations):
@@ -2580,7 +2588,10 @@ class ConstraintReport(Generic[DesignPart]):
     report_only_violations: bool
 
     def __init__(
-        self, constraint: nc.Constraint[DesignPart], evaluation_set: EvaluationSet, report_only_violations: bool
+        self,
+        constraint: nc.Constraint[DesignPart],
+        evaluation_set: EvaluationSet,
+        report_only_violations: bool,
     ) -> None:
         if not isinstance(
             constraint,
@@ -2629,10 +2640,12 @@ class ConstraintReport(Generic[DesignPart]):
             f"\n* score of violations: {self.score:.2f}{summary_unfixed_content}" if include_scores else ""
         )
 
+        full_description = f"{self.constraint.short_description}: {self.constraint.description}"
+
         summary = (
             f"""\
-**{"*" * len(self.constraint.description)}
-* {self.constraint.description}
+**{"*" * len(full_description)}
+* {full_description}
 * evaluations: {self.num_evaluations}
 * violations:  {self.num_violations}"""
             + score_summary_str
