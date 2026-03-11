@@ -122,7 +122,7 @@ def pfunc(
     except ModuleNotFoundError:
         raise ImportError(
             "NUPACK 4 must be installed to use pfunc. Installation instructions can be found at "
-            "https://piercelab-caltech.github.io/nupack-docs/start/."
+            "https://docs.nupack.org/start/#installation-requirements."
         )
 
     # expensive to create a Model, so don't create the same one twice
