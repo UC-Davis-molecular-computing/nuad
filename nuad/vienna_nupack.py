@@ -21,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Iterable, List, Sequence, Tuple, TypeVar
+from typing import Iterable, List, Sequence, Tuple, TypeVar, cast
 
 import numpy as np
 
@@ -72,7 +72,7 @@ S = TypeVar("S", str, bytes, bytearray)
 
 
 def pfunc(
-    seqs: S | Tuple[S, ...],
+    seqs: S | Iterable[S],
     temperature: float = default_temperature,
     sodium: float = default_sodium,
     magnesium: float = default_magnesium,
@@ -114,7 +114,7 @@ def pfunc(
     :return:
         complex free energy ("delta G") of ordered complex with strands in given cyclic permutation
     """
-    seqs: Tuple[S, ...] = tupleize(seqs)
+    seqs_tuple: Tuple[S, ...] = tupleize(seqs)
 
     try:
         from nupack import Model  # type: ignore
@@ -132,16 +132,16 @@ def pfunc(
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
-    _, dg = nupack_pfunc(strands=seqs, model=model)
+    _, dg = nupack_pfunc(strands=seqs_tuple, model=model)
 
-    if strand_association_penalty and len(seqs) > 1:
-        dg += calculate_strand_association_penalty(temperature, len(seqs))
+    if strand_association_penalty and len(seqs_tuple) > 1:
+        dg += calculate_strand_association_penalty(temperature, len(seqs_tuple))
 
-    return dg
+    return float(dg)
 
 
 def tupleize(seqs: S | Iterable[S]) -> Tuple[S, ...]:
-    return (seqs,) if isinstance(seqs, str) or isinstance(seqs, bytes) or isinstance(seqs, bytearray) else tuple(seqs)
+    return cast(tuple[S, ...], (seqs,)) if isinstance(seqs, (str, bytes, bytearray)) else tuple(seqs)
 
 
 try:
