@@ -7636,7 +7636,7 @@ def energy_excess_domains(
     domain1: Domain,
     domain2: Domain,
 ) -> float:
-    threshold_value = 0.0  # noqa: F841
+    threshold_value = 0.0  # noqa
     if isinstance(threshold, Number):
         threshold_value = threshold
     elif isinstance(threshold, dict):
