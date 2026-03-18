@@ -44,7 +44,7 @@ from typing import (
     cast,
 )
 
-import numpy as np  # noqa
+import numpy as np
 import scadnano as sc  # type: ignore
 from ordered_set import OrderedSet
 
@@ -319,7 +319,9 @@ _configure_logger()
 
 
 def all_pairs(
-    values: Iterable[T], with_replacement: bool = True, where: Callable[[T, T], bool] = lambda _, __: True
+    values: Iterable[T],
+    with_replacement: bool = True,
+    where: Callable[[T, T], bool] = lambda _, __: True,
 ) -> list[tuple[T, T]]:
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
@@ -343,7 +345,9 @@ def all_pairs(
 
 
 def all_pairs_iterator(
-    values: Iterable[T], with_replacement: bool = True, where: Callable[[tuple[T, T]], bool] = lambda _: True
+    values: Iterable[T],
+    with_replacement: bool = True,
+    where: Callable[[tuple[T, T]], bool] = lambda _: True,
 ) -> Iterator[tuple[T, T]]:
     """
     Strongly typed function to get iterator of all pairs from `iterable`. (for using with mypy)
@@ -807,7 +811,12 @@ class RunsOfBasesFilter(NumpyFilter):
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences that have a run of given length of bases from given bases."""
-        substrings = list(map(lambda lst: "".join(lst), itertools.product(self.bases, repeat=self.length)))
+        substrings = list(
+            map(
+                lambda lst: "".join(lst),
+                itertools.product(self.bases, repeat=self.length),
+            )
+        )
         constraint = ForbiddenSubstringFilter(substrings)
         return constraint.remove_violating_sequences(seqs)
 
@@ -1255,7 +1264,10 @@ class DomainPool(JSONSerializable):
         return seqs_list
 
     def generate_sequence(
-        self, rng: np.random.Generator, previous_sequence: str | None = None, warn_no_seqs_found: bool = False
+        self,
+        rng: np.random.Generator,
+        previous_sequence: str | None = None,
+        warn_no_seqs_found: bool = False,
     ) -> str:
         """
         Returns a DNA sequence of given length satisfying :data:`DomainPool.numpy_filters` and
@@ -1309,7 +1321,10 @@ class DomainPool(JSONSerializable):
         return sequence
 
     def _sample_hamming_distance_from_sequence(
-        self, previous_sequence: str, rng: np.random.Generator, warn_no_seqs_found: bool = False
+        self,
+        previous_sequence: str,
+        rng: np.random.Generator,
+        warn_no_seqs_found: bool = False,
     ) -> str:
         # all possible distances from 1 to len(previous_sequence) are calculated.
 
@@ -1330,11 +1345,12 @@ class DomainPool(JSONSerializable):
             prob_sum = existing_hamming_probabilities.sum()
             assert prob_sum > 0.0
             existing_hamming_probabilities /= prob_sum
-            sampled_distance: int = rng.choice(available_distances_arr, p=existing_hamming_probabilities)
+            sampled_distance = int(rng.choice(available_distances_arr, p=existing_hamming_probabilities))
 
             sequence: str | None = None
 
-            while sequence is None:  # each iteration of this loop tries one value of num_to_generate
+            while sequence is None:
+                # each iteration of this loop tries one value of num_to_generate
                 bases = self._bases_to_use()
                 length = self.length
 
@@ -1351,13 +1367,16 @@ class DomainPool(JSONSerializable):
                 assert num_sequences_at_sampled_distance > 0
 
                 if num_to_generate > num_sequences_at_sampled_distance:
-                    num_to_generate = num_sequences_at_sampled_distance
+                    num_to_generate = int(num_sequences_at_sampled_distance)
 
                 if num_to_generate >= num_sequences_at_sampled_distance // 2:
-                    num_to_generate = num_sequences_at_sampled_distance
+                    num_to_generate = int(num_sequences_at_sampled_distance)
                     # if we want sufficiently many random sequences, just generate all possible sequences
                     seqs = nn.DNASeqList(
-                        hamming_distance_from_sequence=(sampled_distance, previous_sequence),
+                        hamming_distance_from_sequence=(
+                            sampled_distance,
+                            previous_sequence,
+                        ),
                         alphabet=bases,
                         shuffle=True,
                         rng=rng,
@@ -1366,7 +1385,10 @@ class DomainPool(JSONSerializable):
                 else:
                     # otherwise sample num_to_generate with replacement
                     seqs = nn.DNASeqList(
-                        hamming_distance_from_sequence=(sampled_distance, previous_sequence),
+                        hamming_distance_from_sequence=(
+                            sampled_distance,
+                            previous_sequence,
+                        ),
                         alphabet=bases,
                         shuffle=True,
                         num_random_seqs=num_to_generate,
@@ -1451,7 +1473,13 @@ NumpyFilters and SequenceFilters. Trying another distance."""
     ) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
-        seqs = nn.DNASeqList(length=length, alphabet=bases, shuffle=True, num_random_seqs=num_to_generate, rng=rng)
+        seqs = nn.DNASeqList(
+            length=length,
+            alphabet=bases,
+            shuffle=True,
+            num_random_seqs=num_to_generate,
+            rng=rng,
+        )
         seqs_passing_numpy_filters = self._apply_numpy_filters(seqs)
         self._log_numpy_generation(length, num_to_generate, len(seqs_passing_numpy_filters))
         return seqs_passing_numpy_filters
@@ -2288,7 +2316,7 @@ def domains_not_substrings_of_each_other_constraint(
     check_complements: bool = True,
     short_description: str = "dom neq",
     weight: float = 1.0,
-    min_length: int = 0,
+    min_length: int = 4,
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
     domains: Iterable[Domain] | None = None,
 ) -> DomainPairConstraint:
@@ -2425,10 +2453,20 @@ class VendorFields(JSONSerializable):
         return VendorFields(scale=scale, purification=purification, plate=plate, well=well)
 
     def clone(self) -> VendorFields:
-        return VendorFields(scale=self.scale, purification=self.purification, plate=self.plate, well=self.well)
+        return VendorFields(
+            scale=self.scale,
+            purification=self.purification,
+            plate=self.plate,
+            well=self.well,
+        )
 
     def to_scadnano_vendor_fields(self) -> sc.VendorFields:
-        return sc.VendorFields(scale=self.scale, purification=self.purification, plate=self.plate, well=self.well)
+        return sc.VendorFields(
+            scale=self.scale,
+            purification=self.purification,
+            plate=self.plate,
+            well=self.well,
+        )
 
 
 def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
@@ -3163,7 +3201,9 @@ def remove_duplicates(lst: Iterable[T]) -> list[T]:
     return [x for x in lst if not (x in seen or seen_add(x))]
 
 
-def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> sc.Design:
+def _export_dummy_scadnano_design_for_idt_export(
+    strands: Iterable[Strand],
+) -> sc.Design:
     """
     Exports a dummy scadnano design from this dsd :any:`Design`.
     Useful for reusing scadnano methods such as to_idt_bulk_input_format.
@@ -3183,7 +3223,12 @@ def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> s
         sc_domains = []
         prev_end = 0
         for domain in strand.domains:
-            sc_domain = sc.Domain(helix=helix_idx, forward=True, start=prev_end, end=prev_end + domain.get_length())
+            sc_domain = sc.Domain(
+                helix=helix_idx,
+                forward=True,
+                start=prev_end,
+                end=prev_end + domain.get_length(),
+            )
             prev_end = sc_domain.end
             sc_domains.append(sc_domain)
         sc_strand = sc.Strand(
@@ -3205,7 +3250,9 @@ def _export_dummy_scadnano_design_for_idt_export(strands: Iterable[Strand]) -> s
         if len(strand.modifications_int) > 0:
             for offset, mod in strand.modifications_int.items():
                 sc_mod = sc.ModificationInternal(
-                    vendor_code=mod.vendor_code, display_text=mod.vendor_code, allowed_bases=mod.allowed_bases
+                    vendor_code=mod.vendor_code,
+                    display_text=mod.vendor_code,
+                    allowed_bases=mod.allowed_bases,
                 )
                 sc_strand.modifications_int[offset] = sc_mod
 
@@ -3690,7 +3737,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def assign_modifications_to_strands(
-        strands: list[Strand], strand_jsons: list[dict], all_mods: dict[str, nm.Modification]
+        strands: list[Strand],
+        strand_jsons: list[dict],
+        all_mods: dict[str, nm.Modification],
     ) -> None:
         for strand, strand_json in zip(strands, strand_jsons):
             if nm.modification_5p_key in strand_json:
@@ -3954,7 +4003,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def from_scadnano_file(
-        sc_filename: str, fix_assigned_sequences: bool = True, ignored_strands: Iterable[Strand] | None = None
+        sc_filename: str,
+        fix_assigned_sequences: bool = True,
+        ignored_strands: Iterable[Strand] | None = None,
     ) -> Design:
         """
         Converts a scadnano Design stored in file named `sc_filename` to a a :any:`Design` for doing
@@ -4091,7 +4142,10 @@ class Design(JSONSerializable):
                 domain_names: list[str] = [domain.name for domain in sc_strand.domains]
                 sequence = sc_strand.dna_sequence
                 nuad_strand: Strand = design.add_strand(
-                    domain_names=domain_names, group=group, name=sc_strand.name, label=sc_strand.label
+                    domain_names=domain_names,
+                    group=group,
+                    name=sc_strand.name,
+                    label=sc_strand.label,
                 )
                 # assign sequence
                 if sequence is not None:
@@ -4133,7 +4187,10 @@ class Design(JSONSerializable):
             raise AssertionError(f'label does not have either an attribute or a dict key "{group_key}"')
 
     def assign_fields_to_scadnano_design(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = (), overwrite: bool = False
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ):
         """
         Assigns DNA sequence, VendorFields, and StrandGroups (as a key in a scadnano String.label dict
@@ -4146,7 +4203,10 @@ class Design(JSONSerializable):
         self.assign_modifications_to_scadnano_design(sc_design, ignored_strands, overwrite)
 
     def assign_sequences_to_scadnano_design(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = (), overwrite: bool = False
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns sequences from this :any:`Design` into `sc_design`.
@@ -4225,7 +4285,10 @@ class Design(JSONSerializable):
         return pairs
 
     def assign_strand_groups_to_labels(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = (), overwrite: bool = False
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         TODO: document this
@@ -4257,7 +4320,10 @@ class Design(JSONSerializable):
                     sc_strand.label[group_key] = nuad_strand.group
 
     def assign_idt_fields_to_scadnano_design(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = (), overwrite: bool = False
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns :any:`VendorFields` from this :any:`Design` into `sc_design`.
@@ -4290,7 +4356,10 @@ class Design(JSONSerializable):
                     sc_strand.vendor_fields = nuad_strand.vendor_fields.to_scadnano_vendor_fields()
 
     def assign_modifications_to_scadnano_design(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = (), overwrite: bool = False
+        self,
+        sc_design: sc.Design,
+        ignored_strands: Iterable[Strand] = (),
+        overwrite: bool = False,
     ) -> None:
         """
         Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
@@ -4374,7 +4443,9 @@ class Design(JSONSerializable):
 
     @staticmethod
     def _assign_to_strand_with_partial_sequence(
-        sc_strand: sc.Strand, sc_design: sc.Design, sc_domain_name_tuples: dict[tuple[str, ...], Strand]
+        sc_strand: sc.Strand,
+        sc_design: sc.Design,
+        sc_domain_name_tuples: dict[tuple[str, ...], Strand],
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
@@ -4431,7 +4502,12 @@ class Design(JSONSerializable):
                     )
             sequence_list.append(domain_sequence)
         strand_sequence = "".join(sequence_list)
-        sc_design.assign_dna(strand=sc_strand, sequence=strand_sequence, assign_complement=False, check_length=True)
+        sc_design.assign_dna(
+            strand=sc_strand,
+            sequence=strand_sequence,
+            assign_complement=False,
+            check_length=True,
+        )
 
     def copy_sequences_from(self, other: Design) -> None:
         """
@@ -4654,7 +4730,11 @@ class Result(Generic[DesignPart]):
     """
 
     def __init__(
-        self, excess: float, summary: str | None = None, value: float | None = None, unit: str | None = None
+        self,
+        excess: float,
+        summary: str | None = None,
+        value: float | None = None,
+        unit: str | None = None,
     ) -> None:
         self.excess = excess
         if summary is None:
@@ -4773,7 +4853,9 @@ class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
     evaluate_bulk: Callable[[Sequence[DesignPart]], list[Result]] = lambda _: _raise_unreachable()
 
     def call_evaluate_bulk(
-        self, parts: Sequence[DesignPart], score_transfer_function: Callable[[float], float]
+        self,
+        parts: Sequence[DesignPart],
+        score_transfer_function: Callable[[float], float],
     ) -> list[Result]:
         results: list[Result[DesignPart]] = (self.evaluate_bulk)(parts)  # noqa
         # apply weight and transfer scores
@@ -5228,6 +5310,50 @@ def nupack_domain_free_energy_constraint(
     )
 
 
+def forbidden_substring_strand_constraint(
+    forbidden_substring: str | Iterable[str],
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] | None = None,
+    parallel: bool = False,
+    description: str | None = None,
+    short_description: str | None = None,
+    strands: Iterable[Strand] | None = None,
+) -> StrandConstraint:
+    """
+    Returns constraint that checks that a given substring does not appear in the sequence of any of the
+    given :any:`Strand`'s. For individual domains, this is better implemented using :any:`ForbiddenSubstringFilter`,
+    but that will not catch substrings such as GGGG that cross domain boundaries.
+    """
+    if description is None:
+        description = f"'{forbidden_substring}' not allowed in strand"
+    if short_description is None:
+        short_description = f"no {forbidden_substring}"
+    if isinstance(forbidden_substring, str):
+        forbidden_substrings = (forbidden_substring,)
+    else:
+        forbidden_substrings = tuple(forbidden_substring)
+
+    def evaluate(seqs: tuple[str, ...], _: Strand | None) -> Result:
+        sequence = seqs[0]
+        result = Result(excess=0.0, summary="")
+        for forbidden in forbidden_substrings:
+            if forbidden in sequence:
+                result.summary += f"contains {forbidden}" if result.excess < 1.0 else f", {forbidden}"
+                result.excess += 1.0
+
+        return result
+
+    return StrandConstraint(
+        description=description,
+        short_description=short_description,
+        weight=weight,
+        score_transfer_function=score_transfer_function,
+        evaluate=evaluate,
+        parallel=parallel,
+        strands=tuple(strands) if strands is not None else None,
+    )
+
+
 def nupack_strand_free_energy_constraint(
     threshold: float,
     temperature: float = nv.default_temperature,
@@ -5360,7 +5486,13 @@ def nupack_domain_pair_constraint(
             raise ValueError(f"threshold = {threshold} must be one of float or dict, but it is {type(threshold)}")
 
     def binding_closure(seq_pair: tuple[str, str]) -> float:
-        return nv.binding(seq_pair[0], seq_pair[1], temperature=temperature, sodium=sodium, magnesium=magnesium)
+        return nv.binding(
+            seq_pair[0],
+            seq_pair[1],
+            temperature=temperature,
+            sodium=sodium,
+            magnesium=magnesium,
+        )
 
     # def evaluate(seq1: str, seq2: str, domain1: Domain | None, domain2: Domain | None) -> float:
     def evaluate(seqs: tuple[str, ...], domain_pair: DomainPair | None) -> Result:
@@ -5401,7 +5533,10 @@ def nupack_domain_pair_constraint(
 
         max_name_length = max(len(name) for name in flatten(name_pairs))
         lines_and_energies = [
-            (f"{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol", energy)
+            (
+                f"{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol",
+                energy,
+            )
             for (name1, name2), energy in zip(name_pairs, energies)
         ]
         lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
@@ -5680,6 +5815,7 @@ def rna_duplex_strand_pair_constraint(
     short_description: str = "rna_dup_strand_pairs",
     parallel: bool = False,  # TODO: remove after figuring out Protocol
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
+    strands: Iterable[Strand] | None = None,
     # max_energy: float = 0.0, # TODO: remove after figuring out Protocol
     # gu_wobble: bool = False, # TODO: remove after figuring out Protocol
 ) -> StrandPairConstraint:
@@ -5722,6 +5858,8 @@ def rna_duplex_strand_pair_constraint(
     :return:
         The :any:`StrandPairConstraint`.
     """
+    if strands is not None and pairs is not None:
+        raise ValueError("Exactly one of strands or pairs can be specified, but not both.")
     gu_wobble = False  # TODO: remove after figuring out Protocol
     max_energy = 0.0  # TODO: remove after figuring out Protocol
     import RNA
@@ -5742,7 +5880,12 @@ def rna_duplex_strand_pair_constraint(
 
     pairs_tuple = None
     if pairs is not None:
+        assert strands is None
         pairs_tuple = tuple(pairs)
+
+    if strands is not None:
+        assert pairs_tuple is None
+        pairs_tuple = tuple(itertools.combinations_with_replacement(tuple(strands), 2))
 
     return StrandPairConstraint(
         description=description,
@@ -5754,7 +5897,11 @@ def rna_duplex_strand_pair_constraint(
     )
 
 
-def chunker(sequence: Sequence[T], chunk_length: int | None = None, num_chunks: int | None = None) -> list[list[T]]:
+def chunker(
+    sequence: Sequence[T],
+    chunk_length: int | None = None,
+    num_chunks: int | None = None,
+) -> list[list[T]]:
     """
     Collect data into fixed-length chunks or blocks, e.g., chunker('ABCDEFG', 3) --> ABC DEF G
 
@@ -6375,7 +6522,9 @@ def _populate_strand_list_and_pairs(
     return strands, pairs
 
 
-def strand_pairs_by_lengths(strands: Iterable[Strand]) -> dict[tuple[int, int], list[tuple[Strand, Strand]]]:
+def strand_pairs_by_lengths(
+    strands: Iterable[Strand],
+) -> dict[tuple[int, int], list[tuple[Strand, Strand]]]:
     """
     Separates pairs of strands in `strands` by lengths. If there are n different strand lengths
     in `strands`, then there are ((n+1) choose 2) keys in the returned dict, one for each pair of
@@ -6396,7 +6545,9 @@ def strand_pairs_by_lengths(strands: Iterable[Strand]) -> dict[tuple[int, int], 
 
 
 def strand_pairs_by_number_matching_domains(
-    *, strands: Iterable[Strand] | None = None, pairs: Iterable[tuple[Strand, Strand]] | None = None
+    *,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[tuple[Strand, Strand]] | None = None,
 ) -> dict[int, list[tuple[Strand, Strand]]]:
     """
     Utility function for calculating number of complementary domains betweeen several pairs of strands.
@@ -7485,7 +7636,7 @@ def energy_excess_domains(
     domain1: Domain,
     domain2: Domain,
 ) -> float:
-    threshold_value = 0.0  # noqa; warns that variable isn't used even though it clearly is
+    threshold_value = 0.0  # noqa: F841
     if isinstance(threshold, Number):
         threshold_value = threshold
     elif isinstance(threshold, dict):
@@ -7543,7 +7694,9 @@ def rna_cofold_strand_pairs_constraint(
     # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
     thread_pool = ThreadPool(processes=num_threads)
 
-    def calculate_energies_unparallel(sequence_pairs: Sequence[tuple[str, str]]) -> tuple[float]:
+    def calculate_energies_unparallel(
+        sequence_pairs: Sequence[tuple[str, str]],
+    ) -> tuple[float]:
         return nv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
 
     def calculate_energies(sequence_pairs: Sequence[tuple[str, str]]) -> tuple[float]:
@@ -7650,7 +7803,8 @@ class ComplexConstraint(ConstraintWithComplexes[Complex], SingularConstraint[Com
 
 
 def _alter_scores_by_transfer(
-    sets_excesses: list[tuple[OrderedSet[Domain], float]], transfer_callback: Callable[[float], float]
+    sets_excesses: list[tuple[OrderedSet[Domain], float]],
+    transfer_callback: Callable[[float], float],
 ) -> list[tuple[OrderedSet[Domain], float]]:
     sets_weights: list[tuple[OrderedSet[Domain], float]] = []
     for set_, excess in sets_excesses:
@@ -8966,7 +9120,8 @@ BoundDomains = tuple[StrandDomainAddress, StrandDomainAddress]
 
 
 def _get_implicitly_bound_domain_addresses(
-    strand_complex: Iterable[Strand], nonimplicit_base_pairs_domain_names: set[str] | None = None
+    strand_complex: Iterable[Strand],
+    nonimplicit_base_pairs_domain_names: set[str] | None = None,
 ) -> dict[StrandDomainAddress, StrandDomainAddress]:
     """Returns a map of all the implicitly bound domain addresses
 
@@ -9010,7 +9165,9 @@ def _get_implicitly_bound_domain_addresses(
     return implicitly_bound_domain_addresses
 
 
-def _get_addr_to_starting_base_pair_idx(strand_complex: Complex) -> dict[StrandDomainAddress, int]:
+def _get_addr_to_starting_base_pair_idx(
+    strand_complex: Complex,
+) -> dict[StrandDomainAddress, int]:
     """Returns a mapping between StrandDomainAddress and the base index of the
     5' end base of the domain
 
@@ -9048,7 +9205,8 @@ def _leafify_domain(domain: Domain) -> list[Domain]:
 
 
 def _leafify_strand(
-    strand: Strand, addr_translation_table: dict[StrandDomainAddress, list[StrandDomainAddress]]
+    strand: Strand,
+    addr_translation_table: dict[StrandDomainAddress, list[StrandDomainAddress]],
 ) -> Strand:
     """Create a new strand that is made of the leaf subdomains. Also updates an
     addr_translation_table which maps StrandDomainAddress from old strand to new
@@ -9082,7 +9240,9 @@ def _leafify_strand(
 
         new_starred_domain_idx += len(leaf_domain_list)
     new_strand: Strand = Strand(
-        domains=new_domains, starred_domain_indices=new_starred_domain_indices, name=f"leafifed {strand.name}"
+        domains=new_domains,
+        starred_domain_indices=new_starred_domain_indices,
+        name=f"leafifed {strand.name}",
     )
     for idx, new_idxs in addr_translation_table_without_strand.items():
         new_addrs = [StrandDomainAddress(new_strand, new_idx) for new_idx in new_idxs]
@@ -9094,7 +9254,8 @@ def _leafify_strand(
 
 
 def _get_base_pair_domain_endpoints_to_check(
-    strand_complex: Iterable[Strand], nonimplicit_base_pairs: Iterable[BoundDomains] = None
+    strand_complex: Iterable[Strand],
+    nonimplicit_base_pairs: Iterable[BoundDomains] = None,
 ) -> set[_BasePairDomainEndpoint]:
     """Returns the set of all the _BasePairDomainEndpoint to check
 
@@ -9263,7 +9424,11 @@ def __get_base_pair_domain_endpoints_to_check(
 
         base_pair_domain_endpoints_to_check.add(
             _BasePairDomainEndpoint(
-                domain1_5p, domain2_3p, domain_base_length, d1_5p_d2_3p_ext_bp_type, d1_3p_d2_5p_ext_bp_type
+                domain1_5p,
+                domain2_3p,
+                domain_base_length,
+                d1_5p_d2_3p_ext_bp_type,
+                d1_3p_d2_5p_ext_bp_type,
             )
         )
 

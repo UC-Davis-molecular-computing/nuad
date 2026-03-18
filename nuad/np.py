@@ -16,6 +16,7 @@ import itertools as it
 import math
 from dataclasses import dataclass
 from functools import lru_cache
+import itertools
 from typing import Collection, Iterable, Iterator, Sequence
 
 import numpy as np
@@ -23,7 +24,16 @@ import numpy as np
 default_rng: np.random.Generator = np.random.default_rng()  # noqa
 
 bits2base = ["A", "C", "G", "T"]
-base2bits = {"A": 0b00, "C": 0b01, "G": 0b10, "T": 0b11, "a": 0b00, "c": 0b01, "g": 0b10, "t": 0b11}
+base2bits = {
+    "A": 0b00,
+    "C": 0b01,
+    "G": 0b10,
+    "T": 0b11,
+    "a": 0b00,
+    "c": 0b01,
+    "g": 0b10,
+    "t": 0b11,
+}
 
 
 def idx2seq(idx: int, length: int) -> str:
@@ -364,14 +374,14 @@ def combnr_idxs(length: int, number: int) -> np.ndarray:
     # :return:
     #     numpy array, with `length` columns and (`length` choose `number`) rows,
     #     representing all ways to set exactly `number` elements of the row True and the others to False.
+    assert 0 <= number <= length
     if number == 0:
         return np.array([[False] * length], dtype=bool)
-    elif number > length // 2:
-        vals = combnr_idxs(length, length - number)
-        return np.logical_not(vals)
-    x = np.array(np.meshgrid(*([np.arange(0, length)] * number))).T.reshape(-1, number)
-    z = np.sum(np.identity(length)[x], 1, dtype=bool).astype(int)
-    return np.unique(z[np.sum(z, axis=1) == number], axis=0).astype(bool)
+    n_rows = comb(length, number)
+    combos = np.array(list(itertools.combinations(range(length), number)))  # shape: (n_rows, number)
+    result = np.zeros((n_rows, length), dtype=bool)
+    result[np.arange(n_rows)[:, np.newaxis], combos] = True
+    return result
 
 
 def make_array_with_random_subset_of_dna_seqs_hamming_distance(
@@ -698,7 +708,12 @@ def strongest_common_substrings_all_pairs_string(
     a1idx_strongest, a2idx_strongest, len_strongest, energy_strongest = _strongest_common_substrings_all_pairs(
         a1s, wc_arr(a2s), temperature
     )
-    return list(a1idx_strongest), list(a2idx_strongest), list(len_strongest), list(energy_strongest)
+    return (
+        list(a1idx_strongest),
+        list(a2idx_strongest),
+        list(len_strongest),
+        list(energy_strongest),
+    )
 
 
 def energies_strongest_common_substrings(seqs1: Sequence[str], seqs2: Sequence[str], temperature: float) -> list[float]:
@@ -820,7 +835,10 @@ class DNASeqList:
                 self.seqarr = make_array_with_all_dna_seqs(length=length, bases=alphabet)
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs(
-                    length=length, num_random_seqs=num_random_seqs, rng=self.rng, bases=alphabet
+                    length=length,
+                    num_random_seqs=num_random_seqs,
+                    rng=self.rng,
+                    bases=alphabet,
                 )
             self.seqlen = length
             self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
@@ -831,7 +849,11 @@ class DNASeqList:
                 self.seqarr = make_array_with_all_dna_seqs_hamming_distance(dist=dist, seq=seq, bases=alphabet)
             else:
                 self.seqarr = make_array_with_random_subset_of_dna_seqs_hamming_distance(
-                    num_seqs=num_random_seqs, dist=dist, seq=seq, rng=self.rng, bases=alphabet
+                    num_seqs=num_random_seqs,
+                    dist=dist,
+                    seq=seq,
+                    rng=self.rng,
+                    bases=alphabet,
                 )
             self.seqlen = len(seq)
             self.numseqs = len(self.seqarr) if self.seqlen > 0 else 1
