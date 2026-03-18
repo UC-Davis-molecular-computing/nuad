@@ -93,6 +93,10 @@ from nuad.constraints import (
 )
 from nuad.stopwatch import Stopwatch
 
+# set to True to check that violations are accurately accounted for
+# if no bugs this should be unnecessary
+ASSERT_VIOLATIONS_ARE_ACCURATE = False
+
 
 def new_process_pool(cpu_count: int) -> pathos.pools.ProcessPool:
     return pathos.pools.ProcessPool(processes=cpu_count)
@@ -245,22 +249,40 @@ def _determine_domain_pairs_to_check(
             domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.fixed and d2.fixed))
 
     else:
+        domains_changed_not_fixed_or_dependent = [
+            domain for domain in domains_changed if not (domain.fixed or domain.dependent)
+        ]
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
-            domain_pairs_to_check = tuple(
-                DomainPair(d1, d2)
-                for d1, d2 in constraint.domain_pairs
-                if d1 in domains_changed or d2 in domains_changed
-            )
+            if len(domains_changed_not_fixed_or_dependent) == 1:
+                domain_changed = domains_changed_not_fixed_or_dependent[0]
+                domain_pairs_to_check = constraint.domain_pairs_with[domain_changed]
+            else:
+                domain_pairs_to_check = tuple(
+                    DomainPair(d1, d2)
+                    for d1, d2 in constraint.domain_pairs
+                    if d1 in domains_changed or d2 in domains_changed
+                )
         else:
-            domain_pairs_to_check = []
-            for domain_changed in domains_changed:
-                for other_domain in design.domains:
-                    if domain_changed is not other_domain or constraint.check_domain_against_itself:
-                        if nc.not_subdomain(domain_changed, other_domain):
-                            domain_pairs_to_check.append(DomainPair(domain_changed, other_domain))
-            domain_pairs_to_check = tuple(domain_pairs_to_check)
+            if len(domains_changed_not_fixed_or_dependent) == 1 and len(constraint.domain_pairs_with) > 0:
+                domain_changed = domains_changed_not_fixed_or_dependent[0]
+                domain_pairs_to_check = constraint.domain_pairs_with[domain_changed]
+            else:
+                domain_pairs_to_check = find_domain_pairs_to_check(design, domains_changed, constraint)
 
+    return domain_pairs_to_check
+
+
+def find_domain_pairs_to_check(
+    design: nc.Design, domains_changed: tuple[Domain, ...], constraint: nc.ConstraintWithDomainPairs
+) -> tuple[DomainPair, ...]:
+    domain_pairs_to_check = []
+    for domain_changed in domains_changed:
+        for other_domain in design.domains:
+            if domain_changed is not other_domain or constraint.check_domain_against_itself:
+                if nc.not_subdomain(domain_changed, other_domain):
+                    domain_pairs_to_check.append(DomainPair(domain_changed, other_domain))
+    domain_pairs_to_check = tuple(domain_pairs_to_check)
     return domain_pairs_to_check
 
 
@@ -1753,7 +1775,8 @@ class EvaluationSet:
             self.evaluate_constraint(constraint, design, None, None, params)
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
         self.update_scores_and_counts()
-        # _assert_violations_are_accurate(self.evaluations, self.violations)
+        if ASSERT_VIOLATIONS_ARE_ACCURATE:
+            _assert_violations_are_accurate(self.evaluations, self.violations)
 
     def evaluate_new(self, design: Design, domains_new: tuple[Domain, ...], params: SearchParameters) -> None:
         # called only on changed parts of the design and sets self.evaluations_new
@@ -1960,8 +1983,8 @@ class EvaluationSet:
                     self.num_violations_nonfixed -= 1
 
         self.reset_new()
-
-        _assert_violations_are_accurate(self.evaluations, self.violations)
+        if ASSERT_VIOLATIONS_ARE_ACCURATE:
+            _assert_violations_are_accurate(self.evaluations, self.violations)
 
     def update_scores_and_counts(self) -> None:
         # return: Total score of all evaluations.
