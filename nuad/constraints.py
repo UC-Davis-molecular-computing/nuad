@@ -1676,6 +1676,8 @@ class Domain(Part, JSONSerializable):
     on the :data:`Domain.subdomains` of other domains in the same tree.
     """
 
+    _key: str = field(init=False, default="", compare=False, hash=False)
+
     def __init__(
         self,
         name: str,
@@ -1699,6 +1701,7 @@ class Domain(Part, JSONSerializable):
         self.label = label
         self.dependent = dependent
         self._subdomains = subdomains
+        self._key = f"Domain({self.name})"
 
         if self.name.endswith("*"):
             raise ValueError(f"Domain name cannot end with *\ndomain name = {self.name}")
@@ -1764,7 +1767,7 @@ class Domain(Part, JSONSerializable):
         return "domain"
 
     def key(self) -> str:
-        return f"Domain({self.name})"
+        return self._key
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -2548,6 +2551,8 @@ class Strand(Part, JSONSerializable):
     for DNA sequence design.
     """
 
+    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+
     def __init__(
         self,
         domains: Iterable[Domain] | None = None,
@@ -2604,7 +2609,7 @@ class Strand(Part, JSONSerializable):
         return "strand"
 
     def key(self) -> str:
-        return f"Strand({self._hash_domain_names_concatenated})"
+        return self._key
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -2647,6 +2652,7 @@ class Strand(Part, JSONSerializable):
         """
         self._domain_names_concatenated = "-".join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
+        self._key = f"Strand({self._hash_domain_names_concatenated})"
         self._compute_all_intersecting_domains()
 
     def all_intersecting_domains(self) -> list[Domain]:
@@ -3065,11 +3071,14 @@ class DomainPair(Part, Iterable[Domain]):
     starred2: bool = False
     "Whether second domain is starred (not used in most constraints)"
 
+    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+
     def __post_init__(self) -> None:
         # make this symmetric so dict lookups work no matter the order
         if self.domain1.name > self.domain2.name:
             self.domain1, self.domain2 = self.domain2, self.domain1
             self.starred1, self.starred2 = self.starred2, self.starred1
+        self._key = f"DomainPair[{self.name}]"
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3080,7 +3089,7 @@ class DomainPair(Part, Iterable[Domain]):
         return self.domain1.get_name(self.starred1) + ", " + self.domain2.get_name(self.starred2)
 
     def key(self) -> str:
-        return f"DomainPair[{self.name}]"
+        return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -3103,10 +3112,13 @@ class StrandPair(Part, Iterable[Strand]):
     strand1: Strand
     strand2: Strand
 
+    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+
     def __post_init__(self) -> None:
         # make this symmetric so make dict lookups work
         if self.strand1.name > self.strand2.name:
             self.strand1, self.strand2 = self.strand2, self.strand1
+        self._key = f"StrandPair[{self.strand1.name}, {self.strand2.name}]"
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3117,7 +3129,7 @@ class StrandPair(Part, Iterable[Strand]):
         return f"{self.strand1.name}, {self.strand2.name}"
 
     def key(self) -> str:
-        return f"StrandPair[{self.strand1.name}, {self.strand2.name}]"
+        return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -3140,6 +3152,8 @@ class Complex(Part, Iterable[Strand]):
     strands: tuple[Strand, ...]
     """The strands in this complex."""
 
+    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+
     def __init__(self, *args: Strand) -> None:
         """
         Creates a complex of strands given as arguments, e.g., ``Complex(strand1, strand2)`` creates
@@ -3149,6 +3163,7 @@ class Complex(Part, Iterable[Strand]):
             if not isinstance(strand, Strand):
                 raise TypeError(f"must pass Strands to constructor for complex, not {strand}")
         self.strands = tuple(args)
+        self._key = f"Complex[{self.name}]"
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3160,7 +3175,7 @@ class Complex(Part, Iterable[Strand]):
         return f"Complex[{strand_names}]"
 
     def key(self) -> str:
-        return f"Complex[{self.name}]"
+        return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -4954,12 +4969,34 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     Only used if :data:`ConstraintWithDomainPairs.pairs` is not specified, otherwise it is ignored.
     """
 
+    domain_pairs_with: dict[Domain, tuple[DomainPair, ...]] = field(init=False, default_factory=dict)
+    # dict mapping each Domain that appears in a pair to the list of all pairs where it appears
+    # useful for speedy lookups during search
+
     def __post_init__(self, pairs: Iterable[tuple[Domain, Domain]] | None) -> None:
         _check_at_most_one_parameter_specified(self.domain_pairs, pairs, "domain_pairs", "pairs")
 
         if self.domain_pairs is None:
             domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
             object.__setattr__(self, "domain_pairs", domain_pairs)
+
+        self.domain_pairs_with = (
+            create_domain_pairs_with_dict(self.domain_pairs) if self.domain_pairs is not None else {}
+        )
+
+
+def create_domain_pairs_with_dict(domain_pairs: Sequence[DomainPair]) -> dict[Domain, tuple[DomainPair, ...]]:
+    domain_pairs_with_list: dict[Domain, list[DomainPair]] = {}
+    for pair in domain_pairs:
+        for domain in pair:
+            if domain not in domain_pairs_with_list:
+                domain_pairs_with_list[domain] = []
+            domain_pairs_with_list[domain].append(pair)
+    # convert lists to tuples
+    domain_pairs_with: dict[Domain, tuple[DomainPair, ...]] = {
+        domain: tuple(pairs) for domain, pairs in domain_pairs_with_list.items()
+    }
+    return domain_pairs_with
 
 
 def _check_at_most_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
