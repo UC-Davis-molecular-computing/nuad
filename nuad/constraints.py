@@ -1536,14 +1536,19 @@ def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys:
     raise ValueError(msg)
 
 
+@dataclass
 class Part(ABC):
+    _hash: int | None = field(init=False, repr=False, compare=False, default=None)
+
     def __eq__(self, other: Part) -> bool:
         return type(self) is type(other) and self.name == other.name
 
     # Remember to set subclass __hash__ equal to this implementation; see here:
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
     def __hash__(self) -> int:
-        return hash(self.key())
+        if self._hash is None:
+            self._hash = hash(self.key())
+        return self._hash
 
     @property
     @abstractmethod
