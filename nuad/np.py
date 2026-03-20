@@ -379,8 +379,9 @@ def combnr_idxs(length: int, number: int) -> np.ndarray:
         return np.array([[False] * length], dtype=bool)
     n_rows = comb(length, number)
     combos = np.array(list(itertools.combinations(range(length), number)))  # shape: (n_rows, number)
-    result = np.ones((n_rows, length), dtype=bool)
-    result[np.arange(n_rows)[:, np.newaxis], combos] = False
+    result = np.zeros((n_rows, length), dtype=bool)
+    result[np.arange(n_rows)[:, np.newaxis], combos] = True
+    
     return result
 
 
