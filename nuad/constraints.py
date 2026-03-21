@@ -2323,7 +2323,7 @@ class Domain(Part, JSONSerializable):
         return None
 
 
-def domains_not_substrings_of_each_other_constraint(
+def domains_neq_constraint(
     check_complements: bool = True,
     short_description: str = "dom neq",
     weight: float = 1.0,
@@ -2332,7 +2332,7 @@ def domains_not_substrings_of_each_other_constraint(
     domains: Iterable[Domain] | None = None,
 ) -> DomainPairConstraint:
     """
-    Returns constraint ensuring no two domains are substrings of each other.
+    More generally, returns constraint ensuring no two domains are substrings of each other.
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
 
     :param check_complements:
@@ -2356,10 +2356,7 @@ def domains_not_substrings_of_each_other_constraint(
         (in particular, if they are equal length, then they are not the same domain)
     """
 
-    # def evaluate(s1: str, s2: str, domain1: Domain | None, domain2: Domain | None) -> float:
-    def evaluate_domains_not_substrings_of_each_other(
-        seqs: tuple[str, ...], domains: tuple[Domain, Domain] | None
-    ) -> Result:  # noqa
+    def evaluate_domains_neq(seqs: tuple[str, ...], domains: tuple[Domain, Domain] | None) -> Result:  # noqa
         s1, s2 = seqs
         if len(s1) > len(s2):
             s1, s2 = s2, s1
@@ -2389,12 +2386,12 @@ def domains_not_substrings_of_each_other_constraint(
         pairs = itertools.combinations(domains, 2)
 
     return DomainPairConstraint(
-        description="domains not substrings of each other",
+        description=f"domains >= {min_length} not substrings of each other",
         short_description=short_description,
         weight=weight,
         check_domain_against_itself=False,
         pairs=pairs,
-        evaluate=evaluate_domains_not_substrings_of_each_other,
+        evaluate=evaluate_domains_neq,
     )
 
 
@@ -5451,7 +5448,7 @@ def nupack_strand_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: tuple[str, ...], _: Strand | None) -> Result:
+    def evaluate_nupack_strand_free_energy(seqs: tuple[str, ...], _: Strand | None) -> Result:
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
@@ -5468,7 +5465,7 @@ def nupack_strand_free_energy_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate=evaluate,
+        evaluate=evaluate_nupack_strand_free_energy,
         parallel=parallel,
         strands=strands,
     )
@@ -5543,8 +5540,7 @@ def nupack_domain_pair_constraint(
             magnesium=magnesium,
         )
 
-    # def evaluate(seq1: str, seq2: str, domain1: Domain | None, domain2: Domain | None) -> float:
-    def evaluate(seqs: tuple[str, ...], domain_pair: DomainPair | None) -> Result:
+    def evaluate_nupack_domain_pair(seqs: tuple[str, ...], domain_pair: DomainPair | None) -> Result:
         seq1, seq2 = seqs
         name_pairs = [(None, None)] * 4
         if domain_pair is not None:
@@ -5603,7 +5599,7 @@ def nupack_domain_pair_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate=evaluate,
+        evaluate=evaluate_nupack_domain_pair,
         parallel=parallel,
         pairs=pairs,
     )
@@ -5834,7 +5830,7 @@ def nupack_strand_pair_constraint(
     if description is None:
         description = _pair_default_description("strand", "NUPACK", threshold, temperature)
 
-    def evaluate(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
+    def evaluate_nupack_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
         seq1, seq2 = seqs
         energy = nv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
         excess = max(0.0, threshold - energy)
@@ -5850,7 +5846,7 @@ def nupack_strand_pair_constraint(
         score_transfer_function=score_transfer_function,
         parallel=parallel,
         pairs=pairs,
-        evaluate=evaluate,
+        evaluate=evaluate_nupack_strand_pair,
     )
 
 
@@ -5920,7 +5916,7 @@ def rna_duplex_strand_pair_constraint(
     if description is None:
         description = _pair_default_description("strand", "RNAduplex", threshold, temperature)
 
-    def evaluate(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
+    def evaluate_rna_duplex_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
         seq1, seq2 = seqs
         rna_duplex_result = RNA.duplexfold(seq1, seq2)
         energy = min(rna_duplex_result.energy, max_energy)
@@ -5941,7 +5937,7 @@ def rna_duplex_strand_pair_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate=evaluate,
+        evaluate=evaluate_rna_duplex_strand_pair,
         pairs=pairs_tuple,
     )
 
@@ -6078,7 +6074,7 @@ def rna_duplex_domain_pairs_constraint(
     if description is None:
         description = _pair_default_description("domain", "RNAduplex", threshold, temperature)
 
-    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> list[Result]:
+    def evaluate_bulk_rna_duplex_domain_pairs(domain_pairs: Iterable[DomainPair]) -> list[Result]:
         sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
             domain_pairs
         )
@@ -6136,7 +6132,7 @@ def rna_duplex_domain_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_rna_duplex_domain_pairs,
         pairs=pairs_tuple,
     )
 
@@ -6180,7 +6176,7 @@ def rna_plex_domain_pairs_constraint(
     if description is None:
         description = _pair_default_description("domain", "RNAplex", threshold, temperature)
 
-    def evaluate_bulk(domain_pairs: Iterable[DomainPair]) -> list[Result]:
+    def evaluate_bulk_rna_plex_domain_pairs(domain_pairs: Iterable[DomainPair]) -> list[Result]:
         sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
             domain_pairs
         )
@@ -6234,7 +6230,7 @@ def rna_plex_domain_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_rna_plex_domain_pairs,
         pairs=pairs_tuple,
     )
 
@@ -6303,7 +6299,7 @@ def domain_pairs_nonorthogonal_constraint(
 
     thresholds = thresholds_normalized
 
-    def evaluate_bulk(dom_pairs: Iterable[DomainPair]) -> list[Result]:
+    def evaluate_bulk_domain_pairs_nonorthogonal(dom_pairs: Iterable[DomainPair]) -> list[Result]:
         sequence_pairs: list[tuple[str, str]] = []
         name_pairs: list[tuple[str, str]] = []
         domain_tuples: list[tuple[Domain, Domain]] = []
@@ -6355,7 +6351,7 @@ def domain_pairs_nonorthogonal_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_domain_pairs_nonorthogonal,
         domain_pairs=domain_pairs,
     )
 
@@ -7310,7 +7306,7 @@ def lcs_domain_pairs_constraint(
     if description is None:
         description = f"Longest complementary subsequence between domains is > {threshold}"
 
-    def evaluate_bulk(pairs_: Iterable[DomainPair]) -> list[Result]:
+    def evaluate_bulk_lcs_domain_pairs(pairs_: Iterable[DomainPair]) -> list[Result]:
         seqs1 = [pair.domain1.sequence() for pair in pairs_]
         seqs2 = [pair.domain2.sequence() for pair in pairs_]
         arr1 = nn.seqs2arr(seqs1)
@@ -7334,7 +7330,7 @@ def lcs_domain_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_lcs_domain_pairs,
         pairs=pairs,
         check_domain_against_itself=check_domain_against_itself,
     )
@@ -7380,7 +7376,7 @@ def lcs_strand_pairs_constraint(
     if description is None:
         description = f"Longest complementary subsequence between strands is > {threshold}"
 
-    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> list[Result]:
+    def evaluate_bulk_lcs_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
         # import time
         # start_eb = time.time()
 
@@ -7418,7 +7414,7 @@ def lcs_strand_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_lcs_strand_pairs,
         pairs=pairs_tuple,
         check_strand_against_itself=check_strand_against_itself,
     )
@@ -7566,7 +7562,7 @@ def rna_duplex_strand_pairs_constraint(
             energies = nv.rna_duplex_multiple(seq_pairs, temperature)
         return energies
 
-    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> list[Result]:
+    def evaluate_bulk_rna_duplex_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
 
@@ -7586,7 +7582,7 @@ def rna_duplex_strand_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_rna_duplex_strand_pairs,
         pairs=pairs_tuple,
     )
 
@@ -7654,7 +7650,7 @@ def rna_plex_strand_pairs_constraint(
             energies = nv.rna_plex_multiple(seq_pairs, logger, temperature, parameters_filename)
         return energies
 
-    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> list[Result]:
+    def evaluate_bulk_rna_plex_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
 
@@ -7674,7 +7670,7 @@ def rna_plex_strand_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_rna_plex_strand_pairs,
         pairs=pairs_tuple,
     )
 
@@ -7762,7 +7758,7 @@ def rna_cofold_strand_pairs_constraint(
             energies = calculate_energies_unparallel(sequence_pairs)
         return energies
 
-    def evaluate_bulk(strand_pairs: Iterable[StrandPair]) -> list[Result]:
+    def evaluate_bulk_rna_cofold_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
         sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
         energies = calculate_energies(sequence_pairs)
 
@@ -7782,7 +7778,7 @@ def rna_cofold_strand_pairs_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk,
+        evaluate_bulk=evaluate_bulk_rna_cofold_strand_pairs,
         pairs=pairs_tuple,
     )
 
@@ -9710,7 +9706,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
     if description is None:
         description = "Base pair probability of complex"
 
-    def evaluate(seqs: tuple[str, ...], strand_complex_: Complex) -> Result:
+    def evaluate_nupack_complex_base_pair_probability(seqs: tuple[str, ...], strand_complex_: Complex) -> Result:
         assert len(seqs) == len(strand_complex)
         bps = _violation_base_pairs(strand_complex_)
         err_sq = 0.0
@@ -9850,5 +9846,5 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
         score_transfer_function=score_transfer_function,
         parallel=parallel,
         complexes=tuple(strand_complexes),
-        evaluate=evaluate,
+        evaluate=evaluate_nupack_complex_base_pair_probability,
     )
