@@ -916,6 +916,7 @@ class SubstringSampler(JSONSerializable):
             self.except_start_indices = tuple(except_start_indices)
 
         # compute set of indices to sample from
+        # we use set instead of OrderedSet because afterward we sort to ensure iteration order is consistent
         self.extended_supersequence = self.supersequence
         if self.circular:
             indices = set(range(len(self.supersequence)))
@@ -1318,7 +1319,7 @@ class DomainPool(JSONSerializable):
         else:
             sequence = self._sample_hamming_distance_from_sequence(previous_sequence, rng, warn_no_seqs_found)
 
-        return sequence
+        return str(sequence)
 
     def _sample_hamming_distance_from_sequence(
         self,
@@ -2190,13 +2191,15 @@ class Domain(Part, JSONSerializable):
                         f"Cycle found in subdomain graph rooted at {self}. Propogated from subdomain {sd}: {e}"
                     )
 
-    def all_domains_in_tree(self) -> list["Domain"]:
+    def all_domains_in_tree(self, allow_fixed: bool = False) -> list["Domain"]:
         """
         :return:
             list of all domains in the same subdomain tree as this domain (including itself)
         """
         domains = self._get_all_domains_from_parent()
         domains.extend(self._get_all_domains_from_this_subtree())
+        if not allow_fixed:
+            domains = [domain for domain in domains if not domain.fixed]
         return domains
 
     def all_domains_intersecting(self) -> list["Domain"]:
@@ -4144,7 +4147,7 @@ class Design(JSONSerializable):
             if not assigned:
                 sc_strand_groups[default_strand_group].append(sc_strand)
 
-        # make dsd StrandGroups, taking names from Strands and Domains,
+        # make nuad StrandGroups, taking names from Strands and Domains,
         # and assign (and maybe fix) DNA sequences
         strand_names: set[str] = set()
         design: Design = Design()
@@ -6561,6 +6564,8 @@ def _populate_strand_list_and_pairs(
                     strand_names.add(strand.name)
                     strands.append(strand)
 
+    assert strands is not None and pairs is not None
+
     return strands, pairs
 
 
@@ -6631,6 +6636,8 @@ def strand_pairs_by_number_matching_domains(
         num_complementary_domains = len(complementary_domain_names)
 
         strand_pairs[num_complementary_domains].append((strand1, strand2))
+
+    strand_pairs = {num_comp_doms: pair for num_comp_doms, pair in sorted(strand_pairs.items())}
 
     return strand_pairs
 

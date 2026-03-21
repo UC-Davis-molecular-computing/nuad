@@ -1824,7 +1824,8 @@ class EvaluationSet:
             parts = find_parts_to_check(constraint, design, domains_new)
             for part in parts:
                 ev = self.evaluations[constraint][part]
-                score_gap += ev.score
+                if ev.violated:
+                    score_gap += ev.score
         return score_gap
 
     @staticmethod
@@ -1863,13 +1864,15 @@ class EvaluationSet:
         score_gap: float | None,
         domains_new: tuple[Domain, ...] | None,
         params: SearchParameters,
-    ) -> float:
+    ) -> float | None:
         # returns score gap = score(old evals) - score(new evals);
         # if gap > 0, then new evals haven't added up to
         if score_gap is not None:
             assert domains_new is not None  # ensure we are only using score gap when doing new evaluation
 
         parts = find_parts_to_check(constraint, design, domains_new)
+        if len(parts) == 0:
+            return score_gap
 
         score_transfer_function = constraint.score_transfer_function
         if score_transfer_function is None:
