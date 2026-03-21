@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import collections.abc as abc
 import datetime
+import time
 import itertools
 import json
 import logging
@@ -736,6 +737,13 @@ class SearchParameters:
     of times the design has improved.
     """
 
+    time_between_saves: float = 5.0
+    """
+    Minimum number of seconds between saving intermediate files (report on constraint violations and DNA sequences)
+    whenever a new optimal sequence assignment is found. Set this to 0 to save every time
+    the design improves, but writing the files can take some time.
+    """
+
     restart: bool = False
     """
     If this function was previously called and placed files in `out_directory`, calling with this
@@ -1073,6 +1081,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 eval_set=eval_set,
             )
 
+        time_last_wrote_intermediate_files = time.perf_counter()
         while not _done(iteration, params, eval_set):
             if params.log_time:
                 stopwatch.stop()
@@ -1111,14 +1120,21 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
-                    _write_intermediate_files(
-                        design=design,
-                        params=params,
-                        rng=rng,
-                        num_new_optimal=num_new_optimal,
-                        directories=directories,
-                        eval_set=eval_set,
-                    )
+
+                    # only write intermediate files if some time has elapsed since last write,
+                    # unless we are saving all intermediate updates
+                    current_time = time.perf_counter()
+                    time_since_last_write = current_time - time_last_wrote_intermediate_files
+                    if time_since_last_write > params.time_between_saves:
+                        _write_intermediate_files(
+                            design=design,
+                            params=params,
+                            rng=rng,
+                            num_new_optimal=num_new_optimal,
+                            directories=directories,
+                            eval_set=eval_set,
+                        )
+                        time_last_wrote_intermediate_files = current_time
 
             iteration += 1
 

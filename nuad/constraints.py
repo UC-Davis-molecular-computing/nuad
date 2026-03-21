@@ -2357,7 +2357,9 @@ def domains_not_substrings_of_each_other_constraint(
     """
 
     # def evaluate(s1: str, s2: str, domain1: Domain | None, domain2: Domain | None) -> float:
-    def evaluate(seqs: tuple[str, ...], domains: tuple[Domain, Domain] | None) -> Result:  # noqa
+    def evaluate_domains_not_substrings_of_each_other(
+        seqs: tuple[str, ...], domains: tuple[Domain, Domain] | None
+    ) -> Result:  # noqa
         s1, s2 = seqs
         if len(s1) > len(s2):
             s1, s2 = s2, s1
@@ -2392,7 +2394,7 @@ def domains_not_substrings_of_each_other_constraint(
         weight=weight,
         check_domain_against_itself=False,
         pairs=pairs,
-        evaluate=evaluate,
+        evaluate=evaluate_domains_not_substrings_of_each_other,
     )
 
 
@@ -5334,7 +5336,7 @@ def nupack_domain_free_energy_constraint(
     """
     _check_nupack_installed()
 
-    def evaluate(seqs: tuple[str, ...], _: Domain | None) -> Result:
+    def evaluate_nupack_domain_free_energy(seqs: tuple[str, ...], _: Domain | None) -> Result:
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
@@ -5351,7 +5353,7 @@ def nupack_domain_free_energy_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate=evaluate,
+        evaluate=evaluate_nupack_domain_free_energy,
         parallel=parallel,
         domains=domains,
     )
@@ -5380,7 +5382,7 @@ def forbidden_substring_strand_constraint(
     else:
         forbidden_substrings = tuple(forbidden_substring)
 
-    def evaluate(seqs: tuple[str, ...], _: Strand | None) -> Result:
+    def evaluate_forbidden_substring_strand(seqs: tuple[str, ...], _: Strand | None) -> Result:
         sequence = seqs[0]
         result = Result(excess=0.0, summary="")
         for forbidden in forbidden_substrings:
@@ -5395,7 +5397,7 @@ def forbidden_substring_strand_constraint(
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate=evaluate,
+        evaluate=evaluate_forbidden_substring_strand,
         parallel=parallel,
         strands=tuple(strands) if strands is not None else None,
     )
@@ -5994,6 +5996,7 @@ def cpu_count(logical: bool = False) -> int:
         Number of physical CPU cores if logical is False and package psutils is installed;
         otherwise, the number of logical processors.
     """
+    return 1
     count: int | None
     try:
         import psutil  # type: ignore
