@@ -4996,10 +4996,12 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
 def create_domain_pairs_with_dict(domain_pairs: Sequence[DomainPair]) -> dict[Domain, tuple[DomainPair, ...]]:
     domain_pairs_with_list: dict[Domain, list[DomainPair]] = {}
     for pair in domain_pairs:
-        for domain in pair:
-            if domain not in domain_pairs_with_list:
-                domain_pairs_with_list[domain] = []
-            domain_pairs_with_list[domain].append(pair)
+        for domain_in_pair in pair:
+            domains_in_tree = domain_in_pair.all_domains_in_tree()
+            for domain_in_tree in domains_in_tree:
+                if domain_in_tree not in domain_pairs_with_list:
+                    domain_pairs_with_list[domain_in_tree] = []
+                domain_pairs_with_list[domain_in_tree].append(pair)
     # convert lists to tuples
     domain_pairs_with: dict[Domain, tuple[DomainPair, ...]] = {
         domain: tuple(pairs) for domain, pairs in domain_pairs_with_list.items()

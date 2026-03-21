@@ -256,7 +256,7 @@ def _determine_domain_pairs_to_check(
         if constraint.domain_pairs is not None:
             if len(domains_changed_not_fixed_or_dependent) == 1:
                 domain_changed = domains_changed_not_fixed_or_dependent[0]
-                domain_pairs_to_check = constraint.domain_pairs_with[domain_changed]
+                domain_pairs_to_check = constraint.domain_pairs_with.get(domain_changed, tuple())
             else:
                 domain_pairs_to_check = tuple(
                     DomainPair(d1, d2)
