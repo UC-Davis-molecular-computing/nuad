@@ -381,7 +381,7 @@ def combnr_idxs(length: int, number: int) -> np.ndarray:
     combos = np.array(list(itertools.combinations(range(length), number)))  # shape: (n_rows, number)
     result = np.zeros((n_rows, length), dtype=bool)
     result[np.arange(n_rows)[:, np.newaxis], combos] = True
-    
+
     return result
 
 
