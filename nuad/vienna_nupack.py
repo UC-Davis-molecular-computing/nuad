@@ -21,7 +21,7 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Iterable, List, Sequence, tuple, TypeVar, cast
+from typing import Iterable, List, Sequence, TypeVar, cast
 
 import numpy as np
 
