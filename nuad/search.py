@@ -369,9 +369,6 @@ def _strands_containing_domains(domains: Iterable[Domain] | None, strands: list[
         return list(strands_set)
 
 
-_empty_frozen_set: frozenset = frozenset()
-
-
 def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[Domain, ...]:
     """
     :param part:
@@ -1212,7 +1209,10 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 
 
 def _reassign_domains(
-    eval_set: EvaluationSet, max_domains_to_change: int, rng: np.random.Generator, warn_no_seqs_found: bool
+    eval_set: EvaluationSet,
+    max_domains_to_change: int,
+    rng: np.random.Generator,
+    warn_no_seqs_found: bool,
 ) -> tuple[tuple[Domain, ...], dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
@@ -2137,7 +2137,7 @@ class Evaluation(Generic[DesignPart]):
     part: DesignPart
     # DesignPart that caused this violation
 
-    domains: frozenset[Domain]  # = field(init=False, hash=False, compare=False, default=None)
+    domains: tuple[Domain]  # = field(init=False, hash=False, compare=False, default=None)
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
 
     summary: str
@@ -2151,7 +2151,7 @@ class Evaluation(Generic[DesignPart]):
         constraint: Constraint,
         violated: bool,
         part: DesignPart,
-        domains: Iterable[Domain],
+        domains: tuple[Domain],
         score: float,
         summary: str,
         result: nc.Result,
@@ -2166,7 +2166,7 @@ class Evaluation(Generic[DesignPart]):
         self.constraint = constraint
         self.violated = violated
         self.part = part
-        self.domains = frozenset(domains)
+        self.domains = domains
         self.score = score
         self.summary = summary
         self.result = result

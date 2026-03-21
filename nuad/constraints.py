@@ -1358,7 +1358,7 @@ class DomainPool(JSONSerializable):
                 # do floating-point arithmetic to avoid integer overflow with long sequences
                 import scipy.special
 
-                num_ways_to_choose_subsequence_indices = scipy.special.comb(length, sampled_distance)
+                num_ways_to_choose_subsequence_indices = float(scipy.special.comb(length, sampled_distance))
                 assert isinstance(num_ways_to_choose_subsequence_indices, float)
                 # num_ways_to_choose_subsequence_indices = nn.comb(length, sampled_distance)
                 num_different_bases = float(len(bases) - 1)
@@ -1383,6 +1383,8 @@ class DomainPool(JSONSerializable):
                         rng=rng,
                     )
                     generated_all_seqs = True
+                    # don't bother trying again with this distance on this previous_sequence; we still won't find any
+                    available_distances_list.remove(sampled_distance)
                 else:
                     # otherwise sample num_to_generate with replacement
                     seqs = nn.DNASeqList(

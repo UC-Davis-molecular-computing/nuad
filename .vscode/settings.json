@@ -1,3 +1,10 @@
 {
-    "ruff.nativeServer": "on"
+    "ruff.nativeServer": "on",
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "envManager": "ms-python.python:conda",
+            "packageManager": "ms-python.python:conda"
+        }
+    ]
 }

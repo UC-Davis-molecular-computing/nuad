@@ -826,7 +826,7 @@ class DNASeqList:
                 if len(seq) != self.seqlen:
                     raise ValueError("All sequences in seqs must be equal length")
             self.numseqs = len(seqs)
-            self.seqarr = seqs2arr(seqs)
+            self.seqarr = seqs2arr(seqs)    
 
         elif filename is not None:
             self._read_from_file(filename)
