@@ -6095,11 +6095,11 @@ def rna_duplex_domain_pairs_constraint(
             energies, name_pairs = zip(*energies_and_name_pairs)
             excesses: list[float] = []
             for energy, (name1, name2) in energies_and_name_pairs:
-                if name1 is not None and name2 is not None:
-                    logger.debug(
-                        f"domain pair threshold: {threshold:6.2f} "
-                        f"rna_duplex({name1}, {name2}, {temperature}) = {energy:6.2f} "
-                    )
+                # if name1 is not None and name2 is not None:
+                #     logger.debug(
+                #         f"domain pair threshold: {threshold:6.2f} "
+                #         f"rna_duplex({name1}, {name2}, {temperature}) = {energy:6.2f} "
+                #     )
                 excess = max(0.0, (threshold - energy))
                 excesses.append(excess)
             max_excess = max(excesses)
