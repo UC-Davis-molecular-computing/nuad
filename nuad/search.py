@@ -26,19 +26,8 @@ import textwrap
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeVar
+from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeVar, Mapping, Literal
 
-try:
-    from typing import Literal
-except ImportError:
-    try:
-        from typing_extensions import Literal
-    except ImportError:
-        print(
-            "If you are using Python prior to version 3.8, you need to install the typing_extensions\n"
-            "package in order to use nuad. Exiting."
-        )
-        sys.exit(-1)
 
 import numpy as np  # noqa
 import numpy.random
@@ -97,6 +86,249 @@ from nuad.stopwatch import Stopwatch
 # set to True to check that violations are accurately accounted for
 # if no bugs this should be unnecessary
 ASSERT_VIOLATIONS_ARE_ACCURATE = False
+
+
+def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
+    """
+    Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
+    :any:`Constraint`'s in :data:`SearchParameters.constraints`.
+
+    **Search algorithm:**
+    This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
+    More precisely, it adds the total score of all violated constraints
+    (sum of :data:`constraints.Constraint.weight` * score_of_violation over all violated
+    :any:`Constraint`'s).
+    The goal is to reduce this total score until it is 0 (i.e., no violated constraints).
+    Any :any:`Domain` "involved" in the violated :any:`Constraint` is noted as being one of the
+    :any:`Domain`'s responsible for the violation, i.e., is "blamed".
+    For example, if a :any:`DomainConstraint` is violated,
+    only one :any:`Domain` is blamed, whereas if a :any:`StrandConstraint` is violated, every :any:`Domain`
+    in the :any:`Strand` is blamed.
+    However, fixed domains (those with :data:`constraints.Domain.fixed` = True) are never blamed,
+    since their DNA sequences cannot be changed.
+
+    While any :any:`Constraint`'s are violated, a :any:`Domain` is picked
+    at random, with probability proportional to the total score of all the :any:`Constraint`'s
+    for which the :any:`Domain` was blamed (so probability 0 to pick a :any:`Domain` that is fixed or that
+    was involved in no violations).
+    A new DNA sequence is assigned to this
+    :any:`Domain` by calling :meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
+    of that :any:`Domain`.
+
+    The way to decide whether to keep the changed sequence, or revert to the
+    old sequence, can be configured, but the default is to keep the change if and only if it
+    does not increase the total score of violations.
+    More generally, we calculate the total score of all violated constraints in the original and changed
+    :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
+    The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
+    is kept. The default function computing this probability is returned by
+    :meth:`default_probability_of_keeping_change_function`, which simply assigns probability 0
+    to keep the change if `score_delta` is positive (i.e., the score went up) and probability 1
+    otherwise.
+    In particular, the change is kept if the score is identical (though this would happen only rarely).
+    One reason to favor this default is that it allows an optimization that speeds up the search
+    significantly in practice: When evaluating constraints, once the total score of violations exceeds
+    that of the best design so far, no further constraints need to be evaluated, since we can decide
+    immediately that the new design change will not be kept.
+
+    The :any:`Design` is modified in place; each :any:`Domain` is modified to have a DNA sequence.
+
+    If no DNA sequences are assigned to the :any:`Domain`'s initially, they are picked at random
+    from the :any:`DomainPool` associated to each :any:`Domain` by calling
+    :py:meth:`constraints.DomainPool.generate_sequence`.
+
+    Otherwise, if DNA sequences are already assigned to the :any:`Domain`'s initially, these sequences
+    are used as a starting point for finding sequences that satisfy all :any:`Constraint`'s.
+    (In this case, those sequences are not checked against any :any:`NumpyFilter`'s
+    or :any:`SequenceFilter`'s in the :any:`Design`, since those checks are applied prior to
+    assigning DNA sequences to any :any:`Domain`.)
+
+    The function has some side effects. It writes a report on the optimal sequence assignment found so far
+    every time a new improve assignment is found.
+
+    Whenever a new optimal sequence assignment is found, the following are also be written to files:
+
+    * DNA sequences of each strand are written to a text file .
+    * the whole design itself
+    * a report on the DNA sequences indicating how well they do on constraints.
+
+    :param design:
+        The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
+        and the :any:`Constraint`'s that apply to them
+    :param params:
+        A :any:`SearchParameters` object with attributes that can be used to specify options for the search.
+
+    """
+
+    if params.random_seed is not None:
+        logger.info(f"using random seed of {params.random_seed}; use this same seed to reproduce this run")
+
+    # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
+    # StrandPool that contains them.
+    # domain_to_strand: dict[dc.Domain, dc.Strand] = _check_design(design)
+    design.compute_derived_fields()
+
+    design.check_all_subdomain_graphs_acyclic()
+    design.check_all_subdomain_graphs_uniquely_assignable()
+    design.check_names_unique()
+    _check_design(design)
+
+    directories = _setup_directories(params)
+
+    if params.random_seed is not None:
+        rng = np.random.default_rng(params.random_seed)
+    else:
+        rng = nn.default_rng
+
+    if params.probability_of_keeping_change is None:
+        params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
+        if params.never_increase_score is None:
+            params.never_increase_score = True
+    elif params.never_increase_score is None:
+        params.never_increase_score = False
+
+    assert params.never_increase_score is not None
+
+    cpu_count = nc.cpu_count()
+    logger.info(f"number of processes in system: {cpu_count}")
+
+    # need to assign to local function variable so it doesn't look like a method call
+    on_improved_design: Callable[[int], None] = params.on_improved_design
+
+    try:
+        if not params.restart:
+            assign_sequences_to_domains_randomly_from_pools(
+                design=design,
+                warn_fixed_sequences=params.warn_fixed_sequences,
+                warn_no_seqs_found=params.warn_no_seqs_found,
+                rng=rng,
+                overwrite_existing_sequences=False,
+            )
+            num_new_optimal = 0
+        else:
+            num_new_optimal, rng_restart = _restart_from_directory(directories, design, params)
+            if rng_restart is not None:
+                rng = rng_restart
+
+        iteration = 0
+        stopwatch = Stopwatch()
+
+        eval_set = EvaluationSet(params.constraints, params.never_increase_score)
+        eval_set.evaluate_all(design, params)
+
+        if not params.restart:
+            # write initial sequences and report
+            _write_intermediate_files(
+                design=design,
+                params=params,
+                rng_state=rng.bit_generator.state,
+                num_new_optimal=num_new_optimal,
+                directories=directories,
+                eval_set=eval_set,
+            )
+
+        time_last_wrote_intermediate_files = time.perf_counter()
+
+        while not _done(iteration, params, eval_set):
+            if params.log_time:
+                stopwatch.stop()
+                _log_time(stopwatch)
+                stopwatch.restart()
+
+            # needed to bypass changes to RNG from random numbers generated between here and next file write
+            # rng_state_before_domains_reassigned = rng.bit_generator.state
+
+            domains_new, original_sequences = _reassign_domains(
+                eval_set, params.max_domains_to_change, rng, params.warn_no_seqs_found
+            )
+
+            # evaluate constraints on new Design with domain_to_change's new sequence
+            # eval_set.evaluate_new(design, domains_new=domains_new, params=params)
+            eval_set.evaluate_all(design, params)
+
+            # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
+            # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
+            #                                       eval_set=eval_set)
+
+            _log_constraint_summary(
+                params=params,
+                eval_set=eval_set,
+                iteration=iteration,
+                num_new_optimal=num_new_optimal,
+            )
+
+            # based on total score of new constraint violations compared to optimal assignment so far,
+            # decide whether to keep the change
+            score_delta = -eval_set.calculate_score_gap()
+            prob_keep_change = params.probability_of_keeping_change(score_delta)
+            keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
+
+            if not keep_change:
+                _unassign_domains(domains_new, original_sequences)
+                eval_set.reset_new()
+            else:
+                # keep new sequence and update information about optimal solution so far
+                eval_set.replace_with_new()
+                if score_delta < 0:  # increment whenever we actually improve the design
+                    num_new_optimal += 1
+                    on_improved_design(num_new_optimal)  # type: ignore
+
+                    # only write intermediate files if some time has elapsed since last write,
+                    # unless we are saving all intermediate updates
+                    current_time = time.perf_counter()
+                    time_since_last_write = current_time - time_last_wrote_intermediate_files
+                    if (
+                        time_since_last_write > params.time_between_saves
+                        or params.save_report_for_all_updates
+                        or params.save_design_for_all_updates
+                        or params.save_sequences_for_all_updates
+                    ):
+                        _write_intermediate_files(
+                            design=design,
+                            params=params,
+                            # rng_state=rng_state_before_domains_reassigned,
+                            rng_state=rng.bit_generator.state,
+                            num_new_optimal=num_new_optimal,
+                            directories=directories,
+                            eval_set=eval_set,
+                        )
+                        time_last_wrote_intermediate_files = current_time
+
+            iteration += 1
+
+        print()
+
+    finally:
+        # if sys.platform != 'win32':
+        #     _pfunc_killall()
+        global _process_pool
+        if _process_pool is not None:
+            _process_pool.close()  # noqa
+            _process_pool.terminate()
+
+    if directories.debug_file_handler is not None:
+        nc.logger.removeHandler(directories.debug_file_handler)  # noqa
+
+    if directories.info_file_handler is not None:
+        nc.logger.removeHandler(directories.info_file_handler)  # noqa
+
+
+def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
+    # unconditionally stop when max_iterations is reached, if specified
+    if params.max_iterations is not None and iteration > params.max_iterations:
+        return True
+
+    # otherwise if target_score is specified, check that current score is close to it
+    if params.target_score is not None:
+        if _is_significantly_greater(eval_set.total_score, params.target_score):
+            return False
+    else:
+        # otherwise just see if any violations remain that are not fixed
+        # (i.e., that might be correctable by changing domains; fixed violations are un-solvable)
+        if eval_set.has_nonfixed_violations():
+            return False
+
+    return True
 
 
 def new_process_pool(cpu_count: int) -> pathos.pools.ProcessPool:
@@ -429,7 +661,7 @@ def _write_intermediate_files(
     *,
     design: nc.Design,
     params: SearchParameters,
-    rng: numpy.random.Generator,
+    rng_state: Mapping[str, Any],
     num_new_optimal: int,
     directories: _Directories,
     eval_set: EvaluationSet,
@@ -440,7 +672,7 @@ def _write_intermediate_files(
 
     _write_design(design, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
 
-    _write_rng_state(rng, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
+    _write_rng_state(rng_state, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
 
     _write_sequences(design, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
 
@@ -467,13 +699,12 @@ def _write_design(
 
 
 def _write_rng_state(
-    rng: numpy.random.Generator,
+    rng_state: Mapping[str, Any],
     params: SearchParameters,
     directories: _Directories,
     num_new_optimal_padded: str,
 ) -> None:
-    state = rng.bit_generator.state
-    content = json.dumps(state, indent=2)
+    content = json.dumps(rng_state, indent=2)
 
     best_filename = directories.best_rng_full_filename_noext()
     idx_filename = (
@@ -939,238 +1170,6 @@ class SearchParameters:
             idx += 1
 
 
-def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
-    """
-    Search for DNA sequences to assign to each :any:`Domain` in `design`, satisfying the various
-    :any:`Constraint`'s in :data:`SearchParameters.constraints`.
-
-    **Search algorithm:**
-    This is a stochastic local search. It determines which :any:`Constraint`'s are violated.
-    More precisely, it adds the total score of all violated constraints
-    (sum of :data:`constraints.Constraint.weight` * score_of_violation over all violated
-    :any:`Constraint`'s).
-    The goal is to reduce this total score until it is 0 (i.e., no violated constraints).
-    Any :any:`Domain` "involved" in the violated :any:`Constraint` is noted as being one of the
-    :any:`Domain`'s responsible for the violation, i.e., is "blamed".
-    For example, if a :any:`DomainConstraint` is violated,
-    only one :any:`Domain` is blamed, whereas if a :any:`StrandConstraint` is violated, every :any:`Domain`
-    in the :any:`Strand` is blamed.
-    However, fixed domains (those with :data:`constraints.Domain.fixed` = True) are never blamed,
-    since their DNA sequences cannot be changed.
-
-    While any :any:`Constraint`'s are violated, a :any:`Domain` is picked
-    at random, with probability proportional to the total score of all the :any:`Constraint`'s
-    for which the :any:`Domain` was blamed (so probability 0 to pick a :any:`Domain` that is fixed or that
-    was involved in no violations).
-    A new DNA sequence is assigned to this
-    :any:`Domain` by calling :meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
-    of that :any:`Domain`.
-
-    The way to decide whether to keep the changed sequence, or revert to the
-    old sequence, can be configured, but the default is to keep the change if and only if it
-    does not increase the total score of violations.
-    More generally, we calculate the total score of all violated constraints in the original and changed
-    :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
-    The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
-    is kept. The default function computing this probability is returned by
-    :meth:`default_probability_of_keeping_change_function`, which simply assigns probability 0
-    to keep the change if `score_delta` is positive (i.e., the score went up) and probability 1
-    otherwise.
-    In particular, the change is kept if the score is identical (though this would happen only rarely).
-    One reason to favor this default is that it allows an optimization that speeds up the search
-    significantly in practice: When evaluating constraints, once the total score of violations exceeds
-    that of the best design so far, no further constraints need to be evaluated, since we can decide
-    immediately that the new design change will not be kept.
-
-    The :any:`Design` is modified in place; each :any:`Domain` is modified to have a DNA sequence.
-
-    If no DNA sequences are assigned to the :any:`Domain`'s initially, they are picked at random
-    from the :any:`DomainPool` associated to each :any:`Domain` by calling
-    :py:meth:`constraints.DomainPool.generate_sequence`.
-
-    Otherwise, if DNA sequences are already assigned to the :any:`Domain`'s initially, these sequences
-    are used as a starting point for finding sequences that satisfy all :any:`Constraint`'s.
-    (In this case, those sequences are not checked against any :any:`NumpyFilter`'s
-    or :any:`SequenceFilter`'s in the :any:`Design`, since those checks are applied prior to
-    assigning DNA sequences to any :any:`Domain`.)
-
-    The function has some side effects. It writes a report on the optimal sequence assignment found so far
-    every time a new improve assignment is found.
-
-    Whenever a new optimal sequence assignment is found, the following are also be written to files:
-
-    * DNA sequences of each strand are written to a text file .
-    * the whole design itself
-    * a report on the DNA sequences indicating how well they do on constraints.
-
-    :param design:
-        The :any:`Design` containing the :any:`Domain`'s to which to assign DNA sequences
-        and the :any:`Constraint`'s that apply to them
-    :param params:
-        A :any:`SearchParameters` object with attributes that can be used to specify options for the search.
-
-    """
-
-    if params.random_seed is not None:
-        logger.info(f"using random seed of {params.random_seed}; use this same seed to reproduce this run")
-
-    # keys should be the non-independent Domains in this Design, mapping to the unique Strand with a
-    # StrandPool that contains them.
-    # domain_to_strand: dict[dc.Domain, dc.Strand] = _check_design(design)
-    design.compute_derived_fields()
-
-    design.check_all_subdomain_graphs_acyclic()
-    design.check_all_subdomain_graphs_uniquely_assignable()
-    design.check_names_unique()
-    _check_design(design)
-
-    directories = _setup_directories(params)
-
-    if params.random_seed is not None:
-        rng = np.random.default_rng(params.random_seed)
-    else:
-        rng = nn.default_rng
-
-    if params.probability_of_keeping_change is None:
-        params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
-        if params.never_increase_score is None:
-            params.never_increase_score = True
-    elif params.never_increase_score is None:
-        params.never_increase_score = False
-
-    assert params.never_increase_score is not None
-
-    cpu_count = nc.cpu_count()
-    logger.info(f"number of processes in system: {cpu_count}")
-
-    # need to assign to local function variable so it doesn't look like a method call
-    on_improved_design: Callable[[int], None] = params.on_improved_design
-
-    try:
-        if not params.restart:
-            assign_sequences_to_domains_randomly_from_pools(
-                design=design,
-                warn_fixed_sequences=params.warn_fixed_sequences,
-                warn_no_seqs_found=params.warn_no_seqs_found,
-                rng=rng,
-                overwrite_existing_sequences=False,
-            )
-            num_new_optimal = 0
-        else:
-            num_new_optimal, rng_restart = _restart_from_directory(directories, design, params)
-            if rng_restart is not None:
-                rng = rng_restart
-
-        iteration = 0
-        stopwatch = Stopwatch()
-
-        eval_set = EvaluationSet(params.constraints, params.never_increase_score)
-        eval_set.evaluate_all(design, params)
-
-        if not params.restart:
-            # write initial sequences and report
-            _write_intermediate_files(
-                design=design,
-                params=params,
-                rng=rng,
-                num_new_optimal=num_new_optimal,
-                directories=directories,
-                eval_set=eval_set,
-            )
-
-        time_last_wrote_intermediate_files = time.perf_counter()
-        while not _done(iteration, params, eval_set):
-            if params.log_time:
-                stopwatch.stop()
-                _log_time(stopwatch)
-                stopwatch.restart()
-
-            _check_cpu_count(cpu_count)
-
-            domains_new, original_sequences = _reassign_domains(
-                eval_set, params.max_domains_to_change, rng, params.warn_no_seqs_found
-            )
-
-            # evaluate constraints on new Design with domain_to_change's new sequence
-            eval_set.evaluate_new(design, domains_new=domains_new, params=params)
-
-            # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
-            # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
-            #                                       eval_set=eval_set)
-
-            _log_constraint_summary(
-                params=params, eval_set=eval_set, iteration=iteration, num_new_optimal=num_new_optimal
-            )
-
-            # based on total score of new constraint violations compared to optimal assignment so far,
-            # decide whether to keep the change
-            score_delta = -eval_set.calculate_score_gap()
-            prob_keep_change = params.probability_of_keeping_change(score_delta)
-            keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
-
-            if not keep_change:
-                _unassign_domains(domains_new, original_sequences)
-                eval_set.reset_new()
-            else:
-                # keep new sequence and update information about optimal solution so far
-                eval_set.replace_with_new()
-                if score_delta < 0:  # increment whenever we actually improve the design
-                    num_new_optimal += 1
-                    on_improved_design(num_new_optimal)  # type: ignore
-
-                    # only write intermediate files if some time has elapsed since last write,
-                    # unless we are saving all intermediate updates
-                    current_time = time.perf_counter()
-                    time_since_last_write = current_time - time_last_wrote_intermediate_files
-                    if time_since_last_write > params.time_between_saves:
-                        _write_intermediate_files(
-                            design=design,
-                            params=params,
-                            rng=rng,
-                            num_new_optimal=num_new_optimal,
-                            directories=directories,
-                            eval_set=eval_set,
-                        )
-                        time_last_wrote_intermediate_files = current_time
-
-            iteration += 1
-
-        _log_constraint_summary(params=params, eval_set=eval_set, iteration=iteration, num_new_optimal=num_new_optimal)
-        print()
-
-    finally:
-        # if sys.platform != 'win32':
-        #     _pfunc_killall()
-        global _process_pool
-        if _process_pool is not None:
-            _process_pool.close()  # noqa
-            _process_pool.terminate()
-
-    if directories.debug_file_handler is not None:
-        nc.logger.removeHandler(directories.debug_file_handler)  # noqa
-
-    if directories.info_file_handler is not None:
-        nc.logger.removeHandler(directories.info_file_handler)  # noqa
-
-
-def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
-    # unconditinoally stop when max_iterations is reached, if specified
-    if params.max_iterations is not None and iteration >= params.max_iterations:
-        return True
-
-    # otherwise if target_score is specified, check that current score is close to it
-    if params.target_score is not None:
-        if _is_significantly_greater(eval_set.total_score, params.target_score):
-            return False
-    else:
-        # otherwise just see if any violations remain that are not fixed
-        # (i.e., that might be correctable by changing domains; fixed violations are un-solvable)
-        if eval_set.has_nonfixed_violations():
-            return False
-
-    return True
-
-
 def _check_cpu_count(cpu_count: int) -> None:
     # alters number of threads in ThreadPool if cpu count changed. (Lets us hot-swap CPUs, e.g.,
     # in Amazon web services, without stopping the program.)
@@ -1191,8 +1190,21 @@ def _setup_directories(params: SearchParameters) -> _Directories:
     if out_directory is None:
         out_directory = default_output_directory()
 
+    def directory_missing_error_msg(directory: str) -> str:
+        return f"""
+Directory
+  {directory}
+does not exist. 
+Set restart to False to start a new search and create these directories, 
+or run the search with parameters set to inspect the correct directory from which to restart. 
+Ensure that the parameters you specified for the search match those of the previous search, 
+so that the directory names will be correct if they depend on the parameters."""
+
     if not os.path.exists(out_directory):
-        os.makedirs(out_directory)
+        if params.restart:
+            raise ValueError(directory_missing_error_msg(out_directory))
+        else:
+            os.makedirs(out_directory)
     if not params.restart:
         import time
 
@@ -1203,7 +1215,10 @@ def _setup_directories(params: SearchParameters) -> _Directories:
 
     for subdir in directories.all_subdirectories(params):
         if not os.path.exists(subdir):
-            os.makedirs(subdir)
+            if params.restart:
+                raise ValueError(directory_missing_error_msg(subdir))
+            else:
+                os.makedirs(subdir)
 
     return directories
 
@@ -1218,6 +1233,19 @@ def _reassign_domains(
     # first weight scores by domain's weight
     domains: list[Domain] = list(eval_set.domain_to_score.keys())
     scores_weighted = [score * domain.weight for domain, score in eval_set.domain_to_score.items()]
+    # import inspect
+    #
+    # def quote(list) -> str:
+    #     return "[" + ", ".join(f'"{domain.name}"' for domain in list) + "]"
+    #
+    # iteration = inspect.currentframe().f_back.f_locals["iteration"]
+    # if iteration == 97:
+    #     print(f"domains = {quote(domains)}")
+    #     print(f"scores_weighted = {scores_weighted}")
+    # if iteration == 0:
+    #     print(f"domains_restart = {quote(domains)}")
+    #     print(f"scores_weighted_restart = {scores_weighted}")
+
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
     num_domains_to_change = 1 if max_domains_to_change == 1 else rng.choice(a=range(1, max_domains_to_change + 1))
@@ -1477,7 +1505,11 @@ def _remove_first_lines_from_string(s: str, num_lines: int) -> str:
 
 
 def _log_constraint_summary(
-    *, params: SearchParameters, eval_set: EvaluationSet, iteration: int, num_new_optimal: int
+    *,
+    params: SearchParameters,
+    eval_set: EvaluationSet,
+    iteration: int,
+    num_new_optimal: int,
 ) -> None:
     # If output is not scrolling, only print this once on first iteration.
     if params.scrolling_output or iteration == 0:
@@ -1689,6 +1721,10 @@ def key_exists_in_2d_dict(dct: dict[K1, dict[K2, Any]], key1: K1, key2: K2) -> b
     return key2 in dct[key1][key2]
 
 
+def sort_dict_by_value(dct: dict) -> dict:
+    return dict(sorted(dct.items(), key=lambda item: item[1], reverse=True))
+
+
 @dataclass
 class EvaluationSet:
     # Represents evaluations of :any:`Constraint`'s in a :any:`Design`.
@@ -1816,6 +1852,7 @@ class EvaluationSet:
             for domain, domain_violations in domain_to_violations.items()
             if not domain.fixed
         }
+        domain_to_score = sort_dict_by_value(domain_to_score)
         return domain_to_score
 
     def calculate_score_gap(self, fixed: bool | None = None) -> float:
@@ -1928,15 +1965,16 @@ class EvaluationSet:
             raise AssertionError(f"constraint {constraint} of unrecognized type {constraint.__class__.__name__}")
 
         # assign blame for violations to domains by looking up associated domains in each part
-        evals_of_constraint = self.evaluations[constraint]
-        viols_of_constraint = self.violations[constraint]
-        domain_to_evals = self.domain_to_evaluations
-        domain_to_viols = self.domain_to_violations
         if domains_new is not None:
             evals_of_constraint = self.evaluations_new[constraint]
             viols_of_constraint = self.violations_new[constraint]
             domain_to_evals = self.domain_to_evaluations_new
             domain_to_viols = self.domain_to_violations_new
+        else:
+            evals_of_constraint = self.evaluations[constraint]
+            viols_of_constraint = self.violations[constraint]
+            domain_to_evals = self.domain_to_evaluations
+            domain_to_viols = self.domain_to_violations
 
         for result in results:
             domains = _independent_domains_in_part(result.part, exclude_fixed=False)
@@ -2137,7 +2175,7 @@ class Evaluation(Generic[DesignPart]):
     part: DesignPart
     # DesignPart that caused this violation
 
-    domains: tuple[Domain]  # = field(init=False, hash=False, compare=False, default=None)
+    domains: tuple[Domain, ...]  # = field(init=False, hash=False, compare=False, default=None)
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
 
     summary: str
@@ -2151,7 +2189,7 @@ class Evaluation(Generic[DesignPart]):
         constraint: Constraint,
         violated: bool,
         part: DesignPart,
-        domains: tuple[Domain],
+        domains: tuple[Domain, ...],
         score: float,
         summary: str,
         result: nc.Result,

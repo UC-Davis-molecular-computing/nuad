@@ -10,4 +10,3 @@ openpyxl
 viennarna
 scadnano
 tqdm
-typing_extensions; python_version < "3.8"

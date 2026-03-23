@@ -2388,7 +2388,7 @@ def domains_neq_constraint(
         pairs = itertools.combinations(domains, 2)
 
     return DomainPairConstraint(
-        description=f"domains >= {min_length} not substrings of each other",
+        description=f"domains >= {min_length} neq",
         short_description=short_description,
         weight=weight,
         check_domain_against_itself=False,
@@ -5994,7 +5994,6 @@ def cpu_count(logical: bool = False) -> int:
         Number of physical CPU cores if logical is False and package psutils is installed;
         otherwise, the number of logical processors.
     """
-    return 1
     count: int | None
     try:
         import psutil  # type: ignore
