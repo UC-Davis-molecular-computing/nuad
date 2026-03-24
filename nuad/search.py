@@ -240,9 +240,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 _log_time(stopwatch)
                 stopwatch.restart()
 
-            # needed to bypass changes to RNG from random numbers generated between here and next file write
-            # rng_state_before_domains_reassigned = rng.bit_generator.state
-
             domains_new, original_sequences = _reassign_domains(
                 eval_set, params.max_domains_to_change, rng, params.warn_no_seqs_found
             )
