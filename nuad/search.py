@@ -243,8 +243,8 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             )
 
             # evaluate constraints on new Design with domain_to_change's new sequence
-            # eval_set.evaluate_new(design, domains_new=domains_new, params=params)
-            eval_set.evaluate_all(design, params)
+            eval_set.evaluate_new(design, domains_new=domains_new, params=params)
+            # eval_set.evaluate_all(design, params)
 
             # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
@@ -345,12 +345,20 @@ def default_output_directory() -> str:
     return os.path.join("output", f"{script_name_no_ext()}--{timestamp()}")
 
 
-# This function takes a lot of time if we don't cache results; but there's not too many different
-# combinations of inputs so it's worth it to maintain a cache.
+type TupleDesignParts = (
+    tuple[Domain, ...]
+    | tuple[Strand, ...]
+    | tuple[DomainPair, ...]
+    | tuple[StrandPair, ...]
+    | tuple[Complex, ...]
+    | tuple[()]
+)
+
+
 @lru_cache()
 def find_parts_to_check(
-    constraint: nc.Constraint[DesignPart], design: nc.Design, domains_changed: None | tuple[Domain, ...]
-) -> tuple[DesignPart, ...]:
+    constraint: nc.Constraint, design: nc.Design, domains_changed: None | tuple[Domain, ...] = None
+) -> TupleDesignParts:
     if domains_changed is not None:
         domains_changed_full: OrderedSet[Domain] = OrderedSet(domains_changed)
         for domain in domains_changed:
@@ -363,7 +371,6 @@ def find_parts_to_check(
         if len(domains_changed_full) > len(domains_changed):
             domains_changed = tuple(domains_changed_full)
 
-    parts_to_check: tuple[DesignPart, ...]
     if isinstance(constraint, ConstraintWithDomains):
         parts_to_check = _determine_domains_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithStrands):
@@ -410,7 +417,7 @@ def _at_least_one_domain_unfixed(pair: tuple[Domain, Domain]) -> bool:
 
 
 def _determine_domains_to_check(
-    design: Design, domains_changed: None | tuple[Domain], constraint: ConstraintWithDomains
+    design: Design, domains_changed: None | tuple[Domain, ...], constraint: ConstraintWithDomains
 ) -> tuple[Domain, ...]:
     """
     Determines domains to check in `all_domains`.
@@ -435,7 +442,7 @@ def _determine_domains_to_check(
 
 
 def _determine_strands_to_check(
-    design: Design, domains_changed: None | tuple[Domain], constraint: ConstraintWithStrands
+    design: Design, domains_changed: None | tuple[Domain, ...], constraint: ConstraintWithStrands
 ) -> tuple[Strand, ...]:
     """
     Similar to _determine_domains_to_check but for strands.
@@ -458,7 +465,7 @@ def _determine_strands_to_check(
 
 
 def _determine_domain_pairs_to_check(
-    design: Design, domains_changed: None | tuple[Domain], constraint: ConstraintWithDomainPairs
+    design: Design, domains_changed: None | tuple[Domain, ...], constraint: ConstraintWithDomainPairs
 ) -> tuple[DomainPair, ...]:
     """
     Determines domain pairs to check between domains in `all_domains`.
@@ -524,7 +531,7 @@ def _at_least_one_strand_unfixed(pair: tuple[Strand, Strand]) -> bool:
 
 
 def _determine_strand_pairs_to_check(
-    design: Design, domains_changed: None | tuple[Domain], constraint: ConstraintWithStrandPairs
+    design: Design, domains_changed: None | tuple[Domain, ...], constraint: ConstraintWithStrandPairs
 ) -> tuple[StrandPair, ...]:
     # Similar to _determine_domain_pairs_to_check but for strands.
     # some code is repeated here, but otherwise it's way too slow on a large design to iterate over
@@ -601,6 +608,7 @@ def _strands_containing_domains(domains: Iterable[Domain] | None, strands: list[
         return list(strands_set)
 
 
+@lru_cache()
 def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[Domain, ...]:
     """
     :param part:
@@ -1741,12 +1749,15 @@ class EvaluationSet:
     # has keys for every (Constraint, Part) instance.
 
     evaluations_new: dict[Constraint, dict[nc.Part, Evaluation]]
-    # "2D dict" mapping some Constraint, Part to the list of all new Evaluation's of it
+    # "2D dict" mapping some (Constraint, Part) to the list of all new Evaluation's of it
     # (after changing domain(s)).
     # Unlike evaluations, only has keys for parts affected by the most recent domain changes.
 
     domain_to_evaluations: dict[Domain, list[Evaluation]]
     # dict mapping each Domain to the set of all Evaluations for which it is blamed
+
+    domain_to_evaluations_new: dict[Domain, list[Evaluation]]
+    # dict mapping each Domain to the set of all newly evaluated Evaluations for which it is blamed
 
     violations: dict[Constraint, dict[nc.Part, Evaluation]]
     # "2D dict" mapping each (Constraint, Part) to the list of all violations of it.
@@ -1755,40 +1766,38 @@ class EvaluationSet:
     # only has keys for Parts that are violations
 
     violations_new: dict[Constraint, dict[nc.Part, Evaluation]]
-    # "2D dict" mapping some Constraint, Part to the list of all new Evaluations of it
+    # "2D dict" mapping some (Constraint, Part) to the list of all new Evaluations of it
     # (after changing domain(s)).
     # Unlike violations, only has keys for parts affected by the most recent domain changes.
-
-    domain_to_evaluations: dict[Domain, list[Evaluation]]
-    # dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
-
-    domain_to_evaluations_new: dict[Domain, list[Evaluation]]
 
     domain_to_violations: dict[Domain, list[Evaluation]]
     # dict mapping each :any:`constraint.Domain` to the set of all :any:`Evaluation`'s for which it is blamed
 
     domain_to_violations_new: dict[Domain, list[Evaluation]]
+    # dict mapping each :any:`constraint.Domain` to the set of all new :any:`Evaluation`'s for which it is blamed
 
     domain_to_score: dict[Domain, float]
+    # total score of all violations for which each Domain is blamed; used for picking which domain to change
 
     domain_to_score_new: dict[Domain, float]
+    # total score of all new violations for which each Domain is blamed
 
-    total_score: float
+    total_score: float = 0.0
     # sum of scores of all evalutions
 
-    total_score_nonfixed: float
+    total_score_nonfixed: float = 0.0
     # for evaluations blaming Domains with Domain.fixed = False
 
-    total_score_fixed: float
+    total_score_fixed: float = 0.0
     # for evaluations blaming Domains with Domain.fixed = True
 
-    num_evaluations: int
-    num_evaluations_fixed: int
-    num_evaluations_nonfixed: int
+    num_evaluations: int = 0
+    num_evaluations_fixed: int = 0
+    num_evaluations_nonfixed: int = 0
 
-    num_violations: int
-    num_violations_fixed: int
-    num_violations_nonfixed: int
+    num_violations: int = 0
+    num_violations_fixed: int = 0
+    num_violations_nonfixed: int = 0
 
     def __init__(self, constraints: Iterable[Constraint], never_increase_score: bool) -> None:
         self.constraints = list(constraints)
@@ -1806,6 +1815,9 @@ class EvaluationSet:
         return repr(self)
 
     def reset_all(self) -> None:
+        self.total_score = self.total_score_fixed = self.total_score_nonfixed = 0.0
+        self.num_evaluations = self.num_evaluations_fixed = self.num_evaluations_nonfixed = 0
+        self.num_violations = self.num_violations_fixed = self.num_violations_nonfixed = 0
         self.evaluations = {constraint: {} for constraint in self.constraints}
         self.violations = {constraint: {} for constraint in self.constraints}
         self.domain_to_evaluations = defaultdict(list)
@@ -1859,31 +1871,32 @@ class EvaluationSet:
         # fixed is None (all violations), True (fixed violations), or False (nonfixed violations)
         # total score of evaluations - total score of new evaluations
         assert len(self.evaluations) > 0
-        total_gap = 0.0
+        all_gaps = []
         for (constraint, part), eval_new in items_2d(self.evaluations_new):
             eval_old = self.evaluations[constraint][part]
             assert eval_old.part.fixed == eval_new.part.fixed
-            assert eval_old.violated == (eval_old.score > 0)
-            assert eval_new.violated == (eval_new.score > 0)
-            if fixed is None or eval_old.part.fixed == fixed:
-                total_gap += eval_old.score - eval_new.score
+            if eval_old.violated or eval_new.violated:
+                if fixed is None or eval_old.part.fixed == fixed:
+                    all_gaps.append(eval_old.score - eval_new.score)
+        total_gap = sum(all_gaps)
         return total_gap
 
     def calculate_initial_score_gap(self, design: Design, domains_new: tuple[Domain, ...]) -> float:
         # before evaluations_new is populated, we need to calculate the total score of evaluations
         # on parts affected by domains_new, which is the score gap assuming all new evaluations come up 0
-        score_gap = 0.0
+        gaps = []
         for constraint in self.constraints:
             parts = find_parts_to_check(constraint, design, domains_new)
             for part in parts:
                 ev = self.evaluations[constraint][part]
                 if ev.violated:
-                    score_gap += ev.score
+                    gaps.append(ev.score)
+        score_gap = sum(gaps)
         return score_gap
 
     @staticmethod
     def evaluate_singular_constraint_parallel(
-        constraint: SingularConstraint[DesignPart], parts: tuple[nc.DesignPart, ...], score_gap: float
+        constraint: SingularConstraint[DesignPart], parts: TupleDesignParts, score_gap: float
     ) -> tuple[list[tuple[nc.DesignPart, float, str]], float]:
         if len(parts) == 0:
             return [], 0.0
@@ -1931,7 +1944,7 @@ class EvaluationSet:
         if score_transfer_function is None:
             score_transfer_function = params.score_transfer_function
 
-        # measure violations of constraints and collect in list of triples (part, score, summary)
+        # measure violations of constraints and collect in list of Results
         results: list[nc.Result] = []
         if isinstance(constraint, SingularConstraint):
             if not constraint.parallel or len(parts) == 1 or nc.cpu_count() == 1:
@@ -1939,11 +1952,10 @@ class EvaluationSet:
                     seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
                     result = constraint.call_evaluate(seqs, part, score_transfer_function)
                     results.append(result)
-                    if result.score > 0.0:
-                        if score_gap is not None:
-                            score_gap -= result.score
-                            if _is_significantly_greater(0.0, score_gap):
-                                break
+                    if score_gap is not None and result.score > 0.0:
+                        score_gap -= result.score
+                        if _is_significantly_greater(0.0, score_gap):
+                            break
             else:
                 violating_parts_scores_summaries, score_gap = EvaluationSet.evaluate_singular_constraint_parallel(
                     constraint, parts, score_gap
@@ -1978,15 +1990,7 @@ class EvaluationSet:
 
         for result in results:
             domains = _independent_domains_in_part(result.part, exclude_fixed=False)
-            evaluation = Evaluation(
-                constraint=constraint,
-                part=result.part,
-                domains=domains,
-                score=result.score,
-                summary=result.summary,
-                violated=result.score > 0,
-                result=result,
-            )
+            evaluation = Evaluation(constraint=constraint, domains=domains, result=result)
 
             evals_of_constraint[result.part] = evaluation
             for domain in domains:
@@ -2169,54 +2173,10 @@ class Evaluation(Generic[DesignPart]):
     constraint: Constraint
     # :any:`Constraint` that was evaluated to result in this :any:`Evaluation`.
 
-    violated: bool
-    # whether the :any:`Constraint` was violated last time it was evaluated
-
-    part: DesignPart
-    # DesignPart that caused this violation
-
     domains: tuple[Domain, ...]  # = field(init=False, hash=False, compare=False, default=None)
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
 
-    summary: str
-
-    score: float
-
     result: nc.Result
-
-    def __init__(
-        self,
-        constraint: Constraint,
-        violated: bool,
-        part: DesignPart,
-        domains: tuple[Domain, ...],
-        score: float,
-        summary: str,
-        result: nc.Result,
-    ) -> None:
-        # constraint:
-        #     :any:`Constraint` that was violated to result in this
-        # domains:
-        #     :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
-        # score:
-        #     total "score" of this violation, typically something like an excess energy over a
-        #     threshold, squared, multiplied by the :data:`Constraint.weight`
-        self.constraint = constraint
-        self.violated = violated
-        self.part = part
-        self.domains = domains
-        self.score = score
-        self.summary = summary
-        self.result = result
-
-        # object.__setattr__(self, 'constraint', constraint)
-        # object.__setattr__(self, 'violated', violated)
-        # object.__setattr__(self, 'part', part)
-        # domains_frozen = frozenset(domains)
-        # object.__setattr__(self, 'domains', domains_frozen)
-        # object.__setattr__(self, 'score', score)
-        # object.__setattr__(self, 'summary', summary)
-        # object.__setattr__(self, 'result', result)
 
     def __repr__(self) -> str:
         return (
@@ -2234,6 +2194,23 @@ class Evaluation(Generic[DesignPart]):
 
     def __eq__(self, other):
         return self is other
+
+    @property
+    def score(self) -> float:
+        return self.result.score
+
+    @property
+    def violated(self) -> bool:
+        # whether the :any:`Constraint` was violated last time it was evaluated
+        return self.result.score > 0.0
+
+    @property
+    def summary(self) -> str:
+        return self.result.summary
+
+    @property
+    def part(self) -> nc.Part:
+        return self.result.part
 
 
 ####################################################################################
