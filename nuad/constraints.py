@@ -537,6 +537,9 @@ class NearestNeighborEnergyFilter(NumpyFilter):
 class BaseCountFilter(NumpyFilter):
     """
     Restricts the sequence to contain a certain number of occurences of given bases.
+
+    This is useful to implement, for instance, a "pseudo three letter code", in which the alphabet is mostly
+    ATC, but with the exception up to one G.
     """
 
     bases: str

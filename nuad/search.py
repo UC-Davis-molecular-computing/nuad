@@ -230,6 +230,11 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
+            if (iteration + 1) % 5000 == 0:
+                # TODO: this is a hack until I deal with this bug:
+                # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
+                eval_set.evaluate_all(design, params)
+
             if params.log_time:
                 stopwatch.stop()
                 _log_time(stopwatch)
@@ -244,7 +249,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
             # evaluate constraints on new Design with domain_to_change's new sequence
             eval_set.evaluate_new(design, domains_new=domains_new, params=params)
-            # eval_set.evaluate_all(design, params)
 
             # uncomment to debug if violations/evaluations appear to be getting updated incorrectly
             # _double_check_violations_from_scratch(design=design, params=params, iteration=iteration,
@@ -278,10 +282,12 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                     current_time = time.perf_counter()
                     time_since_last_write = current_time - time_last_wrote_intermediate_files
                     if (
-                        time_since_last_write > params.time_between_saves
+                        _done(iteration, params, eval_set)
+                        or time_since_last_write > params.time_between_saves
                         or params.save_report_for_all_updates
                         or params.save_design_for_all_updates
                         or params.save_sequences_for_all_updates
+                        or eval_set.total_score == 0.0
                     ):
                         _write_intermediate_files(
                             design=design,
