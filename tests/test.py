@@ -6,6 +6,8 @@ import numpy
 import openpyxl
 import scadnano as sc
 
+from collections import defaultdict
+
 import nuad.constraints as nc
 import nuad.search as ns
 import nuad.vienna_nupack as nv
@@ -21,6 +23,7 @@ from nuad.constraints import (
     _get_base_pair_domain_endpoints_to_check,
     _get_implicitly_bound_domain_addresses,
 )
+from nuad.search import Evaluation, EvaluationSet
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -1283,6 +1286,352 @@ class TestViennaRNA(unittest.TestCase):
         ]
         energies = nv.rna_plex_multiple(pairs)
         self.assertEqual(2, len(energies))
+
+
+def _make_domain(name: str, length: int = 8, fixed: bool = False) -> Domain:
+    """Helper to create a Domain with a DomainPool of a given length."""
+    pool = DomainPool(f"pool_{name}", length)
+    return Domain(name, pool, fixed=fixed)
+
+
+def _make_result(excess: float, score: float, part: nc.Part) -> nc.Result:
+    """Helper to create a Result with a specific score (bypassing score_transfer_function)."""
+    result = nc.Result(excess=excess, summary=f"excess={excess}")
+    result.score = score
+    result.part = part
+    return result
+
+
+def _make_evaluation(constraint: nc.Constraint, domains: tuple[Domain, ...],
+                     result: nc.Result) -> Evaluation:
+    """Helper to create an Evaluation."""
+    return Evaluation(constraint=constraint, domains=domains, result=result)
+
+
+def _make_domain_constraint(description: str, weight: float = 1.0) -> nc.DomainConstraint:
+    """Helper to create a DomainConstraint with a dummy evaluate function."""
+    return nc.DomainConstraint(
+        description=description,
+        short_description=description,
+        weight=weight,
+        evaluate=lambda seqs, part: nc.Result(excess=0.0, summary="dummy"),
+    )
+
+
+class TestUpdateDomainKeyedDicts(unittest.TestCase):
+    """Tests for EvaluationSet.update_domain_keyed_dicts() correctness."""
+
+    def setUp(self) -> None:
+        self.d1 = _make_domain("d1")
+        self.d2 = _make_domain("d2")
+        self.d3 = _make_domain("d3")
+        self.c1 = _make_domain_constraint("c1")
+        self.c2 = _make_domain_constraint("c2")
+
+    def _make_eval_set(self, constraints: list[nc.Constraint]) -> EvaluationSet:
+        return EvaluationSet(constraints, never_increase_score=False)
+
+    def test_empty_evaluations(self) -> None:
+        """update_domain_keyed_dicts on empty evaluations produces empty dicts."""
+        es = self._make_eval_set([self.c1])
+        es.update_domain_keyed_dicts()
+        self.assertEqual(0, len(es.domain_to_evaluations))
+        self.assertEqual(0, len(es.domain_to_violations))
+
+    def test_single_evaluation_no_violation(self) -> None:
+        """A non-violated evaluation appears in domain_to_evaluations but not domain_to_violations."""
+        es = self._make_eval_set([self.c1])
+        result = _make_result(excess=0.0, score=0.0, part=self.d1)
+        ev = _make_evaluation(self.c1, (self.d1,), result)
+        es.evaluations[self.c1][self.d1] = ev
+        # not a violation, so don't add to violations
+
+        es.update_domain_keyed_dicts()
+
+        self.assertIn(self.d1, es.domain_to_evaluations)
+        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
+        self.assertNotIn(self.d1, es.domain_to_violations)
+
+    def test_single_violation(self) -> None:
+        """A violated evaluation appears in both domain_to_evaluations and domain_to_violations."""
+        es = self._make_eval_set([self.c1])
+        result = _make_result(excess=1.0, score=1.0, part=self.d1)
+        ev = _make_evaluation(self.c1, (self.d1,), result)
+        es.evaluations[self.c1][self.d1] = ev
+        es.violations[self.c1][self.d1] = ev
+
+        es.update_domain_keyed_dicts()
+
+        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
+        self.assertEqual([ev], es.domain_to_violations[self.d1])
+
+    def test_multi_domain_evaluation(self) -> None:
+        """An evaluation blaming multiple domains appears under each domain."""
+        es = self._make_eval_set([self.c1])
+        result = _make_result(excess=2.0, score=8.0, part=self.d1)
+        ev = _make_evaluation(self.c1, (self.d1, self.d2), result)
+        es.evaluations[self.c1][self.d1] = ev
+        es.violations[self.c1][self.d1] = ev
+
+        es.update_domain_keyed_dicts()
+
+        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
+        self.assertEqual([ev], es.domain_to_evaluations[self.d2])
+        self.assertEqual([ev], es.domain_to_violations[self.d1])
+        self.assertEqual([ev], es.domain_to_violations[self.d2])
+
+    def test_multiple_constraints_same_domain(self) -> None:
+        """Multiple evaluations from different constraints accumulate for a domain."""
+        es = self._make_eval_set([self.c1, self.c2])
+        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
+        r2 = _make_result(excess=2.0, score=8.0, part=self.d1)
+        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
+        ev2 = _make_evaluation(self.c2, (self.d1,), r2)
+
+        es.evaluations[self.c1][self.d1] = ev1
+        es.evaluations[self.c2][self.d1] = ev2
+        es.violations[self.c1][self.d1] = ev1
+        es.violations[self.c2][self.d1] = ev2
+
+        es.update_domain_keyed_dicts()
+
+        self.assertEqual(2, len(es.domain_to_evaluations[self.d1]))
+        self.assertIn(ev1, es.domain_to_evaluations[self.d1])
+        self.assertIn(ev2, es.domain_to_evaluations[self.d1])
+        self.assertEqual(2, len(es.domain_to_violations[self.d1]))
+
+    def test_sum_domain_scores(self) -> None:
+        """sum_domain_scores correctly sums violation scores per domain, excluding fixed domains."""
+        es = self._make_eval_set([self.c1, self.c2])
+        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
+        r2 = _make_result(excess=2.0, score=8.0, part=self.d1)
+        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
+        ev2 = _make_evaluation(self.c2, (self.d1,), r2)
+
+        es.evaluations[self.c1][self.d1] = ev1
+        es.evaluations[self.c2][self.d1] = ev2
+        es.violations[self.c1][self.d1] = ev1
+        es.violations[self.c2][self.d1] = ev2
+
+        es.update_domain_keyed_dicts()
+        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
+
+        self.assertAlmostEqual(9.0, es.domain_to_score[self.d1])
+
+    def test_sum_domain_scores_excludes_fixed(self) -> None:
+        """sum_domain_scores excludes fixed domains from the result."""
+        d_fixed = _make_domain("d_fixed", fixed=True)
+        es = self._make_eval_set([self.c1])
+        r1 = _make_result(excess=1.0, score=5.0, part=d_fixed)
+        ev1 = _make_evaluation(self.c1, (d_fixed,), r1)
+        es.evaluations[self.c1][d_fixed] = ev1
+        es.violations[self.c1][d_fixed] = ev1
+
+        es.update_domain_keyed_dicts()
+        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
+
+        self.assertNotIn(d_fixed, es.domain_to_score)
+
+    def test_update_clears_old_data(self) -> None:
+        """update_domain_keyed_dicts replaces old data, not appending to it."""
+        es = self._make_eval_set([self.c1])
+        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
+        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
+        es.evaluations[self.c1][self.d1] = ev1
+        es.violations[self.c1][self.d1] = ev1
+
+        # First call
+        es.update_domain_keyed_dicts()
+        self.assertEqual(1, len(es.domain_to_evaluations[self.d1]))
+
+        # Call again without changing evaluations — should still be length 1, not 2
+        es.update_domain_keyed_dicts()
+        self.assertEqual(1, len(es.domain_to_evaluations[self.d1]))
+        self.assertEqual(1, len(es.domain_to_violations[self.d1]))
+
+
+class TestReplaceWithNewDomainKeyedDicts(unittest.TestCase):
+    """Tests that replace_with_new() correctly updates domain_to_* dicts and domain_to_score."""
+
+    def setUp(self) -> None:
+        self.d1 = _make_domain("d1")
+        self.d2 = _make_domain("d2")
+        self.d3 = _make_domain("d3")
+        self.c1 = _make_domain_constraint("c1")
+        self.c2 = _make_domain_constraint("c2")
+
+    def _make_eval_set(self, constraints: list[nc.Constraint]) -> EvaluationSet:
+        return EvaluationSet(constraints, never_increase_score=False)
+
+    def _populate_initial(self, es: EvaluationSet,
+                          eval_data: list[tuple[nc.Constraint, Domain, tuple[Domain, ...],
+                                                float, float, bool]]) -> dict:
+        """Populate initial evaluations/violations.
+        Each entry: (constraint, part, domains, excess, score, violated)
+        Returns dict of created evaluations keyed by (constraint, part).
+        """
+        created = {}
+        for constraint, part, domains, excess, score, violated in eval_data:
+            result = _make_result(excess, score, part)
+            ev = _make_evaluation(constraint, domains, result)
+            es.evaluations[constraint][part] = ev
+            if violated:
+                es.violations[constraint][part] = ev
+            created[(constraint, part)] = ev
+        es.update_domain_keyed_dicts()
+        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
+        return created
+
+    def _populate_new(self, es: EvaluationSet,
+                      eval_data: list[tuple[nc.Constraint, Domain, tuple[Domain, ...],
+                                            float, float, bool]]) -> dict:
+        """Populate evaluations_new/violations_new (simulating evaluate_new).
+        Each entry: (constraint, part, domains, excess, score, violated)
+        Returns dict of created evaluations keyed by (constraint, part).
+        """
+        created = {}
+        for constraint, part, domains, excess, score, violated in eval_data:
+            result = _make_result(excess, score, part)
+            ev = _make_evaluation(constraint, domains, result)
+            es.evaluations_new[constraint][part] = ev
+            if violated:
+                es.violations_new[constraint][part] = ev
+            # Also populate domain_to_*_new as evaluate_new would
+            for domain in domains:
+                es.domain_to_evaluations_new[domain].append(ev)
+                if violated:
+                    es.domain_to_violations_new[domain].append(ev)
+            created[(constraint, part)] = ev
+        es.domain_to_score_new = EvaluationSet.sum_domain_scores(es.domain_to_violations_new)
+        return created
+
+    def test_replace_violation_becomes_satisfied(self) -> None:
+        """When a violation becomes satisfied, domain_to_violations and domain_to_score update."""
+        es = self._make_eval_set([self.c1])
+
+        # Initial: d1 has a violation with score 5.0
+        self._populate_initial(es, [
+            (self.c1, self.d1, (self.d1,), 1.0, 5.0, True),
+        ])
+        self.assertAlmostEqual(5.0, es.domain_to_score[self.d1])
+        es.num_violations = 1
+
+        # New: same part now satisfied (score 0)
+        self._populate_new(es, [
+            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
+        ])
+
+        es.replace_with_new()
+
+        # d1 should have no violations and score 0 (or not in dict)
+        self.assertEqual(0, len(es.domain_to_violations.get(self.d1, [])))
+        self.assertAlmostEqual(0.0, es.domain_to_score.get(self.d1, 0.0))
+
+    def test_replace_satisfied_becomes_violation(self) -> None:
+        """When a satisfied constraint becomes violated, domain_to_violations updates."""
+        es = self._make_eval_set([self.c1])
+
+        # Initial: d1 satisfied
+        self._populate_initial(es, [
+            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
+        ])
+        self.assertNotIn(self.d1, es.domain_to_score)
+        es.num_violations = 0
+
+        # New: d1 now violated with score 3.0
+        self._populate_new(es, [
+            (self.c1, self.d1, (self.d1,), 1.5, 3.0, True),
+        ])
+
+        es.replace_with_new()
+
+        self.assertAlmostEqual(3.0, es.domain_to_score[self.d1])
+
+    def test_replace_preserves_non_reevaluated_violations(self) -> None:
+        """Key bug #275 test: violations from non-re-evaluated constraints are preserved.
+
+        This was the core bug: if c1 and c2 both blame d1, but only c1 is re-evaluated,
+        c2's violation for d1 must still appear in domain_to_violations after replace_with_new.
+        """
+        es = self._make_eval_set([self.c1, self.c2])
+
+        # Initial: c1 violation on d1 (score 2.0), c2 violation on d1 (score 3.0)
+        self._populate_initial(es, [
+            (self.c1, self.d1, (self.d1,), 1.0, 2.0, True),
+            (self.c2, self.d1, (self.d1,), 1.5, 3.0, True),
+        ])
+        self.assertAlmostEqual(5.0, es.domain_to_score[self.d1])
+        es.num_violations = 2
+
+        # New: only c1 is re-evaluated (d1 now satisfied for c1). c2 is NOT re-evaluated.
+        self._populate_new(es, [
+            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
+        ])
+
+        es.replace_with_new()
+
+        # c2's violation on d1 must still be present
+        violations_d1 = es.domain_to_violations.get(self.d1, [])
+        self.assertEqual(1, len(violations_d1))
+        self.assertAlmostEqual(3.0, violations_d1[0].score)
+        self.assertAlmostEqual(3.0, es.domain_to_score[self.d1])
+
+    def test_replace_multi_domain_violation(self) -> None:
+        """A violation blaming multiple domains correctly updates scores for all of them."""
+        es = self._make_eval_set([self.c1])
+
+        # Initial: violation on (d1, d2) with score 4.0
+        self._populate_initial(es, [
+            (self.c1, self.d1, (self.d1, self.d2), 2.0, 4.0, True),
+        ])
+        self.assertAlmostEqual(4.0, es.domain_to_score[self.d1])
+        self.assertAlmostEqual(4.0, es.domain_to_score[self.d2])
+        es.num_violations = 1
+
+        # New: violation score changes to 1.0
+        self._populate_new(es, [
+            (self.c1, self.d1, (self.d1, self.d2), 0.5, 1.0, True),
+        ])
+
+        es.replace_with_new()
+
+        self.assertAlmostEqual(1.0, es.domain_to_score[self.d1])
+        self.assertAlmostEqual(1.0, es.domain_to_score[self.d2])
+
+    def test_replace_score_matches_evaluate_all_rebuild(self) -> None:
+        """After replace_with_new, domain_to_score matches what a from-scratch rebuild would give.
+
+        This is the fundamental correctness property: the incremental update must produce
+        the same result as rebuilding everything from scratch.
+        """
+        es = self._make_eval_set([self.c1, self.c2])
+
+        # Initial state: mixed violations and non-violations across multiple domains
+        self._populate_initial(es, [
+            (self.c1, self.d1, (self.d1,), 1.0, 2.0, True),
+            (self.c1, self.d2, (self.d2,), 0.0, 0.0, False),
+            (self.c2, self.d1, (self.d1,), 0.5, 1.0, True),
+            (self.c2, self.d2, (self.d2, self.d3), 2.0, 8.0, True),
+        ])
+        es.num_violations = 3
+
+        # Re-evaluate c1 for d1 (now satisfied) and c1 for d2 (now violated)
+        self._populate_new(es, [
+            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
+            (self.c1, self.d2, (self.d2,), 0.8, 1.5, True),
+        ])
+
+        es.replace_with_new()
+
+        # Expected state after replace:
+        # evaluations: c1/d1 -> score 0 (not violated), c1/d2 -> score 1.5 (violated),
+        #              c2/d1 -> score 1 (violated, unchanged), c2/d2 -> score 8 (violated, unchanged)
+        # violations: c1/d2 (1.5), c2/d1 (1.0), c2/d2 (8.0)
+        # domain_to_violations: d1 -> [c2/d1], d2 -> [c1/d2, c2/d2], d3 -> [c2/d2]
+        # domain_to_score: d1 -> 1.0, d2 -> 9.5, d3 -> 8.0
+        self.assertAlmostEqual(1.0, es.domain_to_score.get(self.d1, 0.0))
+        self.assertAlmostEqual(9.5, es.domain_to_score.get(self.d2, 0.0))
+        self.assertAlmostEqual(8.0, es.domain_to_score.get(self.d3, 0.0))
 
 
 if __name__ == "__main__":
