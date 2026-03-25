@@ -230,7 +230,12 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
-            if (iteration + 1) % 5000 == 0:
+            # if (iteration + 1) % 5000 == 0:
+            current_time = time.perf_counter()
+            time_since_last_write = current_time - time_last_wrote_intermediate_files
+            time_until_sim_restart = 5.0
+            if time_since_last_write > time_until_sim_restart:
+                print(f"\nre-evaluating all constraints since it's been {time_until_sim_restart}s since an improvement")
                 # TODO: this is a hack until I deal with this bug:
                 # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
                 eval_set.evaluate_all(design, params)
@@ -1018,7 +1023,7 @@ class SearchParameters:
     of times the design has improved.
     """
 
-    time_between_saves: float = 5.0
+    time_between_saves: float = 1.0
     """
     Minimum number of seconds between saving intermediate files (report on constraint violations and DNA sequences)
     whenever a new optimal sequence assignment is found. Set this to 0 to save every time
