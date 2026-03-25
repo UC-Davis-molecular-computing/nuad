@@ -4711,9 +4711,7 @@ class Constraint(Generic[DesignPart], ABC):
     :any:`StrandsConstraint`,
     :any:`DomainPairsConstraint`,
     :any:`StrandPairsConstraint`,
-    which are subclasses of :any:`BulkConstraint`,
-    or
-    :any:`DesignConstraint`.
+    which are subclasses of :any:`BulkConstraint`.
     """
 
     __hash__ = super(object).__hash__
@@ -5183,7 +5181,6 @@ class DomainsConstraint(ConstraintWithDomains[Domain], BulkConstraint[Domain]):
     It *is* assumed that the constraint works by checking one :any:`Domain` at a time. After computing
     initial violations of constraints, subsequent calls to this constraint only give the domain that was
     mutated, not the entire of :any:`Domain`'s in the whole :any:`Design`.
-    Use :any:`DesignConstraint` for constraints that require every :any:`Domain` in the :any:`Design`.
     """
 
     @staticmethod
@@ -5203,7 +5200,6 @@ class StrandsConstraint(ConstraintWithStrands[Strand], BulkConstraint[Strand]):
     It *is* assumed that the constraint works by checking one :any:`Strand` at a time. After computing
     initial violations of constraints, subsequent calls to this constraint only give strands containing
     the domain that was mutated, not the entire of :any:`Strand`'s in the whole :any:`Design`.
-    Use :any:`DesignConstraint` for constraints that require every :any:`Strand` in the :any:`Design`.
     """
 
     @staticmethod
@@ -5231,59 +5227,6 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[StrandPair], BulkConstrain
     @staticmethod
     def part_name() -> str:
         return "strand pair"
-
-
-@dataclass(eq=False)  # type: ignore
-class DesignConstraint(Constraint[Design]):
-    """
-    Constraint that applies to the entire :any:`Design`. This is used for any :any:`Constraint` that
-    does not naturally fit the structure of the other types of constraints.
-
-    Unlike other constraints, which specify either :data:`Constraint._evaluate` or
-    :data:`Constraint._evaluate_bulk`, a :any:`DesignConstraint` leaves both of these unspecified and
-    specifies :data:`DesignConstraint._evaluate_design` instead.
-    """
-
-    evaluate_design: Callable[[Design, Iterable[Domain]], list[tuple[DesignPart, float, str]]] = (
-        lambda _: _raise_unreachable()
-    )
-    """
-    Evaluates the :any:`Design` (first argument), possibly taking into account which :any:`Domain`'s have
-    changed in the last iteration (second argument).
-    
-    Returns a list of tuples (`part`, `score`, `summary`), 
-    one tuple per violation of the :any:`DesignConstraint`.
-    
-    `part` is the part of the :any:`Design` that caused the violation.
-    It must be one of :any:`Domain`, :any:`Strand`, pair of `Domain`'s, or tuple of :any:`Strand`'s.
-    
-    `score` is the score of the violation.
-    
-    `summary` is a 1-line summary of the violation to put into the generated reports.
-    """
-
-    def __post_init__(self) -> None:
-        if self.evaluate_design is None:
-            raise ValueError("_evaluate_design should be specified in a DesignConstraint")
-
-    def call_evaluate_design(
-        self,
-        design: Design,
-        domains_changed: Iterable[Domain],
-        score_transfer_function: Callable[[float], float],
-    ) -> list[Result]:
-        results = (self._evaluate_bulk)(design, domains_changed)  # noqa
-        # apply weight and transfer scores
-        for result in zip(results):
-            if result.excess < 0.0:
-                result.excess = 0.0
-            result.score = self.weight * score_transfer_function(result.excess)
-            result.part = design
-        return results
-
-    @staticmethod
-    def part_name() -> str:
-        return "whole design"
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:

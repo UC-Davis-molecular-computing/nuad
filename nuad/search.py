@@ -52,7 +52,6 @@ from tabulate import tabulate
 import nuad.constraints as nc
 import nuad.np as nn
 from nuad.constraints import (
-    BulkConstraint,
     Complex,
     ComplexConstraint,
     ComplexesConstraint,
@@ -63,7 +62,6 @@ from nuad.constraints import (
     ConstraintWithStrandPairs,
     ConstraintWithStrands,
     Design,
-    DesignConstraint,
     DesignPart,
     Domain,
     DomainConstraint,
@@ -380,8 +378,6 @@ def find_parts_to_check(
         parts_to_check = _determine_strand_pairs_to_check(design, domains_changed, constraint)
     elif isinstance(constraint, ConstraintWithComplexes):
         parts_to_check = _determine_complexes_to_check(domains_changed, constraint)
-    elif isinstance(constraint, nc.DesignConstraint):
-        parts_to_check = tuple()  # not used when checking DesignConstraint
     else:
         raise AssertionError(
             "should be unreachable; type of constraint not recognized:\n"
@@ -1925,7 +1921,7 @@ class EvaluationSet:
     def evaluate_constraint(
         self,
         constraint: Constraint[DesignPart],
-        design: Design,  # only used with DesignConstraint
+        design: Design,
         score_gap: float | None,
         domains_new: tuple[Domain, ...] | None,
         params: SearchParameters,
@@ -1960,18 +1956,6 @@ class EvaluationSet:
                     constraint, parts, score_gap
                 )
 
-        elif isinstance(constraint, (BulkConstraint, DesignConstraint)):
-            if isinstance(constraint, DesignConstraint):
-                results = constraint.call_evaluate_design(design, domains_new, score_transfer_function)
-            else:
-                # XXX: I don't understand the mypy error on the next line
-                results = constraint.call_evaluate_bulk(parts, score_transfer_function)  # type: ignore
-
-            # we can't quit this function early,
-            # but we can let the caller know to stop evaluating constraints
-            total_score = sum(result.score for result in results)
-            if score_gap is not None:
-                score_gap -= total_score
         else:
             raise AssertionError(f"constraint {constraint} of unrecognized type {constraint.__class__.__name__}")
 
@@ -2003,50 +1987,50 @@ class EvaluationSet:
         return score_gap
 
     def replace_with_new(self) -> None:
-        # uses Evaluations in self.evaluations_new to replace equivalent ones in self.evalautions
-        # same for violations
+        # uses Evaluations in self.evaluations_new to update the existing Evaluations in self.evaluations.
+        # Instead of replacing Evaluation objects, we update their Results in place so that
+        # domain_to_evaluations (which holds references to these objects) stays correct without
+        # needing any list manipulation.
 
         # IMPORTANT: update scores before we start to modify the EvaluationSet
         self.total_score = self.total_score_new()
         self.total_score_fixed = self.total_score_new(True)
         self.total_score_nonfixed = self.total_score_new(False)
 
-        # Save old evaluations/violations before overwriting, for incremental domain_to_* update
-        old_evals: dict[tuple[Constraint, nc.Part], Evaluation] = {}
-        old_viols: dict[tuple[Constraint, nc.Part], Evaluation] = {}
-        for (constraint, part), evaluation in items_2d(self.evaluations_new):
-            if part in self.evaluations[constraint]:
-                old_evals[(constraint, part)] = self.evaluations[constraint][part]
+        # Remember which (constraint, part) pairs were previously violated, before we update Results.
+        was_violated: set[tuple[Constraint, nc.Part]] = set()
+        for (constraint, part), _ in items_2d(self.evaluations_new):
             if part in self.violations[constraint]:
-                old_viols[(constraint, part)] = self.violations[constraint][part]
+                was_violated.add((constraint, part))
 
-        # update all evaluations
-        for (constraint, part), evaluation in items_2d(self.evaluations_new):
-            # CONSIDER updating everything in this loop by looking up eval.violated
-            self.evaluations[constraint][part] = evaluation
+        # Update evaluations: keep the same Evaluation object, just update its Result.
+        # This avoids needing to touch domain_to_evaluations at all.
+        for (constraint, part), new_eval in items_2d(self.evaluations_new):
+            old_eval = self.evaluations[constraint][part]
+            old_eval.result = new_eval.result
 
             viols_by_part = self.violations[constraint]
-            if evaluation.violated:
+            if old_eval.violated:
                 # if was not a violation before, increment total violations
                 if part not in viols_by_part:
                     self.num_violations += 1
-                    if evaluation.part.fixed:
+                    if old_eval.part.fixed:
                         self.num_violations_fixed += 1
                     else:
                         self.num_violations_nonfixed += 1
                 # add it to violations, or replace existing violation
-                viols_by_part[part] = evaluation
-            elif not evaluation.violated and part in viols_by_part.keys():
+                viols_by_part[part] = old_eval
+            elif part in viols_by_part:
                 # otherwise remove violation if one was there from old EvaluationSet,
                 # and decrement total violations
                 del viols_by_part[part]
                 self.num_violations -= 1
-                if evaluation.part.fixed:
+                if old_eval.part.fixed:
                     self.num_violations_fixed -= 1
                 else:
                     self.num_violations_nonfixed -= 1
 
-        self.update_domain_keyed_dicts_incremental(old_evals, old_viols)
+        self.update_domain_keyed_dicts_incremental(was_violated)
 
         # update domain_to_score so _reassign_domains picks domains based on current violations
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
@@ -2077,42 +2061,28 @@ class EvaluationSet:
 
     def update_domain_keyed_dicts_incremental(
         self,
-        old_evals: dict[tuple[Constraint, nc.Part], Evaluation],
-        old_viols: dict[tuple[Constraint, nc.Part], Evaluation],
+        was_violated: set[tuple[Constraint, nc.Part]],
     ) -> None:
-        # Incrementally update domain_to_evaluations and domain_to_violations
-        # by removing old entries and adding new ones only for re-evaluated (constraint, part) pairs.
-        # This is O(changed) instead of O(all), which matters when most constraints are unchanged.
-        for (constraint, part), new_eval in items_2d(self.evaluations_new):
-            key = (constraint, part)
+        # Incrementally update domain_to_violations for re-evaluated (constraint, part) pairs.
+        # domain_to_evaluations does NOT need updating: replace_with_new updated Results in place
+        # on the same Evaluation objects already in domain_to_evaluations.
+        # We only need to handle domain_to_violations for violation transitions.
+        for (constraint, part), _ in items_2d(self.evaluations_new):
+            eval_ = self.evaluations[constraint][part]
+            was_viol = (constraint, part) in was_violated
+            is_viol = eval_.violated
 
-            # Remove old evaluation from domain_to_evaluations
-            old_eval = old_evals.get(key)
-            if old_eval is not None:
-                for domain in old_eval.domains:
-                    evals_list = self.domain_to_evaluations[domain]
-                    evals_list.remove(old_eval)
-                    if len(evals_list) == 0:
-                        del self.domain_to_evaluations[domain]
-
-            # Add new evaluation to domain_to_evaluations
-            for domain in new_eval.domains:
-                self.domain_to_evaluations[domain].append(new_eval)
-
-            # Remove old violation from domain_to_violations
-            old_viol = old_viols.get(key)
-            if old_viol is not None:
-                for domain in old_viol.domains:
+            if was_viol and not is_viol:
+                # Was violated, now not: remove from domain_to_violations
+                for domain in eval_.domains:
                     viols_list = self.domain_to_violations[domain]
-                    viols_list.remove(old_viol)
+                    viols_list.remove(eval_)
                     if len(viols_list) == 0:
                         del self.domain_to_violations[domain]
-
-            # Add new violation to domain_to_violations (if it is violated)
-            if new_eval.violated:
-                new_viol = self.violations[constraint][part]
-                for domain in new_viol.domains:
-                    self.domain_to_violations[domain].append(new_viol)
+            elif not was_viol and is_viol:
+                # Was not violated, now is: add to domain_to_violations
+                for domain in eval_.domains:
+                    self.domain_to_violations[domain].append(eval_)
 
     def update_scores_and_counts(self) -> None:
         # return: Total score of all evaluations.
@@ -2734,7 +2704,6 @@ class ConstraintReport(Generic[DesignPart]):
                 DomainPairsConstraint,
                 StrandPairsConstraint,
                 ComplexesConstraint,
-                DesignConstraint,
             ),
         ):
             raise NotImplementedError(f"unrecognized type {type(constraint)}")
