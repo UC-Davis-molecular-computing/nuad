@@ -2030,7 +2030,7 @@ class EvaluationSet:
                 else:
                     self.num_violations_nonfixed -= 1
 
-        self.update_domain_keyed_dicts_incremental(was_violated)
+        self.update_domain_keyed_dicts(was_violated)
 
         # update domain_to_score so _reassign_domains picks domains based on current violations
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
@@ -2039,30 +2039,7 @@ class EvaluationSet:
         if ASSERT_VIOLATIONS_ARE_ACCURATE:
             _assert_violations_are_accurate(self.evaluations, self.violations)
 
-    def update_domain_keyed_dicts(self):
-        # rebuild domain_to_violations and domain_to_evaluations from scratch,
-        # (evaluations_new only has re-evaluated parts)
-        # TODO: this seems inefficient, but it fixed a very hidden bug where the new score
-        # was not properly calculated after the update that triggered this function call, causing the
-        # calculated score to drift from the real score (what the score is after calling evaluate_all),
-        # so I'm reluctant to mess with this code.
-        # HOWEVER, profiling shows that in some runs it spends 27% of the time in this function, so it
-        # is worth it to figure out how to update this more efficiently while maintaining correctness.
-        self.domain_to_evaluations = defaultdict(list)
-        self.domain_to_violations = defaultdict(list)
-        for constraint_evals in self.evaluations.values():
-            for evaluation in constraint_evals.values():
-                for domain in evaluation.domains:
-                    self.domain_to_evaluations[domain].append(evaluation)
-        for constraint_viols in self.violations.values():
-            for evaluation in constraint_viols.values():
-                for domain in evaluation.domains:
-                    self.domain_to_violations[domain].append(evaluation)
-
-    def update_domain_keyed_dicts_incremental(
-        self,
-        was_violated: set[tuple[Constraint, nc.Part]],
-    ) -> None:
+    def update_domain_keyed_dicts(self, was_violated: set[tuple[Constraint, nc.Part]]) -> None:
         # Incrementally update domain_to_violations for re-evaluated (constraint, part) pairs.
         # domain_to_evaluations does NOT need updating: replace_with_new updated Results in place
         # on the same Evaluation objects already in domain_to_evaluations.
