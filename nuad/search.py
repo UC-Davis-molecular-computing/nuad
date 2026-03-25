@@ -230,10 +230,10 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
-            # if (iteration + 1) % 5000 == 0:
-            #     # TODO: this is a hack until I deal with this bug:
-            #     # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
-            #     eval_set.evaluate_all(design, params)
+            if (iteration + 1) % 5000 == 0:
+                # TODO: this is a hack until I deal with this bug:
+                # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
+                eval_set.evaluate_all(design, params)
 
             if params.log_time:
                 stopwatch.stop()
