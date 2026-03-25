@@ -2011,6 +2011,15 @@ class EvaluationSet:
         self.total_score_fixed = self.total_score_new(True)
         self.total_score_nonfixed = self.total_score_new(False)
 
+        # Save old evaluations/violations before overwriting, for incremental domain_to_* update
+        old_evals: dict[tuple[Constraint, nc.Part], Evaluation] = {}
+        old_viols: dict[tuple[Constraint, nc.Part], Evaluation] = {}
+        for (constraint, part), evaluation in items_2d(self.evaluations_new):
+            if part in self.evaluations[constraint]:
+                old_evals[(constraint, part)] = self.evaluations[constraint][part]
+            if part in self.violations[constraint]:
+                old_viols[(constraint, part)] = self.violations[constraint][part]
+
         # update all evaluations
         for (constraint, part), evaluation in items_2d(self.evaluations_new):
             # CONSIDER updating everything in this loop by looking up eval.violated
@@ -2037,7 +2046,7 @@ class EvaluationSet:
                 else:
                     self.num_violations_nonfixed -= 1
 
-        self.update_domain_keyed_dicts()
+        self.update_domain_keyed_dicts_incremental(old_evals, old_viols)
 
         # update domain_to_score so _reassign_domains picks domains based on current violations
         self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
@@ -2065,6 +2074,45 @@ class EvaluationSet:
             for evaluation in constraint_viols.values():
                 for domain in evaluation.domains:
                     self.domain_to_violations[domain].append(evaluation)
+
+    def update_domain_keyed_dicts_incremental(
+        self,
+        old_evals: dict[tuple[Constraint, nc.Part], Evaluation],
+        old_viols: dict[tuple[Constraint, nc.Part], Evaluation],
+    ) -> None:
+        # Incrementally update domain_to_evaluations and domain_to_violations
+        # by removing old entries and adding new ones only for re-evaluated (constraint, part) pairs.
+        # This is O(changed) instead of O(all), which matters when most constraints are unchanged.
+        for (constraint, part), new_eval in items_2d(self.evaluations_new):
+            key = (constraint, part)
+
+            # Remove old evaluation from domain_to_evaluations
+            old_eval = old_evals.get(key)
+            if old_eval is not None:
+                for domain in old_eval.domains:
+                    evals_list = self.domain_to_evaluations[domain]
+                    evals_list.remove(old_eval)
+                    if len(evals_list) == 0:
+                        del self.domain_to_evaluations[domain]
+
+            # Add new evaluation to domain_to_evaluations
+            for domain in new_eval.domains:
+                self.domain_to_evaluations[domain].append(new_eval)
+
+            # Remove old violation from domain_to_violations
+            old_viol = old_viols.get(key)
+            if old_viol is not None:
+                for domain in old_viol.domains:
+                    viols_list = self.domain_to_violations[domain]
+                    viols_list.remove(old_viol)
+                    if len(viols_list) == 0:
+                        del self.domain_to_violations[domain]
+
+            # Add new violation to domain_to_violations (if it is violated)
+            if new_eval.violated:
+                new_viol = self.violations[constraint][part]
+                for domain in new_viol.domains:
+                    self.domain_to_violations[domain].append(new_viol)
 
     def update_scores_and_counts(self) -> None:
         # return: Total score of all evaluations.
