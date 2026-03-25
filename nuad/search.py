@@ -27,7 +27,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeVar, Mapping, Literal
-
+import concurrent.futures
 
 import numpy as np  # noqa
 import numpy.random
@@ -216,12 +216,11 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
         if not params.restart:
             # write initial sequences and report
-            _write_intermediate_files(
+            directories.write_intermediate_files(
                 design=design,
                 params=params,
                 rng_state=rng.bit_generator.state,
                 num_new_optimal=num_new_optimal,
-                directories=directories,
                 eval_set=eval_set,
             )
 
@@ -280,13 +279,12 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                         or params.save_sequences_for_all_updates
                         or eval_set.total_score == 0.0
                     ):
-                        _write_intermediate_files(
+                        directories.write_intermediate_files(
                             design=design,
                             params=params,
                             # rng_state=rng_state_before_domains_reassigned,
                             rng_state=rng.bit_generator.state,
                             num_new_optimal=num_new_optimal,
-                            directories=directories,
                             eval_set=eval_set,
                         )
                         time_last_wrote_intermediate_files = current_time
@@ -660,104 +658,6 @@ def _sequences_fragile_format_output_to_file(design: Design, include_group: bool
     )
 
 
-def _write_intermediate_files(
-    *,
-    design: nc.Design,
-    params: SearchParameters,
-    rng_state: Mapping[str, Any],
-    num_new_optimal: int,
-    directories: _Directories,
-    eval_set: EvaluationSet,
-) -> None:
-    num_new_optimal_padded = (
-        f"{num_new_optimal}" if params.num_digits_update is None else f"{num_new_optimal:0{params.num_digits_update}d}"
-    )
-
-    _write_design(design, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
-
-    _write_rng_state(rng_state, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
-
-    _write_sequences(design, params=params, directories=directories, num_new_optimal_padded=num_new_optimal_padded)
-
-    _write_report(
-        params=params,
-        directories=directories,
-        num_new_optimal_padded=num_new_optimal_padded,
-        eval_set=eval_set,
-    )
-
-
-def _write_design(
-    design: Design, params: SearchParameters, directories: _Directories, num_new_optimal_padded: str
-) -> None:
-    content = design.to_json()
-
-    best_filename = directories.best_design_full_filename_noext()
-    idx_filename = (
-        directories.indexed_design_full_filename_noext(num_new_optimal_padded)
-        if params.save_design_for_all_updates
-        else None
-    )
-    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
-
-
-def _write_rng_state(
-    rng_state: Mapping[str, Any],
-    params: SearchParameters,
-    directories: _Directories,
-    num_new_optimal_padded: str,
-) -> None:
-    content = json.dumps(rng_state, indent=2)
-
-    best_filename = directories.best_rng_full_filename_noext()
-    idx_filename = (
-        directories.indexed_rng_full_filename_noext(num_new_optimal_padded)
-        if params.save_design_for_all_updates
-        else None
-    )
-    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
-
-
-def _write_sequences(
-    design: Design,
-    params: SearchParameters,
-    directories: _Directories,
-    num_new_optimal_padded: str,
-    include_group: bool = True,
-) -> None:
-    content = _sequences_fragile_format_output_to_file(design, include_group)
-
-    best_filename = directories.best_sequences_full_filename_noext()
-    idx_filename = (
-        directories.indexed_sequences_full_filename_noext(num_new_optimal_padded)
-        if params.save_sequences_for_all_updates
-        else None
-    )
-    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
-
-
-def _write_report(
-    params: SearchParameters, directories: _Directories, num_new_optimal_padded: str, eval_set: EvaluationSet
-) -> None:
-    content = summary_of_constraints(params.constraints, params.report_only_violations, eval_set=eval_set)
-
-    best_filename = directories.best_report_full_filename_noext()
-    idx_filename = (
-        directories.indexed_report_full_filename_noext(num_new_optimal_padded)
-        if params.save_report_for_all_updates
-        else None
-    )
-    _write_text_intermediate_and_final_files(content, best_filename, idx_filename)
-
-
-def _write_text_intermediate_and_final_files(content: str, best_filename: str, idx_filename: str | None) -> None:
-    with open(best_filename, "w") as file:
-        file.write(content)
-    if idx_filename is not None:
-        with open(idx_filename, "w") as file:
-            file.write(content)
-
-
 def _clear_directory(directory: str, force_overwrite: bool) -> None:
     files_relative = os.listdir(directory)
     files_and_directories = [os.path.join(directory, file) for file in files_relative]
@@ -822,6 +722,9 @@ class _Directories:
     debug_file_handler: logging.FileHandler | None = field(init=False, default=None)
     info_file_handler: logging.FileHandler | None = field(init=False, default=None)
 
+    io_executor_serial: concurrent.futures.ThreadPoolExecutor = field(init=False)
+    io_executor_multiple: concurrent.futures.ThreadPoolExecutor = field(init=False)
+
     def all_subdirectories(self, params: SearchParameters) -> list[str]:
         result = []
         if params.save_design_for_all_updates:
@@ -848,6 +751,9 @@ class _Directories:
             self.info_file_handler = logging.FileHandler(os.path.join(self.out, "log_info.log"))
             self.info_file_handler.setLevel(logging.INFO)
             nc.logger.addHandler(self.info_file_handler)
+
+        self.io_executor_serial = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.io_executor_multiple = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
     @staticmethod
     def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int | str, ext: str) -> str:
@@ -883,6 +789,79 @@ class _Directories:
 
     def best_report_full_filename_noext(self) -> str:
         return self.best_full_filename_noext(self.report_filename_no_ext, "txt")
+
+    def write_intermediate_files(
+        self,
+        *,
+        design: nc.Design,
+        params: SearchParameters,
+        rng_state: Mapping[str, Any],
+        num_new_optimal: int,
+        eval_set: EvaluationSet,
+    ) -> None:
+        num_new_optimal_padded = (
+            f"{num_new_optimal}"
+            if params.num_digits_update is None
+            else f"{num_new_optimal:0{params.num_digits_update}d}"
+        )
+
+        self.write_design(design, params=params, num_new_optimal_padded=num_new_optimal_padded)
+        self.write_rng_state(rng_state, params=params, num_new_optimal_padded=num_new_optimal_padded)
+        self.write_sequences(design, params=params, num_new_optimal_padded=num_new_optimal_padded)
+        self.write_report(params=params, num_new_optimal_padded=num_new_optimal_padded, eval_set=eval_set)
+
+    def write_design(self, design: Design, params: SearchParameters, num_new_optimal_padded: str) -> None:
+        content = design.to_json()
+        best_filename = self.best_design_full_filename_noext()
+        idx_filename = (
+            self.indexed_design_full_filename_noext(num_new_optimal_padded)
+            if params.save_design_for_all_updates
+            else None
+        )
+        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+
+    def write_rng_state(
+        self, rng_state: Mapping[str, Any], params: SearchParameters, num_new_optimal_padded: str
+    ) -> None:
+        content = json.dumps(rng_state, indent=2)
+        best_filename = self.best_rng_full_filename_noext()
+        idx_filename = (
+            self.indexed_rng_full_filename_noext(num_new_optimal_padded) if params.save_design_for_all_updates else None
+        )
+        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+
+    def write_sequences(
+        self, design: Design, params: SearchParameters, num_new_optimal_padded: str, include_group: bool = True
+    ) -> None:
+        content = _sequences_fragile_format_output_to_file(design, include_group)
+        best_filename = self.best_sequences_full_filename_noext()
+        idx_filename = (
+            self.indexed_sequences_full_filename_noext(num_new_optimal_padded)
+            if params.save_sequences_for_all_updates
+            else None
+        )
+        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+
+    def write_report(self, params: SearchParameters, num_new_optimal_padded: str, eval_set: EvaluationSet) -> None:
+        content = summary_of_constraints(params.constraints, params.report_only_violations, eval_set=eval_set)
+        best_filename = self.best_report_full_filename_noext()
+        idx_filename = (
+            self.indexed_report_full_filename_noext(num_new_optimal_padded)
+            if params.save_report_for_all_updates
+            else None
+        )
+        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+
+    def write_text_intermediate_and_final_files(
+        self, content: str, best_filename: str, idx_filename: str | None
+    ) -> None:
+        self.io_executor_serial.submit(self.blocking_write, content, best_filename)
+        if idx_filename is not None:
+            self.io_executor_multiple.submit(self.blocking_write, content, idx_filename)
+
+    def blocking_write(self, content: str, filename: str) -> None:
+        with open(filename, "w") as file:
+            file.write(content)
 
 
 def _check_design(design: nc.Design) -> None:
