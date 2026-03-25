@@ -4514,9 +4514,9 @@ has a name, and the design contains a nuad strand with that name."""
         if not isinstance(sc_strand, sc.Strand):
             raise TypeError(f"sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}")
 
-        strand = self.get_nuad_strand_with_same_name_as(sc_strand)
-        strand_sequence = strand.sequence()
-        sc_strand.set_dna_sequence(strand_sequence)
+        nuad_strand = self.get_nuad_strand_with_same_name_as(sc_strand)
+        nuad_strand_sequence = nuad_strand.sequence()
+        sc_strand.set_dna_sequence(nuad_strand_sequence)
 
     def get_nuad_strand_with_same_name_as(self, sc_strand):
         if sc_strand.name is None:

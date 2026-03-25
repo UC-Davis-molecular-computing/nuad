@@ -273,6 +273,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
                 # DEBUG: check for score drift periodically
                 import math as _math
+
                 if iteration % 1000 != 0:
                     pass  # skip check
                 else:
@@ -281,7 +282,9 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 if iteration % 1000 == 0:
                     _es_check = EvaluationSet(params.constraints, params.never_increase_score)
                     _es_check.evaluate_all(design, params)
-                if _es_check is not None and not _math.isclose(eval_set.total_score, _es_check.total_score, abs_tol=1e-9):
+                if _es_check is not None and not _math.isclose(
+                    eval_set.total_score, _es_check.total_score, abs_tol=1e-9
+                ):
                     _diff = eval_set.total_score - _es_check.total_score
                     logger.error(
                         f"SCORE DRIFT at iteration {iteration}! "
@@ -295,9 +298,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                         _inc = eval_set.score_of_constraint(_c, violations=True)
                         _fs = _es_check.score_of_constraint(_c, violations=True)
                         if not _math.isclose(_inc, _fs, abs_tol=1e-9):
-                            logger.error(
-                                f"  {_c.short_description}: inc={_inc:.10f} fs={_fs:.10f}"
-                            )
+                            logger.error(f"  {_c.short_description}: inc={_inc:.10f} fs={_fs:.10f}")
                     # Print mismatched individual evaluations
                     for _c in params.constraints:
                         for _part, _ev in eval_set.evaluations[_c].items():
@@ -309,6 +310,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                                     f"fs={_ev2.score:.10f}({_ev2.summary})"
                                 )
                     import sys as _sys
+
                     _sys.exit(1)
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
