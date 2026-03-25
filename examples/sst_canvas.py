@@ -214,13 +214,13 @@ class Thresholds:
     temperature: float = 52.0
     """Temperature in Celsius"""
 
-    tile_ss: float = -1.5
+    tile_ss: float = -1.0
     """NUPACK complex free energy threshold for individual tiles."""
 
     tile_pair_0comp: float = -2.5
     """RNAduplex complex free energy threshold for pairs tiles with no complementary domains."""
 
-    tile_pair_1comp: float = -6.5
+    tile_pair_1comp: float = -7.5
     """RNAduplex complex free energy threshold for pairs tiles with 1 complementary domain."""
 
 
@@ -235,7 +235,7 @@ def create_constraints(design: nc.Design) -> list[nc.Constraint]:
         nc.rna_duplex_strand_pairs_constraints_by_number_matching_domains(
             thresholds={0: thresholds.tile_pair_0comp, 1: thresholds.tile_pair_1comp},
             temperature=thresholds.temperature,
-            short_descriptions={0: "StrandPairRNA0Comp", 1: "StrandPairRNA1Comp"},
+            short_descriptions={0: "RNA0Comp", 1: "RNA1Comp"},
             strands=design.strands,
         )
     )

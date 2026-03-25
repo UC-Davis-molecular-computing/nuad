@@ -5,6 +5,8 @@ output
 CLAUDE.md
 
 .vscode
+bug-275-fixes.md
+examples/minimal_bug_repro.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

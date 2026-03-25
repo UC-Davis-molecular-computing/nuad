@@ -230,11 +230,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
-            if (iteration + 1) % 5000 == 0:
-                # TODO: this is a hack until I deal with this bug:
-                # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
-                eval_set.evaluate_all(design, params)
-
             if params.log_time:
                 stopwatch.stop()
                 _log_time(stopwatch)
@@ -271,47 +266,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 # keep new sequence and update information about optimal solution so far
                 eval_set.replace_with_new()
 
-                # DEBUG: check for score drift periodically
-                import math as _math
-
-                if iteration % 1000 != 0:
-                    pass  # skip check
-                else:
-                    pass  # will check below
-                _es_check = None
-                if iteration % 1000 == 0:
-                    _es_check = EvaluationSet(params.constraints, params.never_increase_score)
-                    _es_check.evaluate_all(design, params)
-                if _es_check is not None and not _math.isclose(
-                    eval_set.total_score, _es_check.total_score, abs_tol=1e-9
-                ):
-                    _diff = eval_set.total_score - _es_check.total_score
-                    logger.error(
-                        f"SCORE DRIFT at iteration {iteration}! "
-                        f"incremental={eval_set.total_score:.15f} "
-                        f"from_scratch={_es_check.total_score:.15f} "
-                        f"diff={_diff:.6e} "
-                        f"domains_changed={[d.name for d in domains_new]}"
-                    )
-                    # Print per-constraint breakdown
-                    for _c in params.constraints:
-                        _inc = eval_set.score_of_constraint(_c, violations=True)
-                        _fs = _es_check.score_of_constraint(_c, violations=True)
-                        if not _math.isclose(_inc, _fs, abs_tol=1e-9):
-                            logger.error(f"  {_c.short_description}: inc={_inc:.10f} fs={_fs:.10f}")
-                    # Print mismatched individual evaluations
-                    for _c in params.constraints:
-                        for _part, _ev in eval_set.evaluations[_c].items():
-                            _ev2 = _es_check.evaluations[_c].get(_part)
-                            if _ev2 is not None and not _math.isclose(_ev.score, _ev2.score, abs_tol=1e-9):
-                                logger.error(
-                                    f"  {_c.short_description}/{_part.name}: "
-                                    f"inc={_ev.score:.10f}({_ev.summary}) "
-                                    f"fs={_ev2.score:.10f}({_ev2.summary})"
-                                )
-                    import sys as _sys
-
-                    _sys.exit(1)
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
@@ -1018,7 +972,7 @@ class SearchParameters:
     of times the design has improved.
     """
 
-    time_between_saves: float = 5.0
+    time_between_saves: float = 1.0
     """
     Minimum number of seconds between saving intermediate files (report on constraint violations and DNA sequences)
     whenever a new optimal sequence assignment is found. Set this to 0 to save every time
@@ -2062,11 +2016,6 @@ class EvaluationSet:
             # CONSIDER updating everything in this loop by looking up eval.violated
             self.evaluations[constraint][part] = evaluation
 
-            # update dict mapping domain to list of evals/violations for which it is blamed
-            for domain in evaluation.domains:
-                self.domain_to_evaluations[domain] = self.domain_to_evaluations_new[domain]
-                self.domain_to_violations[domain] = self.domain_to_violations_new[domain]
-
             viols_by_part = self.violations[constraint]
             if evaluation.violated:
                 # if was not a violation before, increment total violations
@@ -2088,9 +2037,34 @@ class EvaluationSet:
                 else:
                     self.num_violations_nonfixed -= 1
 
+        self.update_domain_keyed_dicts()
+
+        # update domain_to_score so _reassign_domains picks domains based on current violations
+        self.domain_to_score = EvaluationSet.sum_domain_scores(self.domain_to_violations)
+
         self.reset_new()
         if ASSERT_VIOLATIONS_ARE_ACCURATE:
             _assert_violations_are_accurate(self.evaluations, self.violations)
+
+    def update_domain_keyed_dicts(self):
+        # rebuild domain_to_violations and domain_to_evaluations from scratch,
+        # (evaluations_new only has re-evaluated parts)
+        # TODO: this seems inefficient, but it fixed a very hidden bug where the new score
+        # was not properly calculated after the update that triggered this function call, causing the
+        # calculated score to drift from the real score (what the score is after calling evaluate_all),
+        # so I'm reluctant to mess with this code.
+        # HOWEVER, profiling shows that in some runs it spends 27% of the time in this function, so it
+        # is worth it to figure out how to update this more efficiently while maintaining correctness.
+        self.domain_to_evaluations = defaultdict(list)
+        self.domain_to_violations = defaultdict(list)
+        for constraint_evals in self.evaluations.values():
+            for evaluation in constraint_evals.values():
+                for domain in evaluation.domains:
+                    self.domain_to_evaluations[domain].append(evaluation)
+        for constraint_viols in self.violations.values():
+            for evaluation in constraint_viols.values():
+                for domain in evaluation.domains:
+                    self.domain_to_violations[domain].append(evaluation)
 
     def update_scores_and_counts(self) -> None:
         # return: Total score of all evaluations.
@@ -2391,9 +2365,13 @@ def summary_of_constraints(
     score_total_summary = f"total score of constraint violations: {score:.2f}"
     score_unfixed_summary = f"total score of unfixed constraint violations: {score_unfixed:.2f}"
 
+    date_str = datetime.datetime.now().astimezone().strftime("%-m/%y/%-d, %-H:%-M:%-S %Z")
     summary = (
-        f"total evaluations: {eval_set.num_evaluations}\n"
-        f"total violations: {eval_set.num_violations}\n"
+        f"""\
+This report was generated by running script {script_name_no_ext()} at {date_str}.
+total evaluations: {eval_set.num_evaluations}
+total violations: {eval_set.num_violations}
+"""
         + score_total_summary
         + "\n"
         + (score_unfixed_summary + "\n\n" if score_unfixed != score else "\n")
