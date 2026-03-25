@@ -230,10 +230,10 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
-            if (iteration + 1) % 5000 == 0:
-                # TODO: this is a hack until I deal with this bug:
-                # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
-                eval_set.evaluate_all(design, params)
+            # if (iteration + 1) % 5000 == 0:
+            #     # TODO: this is a hack until I deal with this bug:
+            #     # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
+            #     eval_set.evaluate_all(design, params)
 
             if params.log_time:
                 stopwatch.stop()
@@ -270,6 +270,46 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
             else:
                 # keep new sequence and update information about optimal solution so far
                 eval_set.replace_with_new()
+
+                # DEBUG: check for score drift periodically
+                import math as _math
+                if iteration % 1000 != 0:
+                    pass  # skip check
+                else:
+                    pass  # will check below
+                _es_check = None
+                if iteration % 1000 == 0:
+                    _es_check = EvaluationSet(params.constraints, params.never_increase_score)
+                    _es_check.evaluate_all(design, params)
+                if _es_check is not None and not _math.isclose(eval_set.total_score, _es_check.total_score, abs_tol=1e-9):
+                    _diff = eval_set.total_score - _es_check.total_score
+                    logger.error(
+                        f"SCORE DRIFT at iteration {iteration}! "
+                        f"incremental={eval_set.total_score:.15f} "
+                        f"from_scratch={_es_check.total_score:.15f} "
+                        f"diff={_diff:.6e} "
+                        f"domains_changed={[d.name for d in domains_new]}"
+                    )
+                    # Print per-constraint breakdown
+                    for _c in params.constraints:
+                        _inc = eval_set.score_of_constraint(_c, violations=True)
+                        _fs = _es_check.score_of_constraint(_c, violations=True)
+                        if not _math.isclose(_inc, _fs, abs_tol=1e-9):
+                            logger.error(
+                                f"  {_c.short_description}: inc={_inc:.10f} fs={_fs:.10f}"
+                            )
+                    # Print mismatched individual evaluations
+                    for _c in params.constraints:
+                        for _part, _ev in eval_set.evaluations[_c].items():
+                            _ev2 = _es_check.evaluations[_c].get(_part)
+                            if _ev2 is not None and not _math.isclose(_ev.score, _ev2.score, abs_tol=1e-9):
+                                logger.error(
+                                    f"  {_c.short_description}/{_part.name}: "
+                                    f"inc={_ev.score:.10f}({_ev.summary}) "
+                                    f"fs={_ev2.score:.10f}({_ev2.summary})"
+                                )
+                    import sys as _sys
+                    _sys.exit(1)
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore

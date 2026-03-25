@@ -3393,6 +3393,13 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    strands_by_name: dict[str, Strand] = field(init=False)
+    """
+    dict mapping each name of a :any:`Strand` to the :any:`Strand` in this :any:`Design` with that name.
+
+    Computed from :data:`Design.strands`, so not specified in constructor.
+    """
+
     @property
     def domains(self) -> list[Domain]:
         """
@@ -3428,6 +3435,8 @@ class Design(JSONSerializable):
         the :any:`Design` was manually modified after being created, before running
         :meth:`search.search_for_dna_sequences`.
         """
+        self.strands_by_name = {strand.name: strand for strand in self.strands}
+
         # Get domains not explicitly listed on strands that are part of domain tree.
         # Set up quick access to domain by name, and ensure each domain name unique.
         for strand in self.strands:
@@ -4216,15 +4225,17 @@ class Design(JSONSerializable):
     def assign_fields_to_scadnano_design(
         self,
         sc_design: sc.Design,
-        ignored_strands: Iterable[Strand] = (),
+        ignored_strands: Collection[Strand] = (),
         overwrite: bool = False,
+        ignore_domains: bool = False,
     ):
         """
         Assigns DNA sequence, VendorFields, and StrandGroups (as a key in a scadnano String.label dict
         under key "group").
         TODO: document more
         """
-        self.assign_sequences_to_scadnano_design(sc_design, ignored_strands, overwrite)
+        self.compute_derived_fields()
+        self.assign_sequences_to_scadnano_design(sc_design, ignored_strands, overwrite, ignore_domains, True)
         self.assign_strand_groups_to_labels(sc_design, ignored_strands, overwrite)
         self.assign_idt_fields_to_scadnano_design(sc_design, ignored_strands, overwrite)
         self.assign_modifications_to_scadnano_design(sc_design, ignored_strands, overwrite)
@@ -4232,8 +4243,10 @@ class Design(JSONSerializable):
     def assign_sequences_to_scadnano_design(
         self,
         sc_design: sc.Design,
-        ignored_strands: Iterable[Strand] = (),
+        ignored_strands: Collection[Strand] = (),
         overwrite: bool = False,
+        ignore_domains: bool = False,
+        _skip_compute_derived_fields: bool = False,
     ) -> None:
         """
         Assigns sequences from this :any:`Design` into `sc_design`.
@@ -4256,8 +4269,13 @@ class Design(JSONSerializable):
         :param overwrite:
             if True, overwrites existing sequences; otherwise gives an error if an existing sequence
             disagrees with the newly assigned sequence
+        :param ignore_domains:
+            if True, does not check that domain names match between the designs. It is still required that
+            each strand name appearing in sc_design is the name of a strand in this design.
+            Cannot be specified if overwrite is False.
         """
-
+        if not _skip_compute_derived_fields:
+            self.compute_derived_fields()
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
@@ -4267,29 +4285,42 @@ class Design(JSONSerializable):
 
         # dict mapping tuples of domain names to strands that have those domains in that order
         # sc_domain_name_tuples = {strand.domain_names_tuple(): strand for strand in self.strands}
-        sc_domain_name_tuples: dict[tuple[str, ...], Strand] = {}
-        for strand in self.strands:
-            domain_names_tuple = strand.domain_names_tuple()
-            sc_domain_name_tuples[domain_names_tuple] = strand
-
-        for sc_strand in sc_strands_to_include:
-            domain_names = [domain.name for domain in sc_strand.domains]
-            if sc_strand.dna_sequence is None or overwrite:
-                assert None not in domain_names
-                self._assign_to_strand_without_checking_existing_sequence(sc_strand, sc_design)
-            elif None not in domain_names:
-                self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
-            else:
-                logger.warning(
-                    "Skipping assignment of DNA sequence to scadnano strand with sequence "
-                    f"{sc_strand.dna_sequence}, since it has at least one domain name "
-                    f"that is None.\n"
-                    f"Make sure that this is a strand you intended to leave out of the "
-                    f"sequence design process"
-                )
+        if not ignore_domains:
+            sc_domain_name_tuples: dict[tuple[str, ...], Strand] = {}
+            for strand in self.strands:
+                domain_names_tuple = strand.domain_names_tuple()
+                sc_domain_name_tuples[domain_names_tuple] = strand
+            for sc_strand in sc_strands_to_include:
+                domain_names = [domain.name for domain in sc_strand.domains]
+                if sc_strand.dna_sequence is None or overwrite:
+                    assert None not in domain_names
+                    self._assign_to_strand_without_checking_existing_sequence(sc_strand, sc_design)
+                elif None not in domain_names:
+                    self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
+                else:
+                    logger.warning(
+                        "Skipping assignment of DNA sequence to scadnano strand with sequence "
+                        f"{sc_strand.dna_sequence}, since it has at least one domain name "
+                        f"that is None.\n"
+                        f"Make sure that this is a strand you intended to leave out of the "
+                        f"sequence design process"
+                    )
+        else:
+            for sc_strand in sc_strands_to_include:
+                if sc_strand.dna_sequence is None or overwrite:
+                    self._assign_to_strand_without_checking_existing_sequence_ignore_domains(sc_strand, sc_design)
+                else:
+                    raise ValueError(
+                        """
+Cannot assign sequence to scadnano strand with existing sequence (using overwrite=False) when ignore_domains is True.
+This option is intended to allow scadnano designs with partial assignment to have only their unassigned domains
+be completed by sequences of nuad domains, but this requires that for each strand, the domains are in common
+between the scadnano and nuad designs, so the parameter ignore_domains must be set to false to enable this 
+partial assignment."""
+                    )
 
     def shared_strands_with_scadnano_design(
-        self, sc_design: sc.Design, ignored_strands: Iterable[Strand] = ()
+        self, sc_design: sc.Design, ignored_strands: Collection[Strand] = ()
     ) -> list[tuple[Strand, list[sc.Strand]]]:
         """
         Returns a list of pairs (nuad_strand, sc_strands), where nuad_strand has the same name
@@ -4467,6 +4498,42 @@ class Design(JSONSerializable):
             sequence_list.append(domain_sequence)
         strand_sequence = "".join(sequence_list)
         sc_strand.set_dna_sequence(strand_sequence)
+
+    @staticmethod
+    def err_msg_assign_scadnano_sequences_ignore_domains_prefix() -> str:
+        return """
+To assign sequences from a nuad design to a scadnano design requires that each scadnano strand
+has a name, and the design contains a nuad strand with that name."""
+
+    def _assign_to_strand_without_checking_existing_sequence_ignore_domains(
+        self, sc_strand: sc.Strand, sc_design: sc.Design
+    ) -> None:
+        # check types
+        if not isinstance(sc_design, sc.Design):
+            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+        if not isinstance(sc_strand, sc.Strand):
+            raise TypeError(f"sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}")
+
+        strand = self.get_nuad_strand_with_same_name_as(sc_strand)
+        strand_sequence = strand.sequence()
+        sc_strand.set_dna_sequence(strand_sequence)
+
+    def get_nuad_strand_with_same_name_as(self, sc_strand):
+        if sc_strand.name is None:
+            err_msg = (
+                self.err_msg_assign_scadnano_sequences_ignore_domains_prefix()
+                + f"\nBut scadnano strand {sc_strand} has no name."
+            )
+            raise ValueError(err_msg)
+        elif sc_strand.name not in self.strands_by_name:
+            err_msg = self.err_msg_assign_scadnano_sequences_ignore_domains_prefix() + (
+                f"\nBut scadnano strand '{sc_strand.name}'"
+                f"\n(details: {sc_strand})"
+                f"\nis not a name of any strand in the nuad design."
+            )
+            raise ValueError(err_msg)
+        strand = self.strands_by_name[sc_strand.name]
+        return strand
 
     @staticmethod
     def _assign_to_strand_with_partial_sequence(
