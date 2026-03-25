@@ -27,7 +27,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeVar, Mapping, Literal
-import concurrent.futures
+from concurrent.futures import Future, ThreadPoolExecutor
 
 import numpy as np  # noqa
 import numpy.random
@@ -702,28 +702,35 @@ class _Directories:
     out: str
 
     # directories "fully qualified relative to project root": out joined with "subdirectory" strings below
-    design: str = field(init=False)
-    rng_state: str = field(init=False)
-    report: str = field(init=False)
-    sequence: str = field(init=False)
+    design: str
+    rng_state: str
+    report: str
+    sequence: str
 
     # relative to out directory
-    design_subdirectory: str = field(init=False, default="designs")
-    rng_state_subdirectory: str = field(init=False, default="rng")
-    report_subdirectory: str = field(init=False, default="reports")
-    sequence_subdirectory: str = field(init=False, default="sequences")
+    design_subdirectory: str = "designs"
+    rng_state_subdirectory: str = "rng"
+    report_subdirectory: str = "reports"
+    sequence_subdirectory: str = "sequences"
 
     # names of files to write (in subdirectories, and also "current-best" versions in out
-    design_filename_no_ext: str = field(init=False, default="design")
-    rng_state_filename_no_ext: str = field(init=False, default="rng")
-    sequences_filename_no_ext: str = field(init=False, default="sequences")
-    report_filename_no_ext: str = field(init=False, default="report")
+    design_filename_no_ext: str = "design"
+    rng_state_filename_no_ext: str = "rng"
+    sequences_filename_no_ext: str = "sequences"
+    report_filename_no_ext: str = "report"
 
-    debug_file_handler: logging.FileHandler | None = field(init=False, default=None)
-    info_file_handler: logging.FileHandler | None = field(init=False, default=None)
+    debug_file_handler: logging.FileHandler | None = None
+    info_file_handler: logging.FileHandler | None = None
 
-    io_executor_serial: concurrent.futures.ThreadPoolExecutor = field(init=False)
-    io_executor_multiple: concurrent.futures.ThreadPoolExecutor = field(init=False)
+    io_executor_multiple: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=20)
+    io_executor_best_design: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
+    pending_best_design_write: Future | None = None
+    io_executor_best_rng_state: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
+    pending_best_rng_state_write: Future | None = None
+    io_executor_best_sequences: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
+    pending_best_sequences_write: Future | None = None
+    io_executor_best_report: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
+    pending_best_report_write: Future | None = None
 
     def all_subdirectories(self, params: SearchParameters) -> list[str]:
         result = []
@@ -751,9 +758,6 @@ class _Directories:
             self.info_file_handler = logging.FileHandler(os.path.join(self.out, "log_info.log"))
             self.info_file_handler.setLevel(logging.INFO)
             nc.logger.addHandler(self.info_file_handler)
-
-        self.io_executor_serial = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self.io_executor_multiple = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
     @staticmethod
     def indexed_full_filename_noext(filename_no_ext: str, directory: str, idx: int | str, ext: str) -> str:
@@ -818,7 +822,13 @@ class _Directories:
             if params.save_design_for_all_updates
             else None
         )
-        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+        self.pending_best_design_write = self.write_text_intermediate_and_final_files(
+            content,
+            self.io_executor_best_design,
+            self.pending_best_design_write,
+            best_filename,
+            idx_filename,
+        )
 
     def write_rng_state(
         self, rng_state: Mapping[str, Any], params: SearchParameters, num_new_optimal_padded: str
@@ -828,7 +838,13 @@ class _Directories:
         idx_filename = (
             self.indexed_rng_full_filename_noext(num_new_optimal_padded) if params.save_design_for_all_updates else None
         )
-        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+        self.pending_best_rng_state_write = self.write_text_intermediate_and_final_files(
+            content,
+            self.io_executor_best_rng_state,
+            self.pending_best_rng_state_write,
+            best_filename,
+            idx_filename,
+        )
 
     def write_sequences(
         self, design: Design, params: SearchParameters, num_new_optimal_padded: str, include_group: bool = True
@@ -840,7 +856,13 @@ class _Directories:
             if params.save_sequences_for_all_updates
             else None
         )
-        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+        self.pending_best_sequences_write = self.write_text_intermediate_and_final_files(
+            content,
+            self.io_executor_best_sequences,
+            self.pending_best_sequences_write,
+            best_filename,
+            idx_filename,
+        )
 
     def write_report(self, params: SearchParameters, num_new_optimal_padded: str, eval_set: EvaluationSet) -> None:
         content = summary_of_constraints(params.constraints, params.report_only_violations, eval_set=eval_set)
@@ -850,14 +872,29 @@ class _Directories:
             if params.save_report_for_all_updates
             else None
         )
-        self.write_text_intermediate_and_final_files(content, best_filename, idx_filename)
+        self.pending_best_report_write = self.write_text_intermediate_and_final_files(
+            content,
+            self.io_executor_best_report,
+            self.pending_best_report_write,
+            best_filename,
+            idx_filename,
+        )
 
     def write_text_intermediate_and_final_files(
-        self, content: str, best_filename: str, idx_filename: str | None
-    ) -> None:
-        self.io_executor_serial.submit(self.blocking_write, content, best_filename)
+        self,
+        content: str,
+        best_executor: ThreadPoolExecutor,
+        pending_best_write: Future | None,
+        best_filename: str,
+        idx_filename: str | None,
+    ) -> Future:
+        if pending_best_write is not None:
+            # no sense waiting for previous write to finish if we will just replace it now
+            pending_best_write.cancel()
+        next_pending_best_write = best_executor.submit(self.blocking_write, content, best_filename)
         if idx_filename is not None:
             self.io_executor_multiple.submit(self.blocking_write, content, idx_filename)
+        return next_pending_best_write
 
     def blocking_write(self, content: str, filename: str) -> None:
         with open(filename, "w") as file:
