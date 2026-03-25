@@ -266,28 +266,14 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 if score_delta < 0:  # increment whenever we actually improve the design
                     num_new_optimal += 1
                     on_improved_design(num_new_optimal)  # type: ignore
-
-                    # only write intermediate files if some time has elapsed since last write,
-                    # unless we are saving all intermediate updates
-                    current_time = time.perf_counter()
-                    time_since_last_write = current_time - time_last_wrote_intermediate_files
-                    if (
-                        _done(iteration, params, eval_set)
-                        or time_since_last_write > params.time_between_saves
-                        or params.save_report_for_all_updates
-                        or params.save_design_for_all_updates
-                        or params.save_sequences_for_all_updates
-                        or eval_set.total_score == 0.0
-                    ):
-                        directories.write_intermediate_files(
-                            design=design,
-                            params=params,
-                            # rng_state=rng_state_before_domains_reassigned,
-                            rng_state=rng.bit_generator.state,
-                            num_new_optimal=num_new_optimal,
-                            eval_set=eval_set,
-                        )
-                        time_last_wrote_intermediate_files = current_time
+                    directories.write_intermediate_files(
+                        design=design,
+                        params=params,
+                        # rng_state=rng_state_before_domains_reassigned,
+                        rng_state=rng.bit_generator.state,
+                        num_new_optimal=num_new_optimal,
+                        eval_set=eval_set,
+                    )
 
             iteration += 1
 
@@ -982,13 +968,6 @@ class SearchParameters:
     """
     Function to call whenever the design improves. Takes an integer as input indicating the number
     of times the design has improved.
-    """
-
-    time_between_saves: float = 1.0
-    """
-    Minimum number of seconds between saving intermediate files (report on constraint violations and DNA sequences)
-    whenever a new optimal sequence assignment is found. Set this to 0 to save every time
-    the design improves, but writing the files can take some time.
     """
 
     restart: bool = False
