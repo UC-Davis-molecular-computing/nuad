@@ -1357,6 +1357,7 @@ class DomainPool(JSONSerializable):
                 # each iteration of this loop tries one value of num_to_generate
                 bases = self._bases_to_use()
                 length = self.length
+                assert length is not None
 
                 # do floating-point arithmetic to avoid integer overflow with long sequences
                 import scipy.special
@@ -1386,8 +1387,6 @@ class DomainPool(JSONSerializable):
                         rng=rng,
                     )
                     generated_all_seqs = True
-                    # don't bother trying again with this distance on this previous_sequence; we still won't find any
-                    available_distances_list.remove(sampled_distance)
                 else:
                     # otherwise sample num_to_generate with replacement
                     seqs = nn.DNASeqList(
@@ -1410,22 +1409,25 @@ class DomainPool(JSONSerializable):
 
                 max_to_generate_before_moving_on = 10**6
 
+                if generated_all_seqs or num_to_generate >= max_to_generate_before_moving_on:
+                    # don't bother trying again with this distance on this previous_sequence;
+                    # we still won't find any if generated_all_seqs is True, and unlikely if
+                    # num_to_generate >= max_to_generate_before_moving_on wasn't enough to find one
+                    assert sampled_distance in available_distances_list
+                    available_distances_list.remove(sampled_distance)
+
                 if warn_no_seqs_found and generated_all_seqs:
                     logger.info(
-                        f"""
-We've generated all possible DNA sequences at Hamming distance {sampled_distance} 
-from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyFilters and SequenceFilters. Trying another distance."""
+                        f"\nGenerated all DNA sequences Hamming distance {sampled_distance} "
+                        f"from the previous sequence {previous_sequence} and not found one that passed the "
+                        f"NumpyFilters and SequenceFilters. Trying another distance."
                     )
-                    available_distances_list.remove(sampled_distance)
                 elif warn_no_seqs_found and num_to_generate >= max_to_generate_before_moving_on:
                     logger.info(
-                        f"""
-We've generated over {max_to_generate_before_moving_on} DNA sequences at Hamming distance {sampled_distance} 
-from the previous sequence {previous_sequence} and not found one that passed your 
-NumpyFilters and SequenceFilters. Trying another distance."""
+                        f"\nGenerated > {max_to_generate_before_moving_on} DNA sequences Hamming "
+                        f"distance {sampled_distance} from the previous sequence {previous_sequence} and not "
+                        f"found one that passed the NumpyFilters and SequenceFilters. Trying another distance."
                     )
-                    available_distances_list.remove(sampled_distance)
 
                 if sequence is None and (generated_all_seqs or num_to_generate >= max_to_generate_before_moving_on):
                     # found no sequences passing constraints at distance `sampled_distance`
@@ -5067,9 +5069,14 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
 def create_domain_pairs_with_dict(domain_pairs: Sequence[DomainPair]) -> dict[Domain, tuple[DomainPair, ...]]:
     domain_pairs_with_list: dict[Domain, list[DomainPair]] = {}
     for pair in domain_pairs:
+        # okay to use set instead of OrderedSet because we never iterate over the set
+        added_for: set[Domain] = set()  # avoid adding pair twice for self-pairs or shared subdomains
         for domain_in_pair in pair:
             domains_in_tree = domain_in_pair.all_domains_in_tree()
             for domain_in_tree in domains_in_tree:
+                if domain_in_tree in added_for:
+                    continue
+                added_for.add(domain_in_tree)
                 if domain_in_tree not in domain_pairs_with_list:
                     domain_pairs_with_list[domain_in_tree] = []
                 domain_pairs_with_list[domain_in_tree].append(pair)
@@ -6163,7 +6170,7 @@ def rna_duplex_domain_pairs_constraint(
         for _, energies_and_name_pairs in groups.items():
             energies, name_pairs = zip(*energies_and_name_pairs)
             excesses: list[float] = []
-            for energy, (name1, name2) in energies_and_name_pairs:
+            for energy, (_name1, _name2) in energies_and_name_pairs:
                 # if name1 is not None and name2 is not None:
                 #     logger.debug(
                 #         f"domain pair threshold: {threshold:6.2f} "
