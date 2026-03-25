@@ -231,14 +231,14 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
         while not _done(iteration, params, eval_set):
             # if (iteration + 1) % 5000 == 0:
-            current_time = time.perf_counter()
-            time_since_last_write = current_time - time_last_wrote_intermediate_files
-            time_until_sim_restart = 5.0
-            if time_since_last_write > time_until_sim_restart:
-                print(f"\nre-evaluating all constraints since it's been {time_until_sim_restart}s since an improvement")
-                # TODO: this is a hack until I deal with this bug:
-                # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
-                eval_set.evaluate_all(design, params)
+            # current_time = time.perf_counter()
+            # time_since_last_write = current_time - time_last_wrote_intermediate_files
+            # time_until_sim_restart = 5.0
+            # if time_since_last_write > time_until_sim_restart:
+            #     print(f"\nre-evaluating all constraints since it's been {time_until_sim_restart}s since an improvement")
+            #     # TODO: this is a hack until I deal with this bug:
+            #     # https://github.com/UC-Davis-molecular-computing/nuad/issues/275
+            #     eval_set.evaluate_all(design, params)
 
             if params.log_time:
                 stopwatch.stop()
