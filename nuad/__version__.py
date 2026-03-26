@@ -1,1 +1,1 @@
-version = '0.4.11'  # version line; WARNING: do not remove or change this line or comment
+version = "0.5.0"  # version line; WARNING: do not remove or change this line or comment

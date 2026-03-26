@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pre-commit:*)",
+      "Bash(black:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cp:*)",
+      "Bash(ruff format:*)",
+      "Bash(pip install:*)",
+      "WebFetch(domain:docs.astral.sh)",
+      "Bash(python test:*)",
+      "?"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

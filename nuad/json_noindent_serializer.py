@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Union, Dict, Any
+from typing import Any, Dict, Union
 
 
 class NoIndent:
@@ -33,7 +33,7 @@ class SuppressableIndentEncoder(json.JSONEncoder):
         self.unique_id = 0
         super().__init__(*args, **kwargs)  # type: ignore
         self.kwargs = dict(kwargs)
-        del self.kwargs['indent']
+        del self.kwargs["indent"]
         self._replacement_map: dict = {}
 
     def default(self, obj: Any) -> Any:

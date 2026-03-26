@@ -1,4 +1,5 @@
 numpy
+scipy
 psutil
 ordered_set
 pathos
@@ -8,4 +9,4 @@ matplotlib
 openpyxl
 viennarna
 scadnano
-typing_extensions; python_version < "3.8"
+tqdm

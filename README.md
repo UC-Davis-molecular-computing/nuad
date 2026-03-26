@@ -21,7 +21,7 @@ Note: If you are reading this on the PyPI website, many links below won't work. 
 
 ## Overview
 
-nuad stands for "NUcleic Acid Designer".† It is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to [NUPACK](http://www.nupack.org/)*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the [nearest-neighbor energy model](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method)*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The nuad library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
+nuad stands for "**NU**cleic **A**cid **D**esigner".† It is a Python library that enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA (for example, "*all strands should have complex free energy at least -2.0 kcal/mol according to [NUPACK](http://www.nupack.org/)*", or "*every binding domain should have binding energy with its perfect complement between -8.0 kcal/mol and -9.0 kcal/mol in the [nearest-neighbor energy model](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method)*"), and then attempts to find concrete DNA sequences that satisfy the constraints. It is not a standalone program, unlike other DNA sequence designers such as [NUPACK](http://www.nupack.org/design/new). Instead, it attempts to be more expressive than existing DNA sequence designers, at the cost of being less simple to use. The nuad library helps you to write your own DNA sequence designer, in case existing designers cannot capture the particular constraints of your project.
 
 Note: The nuad package was originally called dsd (DNA sequence designer), so you may see some old references to this name for the package.
 
@@ -33,15 +33,13 @@ The API documentation is on readthedocs: https://nuad.readthedocs.io/
 
 
 ## Installation
-nuad requires Python version 3.7 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on two pieces of software that are not installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). 
-
-nuad uses [NUPACK](http://www.nupack.org/downloads) and [ViennaRNA](https://www.tbi.univie.ac.at/RNA/#download), which must be installed separately (see below for link to installation instructions). While it is technically possible to use nuad without them, most of the pre-packaged constraints require them.
+nuad requires Python version 3.9 or higher. Currently, although it can be installed using pip by typing `pip install nuad`, it depends on [NUPACK](http://www.nupack.org/downloads), which cannot be installed automatically by pip (see [issue #12](https://github.com/UC-Davis-molecular-computing/nuad/issues/12)). While it is technically possible to use nuad without NUPACK, many of the pre-packaged constraints require NUPACK to be installed.
 
 To use NUPACK on Windows, you must use [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/install), which essentially installs a command-line-only Linux inside of your Windows system, which has access to your Windows file system. If you are using Windows, you can then run python code calling the nuad library from WSL (which will appear to the Python virtual machine as though it is running on Linux). WSL is necessary to use any of the constraints that use NUPACK 4.
 
 ### Installing nuad
 
-To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK and ViennaRNA separately (see [instructions below](#installing-nupack-and-viennarna)).
+To install nuad, you can either install it using pip (the slightly simpler option) or git. No matter which method you choose, you must also install NUPACK separately (see [instructions below](#installing-nupack)).
 
 - pip
   
@@ -67,7 +65,7 @@ To install nuad, you can either install it using pip (the slightly simpler optio
 
         and then unzip somewhere on your file system.
 
-  2. Install the Python package by changing to the directory where the nuad repository is stored localled and type `pip install -e .` This should install the needed dependencies.
+  2. Install the Python package by changing to the directory where the nuad repository is stored localled and type `pip install -e .` This should install the needed dependencies. An advantage of this approach is that, if there are features available on some branch of the github repo (typically the [dev branch](https://github.com/UC-Davis-molecular-computing/nuad/tree/dev)) that are not yet available in the latest version of nuad, you can check out the branch via `git checkout dev`, and those new features will be available.
 
 If step 2 above does not work, try the following:
 
@@ -107,7 +105,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>>
 ```
 
-To test that NUPACK and ViennaRNA can each be called from within the Python library (note that if you do not install NUPACK and/or ViennaRNA, then this will fail):
+To test that NUPACK can be called from within the Python library (note that if you do not install NUPACK, then this will fail):
 
 ```python
 >>> import nuad.vienna_nupack as nv
@@ -152,12 +150,11 @@ In more detail, there are five main types of objects you create to describe your
 
             - `StrandPairConstraint`: This evaluates a pair of `Strand`'s.
 
-            - `ComplexConstraint`: This evaluates a tuple of `Strand`'s of arbitrary size.
+            - `ComplexConstraint`: This evaluates a tuple of `Strand`'s of arbitrary size. If for some reason one wanted to write a constraint that depended on every single strand in the design, one coudl make a "`Complex`" consisting of `design.strands` and then write a `ComplexConstraint` that evaluates that `Complex`. But this should be rare in practice.
 
         - `BulkConstraint`: The subclasses of `SingularConstraint` discussed above each evaluate a single part of the design at a time. The classes `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`, `ComplexesConstraint` are subclasses of `BulkConstraint`. The difference is that some checks may be faster to do in batch or parallel than one at a time. For instance, RNAduplex, an executable included with ViennaRNA, can examine many pairs of sequences, and it is much faster to give it all pairs at once in a single call to RNAduplex, than to repeatedly call RNAduplex from a Python loop, once for each pair. 
 
-        - `DesignConstraint`: This is rarely used in practice, but it can be used to express any constraint not captured by one of the constraints already listed. It takes the entire design as input.
-
+        
     The `SingularConstraint` subclasses `DomainsConstraint`, `StrandsConstraint`, `DomainPairsConstraint`, `StrandPairsConstraint`, and `ComplexConstraint` each are given a function `evaluate`, which takes as input the relevant part of the design (e.g., a `StrandPairConstraint` takes as input two `Strand`'s; technically the input is a bit more complex; see [Parallelism](#parallelism) below for details.). `evaluate` returns a pair `(excess, summary)`, where `excess` is floating-point value and `summary` is a string.
     
     The interpretation of `excess` is as follows: if the constraint is satisfied, `excess` should be 0.0. If the constraint is violated, `excess` should be a positive number indicating "how much" the constraint is violated. The pre-packaged constraints are mostly of the form "*compare some numeric value returned by NUPACK or ViennaRNA to a fixed threshold, and return the difference*". For example, with a threshold of -1.6 kcal/mol (i.e., we want all strands to have complex free energy greater than or equal to -1.6 kcal/mol), if a `Strand` has complex free energy of -2.9 kcal/mol according to NUPACK's pfunc, then the `excess` will be 1.3 = -1.6 - (-2.9), since the actual energy is 1.3 beyond the threshold. If the actual energy is -1.2 instead of -2.9, then it will return 0.0, since it is on the "good" side of the threshold. (The nuad sequence design algorithm actually converts all negative values to 0.0, so one could simply return the value `threshold - energy`.)
