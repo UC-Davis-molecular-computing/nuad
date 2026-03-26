@@ -1383,7 +1383,7 @@ class DomainPool(JSONSerializable):
                             previous_sequence,
                         ),
                         alphabet=bases,
-                        shuffle=True,
+                        shuffle=False,
                         rng=rng,
                     )
                     generated_all_seqs = True
@@ -1395,7 +1395,7 @@ class DomainPool(JSONSerializable):
                             previous_sequence,
                         ),
                         alphabet=bases,
-                        shuffle=True,
+                        shuffle=False,
                         num_random_seqs=num_to_generate,
                         rng=rng,
                     )
@@ -1403,9 +1403,9 @@ class DomainPool(JSONSerializable):
 
                 seqs_satisfying_numpy_filters = self._apply_numpy_filters(seqs)
                 self._log_numpy_generation(length, num_to_generate, len(seqs_satisfying_numpy_filters))
-                sequence = self._first_sequence_satisfying_sequence_filters(seqs_satisfying_numpy_filters)
-                if sequence is not None:
-                    return sequence
+                sequences = self._apply_sequence_filters_and_convert_to_list(seqs_satisfying_numpy_filters)
+                if len(sequences) > 0:
+                    return rng.choice(sequences)
 
                 max_to_generate_before_moving_on = 10**6
 
@@ -1437,8 +1437,7 @@ class DomainPool(JSONSerializable):
 
                 num_to_generate *= 2
 
-        # mypy actually flags the next line as unreachable
-        # raise AssertionError('should be unreachable')
+        raise AssertionError("should be unreachable")
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         num_to_generate = 100
