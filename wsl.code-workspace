@@ -1,0 +1,23 @@
+{
+    "folders": [
+        {
+            "name": "seq_design",
+            "path": "."
+        },
+        {
+            "name": "nuad",
+            "path": "/mnt/c/Dropbox/git/nuad"
+        },
+        {
+            "name": "scadnano",
+            "path": "/mnt/c/Dropbox/git/scadnano-python-package"
+        }
+    ],
+    "settings": {
+        "python.defaultInterpreterPath": "/home/ddoty/programs/anaconda3/bin/python",
+        "python.analysis.extraPaths": [
+            "/mnt/c/Dropbox/git/nuad",
+            "/mnt/c/Dropbox/git/scadnano-python-package",
+        ]
+    }
+}

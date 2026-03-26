@@ -1401,10 +1401,26 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
             f"{filenames}"
         )
 
-    max_index_str = pattern.search(filenames_matching[0]).group(1)
+    match = pattern.search(filenames_matching[0])
+    if match is None:
+        raise ValueError(
+            f'no files in directory "{directory}" '
+            f'match the pattern "{filename_start}-<index>.{ext}";\n'
+            f"files:\n"
+            f"{filenames}"
+        )
+    max_index_str = match.group(1)
     max_index = int(max_index_str)
     for filename in filenames_matching:
-        index_str = pattern.search(filename).group(1)
+        match = pattern.search(filename)
+        if match is None:
+            raise ValueError(
+                f'no files in directory "{directory}" '
+                f'match the pattern "{filename_start}-<index>.{ext}";\n'
+                f"files:\n"
+                f"{filenames}"
+            )
+        index_str = match.group(1)
         index = int(index_str)
         if max_index < index:
             max_index = index

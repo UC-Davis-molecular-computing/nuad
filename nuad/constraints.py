@@ -3417,6 +3417,7 @@ class Design(JSONSerializable):
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
         self.domains_by_name = {}
+        self.check_all_subdomain_graphs_acyclic()
         if len(self.strands) > 0:
             for strand in self.strands:
                 for domain_in_strand in strand.domains:
@@ -3426,7 +3427,6 @@ class Design(JSONSerializable):
                         if name not in self.domains_by_name:
                             self.domains_by_name[name] = domain_in_tree
 
-        self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
 

@@ -1,12 +1,11 @@
 import os
-import unittest
 from typing import Dict, List
 
 import numpy
 import openpyxl
+import pytest
 import scadnano as sc
 
-from collections import defaultdict
 
 import nuad.constraints as nc
 import nuad.search as ns
@@ -23,7 +22,7 @@ from nuad.constraints import (
     _get_base_pair_domain_endpoints_to_check,
     _get_implicitly_bound_domain_addresses,
 )
-from nuad.search import Evaluation, EvaluationSet
+from nuad.search import Evaluation
 
 _domain_pools: Dict[int, DomainPool] = {}
 
@@ -70,7 +69,7 @@ def construct_strand(design: Design, domain_names: List[str], domain_lengths: Li
     return s
 
 
-class TestIntersectingDomains(unittest.TestCase):
+class TestIntersectingDomains:
     def test_strand_intersecting_domains(self) -> None:
         """
         Test strand construction with nested subdomains
@@ -97,56 +96,56 @@ class TestIntersectingDomains(unittest.TestCase):
 
         # make strands with different concatenations of domains above that cover the whole tree
         s1 = Strand(domains=[a], starred_domain_indices=[])
-        self.assertEqual(1, len(s1.domains))
-        self.assertEqual(a, s1.domains[0])
+        assert len(s1.domains) == 1
+        assert s1.domains[0] == a
 
         s2 = Strand(domains=[b, C], starred_domain_indices=[])
-        self.assertEqual(2, len(s2.domains))
-        self.assertEqual(b, s2.domains[0])
-        self.assertEqual(C, s2.domains[1])
+        assert len(s2.domains) == 2
+        assert s2.domains[0] == b
+        assert s2.domains[1] == C
 
         s3 = Strand(domains=[E, F, g, h], starred_domain_indices=[])
-        self.assertEqual(4, len(s3.domains))
-        self.assertEqual(E, s3.domains[0])
-        self.assertEqual(F, s3.domains[1])
-        self.assertEqual(g, s3.domains[2])
-        self.assertEqual(h, s3.domains[3])
+        assert len(s3.domains) == 4
+        assert s3.domains[0] == E
+        assert s3.domains[1] == F
+        assert s3.domains[2] == g
+        assert s3.domains[3] == h
 
         s4 = Strand(domains=[E, F, C], starred_domain_indices=[])
-        self.assertEqual(3, len(s4.domains))
-        self.assertEqual(E, s4.domains[0])
-        self.assertEqual(F, s4.domains[1])
-        self.assertEqual(C, s4.domains[2])
+        assert len(s4.domains) == 3
+        assert s4.domains[0] == E
+        assert s4.domains[1] == F
+        assert s4.domains[2] == C
 
         for s in [s1, s2, s3, s4]:
             for domain in all_domains:
-                self.assertTrue(s.intersects_domain(domain))
+                assert s.intersects_domain(domain)
 
         # these strands do not hit every domain
         s5 = Strand(domains=[b, g], starred_domain_indices=[])
-        self.assertEqual(2, len(s5.domains))
-        self.assertEqual(b, s5.domains[0])
-        self.assertEqual(g, s5.domains[1])
+        assert len(s5.domains) == 2
+        assert s5.domains[0] == b
+        assert s5.domains[1] == g
 
         for domain in [a, b, C, E, F, g]:
-            self.assertTrue(s.intersects_domain(domain))
-        self.assertFalse(s5.intersects_domain(h))
+            assert s.intersects_domain(domain)
+        assert not s5.intersects_domain(h)
 
         s6 = Strand(domains=[b], starred_domain_indices=[])
-        self.assertEqual(1, len(s6.domains))
-        self.assertEqual(b, s5.domains[0])
+        assert len(s6.domains) == 1
+        assert s5.domains[0] == b
 
         for domain in [a, b, E, F]:
-            self.assertTrue(s6.intersects_domain(domain))
+            assert s6.intersects_domain(domain)
         for domain in [C, g, h]:
-            self.assertFalse(s6.intersects_domain(domain))
+            assert not s6.intersects_domain(domain)
 
 
-class TestSampleSubstrings(unittest.TestCase):
+class TestSampleSubstrings:
     def test_substrings(self) -> None:
         sampler = nc.SubstringSampler(supersequence="abcdefghij", substring_length=4, except_start_indices=[2, 3, 5])
-        self.assertEqual("abcdefghij", sampler.extended_supersequence)
-        self.assertEqual((0, 1, 4, 6), sampler.start_indices)
+        assert sampler.extended_supersequence == "abcdefghij"
+        assert sampler.start_indices == (0, 1, 4, 6)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -161,14 +160,14 @@ class TestSampleSubstrings(unittest.TestCase):
         #  bcde
         #     efgh
         #       ghij
-        self.assertEqual(["abcd", "bcde", "efgh", "ghij"], substrings)
+        assert substrings == ["abcd", "bcde", "efgh", "ghij"]
 
     def test_substrings_circular(self) -> None:
         sampler_circular = nc.SubstringSampler(
             supersequence="abcdefghij", substring_length=4, except_start_indices=[1, 3, 5], circular=True
         )
-        self.assertEqual("abcdefghijabc", sampler_circular.extended_supersequence)
-        self.assertEqual((0, 2, 4, 6, 7, 8, 9), sampler_circular.start_indices)
+        assert sampler_circular.extended_supersequence == "abcdefghijabc"
+        assert sampler_circular.start_indices == (0, 2, 4, 6, 7, 8, 9)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -186,14 +185,14 @@ class TestSampleSubstrings(unittest.TestCase):
         #        hija
         #         ijab
         #          jabc
-        self.assertEqual(["abcd", "cdef", "efgh", "ghij", "hija", "ijab", "jabc"], substrings)
+        assert substrings == ["abcd", "cdef", "efgh", "ghij", "hija", "ijab", "jabc"]
 
     def test_substrings_circular_except_overlapping_indices(self) -> None:
         sampler = nc.SubstringSampler(
             supersequence="abcdefghij", substring_length=3, except_overlapping_indices=[2, 7], circular=True
         )
-        self.assertEqual("abcdefghijab", sampler.extended_supersequence)
-        self.assertEqual((3, 4, 8, 9), sampler.start_indices)
+        assert sampler.extended_supersequence == "abcdefghijab"
+        assert sampler.start_indices == (3, 4, 8, 9)
 
         # sample lots of substrings to ensure we get them all
         rng = numpy.random.default_rng(1)
@@ -208,11 +207,11 @@ class TestSampleSubstrings(unittest.TestCase):
         #     efg
         #         ija
         #          jab
-        self.assertEqual(["def", "efg", "ija", "jab"], substrings)
+        assert substrings == ["def", "efg", "ija", "jab"]
 
 
-class TestModifyDesignAfterCreated(unittest.TestCase):
-    def setUp(self) -> None:
+class TestModifyDesignAfterCreated:
+    def setup_method(self) -> None:
         self.design = nc.Design()
         self.design.add_strand(domain_names=["x", "y"])
 
@@ -225,12 +224,12 @@ class TestModifyDesignAfterCreated(unittest.TestCase):
     def test_add_domain(self) -> None:
         strand = self.add_domain()
 
-        self.assertEqual(3, len(self.design.domains))
+        assert len(self.design.domains) == 3
 
         actual_domain_names = sorted([d.name for d in self.design.domains])
-        self.assertEqual(["x", "y", "z"], actual_domain_names)
+        assert actual_domain_names == ["x", "y", "z"]
 
-        self.assertEqual("x-y-z", strand.name)
+        assert strand.name == "x-y-z"
 
     def test_add_domain_assign_sequence(self):
         strand = self.add_domain()
@@ -246,7 +245,7 @@ class TestModifyDesignAfterCreated(unittest.TestCase):
         s2 = strand.domains[2].sequence  # noqa
 
 
-class TestFromScadnanoDesign(unittest.TestCase):
+class TestFromScadnanoDesign:
     def test_two_instances_of_domain(self) -> None:
         """
             x           x
@@ -275,16 +274,16 @@ class TestFromScadnanoDesign(unittest.TestCase):
         dsd_d10 = dsd_design.strands[1].domains[0]
         dsd_d11 = dsd_design.strands[1].domains[1]
 
-        self.assertEqual("x", dsd_d00.name)
-        self.assertEqual("y", dsd_d01.name)
-        self.assertEqual("x", dsd_d10.name)
-        self.assertEqual("y", dsd_d11.name)
+        assert dsd_d00.name == "x"
+        assert dsd_d01.name == "y"
+        assert dsd_d10.name == "x"
+        assert dsd_d11.name == "y"
 
-        self.assertIs(dsd_d00, dsd_d10)
-        self.assertIs(dsd_d01, dsd_d11)
+        assert dsd_d00 is dsd_d10
+        assert dsd_d01 is dsd_d11
 
 
-class TestExportDNASequences(unittest.TestCase):
+class TestExportDNASequences:
     def test_idt_bulk_export(self) -> None:
         custom_idt = nc.VendorFields(scale="100nm", purification="PAGE")
         design = nc.Design()
@@ -302,15 +301,15 @@ class TestExportDNASequences(unittest.TestCase):
         for i, line in enumerate(idt_bulk_input.splitlines()):
             name, seq, scale, pur = line.split(",")
             if i == 0:
-                self.assertEqual("s0", name)
-                self.assertEqual("AACGACGGGGTAGTAA", seq)
-                self.assertEqual("100nm", scale)
-                self.assertEqual("PAGE", pur)
+                assert name == "s0"
+                assert seq == "AACGACGGGGTAGTAA"
+                assert scale == "100nm"
+                assert pur == "PAGE"
             elif i == 1:
-                self.assertEqual("s1", name)
-                self.assertEqual("TTACTACCAAAACCCCAAAAGGGG", seq)
-                self.assertEqual("25nm", scale)
-                self.assertEqual("STD", pur)
+                assert name == "s1"
+                assert seq == "TTACTACCAAAACCCCAAAAGGGG"
+                assert scale == "25nm"
+                assert pur == "STD"
 
     def test_write_idt_plate_excel_file(self) -> None:
         strand_len = 10
@@ -328,10 +327,10 @@ class TestExportDNASequences(unittest.TestCase):
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
 
             book = openpyxl.load_workbook(filename=filename)
-            self.assertEqual(4, len(book.worksheets))
+            assert len(book.worksheets) == 4
             for plate in range(4):
                 sheet = book.worksheets[plate]
-                self.assertEqual(3, sheet.max_column)
+                assert sheet.max_column == 3
 
                 if plate == 2:  # penultimate plate
                     expected_wells = plate_type.num_wells_per_plate() - plate_type.min_wells_per_plate() + 10
@@ -340,19 +339,19 @@ class TestExportDNASequences(unittest.TestCase):
                 else:
                     expected_wells = plate_type.num_wells_per_plate()
 
-                self.assertEqual(expected_wells + 1, sheet.max_row)
+                assert sheet.max_row == expected_wells + 1
 
             os.remove(filename)
 
 
-class TestNumpyFilters(unittest.TestCase):
+class TestNumpyFilters:
     def test_NearestNeighborEnergyFilter_raises_exception_if_energies_in_wrong_order(self) -> None:
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             nc.NearestNeighborEnergyFilter(-10, -15)
 
 
-class TestInsertDomains(unittest.TestCase):
-    def setUp(self) -> None:
+class TestInsertDomains:
+    def setup_method(self) -> None:
         self.design = Design()
         self.design.add_strand(domain_names=["a", "b*", "c", "d*"])
         self.strand = self.design.strands[0]
@@ -360,46 +359,46 @@ class TestInsertDomains(unittest.TestCase):
     def test_no_insertion(self) -> None:
         # 0 1  2 3
         # a-b*-c-d*
-        self.assertEqual({1, 3}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {1, 3}
 
     def test_append_domain_unstarred(self) -> None:
         # 0 1  2 3  4
         # a-b*-c-d*-e
         self.strand.append_domain(Domain("e"))
-        self.assertEqual({1, 3}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {1, 3}
 
     def test_append_domain_starred(self) -> None:
         # 0 1  2 3  4
         # a-b*-c-d*-e*
         self.strand.append_domain(Domain("e"), starred=True)
-        self.assertEqual({1, 3, 4}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {1, 3, 4}
 
     def test_prepend_domain_unstarred(self) -> None:
         # 0 1 2  3  4
         # e-a-b*-c-d*
         self.strand.prepend_domain(Domain("e"))
-        self.assertEqual({2, 4}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {2, 4}
 
     def test_prepend_domain_starred(self) -> None:
         # 0  1 2  3  4
         # e*-a-b*-c-d*
         self.strand.prepend_domain(Domain("e"), starred=True)
-        self.assertEqual({0, 2, 4}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {0, 2, 4}
 
     def test_insert_idx_2_domain_unstarred(self) -> None:
         # 0 1  2 3 4
         # a-b*-e-c-d*
         self.strand.insert_domain(2, Domain("e"))
-        self.assertEqual({1, 4}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {1, 4}
 
     def test_insert_idx_2_domain_starred(self) -> None:
         # 0 1  2  3 4
         # a-b*-e*-c-d*
         self.strand.insert_domain(2, Domain("e"), starred=True)
-        self.assertEqual({1, 2, 4}, self.strand.starred_domain_indices)
+        assert self.strand.starred_domain_indices == {1, 2, 4}
 
 
-class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
+class TestExteriorBaseTypeOfDomain3PEnd:
     def test_adjacent_to_exterior_base_pair_on_length_2_domain(self) -> None:
         """Test that base pair on domain of length two is properly classified as
         ADJACENT_TO_EXTERIOR_BASE_PAIR
@@ -423,12 +422,12 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
 
         all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
-        self.assertEqual(
-            _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses),
-            BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR,
+        assert (
+            _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses)
+            == BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
         )
 
-    @unittest.skip("MISMATCH detection has not been implemented")
+    @pytest.mark.skip("MISMATCH detection has not been implemented")
     def test_mismatch(self):
         """Test MISMATCH is properly classified
 
@@ -447,9 +446,9 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
 
         all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
-        self.assertEqual(_exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses), BasePairType.MISMATCH)
+        assert _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses) == BasePairType.MISMATCH
 
-    @unittest.skip("BULGE_LOOP_3P detection has not been implemented")
+    @pytest.mark.skip("BULGE_LOOP_3P detection has not been implemented")
     def test_bulge_loop_3p(self):
         """Test BULGE_LOOP_3P is properly classified
 
@@ -468,11 +467,9 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
 
         top_a = top_strand.address_of_domain(0)
 
-        self.assertEqual(
-            _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses), BasePairType.BULGE_LOOP_3P
-        )
+        assert _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses) == BasePairType.BULGE_LOOP_3P
 
-    @unittest.skip("BULGE_LOOP_5P detection has not been implemented")
+    @pytest.mark.skip("BULGE_LOOP_5P detection has not been implemented")
     def test_bulge_loop_5p(self):
         """Test BULGE_LOOP_5P is properly classified
 
@@ -491,12 +488,10 @@ class TestExteriorBaseTypeOfDomain3PEnd(unittest.TestCase):
 
         top_a = top_strand.address_of_domain(0)
 
-        self.assertEqual(
-            _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses), BasePairType.BULGE_LOOP_5P
-        )
+        assert _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses) == BasePairType.BULGE_LOOP_5P
 
 
-class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
+class TestGetBasePairDomainEndpointsToCheck:
     def test_seesaw_input_gate_complex(self):
         """Test endpoints for seesaw gate input:gate complex
 
@@ -570,7 +565,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(input_gate_complex, nonimplicit_base_pairs)
-        self.assertEqual(expected, actual)
+        assert actual == expected
 
     def test_seesaw_gate_output_complex(self):
         """Test endpoints for seesaw gate gate:output complex
@@ -639,7 +634,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(gate_output_complex, nonimplicit_base_pairs)
-        self.assertEqual(actual, expected)
+        assert actual == expected
 
     def test_seesaw_threshold_complex(self):
         """Test endpoints for seesaw threshold complex
@@ -690,7 +685,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(threshold_complex)
-        self.assertEqual(actual, expected)
+        assert actual == expected
 
     def test_seesaw_threshold_waste_complex(self):
         """Test endpoints for seesaw threshold waste complex
@@ -764,7 +759,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(threshold_waste_complex)
-        self.assertEqual(actual, expected)
+        assert actual == expected
 
     def test_seesaw_reporter_complex(self):
         """Test endpoints for seesaw reporter complex
@@ -815,7 +810,7 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(reporter_complex)
-        self.assertEqual(actual, expected)
+        assert actual == expected
 
     def test_seesaw_reporter_waste_complex(self):
         """Test endpoints for seesaw reporter waste complex
@@ -874,38 +869,38 @@ class TestGetBasePairDomainEndpointsToCheck(unittest.TestCase):
         )
 
         actual = _get_base_pair_domain_endpoints_to_check(reporter_waste_complex)
-        self.assertEqual(actual, expected)
+        assert actual == expected
 
 
-class TestStrandDomainAddress(unittest.TestCase):
-    def setUp(self):
+class TestStrandDomainAddress:
+    def setup_method(self):
         design = Design()
         self.strand = construct_strand(design, ["a", "b", "c"], [10, 20, 30])
         self.addr = StrandDomainAddress(self.strand, 1)
 
     def test_init(self):
-        self.assertEqual(self.addr.strand, self.strand)
-        self.assertEqual(self.addr.domain_idx, 1)
+        assert self.addr.strand == self.strand
+        assert self.addr.domain_idx == 1
 
     def test_neighbor_5p(self):
-        self.assertEqual(self.addr.neighbor_5p(), StrandDomainAddress(self.strand, 0))
+        assert self.addr.neighbor_5p() == StrandDomainAddress(self.strand, 0)
 
     def test_neighbor_5p_none(self):
         addr = StrandDomainAddress(self.strand, 0)
-        self.assertEqual(addr.neighbor_5p(), None)
+        assert addr.neighbor_5p() is None
 
     def test_neighbor_3p(self):
-        self.assertEqual(self.addr.neighbor_3p(), StrandDomainAddress(self.strand, 2))
+        assert self.addr.neighbor_3p() == StrandDomainAddress(self.strand, 2)
 
     def test_neighbor_3p_none(self):
         addr = StrandDomainAddress(self.strand, 2)
-        self.assertEqual(addr.neighbor_3p(), None)
+        assert addr.neighbor_3p() is None
 
     def test_domain(self):
-        self.assertEqual(self.addr.domain(), self.strand.domains[1])
+        assert self.addr.domain() == self.strand.domains[1]
 
 
-class TestSubdomains(unittest.TestCase):
+class TestSubdomains:
     def test_init(self):
         """
         Test constructing a domain with subdomains
@@ -924,14 +919,14 @@ class TestSubdomains(unittest.TestCase):
         e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
 
         a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, c, d, e])
-        self.assertListEqual([b, c, d, e], a.subdomains)
-        self.assertEqual(a, b.parent)
-        self.assertEqual(a, c.parent)
-        self.assertEqual(a, d.parent)
-        self.assertEqual(a, e.parent)
+        assert a.subdomains == [b, c, d, e]
+        assert b.parent == a
+        assert c.parent == a
+        assert d.parent == a
+        assert e.parent == a
 
-    def test_construct_fixed_domain_with_fixed_subdomains(self):
-        """
+    def test_construct_fixed_domain_with_subdomains_should_raise_error(self):
+        r"""
         Test constructing a fixed domain with fixed subdomains
 
         .. code-block:: none
@@ -943,11 +938,11 @@ class TestSubdomains(unittest.TestCase):
         b = Domain("b", assign_domain_pool_of_length(5), fixed=True)
         c = Domain("c", assign_domain_pool_of_length(4), fixed=True)
 
-        a = Domain("a", assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
-        self.assertTrue(a.fixed)
+        with pytest.raises(ValueError):
+            _a = Domain("a", assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
 
     def test_construct_unfixed_domain_with_unfixed_subdomain(self):
-        """
+        r"""
         Test constructing an unfixed domain with a unfixed subdomain should
         set domain's fixed to False.
 
@@ -961,10 +956,10 @@ class TestSubdomains(unittest.TestCase):
         c = Domain("c", assign_domain_pool_of_length(4), fixed=True)
 
         a = Domain("a", assign_domain_pool_of_length(9), subdomains=[b, c], fixed=False)
-        self.assertFalse(a.fixed)
+        assert not a.fixed
 
     def test_error_construct_fixed_domain_with_unfixed_subdomain(self):
-        """
+        r"""
         Test that constructing a fixed domain with a unfixed subdomain should
         raise ValueError.
 
@@ -977,10 +972,11 @@ class TestSubdomains(unittest.TestCase):
         b = Domain("b", assign_domain_pool_of_length(5), fixed=False)
         c = Domain("c", assign_domain_pool_of_length(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, "a", assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
+        with pytest.raises(ValueError):
+            Domain("a", assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
-        """
+        r"""
         Test that constructing a domain by setting fixed to False when all subdomains
         are fixed should raise ValueError
 
@@ -993,10 +989,11 @@ class TestSubdomains(unittest.TestCase):
         b = Domain("b", assign_domain_pool_of_length(5), fixed=True)
         c = Domain("c", assign_domain_pool_of_length(4), fixed=True)
 
-        self.assertRaises(ValueError, Domain, "a", assign_domain_pool_of_length(9), fixed=False, subdomains=[b, c])
+        with pytest.raises(ValueError):
+            Domain("a", assign_domain_pool_of_length(9), fixed=False, subdomains=[b, c])
 
     def test_construct_strand(self):
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -1019,10 +1016,10 @@ class TestSubdomains(unittest.TestCase):
 
         # Test that constructor runs without errors
         strand = Strand(domains=[a], starred_domain_indices=[])
-        self.assertEqual(strand.domains[0], a)
+        assert strand.domains[0] == a
 
     def test_error_strand_with_unassignable_subsequence(self):
-        """
+        r"""
         Test that constructing a strand with an unassignable subsequence raises
         a ValueError.
 
@@ -1049,10 +1046,11 @@ class TestSubdomains(unittest.TestCase):
 
         strand = Strand(domains=[a], starred_domain_indices=[])
 
-        self.assertRaises(ValueError, Design, strands=[strand])
+        with pytest.raises(ValueError):
+            Design(strands=[strand])
 
     def test_error_strand_with_redundant_independence(self):
-        """
+        r"""
         Test that constructing a strand with an redundant indepndence in subdomain
         graph raises a ValueError.
 
@@ -1078,12 +1076,13 @@ class TestSubdomains(unittest.TestCase):
 
         strand = Strand(domains=[a], starred_domain_indices=[])
 
-        self.assertRaises(ValueError, Design, strands=[strand])
+        with pytest.raises(ValueError):
+            Design(strands=[strand])
 
     def test_error_cycle(self):
         """
         Test that constructing a domain with a cycle in its subdomain graph
-        rasies a ValueError.
+        raises a ValueError.
 
         This isn't checked when instantiating objects, but when first calling search_for_dna_sequences,
         which calls Design.check_subdomain_graphs().
@@ -1101,10 +1100,11 @@ class TestSubdomains(unittest.TestCase):
         a.subdomains = [b]
         strand = Strand(domains=[a], starred_domain_indices=[])
 
-        self.assertRaises(ValueError, Design, strands=[strand])
+        with pytest.raises(ValueError):
+            _design = Design(strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
-        """Returns domains with the following subdomain hierarchy:
+        r"""Returns domains with the following subdomain hierarchy:
 
         .. code-block:: none
 
@@ -1129,7 +1129,7 @@ class TestSubdomains(unittest.TestCase):
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
 
     def test_assign_dna_sequence_to_parent(self):
-        """
+        r"""
         Test assigning dna sequence to parent (a) and propagating it downwards
 
         .. code-block:: none
@@ -1144,13 +1144,15 @@ class TestSubdomains(unittest.TestCase):
         sequence = "CATAGCTTTCTTGTTCTGATCGGAAC"
         a = domains["a"]
         a.set_sequence(sequence)
-        self.assertEqual(sequence, a.sequence())
-        self.assertEqual(sequence[0:11], domains["b"].sequence())
-        self.assertEqual(sequence[11:], domains["C"].sequence())
-        self.assertEqual(sequence[0:5], domains["E"].sequence())
-        self.assertEqual(sequence[5:11], domains["F"].sequence())
-        self.assertEqual(sequence[11:18], domains["g"].sequence())
-        self.assertEqual(sequence[18:], domains["h"].sequence())
+        assert a.sequence() == sequence
+        assert domains["b"].sequence() == sequence[0:11]
+        assert domains["C"].sequence() == sequence[11:]
+        assert domains["E"].sequence() == sequence[0:5]
+        assert domains["F"].sequence() == sequence[5:11]
+        g_domain = domains["g"]
+        assert g_domain.sequence() == sequence[11:18]
+        assert domains["g"].sequence() == sequence[11:18]
+        assert domains["h"].sequence() == sequence[18:]
 
     def test_assign_dna_sequence_to_leaf(self):
         """
@@ -1169,9 +1171,9 @@ class TestSubdomains(unittest.TestCase):
         F = domains["F"]
         E.set_sequence("CATAG")
         F.set_sequence("CTTTCC")
-        self.assertEqual("CATAG", E.sequence())
-        self.assertEqual("CTTTCC", F.sequence())
-        self.assertEqual("CATAGCTTTCC", domains["b"].sequence())
+        assert E.sequence() == "CATAG"
+        assert F.sequence() == "CTTTCC"
+        assert domains["b"].sequence() == "CATAGCTTTCC"
 
     def test_assign_dna_sequence_mixed(self):
         """
@@ -1194,33 +1196,33 @@ class TestSubdomains(unittest.TestCase):
         C.set_sequence("TGTTCTGATCGGAAC")
 
         # Assert initial assignment is correct
-        self.assertEqual("CATAGCTTTCTTGTTCTGATCGGAAC", domains["a"].sequence())
-        self.assertEqual("CATAGCTTTCT", domains["b"].sequence())
-        self.assertEqual("TGTTCTGATCGGAAC", domains["C"].sequence())
-        self.assertEqual("CATAG", domains["E"].sequence())
-        self.assertEqual("CTTTCT", domains["F"].sequence())
-        self.assertEqual("TGTTCTG", domains["g"].sequence())
-        self.assertEqual("ATCGGAAC", domains["h"].sequence())
+        assert domains["a"].sequence() == "CATAGCTTTCTTGTTCTGATCGGAAC"
+        assert domains["b"].sequence() == "CATAGCTTTCT"
+        assert domains["C"].sequence() == "TGTTCTGATCGGAAC"
+        assert domains["E"].sequence() == "CATAG"
+        assert domains["F"].sequence() == "CTTTCT"
+        assert domains["g"].sequence() == "TGTTCTG"
+        assert domains["h"].sequence() == "ATCGGAAC"
 
         # Assert subsequent reassignment to leaf is correct
         F.set_sequence("ATGTTT")
-        self.assertEqual("CATAGATGTTTTGTTCTGATCGGAAC", domains["a"].sequence())
-        self.assertEqual("CATAGATGTTT", domains["b"].sequence())
-        self.assertEqual("TGTTCTGATCGGAAC", domains["C"].sequence())
-        self.assertEqual("CATAG", domains["E"].sequence())
-        self.assertEqual("ATGTTT", domains["F"].sequence())
-        self.assertEqual("TGTTCTG", domains["g"].sequence())
-        self.assertEqual("ATCGGAAC", domains["h"].sequence())
+        assert domains["a"].sequence() == "CATAGATGTTTTGTTCTGATCGGAAC"
+        assert domains["b"].sequence() == "CATAGATGTTT"
+        assert domains["C"].sequence() == "TGTTCTGATCGGAAC"
+        assert domains["E"].sequence() == "CATAG"
+        assert domains["F"].sequence() == "ATGTTT"
+        assert domains["g"].sequence() == "TGTTCTG"
+        assert domains["h"].sequence() == "ATCGGAAC"
 
         # Assert subsequent reassignment to internal node is correct
         C.set_sequence("GGGGGGGGGGGGGGG")
-        self.assertEqual("CATAGATGTTTGGGGGGGGGGGGGGG", domains["a"].sequence())
-        self.assertEqual("CATAGATGTTT", domains["b"].sequence())
-        self.assertEqual("GGGGGGGGGGGGGGG", domains["C"].sequence())
-        self.assertEqual("CATAG", domains["E"].sequence())
-        self.assertEqual("ATGTTT", domains["F"].sequence())
-        self.assertEqual("GGGGGGG", domains["g"].sequence())
-        self.assertEqual("GGGGGGGG", domains["h"].sequence())
+        assert domains["a"].sequence() == "CATAGATGTTTGGGGGGGGGGGGGGG"
+        assert domains["b"].sequence() == "CATAGATGTTT"
+        assert domains["C"].sequence() == "GGGGGGGGGGGGGGG"
+        assert domains["E"].sequence() == "CATAG"
+        assert domains["F"].sequence() == "ATGTTT"
+        assert domains["g"].sequence() == "GGGGGGG"
+        assert domains["h"].sequence() == "GGGGGGGG"
 
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
         """
@@ -1237,7 +1239,7 @@ class TestSubdomains(unittest.TestCase):
         C: Domain = Domain("C", assign_domain_pool_of_length(20), dependent=False)
 
         a: Domain = Domain("a", assign_domain_pool_of_length(15), dependent=True, subdomains=[B, C])
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             a.set_sequence("A" * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
@@ -1265,27 +1267,17 @@ class TestSubdomains(unittest.TestCase):
         strand_b: Strand = Strand(domains=[B], starred_domain_indices=[])
         design = Design(strands=[strand_a, strand_b])
         domains = design.domains
-        self.assertEqual(3, len(domains))
-        self.assertIn(a, domains)
-        self.assertIn(B, domains)
-        self.assertIn(C, domains)
+        assert len(domains) == 3
+        assert a in domains
+        assert B in domains
+        assert C in domains
 
 
-class TestNUPACK(unittest.TestCase):
+class TestNUPACK:
     def test_pfunc(self) -> None:
         seq = "ACGTACGTAGCTGATCCAGCTGATCG"
         energy = nv.pfunc(seq)
-        self.assertTrue(energy < 0)
-
-
-class TestViennaRNA(unittest.TestCase):
-    def test_rna_plex(self) -> None:
-        pairs = [
-            ("ACGT", "ACGT"),
-            ("TTAC", "AATG"),
-        ]
-        energies = nv.rna_plex_multiple(pairs)
-        self.assertEqual(2, len(energies))
+        assert energy < 0
 
 
 def _make_domain(name: str, length: int = 8, fixed: bool = False) -> Domain:
@@ -1302,8 +1294,7 @@ def _make_result(excess: float, score: float, part: nc.Part) -> nc.Result:
     return result
 
 
-def _make_evaluation(constraint: nc.Constraint, domains: tuple[Domain, ...],
-                     result: nc.Result) -> Evaluation:
+def _make_evaluation(constraint: nc.Constraint, domains: tuple[Domain, ...], result: nc.Result) -> Evaluation:
     """Helper to create an Evaluation."""
     return Evaluation(constraint=constraint, domains=domains, result=result)
 
@@ -1316,323 +1307,3 @@ def _make_domain_constraint(description: str, weight: float = 1.0) -> nc.DomainC
         weight=weight,
         evaluate=lambda seqs, part: nc.Result(excess=0.0, summary="dummy"),
     )
-
-
-class TestUpdateDomainKeyedDicts(unittest.TestCase):
-    """Tests for EvaluationSet.update_domain_keyed_dicts() correctness."""
-
-    def setUp(self) -> None:
-        self.d1 = _make_domain("d1")
-        self.d2 = _make_domain("d2")
-        self.d3 = _make_domain("d3")
-        self.c1 = _make_domain_constraint("c1")
-        self.c2 = _make_domain_constraint("c2")
-
-    def _make_eval_set(self, constraints: list[nc.Constraint]) -> EvaluationSet:
-        return EvaluationSet(constraints, never_increase_score=False)
-
-    def test_empty_evaluations(self) -> None:
-        """update_domain_keyed_dicts on empty evaluations produces empty dicts."""
-        es = self._make_eval_set([self.c1])
-        es.update_domain_keyed_dicts()
-        self.assertEqual(0, len(es.domain_to_evaluations))
-        self.assertEqual(0, len(es.domain_to_violations))
-
-    def test_single_evaluation_no_violation(self) -> None:
-        """A non-violated evaluation appears in domain_to_evaluations but not domain_to_violations."""
-        es = self._make_eval_set([self.c1])
-        result = _make_result(excess=0.0, score=0.0, part=self.d1)
-        ev = _make_evaluation(self.c1, (self.d1,), result)
-        es.evaluations[self.c1][self.d1] = ev
-        # not a violation, so don't add to violations
-
-        es.update_domain_keyed_dicts()
-
-        self.assertIn(self.d1, es.domain_to_evaluations)
-        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
-        self.assertNotIn(self.d1, es.domain_to_violations)
-
-    def test_single_violation(self) -> None:
-        """A violated evaluation appears in both domain_to_evaluations and domain_to_violations."""
-        es = self._make_eval_set([self.c1])
-        result = _make_result(excess=1.0, score=1.0, part=self.d1)
-        ev = _make_evaluation(self.c1, (self.d1,), result)
-        es.evaluations[self.c1][self.d1] = ev
-        es.violations[self.c1][self.d1] = ev
-
-        es.update_domain_keyed_dicts()
-
-        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
-        self.assertEqual([ev], es.domain_to_violations[self.d1])
-
-    def test_multi_domain_evaluation(self) -> None:
-        """An evaluation blaming multiple domains appears under each domain."""
-        es = self._make_eval_set([self.c1])
-        result = _make_result(excess=2.0, score=8.0, part=self.d1)
-        ev = _make_evaluation(self.c1, (self.d1, self.d2), result)
-        es.evaluations[self.c1][self.d1] = ev
-        es.violations[self.c1][self.d1] = ev
-
-        es.update_domain_keyed_dicts()
-
-        self.assertEqual([ev], es.domain_to_evaluations[self.d1])
-        self.assertEqual([ev], es.domain_to_evaluations[self.d2])
-        self.assertEqual([ev], es.domain_to_violations[self.d1])
-        self.assertEqual([ev], es.domain_to_violations[self.d2])
-
-    def test_multiple_constraints_same_domain(self) -> None:
-        """Multiple evaluations from different constraints accumulate for a domain."""
-        es = self._make_eval_set([self.c1, self.c2])
-        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
-        r2 = _make_result(excess=2.0, score=8.0, part=self.d1)
-        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
-        ev2 = _make_evaluation(self.c2, (self.d1,), r2)
-
-        es.evaluations[self.c1][self.d1] = ev1
-        es.evaluations[self.c2][self.d1] = ev2
-        es.violations[self.c1][self.d1] = ev1
-        es.violations[self.c2][self.d1] = ev2
-
-        es.update_domain_keyed_dicts()
-
-        self.assertEqual(2, len(es.domain_to_evaluations[self.d1]))
-        self.assertIn(ev1, es.domain_to_evaluations[self.d1])
-        self.assertIn(ev2, es.domain_to_evaluations[self.d1])
-        self.assertEqual(2, len(es.domain_to_violations[self.d1]))
-
-    def test_sum_domain_scores(self) -> None:
-        """sum_domain_scores correctly sums violation scores per domain, excluding fixed domains."""
-        es = self._make_eval_set([self.c1, self.c2])
-        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
-        r2 = _make_result(excess=2.0, score=8.0, part=self.d1)
-        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
-        ev2 = _make_evaluation(self.c2, (self.d1,), r2)
-
-        es.evaluations[self.c1][self.d1] = ev1
-        es.evaluations[self.c2][self.d1] = ev2
-        es.violations[self.c1][self.d1] = ev1
-        es.violations[self.c2][self.d1] = ev2
-
-        es.update_domain_keyed_dicts()
-        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
-
-        self.assertAlmostEqual(9.0, es.domain_to_score[self.d1])
-
-    def test_sum_domain_scores_excludes_fixed(self) -> None:
-        """sum_domain_scores excludes fixed domains from the result."""
-        d_fixed = _make_domain("d_fixed", fixed=True)
-        es = self._make_eval_set([self.c1])
-        r1 = _make_result(excess=1.0, score=5.0, part=d_fixed)
-        ev1 = _make_evaluation(self.c1, (d_fixed,), r1)
-        es.evaluations[self.c1][d_fixed] = ev1
-        es.violations[self.c1][d_fixed] = ev1
-
-        es.update_domain_keyed_dicts()
-        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
-
-        self.assertNotIn(d_fixed, es.domain_to_score)
-
-    def test_update_clears_old_data(self) -> None:
-        """update_domain_keyed_dicts replaces old data, not appending to it."""
-        es = self._make_eval_set([self.c1])
-        r1 = _make_result(excess=1.0, score=1.0, part=self.d1)
-        ev1 = _make_evaluation(self.c1, (self.d1,), r1)
-        es.evaluations[self.c1][self.d1] = ev1
-        es.violations[self.c1][self.d1] = ev1
-
-        # First call
-        es.update_domain_keyed_dicts()
-        self.assertEqual(1, len(es.domain_to_evaluations[self.d1]))
-
-        # Call again without changing evaluations — should still be length 1, not 2
-        es.update_domain_keyed_dicts()
-        self.assertEqual(1, len(es.domain_to_evaluations[self.d1]))
-        self.assertEqual(1, len(es.domain_to_violations[self.d1]))
-
-
-class TestReplaceWithNewDomainKeyedDicts(unittest.TestCase):
-    """Tests that replace_with_new() correctly updates domain_to_* dicts and domain_to_score."""
-
-    def setUp(self) -> None:
-        self.d1 = _make_domain("d1")
-        self.d2 = _make_domain("d2")
-        self.d3 = _make_domain("d3")
-        self.c1 = _make_domain_constraint("c1")
-        self.c2 = _make_domain_constraint("c2")
-
-    def _make_eval_set(self, constraints: list[nc.Constraint]) -> EvaluationSet:
-        return EvaluationSet(constraints, never_increase_score=False)
-
-    def _populate_initial(self, es: EvaluationSet,
-                          eval_data: list[tuple[nc.Constraint, Domain, tuple[Domain, ...],
-                                                float, float, bool]]) -> dict:
-        """Populate initial evaluations/violations.
-        Each entry: (constraint, part, domains, excess, score, violated)
-        Returns dict of created evaluations keyed by (constraint, part).
-        """
-        created = {}
-        for constraint, part, domains, excess, score, violated in eval_data:
-            result = _make_result(excess, score, part)
-            ev = _make_evaluation(constraint, domains, result)
-            es.evaluations[constraint][part] = ev
-            if violated:
-                es.violations[constraint][part] = ev
-            created[(constraint, part)] = ev
-        es.update_domain_keyed_dicts()
-        es.domain_to_score = EvaluationSet.sum_domain_scores(es.domain_to_violations)
-        return created
-
-    def _populate_new(self, es: EvaluationSet,
-                      eval_data: list[tuple[nc.Constraint, Domain, tuple[Domain, ...],
-                                            float, float, bool]]) -> dict:
-        """Populate evaluations_new/violations_new (simulating evaluate_new).
-        Each entry: (constraint, part, domains, excess, score, violated)
-        Returns dict of created evaluations keyed by (constraint, part).
-        """
-        created = {}
-        for constraint, part, domains, excess, score, violated in eval_data:
-            result = _make_result(excess, score, part)
-            ev = _make_evaluation(constraint, domains, result)
-            es.evaluations_new[constraint][part] = ev
-            if violated:
-                es.violations_new[constraint][part] = ev
-            # Also populate domain_to_*_new as evaluate_new would
-            for domain in domains:
-                es.domain_to_evaluations_new[domain].append(ev)
-                if violated:
-                    es.domain_to_violations_new[domain].append(ev)
-            created[(constraint, part)] = ev
-        es.domain_to_score_new = EvaluationSet.sum_domain_scores(es.domain_to_violations_new)
-        return created
-
-    def test_replace_violation_becomes_satisfied(self) -> None:
-        """When a violation becomes satisfied, domain_to_violations and domain_to_score update."""
-        es = self._make_eval_set([self.c1])
-
-        # Initial: d1 has a violation with score 5.0
-        self._populate_initial(es, [
-            (self.c1, self.d1, (self.d1,), 1.0, 5.0, True),
-        ])
-        self.assertAlmostEqual(5.0, es.domain_to_score[self.d1])
-        es.num_violations = 1
-
-        # New: same part now satisfied (score 0)
-        self._populate_new(es, [
-            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
-        ])
-
-        es.replace_with_new()
-
-        # d1 should have no violations and score 0 (or not in dict)
-        self.assertEqual(0, len(es.domain_to_violations.get(self.d1, [])))
-        self.assertAlmostEqual(0.0, es.domain_to_score.get(self.d1, 0.0))
-
-    def test_replace_satisfied_becomes_violation(self) -> None:
-        """When a satisfied constraint becomes violated, domain_to_violations updates."""
-        es = self._make_eval_set([self.c1])
-
-        # Initial: d1 satisfied
-        self._populate_initial(es, [
-            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
-        ])
-        self.assertNotIn(self.d1, es.domain_to_score)
-        es.num_violations = 0
-
-        # New: d1 now violated with score 3.0
-        self._populate_new(es, [
-            (self.c1, self.d1, (self.d1,), 1.5, 3.0, True),
-        ])
-
-        es.replace_with_new()
-
-        self.assertAlmostEqual(3.0, es.domain_to_score[self.d1])
-
-    def test_replace_preserves_non_reevaluated_violations(self) -> None:
-        """Key bug #275 test: violations from non-re-evaluated constraints are preserved.
-
-        This was the core bug: if c1 and c2 both blame d1, but only c1 is re-evaluated,
-        c2's violation for d1 must still appear in domain_to_violations after replace_with_new.
-        """
-        es = self._make_eval_set([self.c1, self.c2])
-
-        # Initial: c1 violation on d1 (score 2.0), c2 violation on d1 (score 3.0)
-        self._populate_initial(es, [
-            (self.c1, self.d1, (self.d1,), 1.0, 2.0, True),
-            (self.c2, self.d1, (self.d1,), 1.5, 3.0, True),
-        ])
-        self.assertAlmostEqual(5.0, es.domain_to_score[self.d1])
-        es.num_violations = 2
-
-        # New: only c1 is re-evaluated (d1 now satisfied for c1). c2 is NOT re-evaluated.
-        self._populate_new(es, [
-            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
-        ])
-
-        es.replace_with_new()
-
-        # c2's violation on d1 must still be present
-        violations_d1 = es.domain_to_violations.get(self.d1, [])
-        self.assertEqual(1, len(violations_d1))
-        self.assertAlmostEqual(3.0, violations_d1[0].score)
-        self.assertAlmostEqual(3.0, es.domain_to_score[self.d1])
-
-    def test_replace_multi_domain_violation(self) -> None:
-        """A violation blaming multiple domains correctly updates scores for all of them."""
-        es = self._make_eval_set([self.c1])
-
-        # Initial: violation on (d1, d2) with score 4.0
-        self._populate_initial(es, [
-            (self.c1, self.d1, (self.d1, self.d2), 2.0, 4.0, True),
-        ])
-        self.assertAlmostEqual(4.0, es.domain_to_score[self.d1])
-        self.assertAlmostEqual(4.0, es.domain_to_score[self.d2])
-        es.num_violations = 1
-
-        # New: violation score changes to 1.0
-        self._populate_new(es, [
-            (self.c1, self.d1, (self.d1, self.d2), 0.5, 1.0, True),
-        ])
-
-        es.replace_with_new()
-
-        self.assertAlmostEqual(1.0, es.domain_to_score[self.d1])
-        self.assertAlmostEqual(1.0, es.domain_to_score[self.d2])
-
-    def test_replace_score_matches_evaluate_all_rebuild(self) -> None:
-        """After replace_with_new, domain_to_score matches what a from-scratch rebuild would give.
-
-        This is the fundamental correctness property: the incremental update must produce
-        the same result as rebuilding everything from scratch.
-        """
-        es = self._make_eval_set([self.c1, self.c2])
-
-        # Initial state: mixed violations and non-violations across multiple domains
-        self._populate_initial(es, [
-            (self.c1, self.d1, (self.d1,), 1.0, 2.0, True),
-            (self.c1, self.d2, (self.d2,), 0.0, 0.0, False),
-            (self.c2, self.d1, (self.d1,), 0.5, 1.0, True),
-            (self.c2, self.d2, (self.d2, self.d3), 2.0, 8.0, True),
-        ])
-        es.num_violations = 3
-
-        # Re-evaluate c1 for d1 (now satisfied) and c1 for d2 (now violated)
-        self._populate_new(es, [
-            (self.c1, self.d1, (self.d1,), 0.0, 0.0, False),
-            (self.c1, self.d2, (self.d2,), 0.8, 1.5, True),
-        ])
-
-        es.replace_with_new()
-
-        # Expected state after replace:
-        # evaluations: c1/d1 -> score 0 (not violated), c1/d2 -> score 1.5 (violated),
-        #              c2/d1 -> score 1 (violated, unchanged), c2/d2 -> score 8 (violated, unchanged)
-        # violations: c1/d2 (1.5), c2/d1 (1.0), c2/d2 (8.0)
-        # domain_to_violations: d1 -> [c2/d1], d2 -> [c1/d2, c2/d2], d3 -> [c2/d2]
-        # domain_to_score: d1 -> 1.0, d2 -> 9.5, d3 -> 8.0
-        self.assertAlmostEqual(1.0, es.domain_to_score.get(self.d1, 0.0))
-        self.assertAlmostEqual(9.5, es.domain_to_score.get(self.d2, 0.0))
-        self.assertAlmostEqual(8.0, es.domain_to_score.get(self.d3, 0.0))
-
-
-if __name__ == "__main__":
-    unittest.main()
