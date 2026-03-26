@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import collections.abc as abc
 import datetime
-import time
 import itertools
 import json
 import logging
@@ -113,18 +112,10 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     :any:`Domain` by calling :meth:`constraints.DomainPool.generate_sequence` on the :any:`DomainPool`
     of that :any:`Domain`.
 
-    The way to decide whether to keep the changed sequence, or revert to the
-    old sequence, can be configured, but the default is to keep the change if and only if it
-    does not increase the total score of violations.
-    More generally, we calculate the total score of all violated constraints in the original and changed
-    :any:`Design`, calling their difference `score_delta` = `new_total_score` - `old_total_score`.
-    The value ``probability_of_keeping_change(score_delta)`` is the probability that the change
-    is kept. The default function computing this probability is returned by
-    :meth:`default_probability_of_keeping_change_function`, which simply assigns probability 0
-    to keep the change if `score_delta` is positive (i.e., the score went up) and probability 1
-    otherwise.
-    In particular, the change is kept if the score is identical (though this would happen only rarely).
-    One reason to favor this default is that it allows an optimization that speeds up the search
+    If this change reduces the total score of violated :any:`Constraint`'s, then the change is kept,
+    otherwise it is reverted. Earlier versions of nuad allowed a small probability to keep schanges that
+    make the score worse, but in practice this seemed to prevent convergence to good solutions.
+    One advantage is that it allows an optimization that speeds up the search
     significantly in practice: When evaluating constraints, once the total score of violations exceeds
     that of the best design so far, no further constraints need to be evaluated, since we can decide
     immediately that the new design change will not be kept.
@@ -178,15 +169,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     else:
         rng = nn.default_rng
 
-    if params.probability_of_keeping_change is None:
-        params.probability_of_keeping_change = default_probability_of_keeping_change_function(params)
-        if params.never_increase_score is None:
-            params.never_increase_score = True
-    elif params.never_increase_score is None:
-        params.never_increase_score = False
-
-    assert params.never_increase_score is not None
-
     cpu_count = nc.cpu_count()
     logger.info(f"number of processes in system: {cpu_count}")
 
@@ -211,7 +193,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
         iteration = 0
         stopwatch = Stopwatch()
 
-        eval_set = EvaluationSet(params.constraints, params.never_increase_score)
+        eval_set = EvaluationSet(params.constraints, params.optimize_score_measurement)
         eval_set.evaluate_all(design, params)
 
         if not params.restart:
@@ -223,8 +205,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
                 num_new_optimal=num_new_optimal,
                 eval_set=eval_set,
             )
-
-        time_last_wrote_intermediate_files = time.perf_counter()
 
         while not _done(iteration, params, eval_set):
             if params.log_time:
@@ -252,9 +232,12 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
 
             # based on total score of new constraint violations compared to optimal assignment so far,
             # decide whether to keep the change
+            # generally we test for score_delta <=0
             score_delta = -eval_set.calculate_score_gap()
-            prob_keep_change = params.probability_of_keeping_change(score_delta)
-            keep_change = rng.random() < prob_keep_change if prob_keep_change < 1 else True
+            # min_weight = min((constraint.weight for constraint in params.constraints), default=0.0)
+            # epsilon_from_min_weight = min_weight / 1000000.0
+            # keep_change = score_delta <= epsilon_from_min_weight
+            keep_change = score_delta <= 0
 
             if not keep_change:
                 _unassign_domains(domains_new, original_sequences)
@@ -928,34 +911,18 @@ class SearchParameters:
     list of :any:`constraints.Constraint`'s to apply to the :any:`Design`.
     """
 
-    probability_of_keeping_change: Callable[[float], float] | None = None
-    """
-    Function giving the probability of keeping a change in one
-    :any:`Domain`'s DNA sequence, if the new sequence affects the total score of all violated
-    :any:`Constraint`'s by `score_delta`, the input to `probability_of_keeping_change`.
-    See :py:meth:`default_probability_of_keeping_change_function` for a description of the default
-    behavior if this parameter is not specified.
-    """
-
     random_seed: int | None = None
     """
     Integer given as a random seed to the numpy random number generator, used for
     all random choices in the algorithm. Set this to a fixed value to allow reproducibility.
     """
 
-    never_increase_score: bool | None = None
+    optimize_score_measurement: bool = True
     """
-    If specified and True, then it is assumed that the function
-    probability_of_keeping_change returns 0 for any negative value of `score_delta` (i.e., the search
-    never goes "uphill"), and the search for violations is optimized to quit as soon as the total score
+    If True, then the search for violations is optimized to quit as soon as the total score
     of violations exceeds that of the current optimal solution. This vastly speeds up the search in later
-    stages, when the current optimal solution is low score. If both `probability_of_keeping_change` and
-    `never_increase_score` are left unspecified, then `probability_of_keeping_change` uses the default,
-    which never goes uphill, and `never_increase_score` is set to True. If
-    `probability_of_keeping_change` is specified and `never_increase_score` is not, then
-    `never_increase_score` is set to False. If both are specified and `never_increase_score` is set to
-    True, then take caution that `probability_of_keeping_change` really has the property that it never
-    goes uphill; the optimization will essentially prevent most uphill climbs from occurring.
+    stages, when the current optimal solution is low score. There's generally no reason to set this to False,
+    but it has been useful in debugging past bugs in the search.
     """
 
     out_directory: str | None = None
@@ -1285,14 +1252,14 @@ def _unassign_domains(domains_changed: Iterable[Domain], original_sequences: dic
 def _double_check_violations_from_scratch(
     design: nc.Design, params: SearchParameters, iteration: int, eval_set: EvaluationSet
 ):
-    eval_set_from_scratch = EvaluationSet(params.constraints, params.never_increase_score)
+    eval_set_from_scratch = EvaluationSet(params.constraints, params.optimize_score_measurement)
     eval_set_from_scratch.evaluate_all(design, params)
     score_new = eval_set.total_score_new()
     score_opt = eval_set.total_score
     score_fs = eval_set_from_scratch.total_score
 
     problem = False
-    if not params.never_increase_score:
+    if not params.optimize_score_measurement:
         if _is_significantly_different(score_fs, score_new):
             problem = True
     else:
@@ -1645,45 +1612,6 @@ _sentinel = object()
 def _iterable_is_empty(iterable: abc.Iterable) -> bool:
     iterator = iter(iterable)
     return next(iterator, _sentinel) is _sentinel
-
-
-def default_probability_of_keeping_change_function(params: SearchParameters) -> Callable[[float], float]:
-    """
-    Returns a function that takes a float input `score_delta` representing a change in score of
-    violated constraint, which returns a probability of keeping the change in the DNA sequence assignment.
-    The probability is 1 if the change it is at least as good as the previous
-    (roughly, the score change is not positive), and the probability is 0 otherwise.
-
-    To mitigate floating-point rounding errors, the actual condition checked is that
-    `score_delta` < :py:data:`epsilon`,
-    on the assumption that if the same score of constraints are violated,
-    rounding errors in calculating `score_delta` could actually make it slightly above than 0
-    and result in reverting to the old assignment when we really want to keep the change.
-    If all values of :py:data:`Constraint.score` are significantly about :py:data:`epsilon`
-    (e.g., 1.0 or higher), then this should be is equivalent to keeping a change in the DNA sequence
-    assignment if and only if it is no worse than the previous.
-
-    :param params: :any:`SearchParameters` to apply this rule for; `params` is required because the score of
-                   :any:`Constraint`'s in the :any:`SearchParameters` are used to calculate an appropriate
-                   epsilon value for determining when a score change is too small to be significant
-                   (i.e., is due to rounding error)
-    :return: the "keep change" function `f`: :math:`\\mathbb{R} \\to [0,1]`,
-             where :math:`f(w_\\delta) = 1` if :math:`w_\\delta \\leq \\epsilon`
-             (where :math:`\\epsilon` is chosen to be 1,000,000 times smaller than
-             the smallest :any:`Constraint.weight` for any :any:`Constraint` in `design`),
-             and :math:`f(w_\\delta) = 0` otherwise.
-    """
-    min_weight = min((constraint.weight for constraint in params.constraints), default=0.0)
-    epsilon_from_min_weight = min_weight / 1000000.0
-
-    def keep_change_only_if_no_worse(score_delta: float) -> float:
-        return 1.0 if score_delta <= epsilon_from_min_weight else 0.0
-
-    # def keep_change_only_if_better(score_delta: float) -> float:
-    #     return 1.0 if score_delta <= -epsilon_from_min_weight else 0.0
-
-    return keep_change_only_if_no_worse
-    # return keep_change_only_if_better
 
 
 K1 = TypeVar("K1")
