@@ -259,7 +259,7 @@ def m13_substrings_of_length(
         All substrings of the M13mp18 DNA sequence, except those that overlap any index in
         `except_start_indices`.
     """
-    m13_ = m13_sc(rotation=0, variant=variant)
+    m13_ = m13_sc(rotation=0, variant=variant.scadnano_variant())
 
     # append start of m13 to its end to help with circular condition
     m13_ += m13_[:length]
@@ -639,7 +639,7 @@ class BaseEndFilter(NumpyFilter):
                     good_right |= right == bits
 
         if self.five_prime and self.three_prime:
-            seqarr_pass = seqs.seqarr[good_left & good_right]  # noqa
+            seqarr_pass = seqs.seqarr[good_left & good_right]  # type: ignore
         elif self.five_prime:
             seqarr_pass = seqs.seqarr[good_left]  # noqa
         elif self.three_prime:
@@ -903,7 +903,7 @@ class SubstringSampler(JSONSerializable):
         if except_start_indices is not None:
             self.except_start_indices = tuple(sorted(except_start_indices))
         elif except_overlapping_indices is None:
-            self.except_start_indices = cast((), tuple[int])
+            self.except_start_indices = cast(tuple[int, ...], ())
         else:
             # compute except_start_indices based on except_overlapping_indices
             assert except_start_indices is None
@@ -943,6 +943,14 @@ class SubstringSampler(JSONSerializable):
         indices_list: list[int] = list(indices)
         indices_list.sort()
         self.start_indices = tuple(indices_list)
+
+    def all_possible_substrings(self) -> list[str]:
+        """
+        :return: list of all possible substrings that can be sampled by this :any:`SubstringSampler`.
+        """
+        supersequence = self.extended_supersequence if self.circular else self.supersequence
+        substrings = [supersequence[start_idx : start_idx + self.substring_length] for start_idx in self.start_indices]
+        return substrings
 
     def sample_substring(self, rng: np.random.Generator) -> str:
         """
@@ -1245,8 +1253,14 @@ class DomainPool(JSONSerializable):
             all DNA sequences of given length satisfying :data:`DomainPool.numpy_filters` and
             :data:`DomainPool.sequence_filters`
         """
-        if self.possible_sequences is not None:
-            return list(self.possible_sequences)
+        possible_sequences = self.possible_sequences
+        if possible_sequences is not None:
+            if isinstance(possible_sequences, list):
+                return list(possible_sequences)
+            else:
+                assert isinstance(possible_sequences, SubstringSampler)
+                return possible_sequences.all_possible_substrings()
+
         assert self.length is not None
         bases = self._bases_to_use()
         seqs = nn.DNASeqList(length=self.length, alphabet=bases, shuffle=True)
@@ -1441,6 +1455,7 @@ class DomainPool(JSONSerializable):
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         num_to_generate = 100
+        assert self.length is not None
         num_sequences_total = len(self._bases_to_use()) ** self.length
 
         sequence = None
@@ -1480,6 +1495,7 @@ class DomainPool(JSONSerializable):
     ) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
+        assert length is not None
         seqs = nn.DNASeqList(
             length=length,
             alphabet=bases,
@@ -1621,8 +1637,8 @@ class Domain(Part, JSONSerializable):
     _sequence: str | None = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
     DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
-    variant; the starred variant has the Watson-Crick complement,
-    accessible via :data:`Domain.starred_sequence`.
+    variant; the starred variant has the reverse complement,
+    accessible via :meth:`Domain.starred_sequence()`.
     """
 
     weight: float = 1.0
@@ -1708,7 +1724,6 @@ class Domain(Part, JSONSerializable):
         self._starred_name = name + "*"
         self._pool = pool
         self._sequence = sequence
-        self._starred_sequence = None if sequence is None else nv.wc(sequence)
         self.fixed = fixed
         self.label = label
         self.dependent = dependent
@@ -1772,7 +1787,6 @@ class Domain(Part, JSONSerializable):
             return
         sb_seqs = [sd.sequence() if sd.has_sequence() else "?" * sd.get_length() for sd in self._subdomains]
         self._sequence = "".join(sb_seqs)
-        self._starred_sequence = nv.wc(self._sequence)
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1826,7 +1840,7 @@ class Domain(Part, JSONSerializable):
         sequence: str | None = json_map.get(sequence_key)
         fixed: bool = json_map.get(fixed_key, False)
 
-        label: str = json_map.get(label_key)
+        label: str | None = json_map.get(label_key)
 
         pool: DomainPool | None
         pool_name: str | None = json_map.get(domain_pool_name_key)
@@ -1986,7 +2000,6 @@ class Domain(Part, JSONSerializable):
                     f"have total length of {sd_total_length}"
                 )
         self._sequence = new_sequence
-        self._starred_sequence = nv.wc(new_sequence)
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
 
@@ -2001,7 +2014,6 @@ class Domain(Part, JSONSerializable):
             sd_len = sd.get_length()
             sd_sequence = new_sequence[sequence_idx : sequence_idx + sd_len]
             sd._sequence = sd_sequence
-            sd._starred_sequence = nv.wc(sd_sequence)
             sd._set_subdomain_sequences(sd_sequence)
             sequence_idx += sd_len
 
@@ -2015,7 +2027,6 @@ class Domain(Part, JSONSerializable):
         if parent is not None:
             if parent._sequence is None:
                 parent._sequence = "?" * parent.get_length()
-                parent._starred_sequence = "?" * parent.get_length()
             # Add up lengths of subdomains, add new_sequence
             idx = 0
             assert self in parent._subdomains
@@ -2028,7 +2039,6 @@ class Domain(Part, JSONSerializable):
             assert sd is not None
             old_sequence = parent._sequence
             parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.get_length() :]
-            parent._starred_sequence = nv.wc(parent._sequence)
             parent._set_parent_sequence(parent._sequence)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
@@ -2041,7 +2051,6 @@ class Domain(Part, JSONSerializable):
         :param fixed_sequence: new fixed DNA sequence to set
         """
         self._sequence = fixed_sequence
-        self._starred_sequence = nv.wc(fixed_sequence)
         self._set_subdomain_sequences(fixed_sequence)
         self._set_parent_sequence(fixed_sequence)
         self.fixed = True
@@ -2060,8 +2069,7 @@ class Domain(Part, JSONSerializable):
         """
         if self._sequence is None:
             raise ValueError("no DNA sequence has been assigned to this Domain")
-        # return dv.wc(self.sequence)
-        return self._starred_sequence
+        return nv.rc(self._sequence)
 
     def get_name(self, starred: bool) -> str:
         """
@@ -2080,12 +2088,7 @@ class Domain(Part, JSONSerializable):
         """
         if self._sequence is None:
             raise ValueError(f"no DNA sequence has been assigned to Domain {self}")
-        if self._starred_sequence is None:
-            raise AssertionError(
-                "_starred_sequence should be set to non-None if _sequence is not None. "
-                "Something went wrong in the logic of dsd."
-            )
-        return self._starred_sequence if starred else self._sequence
+        return self.starred_sequence if starred else self._sequence
 
     def has_sequence(self) -> bool:
         """
