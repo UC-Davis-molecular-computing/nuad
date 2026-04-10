@@ -586,7 +586,7 @@ class BaseCountFilter(NumpyFilter):
 class BaseEndFilter(NumpyFilter):
     """
     Restricts the sequence to contain only certain bases on
-    (or near, if :data:`BaseEndFilter.distance` > 0) each end.
+    (or near, if :data:`BaseEndFilter.distance_from_end` > 0) each end.
     """
 
     bases: Collection[str]
@@ -1740,17 +1740,17 @@ class Domain(Part, JSONSerializable):
                     f"but {len(self._subdomains)} subdomains were given:\n"
                     f"{self._subdomains}"
                 )
-        else:
-            contains_no_non_fixed_subdomains = True
-            for sd in self._subdomains:
-                if not sd.fixed:
-                    contains_no_non_fixed_subdomains = False
-                    break
-            if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
-                raise ValueError(
-                    f"Domain {self.name} is not fixed, but all subdomains "
-                    f"{[subdomain.name for subdomain in self._subdomains]} are fixed"
-                )
+        # else:
+        #     contains_no_non_fixed_subdomains = True
+        #     for sd in self._subdomains:
+        #         if not sd.fixed:
+        #             contains_no_non_fixed_subdomains = False
+        #             break
+        #     if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
+        #         raise ValueError(
+        #             f"Domain {self.name} is not fixed, but all subdomains "
+        #             f"{[subdomain.name for subdomain in self._subdomains]} are fixed"
+        #         )
 
         # set parent field for all subdomains.
         for subdomain in self._subdomains:
@@ -4814,7 +4814,7 @@ class Result(Generic[DesignPart]):
     and to label the y-axis in  plots created by :meth:`search.display_report`.
     """
 
-    score: float = field(init=False)
+    score: float = 0.0
     """
     Set by the search algorithm based on :data:`Result.excess` as well as other data such as the 
     constraint's weight and the :data:`SearchParameters.score_transfer_function`.
@@ -5782,9 +5782,7 @@ def rna_duplex_strand_pair_constraints_by_number_matching_domains(
         }
 
     if short_descriptions is None:
-        short_descriptions = {
-            num_matching: f"RNADuplexpair{num_matching}comp" for num_matching, _ in thresholds.items()
-        }
+        short_descriptions = {num_matching: f"RNADupPair{num_matching}comp" for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_duplex_strand_pair_constraint,
@@ -5963,6 +5961,7 @@ def rna_duplex_strand_pair_constraint(
         score_transfer_function=score_transfer_function,
         evaluate=evaluate_rna_duplex_strand_pair,
         pairs=pairs_tuple,
+        parallel=parallel,
     )
 
 
