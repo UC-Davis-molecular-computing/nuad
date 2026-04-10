@@ -604,12 +604,19 @@ def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple
         )
 
     # Convert direct domains to independent domains.
-    # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
+    # If multiple dependent domains map to the same independent domain d_i, only add d_i once.
+    # A dependent domain may have multiple independent sub-domains (e.g., a composite domain
+    # with subdomains [tt, handle_domain]), so we must collect ALL of them, not just the first.
     independent_domains = []
     for domain in domains:
-        independent_domain = domain.independent_source()
-        if independent_domain not in independent_domains:
-            independent_domains.append(independent_domain)
+        if not domain.dependent:
+            if domain not in independent_domains:
+                independent_domains.append(domain)
+        else:
+            for sub in domain._get_all_domains_from_this_subtree():
+                if not sub.dependent and sub not in independent_domains:
+                    if not (exclude_fixed and sub.fixed):
+                        independent_domains.append(sub)
 
     return tuple(independent_domains)
 
@@ -1925,7 +1932,7 @@ class EvaluationSet:
             domain_to_viols = self.domain_to_violations
 
         for result in results:
-            domains = _independent_domains_in_part(result.part, exclude_fixed=False)
+            domains = _independent_domains_in_part(result.part, exclude_fixed=True)
             evaluation = Evaluation(constraint=constraint, domains=domains, result=result)
 
             evals_of_constraint[result.part] = evaluation
