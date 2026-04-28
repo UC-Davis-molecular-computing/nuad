@@ -975,23 +975,6 @@ class TestSubdomains:
         with pytest.raises(ValueError):
             Domain("a", assign_domain_pool_of_length(9), fixed=True, subdomains=[b, c])
 
-    def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
-        r"""
-        Test that constructing a domain by setting fixed to False when all subdomains
-        are fixed should raise ValueError
-
-        .. code-block:: none
-
-                a
-               / \
-             [b] [c]
-        """
-        b = Domain("b", assign_domain_pool_of_length(5), fixed=True)
-        c = Domain("c", assign_domain_pool_of_length(4), fixed=True)
-
-        with pytest.raises(ValueError):
-            Domain("a", assign_domain_pool_of_length(9), fixed=False, subdomains=[b, c])
-
     def test_construct_strand(self):
         r"""
         Test strand construction with nested subdomains

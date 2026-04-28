@@ -259,7 +259,7 @@ def m13_substrings_of_length(
         All substrings of the M13mp18 DNA sequence, except those that overlap any index in
         `except_start_indices`.
     """
-    m13_ = m13_sc(rotation=0, variant=variant)
+    m13_ = m13_sc(rotation=0, variant=variant.scadnano_variant())
 
     # append start of m13 to its end to help with circular condition
     m13_ += m13_[:length]
@@ -586,7 +586,7 @@ class BaseCountFilter(NumpyFilter):
 class BaseEndFilter(NumpyFilter):
     """
     Restricts the sequence to contain only certain bases on
-    (or near, if :data:`BaseEndFilter.distance` > 0) each end.
+    (or near, if :data:`BaseEndFilter.distance_from_end` > 0) each end.
     """
 
     bases: Collection[str]
@@ -639,7 +639,7 @@ class BaseEndFilter(NumpyFilter):
                     good_right |= right == bits
 
         if self.five_prime and self.three_prime:
-            seqarr_pass = seqs.seqarr[good_left & good_right]  # noqa
+            seqarr_pass = seqs.seqarr[good_left & good_right]  # type: ignore
         elif self.five_prime:
             seqarr_pass = seqs.seqarr[good_left]  # noqa
         elif self.three_prime:
@@ -903,7 +903,7 @@ class SubstringSampler(JSONSerializable):
         if except_start_indices is not None:
             self.except_start_indices = tuple(sorted(except_start_indices))
         elif except_overlapping_indices is None:
-            self.except_start_indices = cast((), tuple[int])
+            self.except_start_indices = cast(tuple[int, ...], ())
         else:
             # compute except_start_indices based on except_overlapping_indices
             assert except_start_indices is None
@@ -943,6 +943,14 @@ class SubstringSampler(JSONSerializable):
         indices_list: list[int] = list(indices)
         indices_list.sort()
         self.start_indices = tuple(indices_list)
+
+    def all_possible_substrings(self) -> list[str]:
+        """
+        :return: list of all possible substrings that can be sampled by this :any:`SubstringSampler`.
+        """
+        supersequence = self.extended_supersequence if self.circular else self.supersequence
+        substrings = [supersequence[start_idx : start_idx + self.substring_length] for start_idx in self.start_indices]
+        return substrings
 
     def sample_substring(self, rng: np.random.Generator) -> str:
         """
@@ -1245,8 +1253,14 @@ class DomainPool(JSONSerializable):
             all DNA sequences of given length satisfying :data:`DomainPool.numpy_filters` and
             :data:`DomainPool.sequence_filters`
         """
-        if self.possible_sequences is not None:
-            return list(self.possible_sequences)
+        possible_sequences = self.possible_sequences
+        if possible_sequences is not None:
+            if isinstance(possible_sequences, list):
+                return list(possible_sequences)
+            else:
+                assert isinstance(possible_sequences, SubstringSampler)
+                return possible_sequences.all_possible_substrings()
+
         assert self.length is not None
         bases = self._bases_to_use()
         seqs = nn.DNASeqList(length=self.length, alphabet=bases, shuffle=True)
@@ -1441,6 +1455,7 @@ class DomainPool(JSONSerializable):
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         num_to_generate = 100
+        assert self.length is not None
         num_sequences_total = len(self._bases_to_use()) ** self.length
 
         sequence = None
@@ -1480,6 +1495,7 @@ class DomainPool(JSONSerializable):
     ) -> nn.DNASeqList:
         bases = self._bases_to_use()
         length = self.length
+        assert length is not None
         seqs = nn.DNASeqList(
             length=length,
             alphabet=bases,
@@ -1621,8 +1637,8 @@ class Domain(Part, JSONSerializable):
     _sequence: str | None = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
     DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
-    variant; the starred variant has the Watson-Crick complement,
-    accessible via :data:`Domain.starred_sequence`.
+    variant; the starred variant has the reverse complement,
+    accessible via :meth:`Domain.starred_sequence()`.
     """
 
     weight: float = 1.0
@@ -1708,7 +1724,6 @@ class Domain(Part, JSONSerializable):
         self._starred_name = name + "*"
         self._pool = pool
         self._sequence = sequence
-        self._starred_sequence = None if sequence is None else nv.wc(sequence)
         self.fixed = fixed
         self.label = label
         self.dependent = dependent
@@ -1725,17 +1740,6 @@ class Domain(Part, JSONSerializable):
                     f"but {len(self._subdomains)} subdomains were given:\n"
                     f"{self._subdomains}"
                 )
-        else:
-            contains_no_non_fixed_subdomains = True
-            for sd in self._subdomains:
-                if not sd.fixed:
-                    contains_no_non_fixed_subdomains = False
-                    break
-            if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
-                raise ValueError(
-                    f"Domain {self.name} is not fixed, but all subdomains "
-                    f"{[subdomain.name for subdomain in self._subdomains]} are fixed"
-                )
 
         # set parent field for all subdomains.
         for subdomain in self._subdomains:
@@ -1748,7 +1752,8 @@ class Domain(Part, JSONSerializable):
                     "since dependent domains cannot be picked to change in the search, "
                     "which is the probability that DOmain.weight affects"
                 )
-            self.length = sum(subdomain.get_length() for subdomain in self._subdomains)
+            if len(self._subdomains) > 0:
+                self.length = sum(subdomain.get_length() for subdomain in self._subdomains)
 
         if weight is not None:
             self.weight = weight
@@ -1772,7 +1777,6 @@ class Domain(Part, JSONSerializable):
             return
         sb_seqs = [sd.sequence() if sd.has_sequence() else "?" * sd.get_length() for sd in self._subdomains]
         self._sequence = "".join(sb_seqs)
-        self._starred_sequence = nv.wc(self._sequence)
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1826,7 +1830,7 @@ class Domain(Part, JSONSerializable):
         sequence: str | None = json_map.get(sequence_key)
         fixed: bool = json_map.get(fixed_key, False)
 
-        label: str = json_map.get(label_key)
+        label: str | None = json_map.get(label_key)
 
         pool: DomainPool | None
         pool_name: str | None = json_map.get(domain_pool_name_key)
@@ -1986,7 +1990,6 @@ class Domain(Part, JSONSerializable):
                     f"have total length of {sd_total_length}"
                 )
         self._sequence = new_sequence
-        self._starred_sequence = nv.wc(new_sequence)
         self._set_subdomain_sequences(new_sequence)
         self._set_parent_sequence(new_sequence)
 
@@ -2001,7 +2004,6 @@ class Domain(Part, JSONSerializable):
             sd_len = sd.get_length()
             sd_sequence = new_sequence[sequence_idx : sequence_idx + sd_len]
             sd._sequence = sd_sequence
-            sd._starred_sequence = nv.wc(sd_sequence)
             sd._set_subdomain_sequences(sd_sequence)
             sequence_idx += sd_len
 
@@ -2015,7 +2017,6 @@ class Domain(Part, JSONSerializable):
         if parent is not None:
             if parent._sequence is None:
                 parent._sequence = "?" * parent.get_length()
-                parent._starred_sequence = "?" * parent.get_length()
             # Add up lengths of subdomains, add new_sequence
             idx = 0
             assert self in parent._subdomains
@@ -2028,7 +2029,6 @@ class Domain(Part, JSONSerializable):
             assert sd is not None
             old_sequence = parent._sequence
             parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.get_length() :]
-            parent._starred_sequence = nv.wc(parent._sequence)
             parent._set_parent_sequence(parent._sequence)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
@@ -2041,7 +2041,6 @@ class Domain(Part, JSONSerializable):
         :param fixed_sequence: new fixed DNA sequence to set
         """
         self._sequence = fixed_sequence
-        self._starred_sequence = nv.wc(fixed_sequence)
         self._set_subdomain_sequences(fixed_sequence)
         self._set_parent_sequence(fixed_sequence)
         self.fixed = True
@@ -2060,8 +2059,7 @@ class Domain(Part, JSONSerializable):
         """
         if self._sequence is None:
             raise ValueError("no DNA sequence has been assigned to this Domain")
-        # return dv.wc(self.sequence)
-        return self._starred_sequence
+        return nv.rc(self._sequence)
 
     def get_name(self, starred: bool) -> str:
         """
@@ -2080,12 +2078,7 @@ class Domain(Part, JSONSerializable):
         """
         if self._sequence is None:
             raise ValueError(f"no DNA sequence has been assigned to Domain {self}")
-        if self._starred_sequence is None:
-            raise AssertionError(
-                "_starred_sequence should be set to non-None if _sequence is not None. "
-                "Something went wrong in the logic of dsd."
-            )
-        return self._starred_sequence if starred else self._sequence
+        return self.starred_sequence if starred else self._sequence
 
     def has_sequence(self) -> bool:
         """
@@ -3417,16 +3410,16 @@ class Design(JSONSerializable):
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
         self.domains_by_name = {}
+        self.check_all_subdomain_graphs_acyclic()
         if len(self.strands) > 0:
             for strand in self.strands:
                 for domain_in_strand in strand.domains:
-                    domains_in_tree = domain_in_strand.all_domains_in_tree()
+                    domains_in_tree = domain_in_strand.all_domains_in_tree(allow_fixed=True)
                     for domain_in_tree in domains_in_tree:
                         name = domain_in_tree.name
                         if name not in self.domains_by_name:
                             self.domains_by_name[name] = domain_in_tree
 
-        self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
 
@@ -4811,7 +4804,7 @@ class Result(Generic[DesignPart]):
     and to label the y-axis in  plots created by :meth:`search.display_report`.
     """
 
-    score: float = field(init=False)
+    score: float = 0.0
     """
     Set by the search algorithm based on :data:`Result.excess` as well as other data such as the 
     constraint's weight and the :data:`SearchParameters.score_transfer_function`.
@@ -5779,9 +5772,7 @@ def rna_duplex_strand_pair_constraints_by_number_matching_domains(
         }
 
     if short_descriptions is None:
-        short_descriptions = {
-            num_matching: f"RNADuplexpair{num_matching}comp" for num_matching, _ in thresholds.items()
-        }
+        short_descriptions = {num_matching: f"RNADupPair{num_matching}comp" for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_duplex_strand_pair_constraint,
@@ -5960,6 +5951,7 @@ def rna_duplex_strand_pair_constraint(
         score_transfer_function=score_transfer_function,
         evaluate=evaluate_rna_duplex_strand_pair,
         pairs=pairs_tuple,
+        parallel=parallel,
     )
 
 
@@ -6301,7 +6293,7 @@ def domain_pairs_nonorthogonal_constraint(
     max_energy: float = 0.0,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
-    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAcofold
+    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAmultifold
 
     if description is None:
         description = f"domain pair {tool_name} energies for nonorthogonal domains at {temperature}C"
@@ -6530,24 +6522,26 @@ def rna_duplex_domain_pairs_nonorthogonal_constraint(
     )
 
 
-def rna_cofold_domain_pairs_nonorthogonal_constraint(
+def rna_multifold_domain_pairs_nonorthogonal_constraint(
     thresholds: dict[tuple[Domain, bool, Domain, bool] | tuple[Domain, Domain], tuple[float, float]],
     temperature: float = nv.default_temperature,
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs_nonorth",
+    short_description: str = "rna_multifold_dom_pairs_nonorth",
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
-    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAcofold instead of RNAplex.
+    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses ViennaRNA's
+    multi-strand partition function (``RNA.fold_compound(...).pf()``, the Python analog of
+    NUPACK's :func:`pfunc`) instead of RNAplex.
     """
     _check_vienna_rna_installed()
 
     return domain_pairs_nonorthogonal_constraint(
-        evaluation_function=nv.rna_cofold_multiple,
-        tool_name="RNAcofold",
+        evaluation_function=nv.rna_multifold_multiple,
+        tool_name="RNAmultifold",
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6677,7 +6671,7 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
     # or
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
     #   and
-    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
     # are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
     # The Protocol class seems to be available in the typing module, even though the above
     # documentation seems to indicate it is only in typing_extensions?
@@ -6712,7 +6706,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
     # and
-    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
 
     check_strand_against_itself = True
     pairs = _normalize_strands_pairs_disjoint_parameters(strands, pairs, check_strand_against_itself)
@@ -6799,7 +6793,7 @@ def _normalize_strands_pairs_disjoint_parameters(
     return pairs_tuple
 
 
-def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
+def rna_multifold_strand_pair_constraints_by_number_matching_domains(
     *,
     thresholds: dict[int, float],
     temperature: float = nv.default_temperature,
@@ -6810,28 +6804,29 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
     parallel: bool = False,
     strands: Iterable[Strand] | None = None,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
-    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     ignore_missing_thresholds: bool = False,
-) -> list[StrandPairsConstraint]:
+) -> list[StrandPairConstraint]:
     """
-    Similar to :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
-    but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
+    Similar to :func:`rna_duplex_strand_pair_constraints_by_number_matching_domains`
+    but creates constraints as returned by :meth:`rna_multifold_strand_pair_constraint`.
     """
-    rna_cofold_with_parameters_filename: _StrandPairsConstraintCreator = functools.partial(
-        rna_cofold_strand_pairs_constraint,  # type:ignore
-        parameters_filename=parameters_filename,
-    )
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNAcofold", threshold, temperature)
+                _pair_default_description("strand", "RNAmultifold", threshold, temperature)
                 + f" for strands with {num_matching} complementary "
                 f"{'domain' if num_matching == 1 else 'domains'}"
             )
             for num_matching, threshold in thresholds.items()
         }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f"RNAmfPair{num_matching}comp" for num_matching, _ in thresholds.items()
+        }
+
     return _strand_pairs_constraints_by_number_matching_domains(
-        constraint_creator=rna_cofold_with_parameters_filename,
+        constraint_creator=rna_multifold_strand_pair_constraint,
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -7715,24 +7710,28 @@ def energy_excess_domains(
     return excess
 
 
-def rna_cofold_strand_pairs_constraint(
+def rna_multifold_strand_pair_constraint(
     *,
     threshold: float,
     temperature: float = nv.default_temperature,
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_dup_strand_pairs",
+    short_description: str = "rna_multifold_strand_pair",
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
-    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-) -> StrandPairsConstraint:
+    strands: Iterable[Strand] | None = None,
+) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
+    ViennaRNA's multi-strand partition function (the analog of NUPACK's :func:`pfunc`),
+    via the Python ``RNA.fold_compound(...).pf()`` API. This is equivalent in spirit to
+    the command-line ``RNAmultifold`` tool (the N-strand successor to ``RNAcofold``).
+
+    Multi-strand support requires ViennaRNA >= 2.5.0.
 
     :param threshold:
-        Energy threshold in kcal/mol
+        Energy threshold in kcal/mol.
     :param temperature:
         Temperature in Celsius.
     :param weight:
@@ -7746,60 +7745,51 @@ def rna_cofold_strand_pairs_constraint(
     :param parallel:
         Whether to test each pair of :any:`Strand`'s in parallel.
     :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
-    :param parameters_filename:
-        Name of parameters file for ViennaRNA;
-        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+        Pairs of :any:`Strand`'s to compare. Mutually exclusive with `strands`.
+    :param strands:
+        :any:`Strand`'s to compare; all pairs (including each strand with itself) are checked.
+        Mutually exclusive with `pairs`.
     :return:
-        The :any:`StrandPairsConstraint`.
+        The :any:`StrandPairConstraint`.
     """
-    _check_vienna_rna_installed()
+    if strands is not None and pairs is not None:
+        raise ValueError("Exactly one of strands or pairs can be specified, but not both.")
+    gu_wobble = False
+    max_energy = 0.0
+    import RNA
+
+    RNA.cvar.temperature = temperature
+    RNA.cvar.noGU = not gu_wobble
+    RNA.params_load_DNA_Mathews2004()
 
     if description is None:
-        description = f"RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol"
+        description = _pair_default_description("strand", "RNAmultifold", threshold, temperature)
 
-    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
-
-    # we use ThreadPool instead of pathos because we're farming this out to processes through
-    # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_threads)
-
-    def calculate_energies_unparallel(
-        sequence_pairs: Sequence[tuple[str, str]],
-    ) -> tuple[float]:
-        return nv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[tuple[str, str]]) -> tuple[float]:
-        if parallel and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = flatten(lists_of_energies)
-        else:
-            energies = calculate_energies_unparallel(sequence_pairs)
-        return energies
-
-    def evaluate_bulk_rna_cofold_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
-        sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
-        energies = calculate_energies(sequence_pairs)
-
-        results = []
-        for pair, energy in zip(strand_pairs, energies):
-            excess = threshold - energy
-            result = Result(excess=excess, value=energy, unit="kcal/mol")
-            results.append(result)
-        return results
+    def evaluate_rna_multifold_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
+        seq1, seq2 = seqs
+        fc = RNA.fold_compound(seq1 + "&" + seq2)
+        _, energy = fc.pf()
+        energy = min(energy, max_energy)
+        excess = max(0.0, threshold - energy)
+        return Result(excess=excess, value=energy, unit="kcal/mol")
 
     pairs_tuple = None
     if pairs is not None:
+        assert strands is None
         pairs_tuple = tuple(pairs)
 
-    return StrandPairsConstraint(
+    if strands is not None:
+        assert pairs_tuple is None
+        pairs_tuple = tuple(itertools.combinations_with_replacement(tuple(strands), 2))
+
+    return StrandPairConstraint(
         description=description,
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk_rna_cofold_strand_pairs,
+        evaluate=evaluate_rna_multifold_strand_pair,
         pairs=pairs_tuple,
+        parallel=parallel,
     )
 
 

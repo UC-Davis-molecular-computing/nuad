@@ -51,6 +51,7 @@ from tabulate import tabulate
 import nuad.constraints as nc
 import nuad.np as nn
 from nuad.constraints import (
+    BulkConstraint,
     Complex,
     ComplexConstraint,
     ComplexesConstraint,
@@ -603,12 +604,19 @@ def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple
         )
 
     # Convert direct domains to independent domains.
-    # If multiple dependent domains map to the same indepedent domain d_i, only add d_i once
+    # If multiple dependent domains map to the same independent domain d_i, only add d_i once.
+    # A dependent domain may have multiple independent sub-domains (e.g., a composite domain
+    # with subdomains [tt, handle_domain]), so we must collect ALL of them, not just the first.
     independent_domains = []
     for domain in domains:
-        independent_domain = domain.independent_source()
-        if independent_domain not in independent_domains:
-            independent_domains.append(independent_domain)
+        if not domain.dependent:
+            if domain not in independent_domains:
+                independent_domains.append(domain)
+        else:
+            for sub in domain._get_all_domains_from_this_subtree():
+                if not sub.dependent and sub not in independent_domains:
+                    if not (exclude_fixed and sub.fixed):
+                        independent_domains.append(sub)
 
     return tuple(independent_domains)
 
@@ -1069,7 +1077,7 @@ class SearchParameters:
 
     warn_no_seqs_found: bool = True
     """
-    Whether to log a warning if no sequences are found that satisfy the :any:`NumpyFilter`'s and :any:`SequenceFilters`.
+    Whether to log a warning if no sequences are found that satisfy the :any:`NumpyFilter`'s and :any:`SequenceFilter`'s.
     This is on by default to warn the user if their filters are too restrictive, since this could cause the search 
     to freeze. However, it usually only appears with very restrictive filters and Hamming distance 1,
     and a larger Hamming distance is picked after, so the search is not actually frozen. If you are confident
@@ -1196,20 +1204,9 @@ def _reassign_domains(
 ) -> tuple[tuple[Domain, ...], dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
+    assert len(eval_set.domain_to_score) > 0
     domains: list[Domain] = list(eval_set.domain_to_score.keys())
     scores_weighted = [score * domain.weight for domain, score in eval_set.domain_to_score.items()]
-    # import inspect
-    #
-    # def quote(list) -> str:
-    #     return "[" + ", ".join(f'"{domain.name}"' for domain in list) + "]"
-    #
-    # iteration = inspect.currentframe().f_back.f_locals["iteration"]
-    # if iteration == 97:
-    #     print(f"domains = {quote(domains)}")
-    #     print(f"scores_weighted = {scores_weighted}")
-    # if iteration == 0:
-    #     print(f"domains_restart = {quote(domains)}")
-    #     print(f"scores_weighted_restart = {scores_weighted}")
 
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
@@ -1830,32 +1827,38 @@ class EvaluationSet:
 
     @staticmethod
     def evaluate_singular_constraint_parallel(
-        constraint: SingularConstraint[DesignPart], parts: TupleDesignParts, score_gap: float
-    ) -> tuple[list[tuple[nc.DesignPart, float, str]], float]:
+        constraint: SingularConstraint[DesignPart],
+        parts: TupleDesignParts,
+        score_transfer_function: Callable[[float], float],
+    ) -> list[nc.Result]:
         if len(parts) == 0:
-            return [], 0.0
+            return []
 
         num_cpus = nc.cpu_count()
 
         parts_chunks = nc.chunker(parts, num_chunks=num_cpus)
 
-        def call_evaluate_sequential(partz: tuple[nc.DesignPart]) -> list[tuple[nc.DesignPart, float, str]]:
-            raise NotImplementedError()
-            partz_scores_summaries: list[tuple[nc.DesignPart, float, str]] = []
+        def call_evaluate_sequential(partz: tuple[nc.DesignPart]) -> list[nc.Result]:
+            resultz: list[nc.Result] = []
             for part in partz:
                 seqs = tuple(indv_part.sequence() for indv_part in part.individual_parts())
-                score, summary = constraint.call_evaluate(seqs, part)
-                partz_scores_summaries.append((part, score, summary))
-            return partz_scores_summaries
+                result = constraint.call_evaluate(seqs, part, score_transfer_function)
+                resultz.append(result)
+            return resultz
 
-        global _process_pool
-        if _process_pool is None:
-            _process_pool = new_process_pool(num_cpus)
+        # global _process_pool
+        # if _process_pool is None:
+        #     _process_pool = new_process_pool(num_cpus)
 
-        lists_of_violating_parts_scores_summaries = _process_pool.map(call_evaluate_sequential, parts_chunks)
-        parts_scores_summaries = [elt for elts in lists_of_violating_parts_scores_summaries for elt in elts]
+        # list_list_results = _process_pool.map(call_evaluate_sequential, parts_chunks)
+        from multiprocessing.pool import ThreadPool
 
-        return parts_scores_summaries, score_gap
+        thread_pool = ThreadPool(num_cpus)
+        list_list_results = thread_pool.map(call_evaluate_sequential, parts_chunks)
+        # flatten list of lists of results into list of results
+        results = list(_flatten(list_list_results))
+
+        return results
 
     def evaluate_constraint(
         self,
@@ -1891,9 +1894,27 @@ class EvaluationSet:
                         if _is_significantly_greater(0.0, score_gap):
                             break
             else:
-                violating_parts_scores_summaries, score_gap = EvaluationSet.evaluate_singular_constraint_parallel(
-                    constraint, parts, score_gap
+                results = EvaluationSet.evaluate_singular_constraint_parallel(
+                    constraint, parts, score_transfer_function
                 )
+                for result in results:
+                    if result.score is None:
+                        print(f"WARNING: constraint {constraint} returned a result with score None")
+                        print(f"result: {result}")
+                        sys.exit()
+                if score_gap is not None:
+                    total_score = sum(result.score for result in results if result.score != 0.0)
+                    score_gap -= total_score
+
+        elif isinstance(constraint, BulkConstraint):
+            # XXX: I don't understand the mypy error on the next line
+            results = constraint.call_evaluate_bulk(parts, score_transfer_function)  # type: ignore
+
+            # we can't quit this function early,
+            # but we can let the caller know to stop evaluating constraints
+            if score_gap is not None:
+                total_score = sum(result.score for result in results if result.score != 0.0)
+                score_gap -= total_score
 
         else:
             raise AssertionError(f"constraint {constraint} of unrecognized type {constraint.__class__.__name__}")
@@ -1911,7 +1932,7 @@ class EvaluationSet:
             domain_to_viols = self.domain_to_violations
 
         for result in results:
-            domains = _independent_domains_in_part(result.part, exclude_fixed=False)
+            domains = _independent_domains_in_part(result.part, exclude_fixed=True)
             evaluation = Evaluation(constraint=constraint, domains=domains, result=result)
 
             evals_of_constraint[result.part] = evaluation
@@ -2201,8 +2222,9 @@ def create_constraints_report(
         :any:`ConstraintsReport` describing a report of how well `design` does
         according to `constraints`
     """
+    constraints = list(constraints)
     eval_set = EvaluationSet(constraints, False)
-    params = SearchParameters()
+    params = SearchParameters(constraints=constraints)
     eval_set.evaluate_all(design, params)
 
     reports = [ConstraintReport(constraint, eval_set, report_only_violations) for constraint in constraints]
@@ -2460,12 +2482,22 @@ def display_report(
         )
 
         plt.yscale(yscale)
+        import matplotlib.ticker as ticker
+
+        # this ensures y-axis uses integer ticks
+        plt.gca().yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+        plt.gca().yaxis.set_major_formatter(ticker.FormatStrFormatter("%d"))
 
         # see if user set custom x limits for this constraint
         # not sure why getting mypy error on next line
         xlim = _value_from_constraint_dict(xlims, report.constraint, None, tuple)  # type:ignore
         if xlim is not None:
             plt.xlim(xlim)
+        else:
+            if all(value <= 0 for value in values):  # if all values are nonpositive, set upper x limit of 0
+                plt.xlim(right=0)
+            if all(value >= 0 for value in values):  # if all values are nonnegative, set lower x limit of 0
+                plt.xlim(left=0)
 
         if isinstance(ylims, (int, float)):
             plt.ylim(top=ylims)
