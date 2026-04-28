@@ -1,4 +1,4 @@
-"""
+r"""
 Library for doing sequence design that can be expressed as linear algebra
 operations for rapid processing by numpy (e.g., generating all DNA sequences
 of a certain length and calculating all their full duplex binding energies
@@ -7,7 +7,7 @@ in the nearest neighbor model and filtering those outside a given range).
 Based on the DNA single-stranded tile (SST) sequence designer used in the following publication.
 
 "Diverse and robust molecular algorithms using reprogrammable DNA self-assembly"
-Woods*, Doty*, Myhrvold, Hui, Zhou, Yin, Winfree. (*Joint first co-authors)
+Woods\*, Doty\*, Myhrvold, Hui, Zhou, Yin, Winfree. (\*Joint first co-authors)
 """  # noqa
 
 from __future__ import annotations
@@ -826,7 +826,7 @@ class DNASeqList:
                 if len(seq) != self.seqlen:
                     raise ValueError("All sequences in seqs must be equal length")
             self.numseqs = len(seqs)
-            self.seqarr = seqs2arr(seqs)    
+            self.seqarr = seqs2arr(seqs)
 
         elif filename is not None:
             self._read_from_file(filename)
