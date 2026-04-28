@@ -3423,7 +3423,7 @@ class Design(JSONSerializable):
         if len(self.strands) > 0:
             for strand in self.strands:
                 for domain_in_strand in strand.domains:
-                    domains_in_tree = domain_in_strand.all_domains_in_tree()
+                    domains_in_tree = domain_in_strand.all_domains_in_tree(allow_fixed=True)
                     for domain_in_tree in domains_in_tree:
                         name = domain_in_tree.name
                         if name not in self.domains_by_name:
