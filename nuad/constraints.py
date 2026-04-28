@@ -1740,17 +1740,6 @@ class Domain(Part, JSONSerializable):
                     f"but {len(self._subdomains)} subdomains were given:\n"
                     f"{self._subdomains}"
                 )
-        # else:
-        #     contains_no_non_fixed_subdomains = True
-        #     for sd in self._subdomains:
-        #         if not sd.fixed:
-        #             contains_no_non_fixed_subdomains = False
-        #             break
-        #     if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
-        #         raise ValueError(
-        #             f"Domain {self.name} is not fixed, but all subdomains "
-        #             f"{[subdomain.name for subdomain in self._subdomains]} are fixed"
-        #         )
 
         # set parent field for all subdomains.
         for subdomain in self._subdomains:
@@ -1763,7 +1752,8 @@ class Domain(Part, JSONSerializable):
                     "since dependent domains cannot be picked to change in the search, "
                     "which is the probability that DOmain.weight affects"
                 )
-            self.length = sum(subdomain.get_length() for subdomain in self._subdomains)
+            if len(self._subdomains) > 0:
+                self.length = sum(subdomain.get_length() for subdomain in self._subdomains)
 
         if weight is not None:
             self.weight = weight
@@ -3420,6 +3410,7 @@ class Design(JSONSerializable):
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
         self.domains_by_name = {}
+        self.check_all_subdomain_graphs_acyclic()
         if len(self.strands) > 0:
             for strand in self.strands:
                 for domain_in_strand in strand.domains:
@@ -3429,7 +3420,6 @@ class Design(JSONSerializable):
                         if name not in self.domains_by_name:
                             self.domains_by_name[name] = domain_in_tree
 
-        self.check_all_subdomain_graphs_acyclic()
         self.check_all_subdomain_graphs_uniquely_assignable()
         self.compute_derived_fields()
 
