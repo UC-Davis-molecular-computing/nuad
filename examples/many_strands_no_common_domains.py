@@ -165,12 +165,17 @@ def main() -> None:
         threshold=3.0, temperature=52, short_description="StrandPairNUPACK", parallel=parallel, weight=0.1
     )
 
+    strand_pair_rna_multifold_constraint = nc.rna_multifold_strand_pair_constraint(
+        threshold=-3.0, temperature=52, short_description="RNAmultifold", parallel=parallel
+    )
+
     params = ns.SearchParameters(
         constraints=[
             # domain_nupack_ss_constraint,
             # strand_individual_ss_constraint,
-            strand_pairs_rna_duplex_constraint,
+            # strand_pairs_rna_duplex_constraint,
             # strand_pairs_rna_plex_constraint,
+            strand_pair_rna_multifold_constraint,
             # strand_pair_nupack_constraint,
             # domain_pair_nupack_constraint,
             # domain_pairs_rna_plex_constraint,

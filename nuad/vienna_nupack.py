@@ -721,89 +721,68 @@ def _fix_filename_windows(parameters_filename: str) -> str:
     return parameters_filename
 
 
-def rna_cofold_multiple(
-    seq_pairs: Sequence[tuple[S, S]],
+def rna_multifold(
+    seqs: Sequence[S],
+    temperature: float = default_temperature,
+    max_energy: float = 0.0,
+    gu_wobble: bool = False,
+) -> float:
+    """
+    Computes the complex free energy of an arbitrary tuple of DNA sequences using
+    ViennaRNA's multi-strand partition function (the analog of NUPACK's :func:`pfunc`).
+    Internally calls ``RNA.fold_compound("&".join(seqs)).pf()``.
+
+    Multi-strand (>2) support requires ViennaRNA >= 2.5.0. For two strands this is
+    equivalent to RNAcofold's partition-function output; for one strand it is
+    equivalent to RNAfold -p.
+
+    :param seqs:
+        tuple/list of DNA sequences forming a complex (any length >= 1)
+    :param temperature:
+        temperature in Celsius
+    :param max_energy:
+        Maximum energy to return. If ViennaRNA reports an energy larger than this
+        (e.g., 100000 when no base pairs are possible between strands like CCCC and TTTT),
+        it is clamped to `max_energy`.
+    :param gu_wobble:
+        Whether to allow GU wobble pairs.
+    :return:
+        complex free energy in kcal/mol
+    """
+    import RNA
+
+    RNA.cvar.temperature = temperature
+    RNA.cvar.noGU = not gu_wobble
+    load_params_viennarna()
+
+    fc = RNA.fold_compound("&".join(seqs))
+    _, energy = fc.pf()
+    return min(energy, max_energy)
+
+
+def rna_multifold_multiple(
+    seq_tuples: Sequence[Sequence[S]],
     logger: logging.Logger = logging.root,
     temperature: float = default_temperature,
     parameters_filename: str = default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
+    gu_wobble: bool = False,
 ) -> tuple[float, ...]:
     """
-    Calls RNAcofold (from ViennaRNA package: https://www.tbi.univie.ac.at/RNA/)
-    on a list of pairs, specifically:
-    [ (seq1, seq2), (seq2, seq3), (seq4, seq5), ... ]
-    where seqi is a string over {A,C,T,G}. Temperature is in Celsius.
-    Returns a list (in the same order as seqpairs) of free energies.
+    Bulk wrapper around :func:`rna_multifold`: computes the complex free energy of each tuple
+    of sequences in `seq_tuples`. Each element of `seq_tuples` may have any length >= 1.
 
-    :param seq_pairs:
-        sequence (list or tuple) of pairs of DNA sequences
-    :param logger:
-        logger to use for printing error messages
-    :param temperature:
-        temperature in Celsius
-    :param parameters_filename:
-        name of NUPACK parameters file
-    :param max_energy:
-        This is the maximum energy possible to assign. If RNAcofold reports any energies larger than this,
-        they will be changed to `max_energy`. This is useful in case two sequences have no possible
-        base pairs between them (e.g., CCCC and TTTT), in which case RNAcofold assigns a free energy
-        of 100000 (perhaps its approximation of infinity). But for meaningful comparison and particularly
-        for graphing energies, it's nice if there's not some value several orders of magnitude larger
-        than all the rest.
-    :return:
-        tuple of free energies, in the same order as `seq_pairs`
+    Provided so callers expecting the same signature as :func:`rna_duplex_multiple` /
+    :func:`rna_plex_multiple` can use multi-strand free energies.
+    The `parameters_filename` argument is accepted for signature parity but ignored;
+    the Mathews 2004 DNA parameters are loaded once via :func:`load_params_viennarna`.
     """
+    del logger, parameters_filename  # unused, kept for signature parity
 
-    # NB: the string NA_parameter_set needs to be exactly the intended filename;
-    # e.g. any extra whitespace characters cause RNAduplex to default to RNA parameter set
-    # without warning the user!
-
-    # Note that loading parameter set dna_mathews2004.par throws a warning encoded in that parameter set:
-    # WARNING: stacking enthalpies not symmetric
-
-    # https://stackoverflow.com/questions/10174211/how-to-make-an-always-relative-to-current-module-file-path
-    full_parameters_filename = os.path.join(os.path.dirname(__file__), parameter_set_directory, parameters_filename)
-
-    if os_is_windows:
-        full_parameters_filename = _fix_filename_windows(full_parameters_filename)
-
-    # DNA sequences to type after RNAcofold starts up
-    user_input = "\n".join(seqpair[0] + "&" + seqpair[1] for seqpair in seq_pairs) + "\n@\n"
-
-    command_strs: List[str] = [
-        "RNAcofold",
-        "-P",
-        full_parameters_filename,
-        "-T",
-        str(temperature),
-        "--noGU",
-        "−−noconv",
-        "-p",
-    ]
-
-    output, stderr = call_subprocess(command_strs, user_input)
-
-    if stderr.strip() != "":
-        logger.warning("error from RNAduplex: ", stderr)
-        if stderr.split("\n")[0] != "WARNING: stacking enthalpies not symmetric":
-            raise ValueError(
-                'I will ignore errors about "stacking enthalpies not symmetric", but this '
-                "is a different error that I don't know how to handled. Exiting."
-            )
-
-    lines = output.split("\n")
-    dg_list: List[float] = []
-    for line in lines[:-1]:
-        energy = -float(line.split(":")[1].split("(")[1].split(")")[0])
-        energy = min(energy, max_energy)
-        dg_list.append(energy)
-
-    if len(lines) - 1 != len(seq_pairs):
-        raise AssertionError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(seq_pairs)}")
-
-    dg_tuple = tuple(dg_list)
-
-    return dg_tuple
+    return tuple(
+        rna_multifold(seqs, temperature=temperature, max_energy=max_energy, gu_wobble=gu_wobble)
+        for seqs in seq_tuples
+    )
 
 
 _rctable = str.maketrans("ACGTacgt", "TGCAtgca")

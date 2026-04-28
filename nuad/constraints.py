@@ -6303,7 +6303,7 @@ def domain_pairs_nonorthogonal_constraint(
     max_energy: float = 0.0,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
-    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAcofold
+    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAmultifold
 
     if description is None:
         description = f"domain pair {tool_name} energies for nonorthogonal domains at {temperature}C"
@@ -6532,24 +6532,26 @@ def rna_duplex_domain_pairs_nonorthogonal_constraint(
     )
 
 
-def rna_cofold_domain_pairs_nonorthogonal_constraint(
+def rna_multifold_domain_pairs_nonorthogonal_constraint(
     thresholds: dict[tuple[Domain, bool, Domain, bool] | tuple[Domain, Domain], tuple[float, float]],
     temperature: float = nv.default_temperature,
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs_nonorth",
+    short_description: str = "rna_multifold_dom_pairs_nonorth",
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
     """
-    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses RNAcofold instead of RNAplex.
+    Similar to :meth:`rna_plex_domain_pairs_nonorthogonal_constraint`, but uses ViennaRNA's
+    multi-strand partition function (``RNA.fold_compound(...).pf()``, the Python analog of
+    NUPACK's :func:`pfunc`) instead of RNAplex.
     """
     _check_vienna_rna_installed()
 
     return domain_pairs_nonorthogonal_constraint(
-        evaluation_function=nv.rna_cofold_multiple,
-        tool_name="RNAcofold",
+        evaluation_function=nv.rna_multifold_multiple,
+        tool_name="RNAmultifold",
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6679,7 +6681,7 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
     # or
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
     #   and
-    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
     # are. See https://mypy.readthedocs.io/en/stable/protocols.html#callback-protocols
     # The Protocol class seems to be available in the typing module, even though the above
     # documentation seems to indicate it is only in typing_extensions?
@@ -6714,7 +6716,7 @@ def _strand_pairs_constraints_by_number_matching_domains(
     # function to share common code between
     #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
     # and
-    #   rna_cofold_strand_pairs_constraints_by_number_matching_domains
+    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
 
     check_strand_against_itself = True
     pairs = _normalize_strands_pairs_disjoint_parameters(strands, pairs, check_strand_against_itself)
@@ -6801,7 +6803,7 @@ def _normalize_strands_pairs_disjoint_parameters(
     return pairs_tuple
 
 
-def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
+def rna_multifold_strand_pair_constraints_by_number_matching_domains(
     *,
     thresholds: dict[int, float],
     temperature: float = nv.default_temperature,
@@ -6812,28 +6814,29 @@ def rna_cofold_strand_pairs_constraints_by_number_matching_domains(
     parallel: bool = False,
     strands: Iterable[Strand] | None = None,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
-    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     ignore_missing_thresholds: bool = False,
-) -> list[StrandPairsConstraint]:
+) -> list[StrandPairConstraint]:
     """
-    Similar to :func:`rna_duplex_strand_pairs_constraints_by_number_matching_domains`
-    but creates constraints as returned by :meth:`rna_cofold_strand_pairs_constraint`.
+    Similar to :func:`rna_duplex_strand_pair_constraints_by_number_matching_domains`
+    but creates constraints as returned by :meth:`rna_multifold_strand_pair_constraint`.
     """
-    rna_cofold_with_parameters_filename: _StrandPairsConstraintCreator = functools.partial(
-        rna_cofold_strand_pairs_constraint,  # type:ignore
-        parameters_filename=parameters_filename,
-    )
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNAcofold", threshold, temperature)
+                _pair_default_description("strand", "RNAmultifold", threshold, temperature)
                 + f" for strands with {num_matching} complementary "
                 f"{'domain' if num_matching == 1 else 'domains'}"
             )
             for num_matching, threshold in thresholds.items()
         }
+
+    if short_descriptions is None:
+        short_descriptions = {
+            num_matching: f"RNAmfPair{num_matching}comp" for num_matching, _ in thresholds.items()
+        }
+
     return _strand_pairs_constraints_by_number_matching_domains(
-        constraint_creator=rna_cofold_with_parameters_filename,
+        constraint_creator=rna_multifold_strand_pair_constraint,
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -7717,24 +7720,28 @@ def energy_excess_domains(
     return excess
 
 
-def rna_cofold_strand_pairs_constraint(
+def rna_multifold_strand_pair_constraint(
     *,
     threshold: float,
     temperature: float = nv.default_temperature,
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_dup_strand_pairs",
+    short_description: str = "rna_multifold_strand_pair",
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
-    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-) -> StrandPairsConstraint:
+    strands: Iterable[Strand] | None = None,
+) -> StrandPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Strand`'s for excessive interaction using
-    Vienna RNA's RNAduplex executable.
+    ViennaRNA's multi-strand partition function (the analog of NUPACK's :func:`pfunc`),
+    via the Python ``RNA.fold_compound(...).pf()`` API. This is equivalent in spirit to
+    the command-line ``RNAmultifold`` tool (the N-strand successor to ``RNAcofold``).
+
+    Multi-strand support requires ViennaRNA >= 2.5.0.
 
     :param threshold:
-        Energy threshold in kcal/mol
+        Energy threshold in kcal/mol.
     :param temperature:
         Temperature in Celsius.
     :param weight:
@@ -7748,60 +7755,51 @@ def rna_cofold_strand_pairs_constraint(
     :param parallel:
         Whether to test each pair of :any:`Strand`'s in parallel.
     :param pairs:
-        Pairs of :any:`Strand`'s to compare; if not specified, checks all pairs.
-    :param parameters_filename:
-        Name of parameters file for ViennaRNA;
-        default is same as :py:meth:`vienna_nupack.rna_duplex_multiple`
+        Pairs of :any:`Strand`'s to compare. Mutually exclusive with `strands`.
+    :param strands:
+        :any:`Strand`'s to compare; all pairs (including each strand with itself) are checked.
+        Mutually exclusive with `pairs`.
     :return:
-        The :any:`StrandPairsConstraint`.
+        The :any:`StrandPairConstraint`.
     """
-    _check_vienna_rna_installed()
+    if strands is not None and pairs is not None:
+        raise ValueError("Exactly one of strands or pairs can be specified, but not both.")
+    gu_wobble = False
+    max_energy = 0.0
+    import RNA
+
+    RNA.cvar.temperature = temperature
+    RNA.cvar.noGU = not gu_wobble
+    RNA.params_load_DNA_Mathews2004()
 
     if description is None:
-        description = f"RNAcofold energy for some strand pairs exceeds {threshold} kcal/mol"
+        description = _pair_default_description("strand", "RNAmultifold", threshold, temperature)
 
-    num_threads = max(cpu_count() - 1, 1)  # this seems to be slightly faster than using all cores
-
-    # we use ThreadPool instead of pathos because we're farming this out to processes through
-    # subprocess module anyway, no need for pathos to boot up separate processes or serialize through dill
-    thread_pool = ThreadPool(processes=num_threads)
-
-    def calculate_energies_unparallel(
-        sequence_pairs: Sequence[tuple[str, str]],
-    ) -> tuple[float]:
-        return nv.rna_cofold_multiple(sequence_pairs, logger, temperature, parameters_filename)
-
-    def calculate_energies(sequence_pairs: Sequence[tuple[str, str]]) -> tuple[float]:
-        if parallel and len(sequence_pairs) > 1:
-            lists_of_sequence_pairs = chunker(sequence_pairs, num_chunks=num_threads)
-            lists_of_energies = thread_pool.map(calculate_energies_unparallel, lists_of_sequence_pairs)
-            energies = flatten(lists_of_energies)
-        else:
-            energies = calculate_energies_unparallel(sequence_pairs)
-        return energies
-
-    def evaluate_bulk_rna_cofold_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
-        sequence_pairs = [(pair.strand1.sequence(), pair.strand2.sequence()) for pair in strand_pairs]
-        energies = calculate_energies(sequence_pairs)
-
-        results = []
-        for pair, energy in zip(strand_pairs, energies):
-            excess = threshold - energy
-            result = Result(excess=excess, value=energy, unit="kcal/mol")
-            results.append(result)
-        return results
+    def evaluate_rna_multifold_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
+        seq1, seq2 = seqs
+        fc = RNA.fold_compound(seq1 + "&" + seq2)
+        _, energy = fc.pf()
+        energy = min(energy, max_energy)
+        excess = max(0.0, threshold - energy)
+        return Result(excess=excess, value=energy, unit="kcal/mol")
 
     pairs_tuple = None
     if pairs is not None:
+        assert strands is None
         pairs_tuple = tuple(pairs)
 
-    return StrandPairsConstraint(
+    if strands is not None:
+        assert pairs_tuple is None
+        pairs_tuple = tuple(itertools.combinations_with_replacement(tuple(strands), 2))
+
+    return StrandPairConstraint(
         description=description,
         short_description=short_description,
         weight=weight,
         score_transfer_function=score_transfer_function,
-        evaluate_bulk=evaluate_bulk_rna_cofold_strand_pairs,
+        evaluate=evaluate_rna_multifold_strand_pair,
         pairs=pairs_tuple,
+        parallel=parallel,
     )
 
 
