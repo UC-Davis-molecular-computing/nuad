@@ -86,15 +86,23 @@ class TestIntersectingDomains(unittest.TestCase):
               / \   / \
              E   F g   h
         """
-        E = Domain('e', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        F = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        h = Domain('h', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
 
-        b = Domain('b', assign_domain_pool_of_length(10), type=DomainType.DEPENDENT, subdomains=[E, F])
-        C = Domain('C', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE, subdomains=[g, h])
+        E = Domain('e', assign_domain_pool_of_length(5))
+        E.set_state(DomainType.ASSIGNABLE)
+        F = Domain('f', assign_domain_pool_of_length(5))
+        F.set_state(DomainType.ASSIGNABLE)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.DEPENDENT)
+        h = Domain('h', assign_domain_pool_of_length(5))
+        h.set_state(DomainType.DEPENDENT)
 
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.DEPENDENT, subdomains=[b, C])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[E, F])
+        b.set_state(DomainType.DEPENDENT)
+        C = Domain('C', assign_domain_pool_of_length(10), subdomains=[g, h])
+        C.set_state(DomainType.ASSIGNABLE)
+
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, C])
+        E.set_state(DomainType.DEPENDENT)
 
         all_domains = [a, b, C, E, F, g, h]
 
@@ -394,19 +402,26 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1]
 
-        d = Domain('d', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b = Domain('b', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[c, f])
-        X = Domain('X', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_state(DomainType.FIXED)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.FIXED)
+        c = Domain('c', assign_domain_pool_of_length(10))
+        c.set_state(DomainType.ASSIGNABLE)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.ASSIGNABLE)
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
+        b.set_state(DomainType.LOCKED)
+        X = Domain('X', assign_domain_pool_of_length(5))
+        X.set_state(DomainType.DEPENDENT)
         e = Domain(
             'e',
             assign_domain_pool_of_length(5),
-            type=DomainType.ASSIGNABLE,
             dependents=[(X, dependency_function_reverses_sequence)],
         )
+        e.set_state(DomainType.ASSIGNABLE)
         a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
+        e.set_state(DomainType.LOCKED)
 
         design = nc.Design()
 
@@ -450,11 +465,16 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
 
         # create design
         d = Domain('d', assign_domain_pool_of_length(5))
-        b = Domain('b', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        c = Domain('c', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        a = Domain('a', assign_domain_pool_of_length(10), type=DomainType.LOCKED, subdomains=[b, c])
-        h = Domain('h', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        p = Domain('p', assign_domain_pool_of_length(15), type=DomainType.DEPENDENT, subdomains=[a, h])
+        b = Domain('b', assign_domain_pool_of_length(5))
+        b.set_state(DomainType.LOCKED)
+        c = Domain('c', assign_domain_pool_of_length(5))
+        c.set_state(DomainType.LOCKED)
+        a = Domain('a', assign_domain_pool_of_length(10), subdomains=[b, c])
+        a.set_state(DomainType.LOCKED)
+        h = Domain('h', assign_domain_pool_of_length(5))
+        h.set_state(DomainType.LOCKED)
+        p = Domain('p', assign_domain_pool_of_length(15), subdomains=[a, h])
+        p.set_state(DomainType.DEPENDENT)
 
         d.dependents.append((p, dependency_function_reverses_sequence_then_three_times_longer))
         c.dependents.append((p, dependency_function_reverses_sequence))  # to test cycle detection
@@ -506,19 +526,26 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         ):
             return sequence[::-1]
 
-        d = Domain('d', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b = Domain('b', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[c, f])
-        X = Domain('X', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_state(DomainType.FIXED)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.FIXED)
+        c = Domain('c', assign_domain_pool_of_length(10))
+        c.set_state(DomainType.ASSIGNABLE)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.ASSIGNABLE)
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
+        b.set_state(DomainType.LOCKED)
+        X = Domain('X', assign_domain_pool_of_length(5))
+        X.set_state(DomainType.DEPENDENT)
         e = Domain(
             'e',
             assign_domain_pool_of_length(5),
-            type=DomainType.ASSIGNABLE,
             dependents=[(X, dependency_function_reverses_sequence)],
         )
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
+        e.set_state(DomainType.ASSIGNABLE)
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
+        a.set_state(DomainType.LOCKED)
 
         design = nc.Design()
 
@@ -555,26 +582,38 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain('d', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b = Domain('b', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[c, f])
-        X = Domain('X', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_state(DomainType.FIXED)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.FIXED)
+        c = Domain('c', assign_domain_pool_of_length(10))
+        c.set_state(DomainType.ASSIGNABLE)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.ASSIGNABLE)
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
+        b.set_state(DomainType.LOCKED)
+        X = Domain('X', assign_domain_pool_of_length(5))
+        X.set_state(DomainType.DEPENDENT)
         e = Domain(
             'e',
             assign_domain_pool_of_length(5),
-            type=DomainType.ASSIGNABLE,
             dependents=[(X, dependency_function)],
         )
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
+        e.set_state(DomainType.ASSIGNABLE)
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
+        a.set_state(DomainType.LOCKED)
 
         d1 = Domain('d1', assign_domain_pool_of_length(5))
-        b1 = Domain('b1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        c1 = Domain('c1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        a1 = Domain('a1', assign_domain_pool_of_length(10), type=DomainType.LOCKED, subdomains=[b1, c1])
-        h1 = Domain('h1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        p1 = Domain('p1', assign_domain_pool_of_length(15), type=DomainType.DEPENDENT, subdomains=[a1, h1])
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
+        b1.set_state(DomainType.LOCKED)
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
+        c1.set_state(DomainType.LOCKED)
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1.set_state(DomainType.LOCKED)
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
+        h1.set_state(DomainType.LOCKED)
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1.set_state(DomainType.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
 
         design = nc.Design()
@@ -607,27 +646,41 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain('d', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b = Domain('b', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[c, f])
-        X = Domain('X', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_state(DomainType.FIXED)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.FIXED)
+        c = Domain('c', assign_domain_pool_of_length(10))
+        c.set_state(DomainType.ASSIGNABLE)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.ASSIGNABLE)
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
+        b.set_state(DomainType.LOCKED)
+        X = Domain('X', assign_domain_pool_of_length(5))
+        X.set_state(DomainType.DEPENDENT)
         e = Domain(
             'e',
             assign_domain_pool_of_length(5),
-            type=DomainType.ASSIGNABLE,
             dependents=[(X, dependency_function)],
         )
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
+        e.set_state(DomainType.ASSIGNABLE)
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
+        a.set_state(DomainType.LOCKED)
 
-        d1 = Domain('d1', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b1 = Domain('b1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        c1 = Domain('c1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        a1 = Domain('a1', assign_domain_pool_of_length(10), type=DomainType.LOCKED, subdomains=[b1, c1])
-        h1 = Domain('h1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        p1 = Domain('p1', assign_domain_pool_of_length(15), type=DomainType.DEPENDENT, subdomains=[a1, h1])
+        d1 = Domain('d1', assign_domain_pool_of_length(5))
+        d1.set_state(DomainType.ASSIGNABLE)
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
+        b1.set_state(DomainType.LOCKED)
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
+        c1.set_state(DomainType.LOCKED)
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1.set_state(DomainType.LOCKED)
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
+        h1.set_state(DomainType.LOCKED)
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1.set_state(DomainType.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
+
 
         design = nc.Design()
         design.add_strand(domains=[d, g, c, h1], starred_domain_indices=[1])
@@ -667,26 +720,38 @@ class TestDependencyRelatedFunctions(unittest.TestCase):
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain('d', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(10), type=DomainType.LOCKED)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        b = Domain('b', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[c, f])
-        X = Domain('X', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_state(DomainType.FIXED)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.FIXED)
+        c = Domain('c', assign_domain_pool_of_length(10))
+        c.set_state(DomainType.LOCKED)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.ASSIGNABLE)
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
+        b.set_state(DomainType.LOCKED)
+        X = Domain('X', assign_domain_pool_of_length(5))
+        X.set_state(DomainType.DEPENDENT)
         e = Domain(
             'e',
             assign_domain_pool_of_length(5),
-            type=DomainType.ASSIGNABLE,
             dependents=[(X, dependency_function)],
         )
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
+        e.set_state(DomainType.ASSIGNABLE)
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
+        a.set_state(DomainType.LOCKED)
 
         d1 = Domain('d1', assign_domain_pool_of_length(5))
-        b1 = Domain('b1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        c1 = Domain('c1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        a1 = Domain('a1', assign_domain_pool_of_length(10), type=DomainType.LOCKED, subdomains=[b1, c1])
-        h1 = Domain('h1', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        p1 = Domain('p1', assign_domain_pool_of_length(15), type=DomainType.DEPENDENT, subdomains=[a1, h1])
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
+        b1.set_state(DomainType.LOCKED)
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
+        c1.set_state(DomainType.LOCKED)
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1.set_state(DomainType.LOCKED)
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
+        h1.set_state(DomainType.LOCKED)
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1.set_state(DomainType.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
 
         design = nc.Design()
@@ -710,28 +775,36 @@ class TestDagObjectCreation(unittest.TestCase):
                                      /\
                                     x  y
                     """
-        e = Domain('e', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        e = Domain('e', assign_domain_pool_of_length(5))
+        e.set_state(DomainType.DEPENDENT)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.DEPENDENT)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.DEPENDENT)
 
-        x = Domain('x', assign_domain_pool_of_length(2), type=DomainType.DEPENDENT)
-        y = Domain('y', assign_domain_pool_of_length(3), type=DomainType.DEPENDENT)
-        h = Domain('h', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT, subdomains=[x, y])
+        x = Domain('x', assign_domain_pool_of_length(2))
+        x.set_state(DomainType.DEPENDENT)
+        y = Domain('y', assign_domain_pool_of_length(3))
+        y.set_state(DomainType.DEPENDENT)
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
+        h.set_state(DomainType.DEPENDENT)
 
-        i = Domain('i', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        b = Domain('b', assign_domain_pool_of_length(10), type=DomainType.DEPENDENT, subdomains=[e, f])
+        i = Domain('i', assign_domain_pool_of_length(5))
+        i.set_state(DomainType.DEPENDENT)
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
+        b.set_state(DomainType.DEPENDENT)
         c = Domain(
             'c',
             assign_domain_pool_of_length(10),
-            type=DomainType.DEPENDENT,
             subdomains=[g, h],
         )
+        c.set_state(DomainType.DEPENDENT)
 
-        A = Domain('A', assign_domain_pool_of_length(20), type=DomainType.ASSIGNABLE, subdomains=[b, c])
-        B = Domain('B', assign_domain_pool_of_length(15), type=DomainType.ASSIGNABLE, subdomains=[g, h, i])
-        # D = Domain(
-        #     "D", assign_domain_pool_of_length(25), state=State.ASSIGNABLE, subdomains=[A, B]
-        # )
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
+        A.set_state(DomainType.DEPENDENT)
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B.set_state(DomainType.DEPENDENT)
+
         visited, domain_name_to_interval = nc.set_domains_memoryviews(h)
         self.assertEqual(visited, {'A', 'b', 'c', 'e', 'f', 'g', 'h', 'i', 'B', 'x', 'y'})
 
@@ -765,25 +838,35 @@ class TestAllIntersectingDomains(unittest.TestCase):
                                              /\
                                             x  y
                             """
-        e = Domain('e', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        f = Domain('f', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
+        e = Domain('e', assign_domain_pool_of_length(5))
+        e.set_state(DomainType.DEPENDENT)
+        f = Domain('f', assign_domain_pool_of_length(5))
+        f.set_state(DomainType.DEPENDENT)
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.DEPENDENT)
 
-        x = Domain('x', assign_domain_pool_of_length(2), type=DomainType.DEPENDENT)
-        y = Domain('y', assign_domain_pool_of_length(3), type=DomainType.DEPENDENT)
-        h = Domain('h', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT, subdomains=[x, y])
+        x = Domain('x', assign_domain_pool_of_length(2))
+        x.set_state(DomainType.DEPENDENT)
+        y = Domain('y', assign_domain_pool_of_length(3))
+        y.set_state(DomainType.DEPENDENT)
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
+        h.set_state(DomainType.DEPENDENT)
 
-        i = Domain('i', assign_domain_pool_of_length(5), type=DomainType.DEPENDENT)
-        b = Domain('b', assign_domain_pool_of_length(10), type=DomainType.DEPENDENT, subdomains=[e, f])
+        i = Domain('i', assign_domain_pool_of_length(5))
+        i.set_state(DomainType.DEPENDENT)
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
+        b.set_state(DomainType.DEPENDENT)
         c = Domain(
             'c',
             assign_domain_pool_of_length(10),
-            type=DomainType.DEPENDENT,
             subdomains=[g, h],
         )
+        c.set_state(DomainType.DEPENDENT)
 
-        A = Domain('A', assign_domain_pool_of_length(20), type=DomainType.ASSIGNABLE, subdomains=[b, c])
-        B = Domain('B', assign_domain_pool_of_length(15), type=DomainType.ASSIGNABLE, subdomains=[g, h, i])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
+        A.set_state(DomainType.ASSIGNABLE)
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B.set_state(DomainType.ASSIGNABLE)
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
         # )

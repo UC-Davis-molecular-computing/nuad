@@ -3856,14 +3856,7 @@ class Design(JSONSerializable):
                 f'domain_names: {domain_names}\n'
                 f'domains: {domains}\n'
                 f'starred_domain_indices: {starred_domain_indices}'
-            )
-
-        # elif domain_names is not None:
-        #     if domain_name_to_subdomains is not None:
-        #         for domain in domain_name_to_subdomains:
-        #             if domain not in domain_names:
-        #                 raise ValueError(f"Domain {domain} is not listed in domain_names of the strand {name}: "
-        #                                  f"{domain_names}.")
+                                          f"{domain_names}.")
 
         domains = []
         starred_domain_indices = OrderedSet()
@@ -3872,7 +3865,6 @@ class Design(JSONSerializable):
             if is_starred:
                 domain_name = domain_name[:-1]
 
-            # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
             domain: Domain
             if domain_name not in self.domains_by_name:
                 domain = Domain(name=domain_name)
@@ -3880,26 +3872,10 @@ class Design(JSONSerializable):
             else:
                 domain = self.domains_by_name[domain_name]
 
-            # if domain_name_to_subdomains is not None:
-            #     subdomains = domain_name_to_subdomains[domain_name]
-            #     domain.subdomains = list(subdomains)
-
             domains.append(domain)
             if is_starred:
                 starred_domain_indices.add(idx)
 
-        # if domain_names is None and domain_name_to_subdomains is not None:
-        #     names = [domain.name for domain in domains]
-        #     for domain in domain_name_to_subdomains:
-        #         if domain not in names:
-        #             raise ValueError(f"Domain {domain} is not listed in domains of the strand {name}:"
-        #                              f"{domains}.")
-        #         else:
-        #             for d in domains:
-        #                 if d.name == domain:
-        #                     subdomains = list(domain_name_to_subdomains[domain])
-        #                     d.subdomains = subdomains
-        #
 
         domains_of_strand = list(domains)  # type: ignore
         strand = Strand(
@@ -3938,8 +3914,8 @@ class Design(JSONSerializable):
     def add_subdomains(self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]],
                        keep_domain_assignable: bool = False) -> None:
         """
-        TODO: add docstring
-
+        :param domain_name: name of the domain we want add subdomains to
+        :param subdomain_names_and_lengths: list of tuples of subdomain names and their length
         :param keep_domain_assignable:
             This means: 1) an assertion that the domain with name `domain_name` (if it already exists)
             is currently assignable (an exception will be raised if not), and 2) that we should keep it
@@ -3955,11 +3931,6 @@ class Design(JSONSerializable):
             domain = Domain(name=domain_name)
             self.domains_by_name[domain_name] = domain
 
-        # if domain_type:
-        #     domain.type = domain_type
-        # else:
-        #     if domain.type == DomainType.ASSIGNABLE:
-        #         domain.type = DomainType.LOCKED
 
         assert domain.type != DomainType.FIXED
         if keep_domain_assignable:
@@ -3990,17 +3961,22 @@ class Design(JSONSerializable):
             subdomain.length = length
 
             if subdomain.type != DomainType.ASSIGNABLE:
-                # in case there is a predefined unlocked ancestor for domain
+                # in case there is a predefined unlocked ancestor for domain:
                 if subdomain.type != DomainType.LOCKED:
-                    unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
+                    unlocked_ancestor = [anc for anc in domain.ancestors() if anc.type != DomainType.LOCKED]
                     if unlocked_ancestor:
                         raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
                                          f" in a subdomain graph, but found more in the path(s) "
                                          f"with domain {domain.name} and unlocked domains "
                                          f"{unlocked_ancestor}, {subdomain_name}")
+                    if keep_domain_assignable:
+                        raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
+                                         f" in a subdomain graph, but found more in the path(s) "
+                                         f"with keeping the domain {domain.name} assignable and "
+                                         f"its unlocked subdomain {subdomain_name}")
             elif domain.type == DomainType.LOCKED:
                 # Now we know subdomain.type is Assignable, and domain.type is Locked,
-                # Default would normally be to made each subdomain Assignable,
+                # Default would normally be to make each subdomain Assignable,
                 # but only if there is no unlocked ancestor; otherwise we make all subdomains Locked
                 # to maintain the rule of one unlocked domain per path.
                 unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
@@ -4011,7 +3987,10 @@ class Design(JSONSerializable):
             else:
                 # This means parent is not locked, so subdomain must be locked 
                 # to enforce exactly one unlocked domain on each path.
-                subdomain.type = DomainType.LOCKED
+                if not keep_domain_assignable and domain.type == DomainType.ASSIGNABLE:
+                    domain.type = DomainType.LOCKED
+                else:
+                    subdomain.type = DomainType.LOCKED
 
 
         subdomains_total_length = sum(length for _, length in subdomain_names_and_lengths)
@@ -4023,7 +4002,6 @@ class Design(JSONSerializable):
 
         domain.subdomains = list(subdomains)
 
-        # self.compute_derived_fields()
 
     @staticmethod
     def assign_modifications_to_strands(
@@ -9568,7 +9546,7 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    leafify_strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
+    # leafify_strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:
@@ -9581,8 +9559,11 @@ def _get_base_pair_domain_endpoints_to_check(
             for idx in range(len(new_addr1_list)):
                 new_nonimplicit_base_pairs.append((new_addr1_list[idx], new_addr2_list[idx]))
 
+    # return __get_base_pair_domain_endpoints_to_check(
+    #     leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
+    # )
     return __get_base_pair_domain_endpoints_to_check(
-        leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
+        strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
     )
 
 
@@ -9597,7 +9578,7 @@ def __get_base_pair_domain_endpoints_to_check(
         Set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
-    :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
+    :raises ValueError: If competitive domains are not specified in nonimplicit_base_pairs
     :raises ValueError: If address given in nonimplicit_base_pairs is not found
     :return: Set of all the _BasePairDomainEndpoint to check
     :rtype: Set[_BasePairDomainEndpoint]
@@ -9656,14 +9637,16 @@ def __get_base_pair_domain_endpoints_to_check(
     # Check final counts of each domain for competition
     for domain_name in domain_counts:
         domain_name_complement = Domain.complementary_domain_name(domain_name)
-        # if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
-        #     assert domain_name not in nonimplicit_base_pairs_domain_names
-        #     raise ValueError(
-        #         f'Multiple instances of domain in a complex is not allowed '
-        #         f'when its complement is also in the complex. '
-        #         f'Violating domain: {domain_name_complement}'
-        #     )
+        if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
+            assert domain_name not in nonimplicit_base_pairs_domain_names
+            raise ValueError(
+                f'Multiple instances of domain in a complex is not allowed '
+                f'when its complement is also in the complex. '
+                f'Violating domain: {domain_name_complement}'
+            )
     # End Input Validation #
+    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
+    strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     addr_to_starting_base_pair_idx: Dict[StrandDomainAddress, int] = _get_addr_to_starting_base_pair_idx(strand_complex)
     all_bound_domain_addresses.update(

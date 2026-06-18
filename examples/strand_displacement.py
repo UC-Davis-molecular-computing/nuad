@@ -62,19 +62,20 @@ design = nc.Design()
 
 
 design.add_subdomains(domain_name='x1',
-                      subdomain_names_and_lengths=[('x1_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x1_toe', TOEHOLD_DOMAIN_LENGTH)],
-                      domain_type=nc.DomainType.ASSIGNABLE)
+                      subdomain_names_and_lengths=[('x1_delta', ALMOST_FULL_DOMAINS_LENGTH),
+                                                   ('x1_toe', TOEHOLD_DOMAIN_LENGTH)], keep_domain_assignable=True)
 design.add_subdomains(domain_name='x2',
-                      subdomain_names_and_lengths=[('x2_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x2_toe', TOEHOLD_DOMAIN_LENGTH)],
-                      domain_type=nc.DomainType.ASSIGNABLE)
+                      subdomain_names_and_lengths=[('x2_delta', ALMOST_FULL_DOMAINS_LENGTH),
+                                                   ('x2_toe', TOEHOLD_DOMAIN_LENGTH)], keep_domain_assignable=True)
 design.add_subdomains(domain_name='x3',
-                      subdomain_names_and_lengths=[('x3_delta', ALMOST_FULL_DOMAINS_LENGTH), ('x3_toe', TOEHOLD_DOMAIN_LENGTH)],
-                      domain_type=nc.DomainType.ASSIGNABLE)
+                      subdomain_names_and_lengths=[('x3_delta', ALMOST_FULL_DOMAINS_LENGTH),
+                                                   ('x3_toe', TOEHOLD_DOMAIN_LENGTH)], keep_domain_assignable=True)
+
 
 X: nc.Strand = design.add_strand(domain_names=['x3', 'x2', 'x1'], name=f'input_strand')
-# print(X.domains)
+
 X1, X2, X3 = X.domains[2], X.domains[1], X.domains[0]
-# print(X1.subdomains)
+
 X1.pool, X2.pool, X3.pool = FULL_LONG_DOMAIN_POOL, FULL_LONG_DOMAIN_POOL, FULL_LONG_DOMAIN_POOL
 X1_Delta, X1_TOE = X1.subdomains[0], X1.subdomains[1]
 X2_Delta, X2_TOE = X2.subdomains[0], X2.subdomains[1]
@@ -163,7 +164,7 @@ fuel_3_bottom = design.add_strand(name='fuel_3_bottom',
 # reporter
 #        Y1_Delta    c      Y2        c      Y3
 #       <==========--===============--===============]
-#        Y1*         c*      Y2*      c*       Y3*
+#          Y1*       c*      Y2*      c*       Y3*
 #  [===============--===============--===============>
 starred_Y3 = nc.Domain.complementary_domain_name('y3')
 reporter_top = design.add_strand(name='reporter_top',domain_names=['y3', 'y2', 'y1_delta'])
