@@ -1,7 +1,6 @@
 import nuad.constraints
-import nuad.vienna_nupack
+import nuad.modifications
 import nuad.np
 import nuad.stopwatch
-import nuad.modifications
-
+import nuad.vienna_nupack
 from nuad.constraints import logger

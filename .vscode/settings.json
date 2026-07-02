@@ -1,17 +1,15 @@
 {
-    "python.defaultInterpreterPath": "./venv/bin/python",
-    "editor.formatOnSave": true,
-    "editor.defaultFormatter": null,
-    "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff",
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": "never",
-            "source.fixAll.ruff": "explicit"
+    "ruff.nativeServer": "on",
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "envManager": "ms-python.python:conda",
+            "packageManager": "ms-python.python:conda"
         }
-    },
-    "ruff.enable": true,
-    "ruff.organizeImports": false,
-    "ruff.fixAll": false,
-    "python.analysis.autoImportCompletions": false
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ]
 }

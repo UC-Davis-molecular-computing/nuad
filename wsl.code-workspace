@@ -1,0 +1,18 @@
+{
+    "folders": [
+        {
+            "name": "nuad",
+            "path": "."
+        },
+        {
+            "name": "scadnano",
+            "path": "/mnt/c/Dropbox/git/scadnano-python-package"
+        }
+    ],
+    "settings": {
+        "python.defaultInterpreterPath": "/home/ddoty/programs/anaconda3/bin/python",
+        "python.analysis.extraPaths": [
+            "/mnt/c/Dropbox/git/scadnano-python-package",
+        ]
+    }
+}
