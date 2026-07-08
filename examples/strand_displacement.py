@@ -220,6 +220,9 @@ params = ns.SearchParameters(  # weigh_violations_equally=True,
     constraints=constraints,
     out_directory='output/strand_displacement',
     report_only_violations=False,
+    restart=True
 )
 
+print(design.domains)
+print("___", design._domains)
 ns.search_for_sequences(design=design, params=params)

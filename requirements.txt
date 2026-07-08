@@ -10,3 +10,5 @@ openpyxl
 viennarna
 scadnano
 tqdm
+networkx
+pytest

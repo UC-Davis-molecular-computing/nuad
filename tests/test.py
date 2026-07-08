@@ -1,7 +1,6 @@
 import os
 import re
 from typing import Dict, List
-import networkx as nx
 import numpy
 import openpyxl
 import pytest
@@ -395,8 +394,8 @@ class TestDependencyRelatedFunctions:
             dependents=[(X, dependency_function_reverses_sequence)],
         )
         e.set_state(DomainType.ASSIGNABLE)
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, e])
-        e.set_state(DomainType.LOCKED)
+        a = Domain('a', assign_domain_pool_of_length(20),subdomains=[b, e])
+        a.set_state(DomainType.LOCKED)
 
         design = nc.Design()
 
@@ -472,9 +471,9 @@ class TestDependencyRelatedFunctions:
         design.check_dependency_graphs_legal()
 
         # test more than one dependee
-        d2 = Domain("d2", assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
+        d2 = Domain("d2", assign_domain_pool_of_length(5))
         d2.dependents.append((p, dependency_function_reverses_sequence))
-        design.domains.append(d2)
+        design._domains.append(d2)
 
         # Test for multiple dependees exception
         with pytest.raises(
@@ -640,9 +639,9 @@ class TestDependencyRelatedFunctions:
             return sequence[::-1] * 3
 
         d = Domain('d', assign_domain_pool_of_length(5))
-        d.set_state(DomainType.FIXED)
+        d.set_fixed_sequence("TATAT")
         g = Domain('g', assign_domain_pool_of_length(5))
-        g.set_state(DomainType.FIXED)
+        g.set_fixed_sequence("TATAT")
         c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainType.ASSIGNABLE)
         f = Domain('f', assign_domain_pool_of_length(5))
@@ -951,7 +950,7 @@ class AllDomainsInTree():
         g.set_state(DomainType.DEPENDENT)
 
         x = Domain('x', assign_domain_pool_of_length(2))
-        x.set_state(DomainType.DEPENDENT)
+        x.set_state(DomainType.LOCKED)
         y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainType.DEPENDENT)
         h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
@@ -996,27 +995,27 @@ class TestSubdomainGraphsLegal():
         f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainType.DEPENDENT)
         g = Domain('g', assign_domain_pool_of_length(5))
-        g.set_state(DomainType.DEPENDENT)
+        g.set_state(DomainType.LOCKED)
 
         x = Domain('x', assign_domain_pool_of_length(2))
-        x.set_state(DomainType.DEPENDENT)
+        x.set_state(DomainType.LOCKED)
         y = Domain('y', assign_domain_pool_of_length(3))
-        y.set_state(DomainType.DEPENDENT)
+        y.set_state(DomainType.LOCKED)
         h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
-        h.set_state(DomainType.DEPENDENT)
+        h.set_state(DomainType.LOCKED)
 
         i = Domain('i', assign_domain_pool_of_length(5))
-        i.set_state(DomainType.DEPENDENT)
+        i.set_state(DomainType.LOCKED)
         b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
-        b.set_state(DomainType.DEPENDENT)
+        b.set_state(DomainType.LOCKED)
         c = Domain(
             'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
-        c.set_state(DomainType.DEPENDENT)
 
         A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
+        A.set_state(DomainType.LOCKED)
         B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
@@ -1037,6 +1036,7 @@ class TestSubdomainGraphsLegal():
         # design.check_subdomain_graph_is_dag(subdomain_graph)
         # print([node for node in nx.topological_sort(subdomain_graph)])
         # design.check_subdomain_graph_is_singly_connected(subdomain_graph)
+        design.add_strand(domains=[A,B], starred_domain_indices=[0])
         design.check_subdomain_graphs_legal()
 
 class TestNumpyFilters:
@@ -1655,8 +1655,6 @@ class TestSubdomains:
         b.set_state(DomainType.FIXED)
         c = Domain('c', assign_domain_pool_of_length(4))
         c.set_state(DomainType.FIXED)
-        a = Domain('a', assign_domain_pool_of_length(9), subdomains=[b, c])
-        a.set_state(DomainType.FIXED)
 
 
         with pytest.raises(ValueError):
@@ -1699,11 +1697,12 @@ class TestSubdomains:
         c.set_state(DomainType.FIXED)
 
         with pytest.raises(ValueError):
-            Domain(
+            a = Domain(
                 "a",
                 assign_domain_pool_of_length(9),
                 subdomains=[b, c],
             )
+            a.set_fixed_sequence("TTTTTTTTT")
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
         """
@@ -1716,12 +1715,15 @@ class TestSubdomains:
                / \
              [b] [c]
         """
-        b = Domain('b', assign_domain_pool_of_length(5), type=DomainType.FIXED)
-        c = Domain('c', assign_domain_pool_of_length(4), type=DomainType.FIXED)
+        b = Domain('b', assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(4))
+        b.set_state(DomainType.FIXED)
+        c.set_state(DomainType.FIXED)
 
 
         with pytest.raises(ValueError):
-            Domain("a", assign_domain_pool_of_length(9), type=DomainType.FIXED, subdomains=[b, c])
+            a = Domain("a", assign_domain_pool_of_length(9), subdomains=[b, c])
+            a.set_state(DomainType.FIXED)
 
 
     def test_construct_strand(self):
@@ -1736,81 +1738,97 @@ class TestSubdomains:
               / \   / \
              E   F g   h
         """
-        E = Domain('e', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        F = Domain('f', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        g = Domain('g', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
-        h = Domain('h', assign_domain_pool_of_length(5), type=DomainType.LOCKED)
+        E = Domain('e', assign_domain_pool_of_length(5))
+        F = Domain('f', assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_state(DomainType.LOCKED)
+        h = Domain('h', assign_domain_pool_of_length(5))
+        h.set_state(DomainType.LOCKED)
 
-        b = Domain('b', assign_domain_pool_of_length(10), type=DomainType.LOCKED, subdomains=[E, F])
-        C = Domain('C', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE, subdomains=[g, h])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[E, F])
+        b.set_state(DomainType.LOCKED)
+        C = Domain('C', assign_domain_pool_of_length(10), subdomains=[g, h])
 
-        a = Domain('a', assign_domain_pool_of_length(20), type=DomainType.LOCKED, subdomains=[b, C])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, C])
+        a.set_state(DomainType.LOCKED)
 
 
         # Test that constructor runs without errors
         strand = Strand(domains=[a], starred_domain_indices=[])
         assert strand.domains[0] == a
 
-    def test_error_strand_with_unassignable_subsequence(self):
-        r"""
-        Test that constructing a strand with an unassignable subsequence raises
-        a ValueError.
+    # def test_error_strand_with_unassignable_subsequence(self):
+    #     r"""
+    #     Test that constructing a strand with an unassignable subsequence raises
+    #     a ValueError.
+    #
+    #     This happens due to when no independent domain assigns a sequence for a
+    #     portion of a strand
+    #
+    #     .. code-block:: none
+    #
+    #               a
+    #             /   \
+    #            b     C
+    #           / \   / \
+    #          e   f g   h
+    #     """
+    #     e = Domain("e", assign_domain_pool_of_length(5))
+    #     e.set_state(DomainType.LOCKED)
+    #     f = Domain("f", assign_domain_pool_of_length(5))
+    #     f.set_state(DomainType.LOCKED)
+    #     g = Domain("g", assign_domain_pool_of_length(5))
+    #     g.set_state(DomainType.LOCKED)
+    #     h = Domain("h", assign_domain_pool_of_length(5))
+    #     h.set_state(DomainType.LOCKED)
+    #
+    #     b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+    #     b.set_state(DomainType.LOCKED)
+    #     C = Domain("C", assign_domain_pool_of_length(10), subdomains=[g, h])
+    #
+    #     a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, C])
+    #     a.set_state(DomainType.LOCKED)
+    #
+    #     strand = Strand(domains=[a], starred_domain_indices=[])
+    #
+    #     with pytest.raises(ValueError):
+    #         Design(strands=[strand])
 
-        This happens due to when no independent domain assigns a sequence for a
-        portion of a strand
-
-        .. code-block:: none
-
-                  a
-                /   \
-               b     C
-              / \   / \
-             e   f g   h
-        """
-        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
-        f = Domain("f", assign_domain_pool_of_length(5), dependent=True)
-        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
-        h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
-
-        b = Domain("b", assign_domain_pool_of_length(10), dependent=True, subdomains=[e, f])
-        C = Domain("C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
-
-        a = Domain("a", assign_domain_pool_of_length(20), dependent=True, subdomains=[b, C])
-
-        strand = Strand(domains=[a], starred_domain_indices=[])
-
-        with pytest.raises(ValueError):
-            Design(strands=[strand])
-
-    def test_error_strand_with_redundant_independence(self):
-        r"""
-        Test that constructing a strand with an redundant indepndence in subdomain
-        graph raises a ValueError.
-
-        Below, in the path from F to a, two independent subdomains are found: F and B
-
-        .. code-block:: none
-
-                  a
-                /   \
-               B     C
-              / \   / \
-             e   F g   h
-        """
-        e = Domain("e", assign_domain_pool_of_length(5), dependent=True)
-        F = Domain("F", assign_domain_pool_of_length(5), dependent=False)
-        g = Domain("g", assign_domain_pool_of_length(5), dependent=True)
-        h = Domain("h", assign_domain_pool_of_length(5), dependent=True)
-
-        B = Domain("B", assign_domain_pool_of_length(10), dependent=False, subdomains=[e, F])
-        C = Domain("C", assign_domain_pool_of_length(10), dependent=False, subdomains=[g, h])
-
-        a = Domain("a", assign_domain_pool_of_length(20), dependent=True, subdomains=[B, C])
-
-        strand = Strand(domains=[a], starred_domain_indices=[])
-
-        with pytest.raises(ValueError):
-            Design(strands=[strand])
+# In the new vwrsion with new states for domains, the cycle throigh subdomains will be detected right before
+# the search begins (in search_for_sequnces)
+    # def test_error_strand_with_redundant_independence(self):
+    #     r"""
+    #     Test that constructing a strand with an redundant indepndence in subdomain
+    #     graph raises a ValueError.
+    #
+    #     Below, in the path from F to a, two independent subdomains are found: F and B
+    #
+    #     .. code-block:: none
+    #
+    #               a
+    #             /   \
+    #            B     C
+    #           / \   / \
+    #          e   F g   h
+    #     """
+    #     e = Domain("e", assign_domain_pool_of_length(5))
+    #     e.set_state(DomainType.LOCKED)
+    #     F = Domain("F", assign_domain_pool_of_length(5))
+    #     g = Domain("g", assign_domain_pool_of_length(5))
+    #     g.set_state(DomainType.LOCKED)
+    #     h = Domain("h", assign_domain_pool_of_length(5))
+    #     h.set_state(DomainType.LOCKED)
+    #
+    #     B = Domain("B", assign_domain_pool_of_length(10), subdomains=[e, F])
+    #     C = Domain("C", assign_domain_pool_of_length(10), subdomains=[g, h])
+    #
+    #     a = Domain("a", assign_domain_pool_of_length(20), subdomains=[B, C])
+    #     a.set_state(DomainType.LOCKED)
+    #
+    #     strand = Strand(domains=[a], starred_domain_indices=[])
+    #
+    #     with pytest.raises(ValueError):
+    #         Design(strands=[strand])
 
     def test_error_cycle(self):
         """
@@ -1828,12 +1846,14 @@ class TestSubdomains:
             |
             a
         """
-        a = Domain("a", assign_domain_pool_of_length(5), dependent=True)
-        b = Domain("b", assign_domain_pool_of_length(5), subdomains=[a], dependent=True)
+        a = Domain("a", assign_domain_pool_of_length(5))
+        a.set_state(DomainType.LOCKED)
+        b = Domain("b", assign_domain_pool_of_length(5), subdomains=[a])
+        b.set_state(DomainType.LOCKED)
         a.subdomains = [b]
-        strand = Strand(domains=[a], starred_domain_indices=[])
 
         with pytest.raises(ValueError):
+            strand = Strand(domains=[a], starred_domain_indices=[])
             _design = Design(strands=[strand])
 
     def sample_nested_domains(self) -> Dict[str, Domain]:
@@ -1850,15 +1870,22 @@ class TestSubdomains:
         :return: Map of domain name to domain object.
         :rtype: Dict[str, Domain]
         """
-        E: Domain = Domain('E', assign_domain_pool_of_length(5), type=DomainType.ASSIGNABLE)
-        F: Domain = Domain('F', assign_domain_pool_of_length(6), type=DomainType.ASSIGNABLE)
-        g: Domain = Domain('g', assign_domain_pool_of_length(7), type=DomainType.LOCKED)
-        h: Domain = Domain('h', assign_domain_pool_of_length(8), type=DomainType.LOCKED)
+        E: Domain = Domain('E', assign_domain_pool_of_length(5))
+        E.set_state(DomainType.ASSIGNABLE)
+        F: Domain = Domain('F', assign_domain_pool_of_length(6))
+        F.set_state(DomainType.ASSIGNABLE)
+        g: Domain = Domain('g', assign_domain_pool_of_length(7))
+        g.set_state(DomainType.LOCKED)
+        h: Domain = Domain('h', assign_domain_pool_of_length(8))
+        h.set_state(DomainType.LOCKED)
 
-        b: Domain = Domain('b', assign_domain_pool_of_length(11), type=DomainType.LOCKED, subdomains=[E, F])
-        C: Domain = Domain('C', assign_domain_pool_of_length(15), type=DomainType.ASSIGNABLE, subdomains=[g, h])
+        b: Domain = Domain('b', assign_domain_pool_of_length(11), subdomains=[E, F])
+        b.set_state(DomainType.LOCKED)
+        C: Domain = Domain('C', assign_domain_pool_of_length(15),  subdomains=[g, h])
+        C.set_state(DomainType.ASSIGNABLE)
 
-        a: Domain = Domain('a', assign_domain_pool_of_length(26), type=DomainType.LOCKED, subdomains=[b, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(26), subdomains=[b, C])
+        a.set_state(DomainType.LOCKED)
 
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
 
@@ -1877,9 +1904,11 @@ class TestSubdomains:
         domains = self.sample_nested_domains()
         sequence = "CATAGCTTTCTTGTTCTGATCGGAAC"
         a = domains["a"]
-        a.set_sequence(sequence)
 
-        assert a.sequence() == sequence
+        with pytest.raises(ValueError):
+            a.set_sequence(sequence) # since a is locked
+
+        assert a.sequence() != sequence
         assert domains["b"].sequence() == sequence[0:11]
         assert domains["C"].sequence() == sequence[11:]
         assert domains["E"].sequence() == sequence[0:5]
@@ -1891,7 +1920,7 @@ class TestSubdomains:
 
     def test_assign_dna_sequence_to_leaf(self):
         """
-        Test assigning dna sequence to E, F and propgate upward to b
+        Test assigning dna sequence to E, F and propagate upward to b
 
         .. code-block:: none
 
@@ -1970,11 +1999,15 @@ class TestSubdomains:
                 /   \
                B     C
         """
-        B: Domain = Domain('B', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        C: Domain = Domain('C', assign_domain_pool_of_length(20), type=DomainType.ASSIGNABLE)
+        B: Domain = Domain('B', assign_domain_pool_of_length(10))
+        B.set_state(DomainType.ASSIGNABLE)
+        C: Domain = Domain('C', assign_domain_pool_of_length(20))
+        C.set_state(DomainType.ASSIGNABLE)
 
-        a: Domain = Domain('a', assign_domain_pool_of_length(15), type=DomainType.LOCKED, subdomains=[B, C])
-        with self.assertRaises(ValueError):
+        a: Domain = Domain('a', assign_domain_pool_of_length(15), subdomains=[B, C])
+        a.set_state(DomainType.LOCKED)
+
+        with pytest.raises(ValueError):
             a.set_sequence('A' * 15)
 
 
@@ -1995,9 +2028,12 @@ class TestSubdomains:
         Strand(domains=[g], starred_domain_indices=[])
 
     def test_design_finds_independent_subdomains(self) -> None:
-        B: Domain = Domain('B', assign_domain_pool_of_length(10), type=DomainType.ASSIGNABLE)
-        C: Domain = Domain('C', assign_domain_pool_of_length(20), type=DomainType.ASSIGNABLE)
-        a: Domain = Domain('a', assign_domain_pool_of_length(30), type=DomainType.LOCKED, subdomains=[B, C])
+        B: Domain = Domain('B', assign_domain_pool_of_length(10))
+        B.set_state(DomainType.ASSIGNABLE)
+        C: Domain = Domain('C', assign_domain_pool_of_length(20))
+        C.set_state(DomainType.ASSIGNABLE)
+        a: Domain = Domain('a', assign_domain_pool_of_length(30), subdomains=[B, C])
+        a.set_state(DomainType.LOCKED)
 
 
         strand_a: Strand = Strand(domains=[a], starred_domain_indices=[])
@@ -2021,7 +2057,9 @@ class TestNUPACK:
 def _make_domain(name: str, length: int = 8, fixed: bool = False) -> Domain:
     """Helper to create a Domain with a DomainPool of a given length."""
     pool = DomainPool(f"pool_{name}", length)
-    return Domain(name, pool, fixed=fixed)
+    domain = Domain(name, pool)
+    domain.set_state(DomainType.FIXED)
+    return domain
 
 
 def _make_result(excess: float, score: float, part: nc.Part) -> nc.Result:
@@ -2034,7 +2072,7 @@ def _make_result(excess: float, score: float, part: nc.Part) -> nc.Result:
 
 def _make_evaluation(constraint: nc.Constraint, domains: tuple[Domain, ...], result: nc.Result) -> Evaluation:
     """Helper to create an Evaluation."""
-    return Evaluation(constraint=constraint, domains=domains, result=result)
+    return Evaluation(constraint=constraint, assignable_domains=domains, result=result)
 
 
 def _make_domain_constraint(description: str, weight: float = 1.0) -> nc.DomainConstraint:

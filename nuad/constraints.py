@@ -53,7 +53,6 @@ from typing import (
 
 import networkx as nx
 import numpy as np
-import numpy as np
 import scadnano as sc  # type: ignore
 from ordered_set import OrderedSet
 
@@ -82,8 +81,9 @@ except ModuleNotFoundError:
 
 name_key = "name"
 sequence_key = "sequence"
-fixed_key = "fixed"
+state_key = "state"
 label_key = "label"
+domain_subdomains_names_key = "domain_subdomains_names"
 strands_key = "strands"
 domains_key = "domains"
 domain_pools_key = "domain_pools"
@@ -1402,7 +1402,6 @@ class DomainPool(JSONSerializable):
                 assert isinstance(num_ways_to_choose_subsequence_indices, float)
                 # num_ways_to_choose_subsequence_indices = nn.comb(length, sampled_distance)
                 num_different_bases = float(len(bases) - 1)
-
                 num_subsequences = num_different_bases**sampled_distance
                 num_sequences_at_sampled_distance = num_ways_to_choose_subsequence_indices * num_subsequences
 
@@ -1465,6 +1464,7 @@ class DomainPool(JSONSerializable):
                         f"distance {sampled_distance} from the previous sequence {previous_sequence} and not "
                         f"found one that passed the NumpyFilters and SequenceFilters. Trying another distance."
                     )
+
                 if sequence is None and (generated_all_seqs or num_to_generate >= max_to_generate_before_moving_on):
                     # found no sequences passing constraints at distance `sampled_distance`
                     # (either through exhaustive search, or trying at least 1 billion),
@@ -1749,7 +1749,7 @@ class Domain(Part, JSONSerializable):
 
     _length: int | None = None
     """
-    Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
+    Length of this domain. If None, then the method :meth:`Domain.length` asks :data:`Domain.pool`
     for the length. However, a :any:`Domain` with :attr:`Domain.state` set to `state.LOCKED` or `state.DEPENDNET` has no
     :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
     """
@@ -1785,20 +1785,6 @@ class Domain(Part, JSONSerializable):
 
         if self.name.endswith('*'):
             raise ValueError(f'Domain name cannot end with *\ndomain name = {self.name}')
-
-        if self.type == DomainType.FIXED:
-            if len(self._subdomains) > 0:
-                raise ValueError(
-                    f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
-                )
-        else:
-            contains_no_non_fixed_subdomains = True
-            for sd in self._subdomains:
-                if not sd.type == DomainType.FIXED:
-                    contains_no_non_fixed_subdomains = False
-                    break
-            if len(self._subdomains) > 0 and contains_no_non_fixed_subdomains:
-                raise ValueError('Domain is not fixed, but all subdomains are fixed')
 
         # Set parents field for all subdomains.
         for subdomain in self._subdomains:
@@ -1836,8 +1822,8 @@ class Domain(Part, JSONSerializable):
                 break
         if all_sd_unassigned:
             return
-        sb_seqs = [sd.sequence() if sd.has_sequence() else "?" * sd.get_length() for sd in self._subdomains]
-        self._sequence = "".join(sb_seqs)
+        sb_seqs = [sd.sequence() if sd.has_sequence() else "?" * sd.length for sd in self._subdomains]
+        self.set_sequence("".join(sb_seqs))
 
     @staticmethod
     def name_of_part_type(self) -> str:
@@ -1867,14 +1853,14 @@ class Domain(Part, JSONSerializable):
             dct[domain_pool_name_key] = self._pool.name
         if self.has_sequence():
             dct[sequence_key] = self.sequence()
-            if self.type == DomainType.FIXED:
-                dct[fixed_key] = True
+        dct[state_key] = self.type
         if self.label is not None:
             dct[label_key] = self.label
+        dct[domain_subdomains_names_key] = [sd.name for sd in self.subdomains]
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
-    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> Domain:
+    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> list[Domain, list[str]]:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1889,8 +1875,8 @@ class Domain(Part, JSONSerializable):
         """
         name: str = mandatory_field(Domain, json_map, name_key)
         sequence: str | None = json_map.get(sequence_key)
-        fixed: bool = json_map.get(fixed_key, False)
-
+        state: DomainType = json_map.get(state_key)
+        sudomains_names = json_map.get(domain_subdomains_names_key)
         label: str | None = json_map.get(label_key)
 
         pool: DomainPool | None
@@ -1903,8 +1889,11 @@ class Domain(Part, JSONSerializable):
         else:
             pool = None
 
-        domain: Domain = Domain(name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
-        return domain
+        domain: Domain = Domain(name=name, pool=pool, label=label)
+        domain._length = len(sequence)
+        domain.set_sequence(sequence)
+        domain.set_state(state)
+        return domain, domain_subdomains_names_key
 
     @property
     def name(self) -> str:
@@ -2016,16 +2005,27 @@ class Domain(Part, JSONSerializable):
                 return self._pool.possible_sequences.substring_length
             else:
                 raise ValueError(
-                    "possible_sequences should be list of strings or SuperSequence but is "
-                    f"{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}"
+                    'possible_sequences should be list of strings or SuperSequence but is '
+                    f'{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}'
                 )
-        assert False, "unreachable"
+        else:
+            assert False, 'unreachable'
 
     @length.setter
     def length(self, length: int):
         self._length = length
 
     def set_state(self, new_state: DomainType):
+        if new_state == DomainType.FIXED:
+            if len(self._subdomains) > 0:
+                raise ValueError(
+                    f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
+                )
+            if len(self.parents) > 0:
+                raise ValueError(
+                    f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
+                )
+
         self.type = new_state
 
     def sequence(self) -> str:
@@ -2043,7 +2043,7 @@ class Domain(Part, JSONSerializable):
 
         :param new_sequence:  new DNA sequence to set
 
-        :param fixed: this method has been called by :meth:`Domain.set_fixed_sequence`.
+        :param fixed: this parameter gets true only when is called by :meth:`Domain.set_fixed_sequence`.
         """
         if self.type == DomainType.FIXED:
             raise ValueError(
@@ -2331,18 +2331,41 @@ class Domain(Part, JSONSerializable):
         :return:
             list of all domains that are ancestors of this one, NOT including this domain
         """
+
         ancestors = self.parents
-        all_ancestors = []
+        all_ancestors = set()
 
         while ancestors:
             older_ancestors = []
             for ancestor in ancestors:
-                all_ancestors.append(ancestor)
+                if ancestor in all_ancestors:
+                    raise ValueError(f"There is a cycle in the domain graph containg the domain {self.name}, "
+                                     f"traversing the domain {ancestor.name}.")
+                all_ancestors.add(ancestor)
                 if ancestor.parents:
                     older_ancestors.extend(ancestor.parents)
             ancestors = older_ancestors.copy()
 
-        return all_ancestors
+        return list(all_ancestors)
+
+
+    def decsendents(self) -> List[Domain]:
+
+        subdomains = self.subdomains
+        decsendents = set()
+
+        while subdomains:
+            later_subdomains = []
+            for sd in subdomains:
+                if sd in decsendents:
+                    raise ValueError(f"There is a cycle in the domain graph containg the domain {self.name}, "
+                                     f"traversing the domain {sd.name}.")
+                decsendents.add(sd)
+                if sd.subdomains:
+                    later_subdomains.extend(sd.subdomains)
+            subdomains = later_subdomains.copy()
+
+        return list(decsendents)
 
 
     def _get_all_domains_from_parents(self) -> List['Domain']:
@@ -2668,7 +2691,6 @@ def set_domains_memoryviews(
     intervals = list(domain_name_to_interval.values())
     minimum = min(start for start, _ in intervals)
     assert minimum <= 0
-
     # Normalize intervals if negative indices exist
     if minimum < 0:
         for domain_name, interval in domain_name_to_interval.items():
@@ -3241,7 +3263,7 @@ class Strand(Part, JSONSerializable):
             DNA sequence to assign to this :any:`Strand`.
             Must have length = :py:meth:`Strand.length`.
         """
-        if not self.length() == len(sequence):
+        if not self.length == len(sequence):
             raise ValueError(
                 f"Strand {self.name} has length {self.length()}, but DNA sequence {sequence} has length {len(sequence)}"
             )
@@ -3406,7 +3428,7 @@ class Strand(Part, JSONSerializable):
         """
         idx = 0
         for domain in self.domains:
-            substring = seq[idx : idx + domain.get_length()]
+            substring = seq[idx : idx + domain.length]
             domain.set_fixed_sequence(substring)
             idx += domain.length
 
@@ -3596,7 +3618,7 @@ def _export_dummy_scadnano_design_for_idt_export(
                 helix=helix_idx,
                 forward=True,
                 start=prev_end,
-                end=prev_end + domain.get_length()
+                end=prev_end + domain.length
             )
             prev_end = sc_domain.end
             sc_domains.append(sc_domain)
@@ -3721,6 +3743,18 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    _domains_interned: Dict[str, Domain]
+
+    #################################################
+    # derived fields, so not specified in constructor
+
+    _domains: List[Domain] = field(init=False)
+    """
+    List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
+
+    Computed from :data:`Design.strands`, so not specified in constructor.
+    """
+
     domain_pools_to_domain_map: dict[DomainPool, list[Domain]] = field(init=False)
     """
     dict mapping each :any:`DomainPool` to a list of the :any:`Domain`'s in this :any:`Design` in the pool.
@@ -3759,15 +3793,19 @@ class Design(JSONSerializable):
         """
         return list(self.domains_by_name.values())
 
+    @domains.setter
+    def domains(self, value: list[Domain]) -> None:
+        self._domains = value
+
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
-        self.compute_derived_fields()
         self._domains_interned = {}
         self.domain_to_affected_domains = {}
+        self.compute_derived_fields()
 
     def compute_derived_fields(self) -> None:
         """
@@ -3792,14 +3830,14 @@ class Design(JSONSerializable):
                         )
                     self.domains_by_name[domain_in_dag.name] = domain_in_dag
 
-        self.domains = remove_duplicates(domains)
+        self._domains = remove_duplicates(domains)
         self.strands_by_group_name = defaultdict(list)
         for strand in self.strands:
             self.strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
 
-        for domain in self.domains:
+        for domain in self._domains:
             self.domain_to_affected_domains[domain] = domain.all_domains_affected_by_sequence_change()
 
         for strand in self.strands:
@@ -3828,7 +3866,7 @@ class Design(JSONSerializable):
 
         dct = {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
-            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
+            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self._domains],
             domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()],
         }
 
@@ -3911,14 +3949,23 @@ class Design(JSONSerializable):
         pool_with_name: dict[str, DomainPool] = {pool.name: pool for pool in pools}
 
         domains_json = mandatory_field(Design, json_map, domains_key)
-        domains: list[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name) for domain_json in domains_json
-        ]
-        domains_by_name = {domain.name: domain for domain in domains}
+        domains = []
+        domain_to_subdomains_names = {}
+        domain_name_to_domain = {}
+        for domain_json in domains_json:
+            domain, subdomain_list = Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
+            domain_to_subdomains_names[domain] = subdomain_list
+            domain_name_to_domain[domain.name] = domain
+            domains.append(domain)
+
+        domains_by_name = domain_name_to_domain.keys()
+        for domain in domains:
+            for subdomain_name in domain_to_subdomains_names[domain]:
+                domain.subdomains.append(domain_name_to_domain[subdomain_name])
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [
-            Strand.from_json_serializable(json_map=strand_json, domain_with_name=domains_by_name)
+            Strand.from_json_serializable(json_map=strand_json, domain_with_name=domain_name_to_domain)
             for strand_json in strands_json
         ]
 
@@ -3933,135 +3980,133 @@ class Design(JSONSerializable):
             Design.assign_modifications_to_strands(strands, strands_json, all_mods)
 
         design = Design(strands=strands)
+        design._domains = domains
+        design.domains_by_name = domain_name_to_domain
+
+        return design
+
 
     def add_strand(
-        self,
-        domain_names: List[str] | None = None,
-        domains: List[Domain] | None = None,
-        starred_domain_indices: Iterable[int] | None = None,
-        group: str = default_strand_group,
-        name: str | None = None,
-        label: str | None = None,
-        vendor_fields: VendorFields | None = None,
-    ) -> Strand:
-        """
-        This is an alternative way to create strands instead of calling the :any:`Strand` constructor
-        explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
-        to specify :any:`Domain`'s simply by giving a name.
+            self,
+            domain_names: List[str] | None = None,
+            domains: List[Domain] | None = None,
+            starred_domain_indices: Iterable[int] | None = None,
+            group: str = default_strand_group,
+            name: str | None = None,
+            label: str | None = None,
+            vendor_fields: VendorFields | None = None,
+        ) -> Strand:
+            """
+            This is an alternative way to create strands instead of calling the :any:`Strand` constructor
+            explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
+            to specify :any:`Domain`'s simply by giving a name.
 
-        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
-        `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
-        If `domain_names` is specified, then by convention those that end with a ``*`` are
-        assumed to be starred.
+            A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
+            `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
+            If `domain_names` is specified, then by convention those that end with a ``*`` are
+            assumed to be starred.
 
-        In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
-        a new domain name that has not been encountered.
-        Also, :any:`Domain`'s created in this way are "interned" as variables
-        in a cache stored in the :any:`Design` object;
-        no two :any:`Domain`'s with the same name in this design will be created,
-        and subsequent uses of the same name will refer to the same :any:`Domain` object.
+            In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
+            a new domain name that has not been encountered.
+            Also, :any:`Domain`'s created in this way are "interned" as variables
+            in a cache stored in the :any:`Design` object;
+            no two :any:`Domain`'s with the same name in this design will be created,
+            and subsequent uses of the same name will refer to the same :any:`Domain` object.
 
-        :param domain_names:
-            Names of the :any:`Domain`'s on this :any:`Strand`.
-            :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
-            is specified; if the domain name has already been used (or its complement via the convention
-            that names ending in a `*` are the complement of the domain whose name is equal but without
-            ending in a `*`), then the same :any:`Domain` object is reused.
-            Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
-        :param domains:
-            list of :any:`Domain`'s on this :any:`Strand`.
-            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
-            :data:`Strand.starred_domain_indices`.
-        :param starred_domain_indices:
-            Indices of :any:`Domain`'s in `domains` that are starred.
-            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
-            :data:`Strand.domains`.
-        :param group:
-            name of group of this :any:`Strand`.
-        :param name:
-            Name of this :any:`Strand`.
-        :param label:
-            Label to associate with this :any:`Strand`.
-        :param vendor_fields:
-            :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
-            methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
-        :return:
-            the :any:`Strand` that is created
-        """
-        for existing_strand in self.strands:
-            if name == existing_strand.name:
+            :param domain_names:
+                Names of the :any:`Domain`'s on this :any:`Strand`.
+                :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
+                is specified; if the domain name has already been used (or its complement via the convention
+                that names ending in a `*` are the complement of the domain whose name is equal but without
+                ending in a `*`), then the same :any:`Domain` object is reused.
+                Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
+            :param domains:
+                list of :any:`Domain`'s on this :any:`Strand`.
+                Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+                :data:`Strand.starred_domain_indices`.
+            :param starred_domain_indices:
+                Indices of :any:`Domain`'s in `domains` that are starred.
+                Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+                :data:`Strand.domains`.
+            :param group:
+                name of group of this :any:`Strand`.
+            :param name:
+                Name of this :any:`Strand`.
+            :param label:
+                Label to associate with this :any:`Strand`.
+            :param vendor_fields:
+                :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
+                methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
+            :return:
+                the :any:`Strand` that is created
+            """
+            if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
+                    domain_names is None and not (domains is not None and starred_domain_indices is not None)
+            ):
                 raise ValueError(
-                    f"strand name {name} already exists for this strand:\n"
-                    f"  {existing_strand}\n"
-                    f"so it cannot be used for the new strand"
-                )
+                    'exactly one of domain_names or '
+                    'domains and starred_domain_indices must be non-None\n'
+                    f'domain_names: {domain_names}\n'
+                    f'domains: {domains}\n'
+                    f'starred_domain_indices: {starred_domain_indices}'
+                    f"{domain_names}.")
 
-        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
-            domain_names is None and not (domains is not None and starred_domain_indices is not None)
-        ):
-            raise ValueError(
+            elif domain_names is not None:
+                domains = []
+                starred_domain_indices = OrderedSet()
+                for idx, domain_name in enumerate(domain_names):
+                    is_starred = domain_name.endswith('*')
+                    if is_starred:
+                        domain_name = domain_name[:-1]
 
-                'exactly one of domain_names or '
-                'domains and starred_domain_indices must be non-None\n'
-                f'domain_names: {domain_names}\n'
-                f'domains: {domains}\n'
-                f'starred_domain_indices: {starred_domain_indices}'
-                                          f"{domain_names}.")
+                    domain: Domain
+                    if domain_name not in self.domains_by_name:
+                        domain = Domain(name=domain_name)
+                        self.domains_by_name[domain_name] = domain
+                    else:
+                        domain = self.domains_by_name[domain_name]
 
-        domains = []
-        starred_domain_indices = OrderedSet()
-        for idx, domain_name in enumerate(domain_names):
-            is_starred = domain_name.endswith('*')
-            if is_starred:
-                domain_name = domain_name[:-1]
+                    domains.append(domain)
+                    if is_starred:
+                        starred_domain_indices.add(idx)
 
-            domain: Domain
-            if domain_name not in self.domains_by_name:
-                domain = Domain(name=domain_name)
-                self.domains_by_name[domain_name] = domain
-            else:
-                domain = self.domains_by_name[domain_name]
+            domains_of_strand = list(domains)  # type: ignore
+            strand = Strand(
+                domains=domains_of_strand,
+                starred_domain_indices=starred_domain_indices,
+                group=group,
+                name=name,
+                label=label,
+                vendor_fields=vendor_fields,
+            )
 
-            domains.append(domain)
-            if is_starred:
-                starred_domain_indices.add(idx)
-
-        domains_of_strand = list(domains)  # type: ignore
-        strand = Strand(
-            domains=domains_of_strand,
-            starred_domain_indices=starred_domain_indices,
-            group=group,
-            name=name,
-            label=label,
-            vendor_fields=vendor_fields,
-        )
-        for existing_strand in self.strands:
-            if strand.name == existing_strand.name:
-                raise ValueError(
-                    f'strand name {strand.name} already exists for this strand:\n'
-                    f'  {existing_strand}\n'
-                    f'so it cannot be used for the new strand\n'
-                    f'  {strand}'
-                )
-        self.strands.append(strand)
-        for domain_in_strand in strand.domains:
-            domains_in_dag = domain_in_strand.all_domains_in_dag()
-            for domain in domains_in_dag:
-                if domain not in self.domains:
-                    self.domains.append(domain)
-                name = domain.name
-                if name in self.domains_by_name and domain is not self.domains_by_name[name]:
+            for existing_strand in self.strands:
+                if strand.name == existing_strand.name:
                     raise ValueError(
-                        f'domain names must be unique, but I found two different domains with name {domain.name}'
+                        f'strand name {strand.name} already exists for this strand:\n'
+                        f'  {existing_strand}\n'
+                        f'so it cannot be used for the new strand\n'
+                        f'  {strand}'
                     )
-                self.domains_by_name[domain.name] = domain
+            self.strands.append(strand)
+            for domain_in_strand in strand.domains:
+                domains_in_dag = domain_in_strand.all_domains_in_dag()
+                for domain in domains_in_dag:
+                    if domain not in self._domains:
+                        self._domains.append(domain)
+                    name = domain.name
+                    if name in self.domains_by_name and domain is not self.domains_by_name[name]:
+                        raise ValueError(
+                            f'domain names must be unique, but I found two different domains with name {domain.name}'
+                        )
+                    self.domains_by_name[domain.name] = domain
 
-                return strand
+            return strand
 
     def add_subdomains(self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]],
                        keep_domain_assignable: bool = False) -> None:
         """
-        :param domain_name: name of the domain we want add subdomains to
+        :param domain_name: name of the domain we want to add subdomains to
         :param subdomain_names_and_lengths: list of tuples of subdomain names and their length
         :param keep_domain_assignable:
             This means: 1) an assertion that the domain with name `domain_name` (if it already exists)
@@ -4106,6 +4151,21 @@ class Design(JSONSerializable):
 
             subdomains.append(subdomain)
             subdomain.length = length
+            # else:
+            #     #check_domain_pools
+            #     subdomain_pool: DomainPool | None
+            #     for pool in self.domain_pools():
+            #         if pool.length == length:
+            #             subdomain_pool = pool
+            #             break
+            #     if not subdomain_pool:
+            #         pool_name = f"pool_with_length_{length}"
+            #         subdomain_pool = DomainPool(name=pool_name, length=length)
+            #
+            #     subdomain = Domain(name=subdomain_name, pool=subdomain_pool)
+            #     self.domains_by_name[subdomain_name] = subdomain
+            #
+            # subdomains.append(subdomain)
 
             if subdomain.type != DomainType.ASSIGNABLE:
                 # in case there is a predefined unlocked ancestor for domain:
@@ -4394,7 +4454,7 @@ class Design(JSONSerializable):
 
     def store_domain_pools(self) -> None:
         self.domain_pools_to_domain_map = defaultdict(list)
-        for domain in self.domains:
+        for domain in self._domains:
             if domain._pool is not None:  # noqa
                 self.domain_pools_to_domain_map[domain.pool].append(domain)
 
@@ -4411,7 +4471,7 @@ class Design(JSONSerializable):
         :return: the :any:`Domain`'s in `domain_pool`
         """
         domains_in_pool: list[Domain] = []
-        for domain in self.domains:
+        for domain in self._domains:
             if domain.pool.name == domain_pool_name:
                 domains_in_pool.append(domain)
         return domains_in_pool
@@ -4992,14 +5052,18 @@ has a name, and the design contains a nuad strand with that name."""
         """
         # see if self.domains needs to be initialized
         computed_derived_fields = False
-        if self.domains is None:
+        if self._domains is None:
             self.compute_derived_fields()
             computed_derived_fields = True
 
         # copy sequences
-        for domain in self.domains:
+        print(other.domains)
+        for domain in self._domains:
             other_domain = other.domains_by_name[domain.name]
             if other_domain.type == DomainType.FIXED:
+                print(domain.name, other_domain.name)
+                print(domain.__class__)
+                print(other_domain.__class__)
                 domain.set_fixed_sequence(other_domain.sequence())
             elif other_domain.has_sequence():
                 domain.set_sequence(other_domain.sequence())
@@ -5103,7 +5167,7 @@ has a name, and the design contains a nuad strand with that name."""
 
     def _check_exactly_one_unlocked_in_every_path(self, subdomain_graph: nx.DiGraph) -> None:
         # first, make sure that every domain has exactly one state:
-        for domain in self.domains:
+        for domain in self._domains:
             if domain.type is None:
                 raise ValueError(f'domain {domain.name} has no states.')
 
@@ -5134,7 +5198,7 @@ has a name, and the design contains a nuad strand with that name."""
 
         graph = nx.DiGraph()
 
-        for domain in self.domains:
+        for domain in self._domains:
             graph.add_node(domain)
             for sd in domain.subdomains:
                 if (domain, sd) not in graph.edges:
@@ -5148,7 +5212,7 @@ has a name, and the design contains a nuad strand with that name."""
     def _create_dependency_digraph(self) -> nx.DiGraph:
         graph = nx.DiGraph()
 
-        unlocked_domains = [domain for domain in self.domains if domain.type != DomainType.LOCKED]
+        unlocked_domains = [domain for domain in self._domains if domain.type != DomainType.LOCKED]
 
         for unlocked_domain in unlocked_domains:
             graph.add_node(unlocked_domain)
@@ -5206,7 +5270,7 @@ has a name, and the design contains a nuad strand with that name."""
         except nx.NetworkXNoCycle:
             pass
 
-    def _check_each_dependent_exactly_one_dependee(self, graph: nx.Digraph) -> None:
+    def _check_each_dependent_exactly_one_dependee(self, graph: nx.DiGraph) -> None:
         for domain in self.domains:
             if domain.type == DomainType.DEPENDENT:
                 dependees = []
@@ -9320,7 +9384,7 @@ def _exterior_base_type_of_domain_3p_end(
                         domain_next_to_interior_base_pair = (
                             domain_addr.neighbor_5p() is not None and complementary_addr.neighbor_3p() is not None
                         )
-                        if domain.length() == 2 and not domain_next_to_interior_base_pair:
+                        if domain.length == 2 and not domain_next_to_interior_base_pair:
                             #   domain_addr == adjacent_5n_addr        adjacent_addr
                             #     |                                       |
                             #    [--###-------------------------------------#
@@ -10059,8 +10123,8 @@ def __get_base_pair_domain_endpoints_to_check(
     base_pair_domain_endpoints_to_check: set[_BasePairDomainEndpoint] = set()
 
     for domain_addr, comple_addr in all_bound_domain_addresses.items():
-        domain_base_length = domain_addr.domain().length()
-        assert domain_base_length == comple_addr.domain().length()
+        domain_base_length = domain_addr.domain().length
+        assert domain_base_length == comple_addr.domain().length
 
         if domain_addr not in addr_to_starting_base_pair_idx:
             if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:

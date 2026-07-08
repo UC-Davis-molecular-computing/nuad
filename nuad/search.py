@@ -240,16 +240,16 @@ def _determine_domain_pairs_to_check(
                 with_replacement=constraint.check_domain_against_itself,
                 where=nc.not_strict_subdomain,
             )
-            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.fixed and d2.fixed))
+            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.type == DomainType.FIXED or d2.type == DomainType.FIXED))
 
     else:
-        domains_changed_not_fixed_or_dependent = [
-            domain for domain in domains_changed if not (domain.fixed or domain.dependent)
+        domains_changed_not_fixed_or_dependent_or_locked = [
+            domain for domain in domains_changed if not (domain.type == DomainType.FIXED or domain.type == DomainType.DEPENDENT or domain.type == DomainType.LOCKED)
         ]
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
-            if len(domains_changed_not_fixed_or_dependent) == 1:
-                domain_changed = domains_changed_not_fixed_or_dependent[0]
+            if len(domains_changed_not_fixed_or_dependent_or_locked) == 1:
+                domain_changed = domains_changed_not_fixed_or_dependent_or_locked[0]
                 domain_pairs_to_check = constraint.domain_pairs_with.get(domain_changed, tuple())
             else:
                 domain_pairs_to_check = tuple(
@@ -258,8 +258,8 @@ def _determine_domain_pairs_to_check(
                     if d1 in domains_changed or d2 in domains_changed
                 )
         else:
-            if len(domains_changed_not_fixed_or_dependent) == 1 and len(constraint.domain_pairs_with) > 0:
-                domain_changed = domains_changed_not_fixed_or_dependent[0]
+            if len(domains_changed_not_fixed_or_dependent_or_locked) == 1 and len(constraint.domain_pairs_with) > 0:
+                domain_changed = domains_changed_not_fixed_or_dependent_or_locked[0]
                 domain_pairs_to_check = constraint.domain_pairs_with[domain_changed]
             else:
                 domain_pairs_to_check = find_domain_pairs_to_check(design, domains_changed, constraint)
@@ -934,6 +934,22 @@ def set_memoryviews(design: nc.Design) -> None:
         if domain.memoryview_sequence is None:
             nc.set_domains_memoryviews(domain)
 
+def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
+    # unconditionally stop when max_iterations is reached, if specified
+    if params.max_iterations is not None and iteration > params.max_iterations:
+        return True
+
+    # otherwise if target_score is specified, check that current score is close to it
+    if params.target_score is not None:
+        if _is_significantly_greater(eval_set.total_score, params.target_score):
+            return False
+    else:
+        # otherwise just see if any violations remain that are not fixed
+        # (i.e., that might be correctable by changing domains; fixed violations are un-solvable)
+        if eval_set.has_nonfixed_violations():
+            return False
+
+    return True
 
 def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
@@ -1131,23 +1147,6 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     if directories.info_file_handler is not None:
         nc.logger.removeHandler(directories.info_file_handler)  # noqa
 
-    def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
-        # unconditionally stop when max_iterations is reached, if specified
-        if params.max_iterations is not None and iteration > params.max_iterations:
-            return True
-
-        # otherwise if target_score is specified, check that current score is close to it
-        if params.target_score is not None:
-            if _is_significantly_greater(eval_set.total_score, params.target_score):
-                return False
-        else:
-            # otherwise just see if any violations remain that are not fixed
-            # (i.e., that might be correctable by changing domains; fixed violations are un-solvable)
-            if eval_set.has_nonfixed_violations():
-                return False
-
-        return True
-
 
 def _check_cpu_count(cpu_count: int) -> None:
     # alters number of threads in ThreadPool if cpu count changed. (Lets us hot-swap CPUs, e.g.,
@@ -1210,9 +1209,9 @@ def _reassign_domains(
 ) -> tuple[tuple[Domain, ...], dict[Domain, str]]:
     # pick domain to change, with probability proportional to total score of constraints it violates
     # first weight scores by domain's weight
-    assert len(eval_set.domain_to_score) > 0
-    domains: list[Domain] = list(eval_set.domain_to_score.keys())
-    scores_weighted = [score * domain.weight for domain, score in eval_set.domain_to_score.items()]
+    assert len(eval_set.assignable_domain_to_score) > 0
+    domains: list[Domain] = list(eval_set.assignable_domain_to_score.keys())
+    scores_weighted = [score * domain.weight for domain, score in eval_set.assignable_domain_to_score.items()]
 
     probs_opt = np.asarray(scores_weighted)
     probs_opt /= probs_opt.sum()
@@ -2013,7 +2012,7 @@ class EvaluationSet:
         self.update_domain_keyed_dicts(was_violated)
 
         # update domain_to_score so _reassign_domains picks domains based on current violations
-        self.domain_to_score = EvaluationSet.sum_domain_scores(self.assignable_domain_to_violations)
+        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(self.assignable_domain_to_violations)
 
         self.reset_new()
         if ASSERT_VIOLATIONS_ARE_ACCURATE:
@@ -2031,14 +2030,14 @@ class EvaluationSet:
 
             if was_viol and not is_viol:
                 # Was violated, now not: remove from assignable_domain_to_violations
-                for domain in eval_.domains:
+                for domain in eval_.assignable_domains:
                     viols_list = self.assignable_domain_to_violations[domain]
                     viols_list.remove(eval_)
                     if len(viols_list) == 0:
                         del self.assignable_domain_to_violations[domain]
             elif not was_viol and is_viol:
                 # Was not violated, now is: add to assignable_domain_to_violations
-                for domain in eval_.domains:
+                for domain in eval_.assignable_domains:
                     self.assignable_domain_to_violations[domain].append(eval_)
 
     def update_scores_and_counts(self) -> None:
