@@ -83,7 +83,7 @@ name_key = "name"
 sequence_key = "sequence"
 state_key = "state"
 label_key = "label"
-domain_subdomains_names_key = "domain_subdomains_names"
+domain_subdomains_names_key = ("domain_subdomains_names")
 strands_key = "strands"
 domains_key = "domains"
 domain_pools_key = "domain_pools"
@@ -333,7 +333,6 @@ def all_pairs(
     with_replacement: bool = True,
     where: Callable[[T, T], bool] = lambda _, __: True,
 ) -> list[tuple[T, T]]:
-
     """
     Strongly typed function to get list of all pairs from `iterable`. (for using with mypy)
 
@@ -358,6 +357,7 @@ def all_pairs(
 def all_pairs_iterator(
     values: Iterable[T],
     with_replacement: bool = True,
+    where: Callable[[tuple[T, T]], bool] = lambda _: True,
 ) -> Iterator[tuple[T, T]]:
     """
     Strongly typed function to get iterator of all pairs from `iterable`. (for using with mypy)
@@ -377,7 +377,6 @@ def all_pairs_iterator(
     """
     comb_iterator = itertools.combinations_with_replacement if with_replacement else itertools.combinations
     it = cast(Iterator[tuple[T, T]], filter(where, comb_iterator(values, 2)))  # noqa
-
     return it
 
 
@@ -1623,7 +1622,7 @@ class Part(ABC):
         # individual domains/strands
         pass
 
-class DomainType(Enum):
+class DomainType(str, Enum):
     """The four mutually states of Domain"""
     ASSIGNABLE = 'Assignable'
     DEPENDENT = 'Dependent'
@@ -1848,6 +1847,7 @@ class Domain(Part, JSONSerializable):
             Dictionary ``d`` representing this :any:`Domain` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
+
         dct: dict[str, Any] = {name_key: self.name}
         if self._pool is not None:
             dct[domain_pool_name_key] = self._pool.name
@@ -1856,11 +1856,16 @@ class Domain(Part, JSONSerializable):
         dct[state_key] = self.type
         if self.label is not None:
             dct[label_key] = self.label
-        dct[domain_subdomains_names_key] = [sd.name for sd in self.subdomains]
+
+        if self.subdomains:
+            dct[domain_subdomains_names_key] = [subdomain.name for subdomain in self.subdomains]
+        else:
+            dct[domain_subdomains_names_key] = []
+
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
-    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> list[Domain, list[str]]:
+    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> tuple[Domain, list[str]]:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1869,6 +1874,8 @@ class Domain(Part, JSONSerializable):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
+        :param domains_added
+        #TODO
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
@@ -1876,7 +1883,7 @@ class Domain(Part, JSONSerializable):
         name: str = mandatory_field(Domain, json_map, name_key)
         sequence: str | None = json_map.get(sequence_key)
         state: DomainType = json_map.get(state_key)
-        sudomains_names = json_map.get(domain_subdomains_names_key)
+
         label: str | None = json_map.get(label_key)
 
         pool: DomainPool | None
@@ -1890,10 +1897,26 @@ class Domain(Part, JSONSerializable):
             pool = None
 
         domain: Domain = Domain(name=name, pool=pool, label=label)
+
+        subdomains_names = mandatory_field(Domain, json_map, domain_subdomains_names_key)
+
+        # subdomains: list[Domain] = []
+        # subdomains_json = mandatory_field(Domain, json_map, domain_subdomains_names_key)
+        # print(domain.name)
+        # print(subdomains_json)
+        # print("---------------------")
+        # for subdomain_json in subdomains_json:
+        #     subdomain = Domain.from_json_serializable(subdomain_json, pool_with_name, domains_added)
+        #     subdomains.append(subdomain)
+        #     subdomain.parents.append(domain)
+
+
         domain._length = len(sequence)
         domain.set_sequence(sequence)
         domain.set_state(state)
-        return domain, domain_subdomains_names_key
+        # domain.subdomains = subdomains
+
+        return domain, subdomains_names
 
     @property
     def name(self) -> str:
@@ -2092,7 +2115,7 @@ class Domain(Part, JSONSerializable):
         # else:
         if self.type == DomainType.FIXED:
             raise ValueError(
-                'cannot assign a new sequence to this Domain; its sequence is fixed as '
+                f'cannot assign a new sequence to Domain {self.name}; its sequence is fixed as '
                 f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
         self.type = None  # temporary
@@ -3949,23 +3972,30 @@ class Design(JSONSerializable):
         pool_with_name: dict[str, DomainPool] = {pool.name: pool for pool in pools}
 
         domains_json = mandatory_field(Design, json_map, domains_key)
-        domains = []
-        domain_to_subdomains_names = {}
-        domain_name_to_domain = {}
-        for domain_json in domains_json:
-            domain, subdomain_list = Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
-            domain_to_subdomains_names[domain] = subdomain_list
-            domain_name_to_domain[domain.name] = domain
-            domains.append(domain)
+        # subdomains_json = mandatory_field(Design, json_map, domain_subdomains_names_key)
 
-        domains_by_name = domain_name_to_domain.keys()
-        for domain in domains:
-            for subdomain_name in domain_to_subdomains_names[domain]:
-                domain.subdomains.append(domain_name_to_domain[subdomain_name])
+        domains_json = mandatory_field(Design, json_map, domains_key)
+        domains: list[Domain] = []
+        domain_to_subdomains_names: dict[Domain, List[str]] = {}
+
+        for domain_json in domains_json:
+            domain, subdomains_names = Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
+            domains.append(domain)
+            domain_to_subdomains_names[domain] = subdomains_names
+
+        domains_by_name = {domain.name: domain for domain in domains}
+
+        #add subdomains
+        for domain, subdomain_names in domain_to_subdomains_names.items():
+            for subdomain_name in subdomain_names:
+                subdomain = domains_by_name[subdomain_name]
+                domain.subdomains.append(subdomain)
+                subdomain.parents.append(domain)
+
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [
-            Strand.from_json_serializable(json_map=strand_json, domain_with_name=domain_name_to_domain)
+            Strand.from_json_serializable(json_map=strand_json, domain_with_name=domains_by_name)
             for strand_json in strands_json
         ]
 
@@ -3981,7 +4011,7 @@ class Design(JSONSerializable):
 
         design = Design(strands=strands)
         design._domains = domains
-        design.domains_by_name = domain_name_to_domain
+        design.domains_by_name = domains_by_name
 
         return design
 
@@ -5057,15 +5087,11 @@ has a name, and the design contains a nuad strand with that name."""
             computed_derived_fields = True
 
         # copy sequences
-        print(other.domains)
         for domain in self._domains:
             other_domain = other.domains_by_name[domain.name]
-            if other_domain.type == DomainType.FIXED:
-                print(domain.name, other_domain.name)
-                print(domain.__class__)
-                print(other_domain.__class__)
+            if other_domain.type == DomainType.FIXED and not other_domain.has_sequence():
                 domain.set_fixed_sequence(other_domain.sequence())
-            elif other_domain.has_sequence():
+            elif other_domain.has_sequence() and other_domain.type == DomainType.ASSIGNABLE:
                 domain.set_sequence(other_domain.sequence())
 
         # no need to compute_derived_fields if we already called it above,
@@ -10015,8 +10041,7 @@ def _get_base_pair_domain_endpoints_to_check(
     addr_translation_table: dict[StrandDomainAddress, list[StrandDomainAddress]] = {}
 
     # Need to convert strands into strands lowest level subdomains
-    # leafify_strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
-
+    leafify_strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     new_nonimplicit_base_pairs = []
     if nonimplicit_base_pairs:

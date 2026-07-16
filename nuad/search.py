@@ -394,15 +394,16 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[
 
     # Convert direct domains to independent domains.
     # If multiple dependent domains map to the same assignable domain d_i, only add d_i once
-    assignable_domains = []
+    assignable_domains = set()
     assignable_domains_connected_to_domain = []
+
     for domain in domains:
         if domain.type == DomainType.ASSIGNABLE:
-            assignable_domains_connected_to_domain = [domain]
+            assignable_domains.add(domain)
         elif domain.type == DomainType.LOCKED:
             assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
 
-            assignable_domains = list(set(assignable_domains + assignable_domains_connected_to_domain))
+            assignable_domains.update(assignable_domains_connected_to_domain)
 
     return tuple(assignable_domains)
 

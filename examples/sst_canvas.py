@@ -28,6 +28,7 @@ def main() -> None:
         force_overwrite=args.force_overwrite,
         # log_time=True,
     )
+
     ns.search_for_sequences(design, params)
 
 

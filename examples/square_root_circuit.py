@@ -55,7 +55,9 @@ dc_complex_constraint = nc.nupack_complex_base_pair_probability_constraint
 
 # Stores all domains used in design
 TOEHOLD_DOMAIN: nc.Domain = nc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
-FUEL_DOMAIN: nc.Domain = nc.Domain('fuel', sequence='CATTTTTTTTTTTCA', fixed=True)
+FUEL_DOMAIN: nc.Domain = nc.Domain('fuel')
+FUEL_DOMAIN.set_fixed_sequence('CATTTTTTTTTTTCA')
+
 recognition_domains_and_subdomains: Dict[str, nc.Domain] = {}
 recognition_domains: Set[nc.Domain] = set()
 
@@ -70,9 +72,12 @@ def get_signal_domain(gate: Union[int, str]) -> nc.Domain:
     :rtype: Domain
     """
     if f'S{gate}' not in recognition_domains_and_subdomains:
-        d_13: nc.Domain = nc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL, dependent=True)
-        d_2: nc.Domain = nc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL, dependent=True)
-        d: nc.Domain = nc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, dependent=False, subdomains=[d_2, d_13])
+        d_13: nc.Domain = nc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL)
+        d_2: nc.Domain = nc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL)
+        d: nc.Domain = nc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d_2, d_13])
+
+        d_13.set_state(nc.DomainType.LOCKED)
+        d_2.set_state(nc.DomainType.LOCKED)
 
         recognition_domains_and_subdomains[f'ss{gate}'] = d_13
         recognition_domains_and_subdomains[f's{gate}'] = d_2
