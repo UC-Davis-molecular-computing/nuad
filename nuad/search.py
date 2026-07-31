@@ -574,8 +574,14 @@ def _strands_containing_domains(domains: Iterable[Domain] | None, strands: list[
 @lru_cache()
 def _independent_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[Domain, ...]:
     """
+    Returns the independent, non-fixed domains associated with a given DesignPart.
+    This is used to identify which domains to associate to each Evaluation in EvaluationSet.evaluate_constraint.
+    This is turn is used in calculating the new score after altering a :any:`Domain`'s sequence,
+    particularly the field :data:`EvaluationSet.domain_to_violations` and
+    :data:`EvaluationSet.domain_to_violations_new`.
+
     :param part:
-        DesignPart (e.g., :any:`Strand`, :any:`Domani`, tuple[:any:`Strand`, :any:`Strand`])
+        DesignPart (e.g., :any:`Strand`, :any:`Domain`, tuple[:any:`Strand`, :any:`Strand`])
     :param exclude_fixed:
         whether to exclude :any:`Domain`'s with :data:`Domain.fixed` == True
     :return:
