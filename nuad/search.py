@@ -69,7 +69,7 @@ from nuad.constraints import (
     DomainPairConstraint,
     DomainPairsConstraint,
     DomainsConstraint,
-    DomainType,
+    DomainState,
     SingularConstraint,
     Strand,
     StrandConstraint,
@@ -240,11 +240,11 @@ def _determine_domain_pairs_to_check(
                 with_replacement=constraint.check_domain_against_itself,
                 where=nc.not_strict_subdomain,
             )
-            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.type == DomainType.FIXED or d2.type == DomainType.FIXED))
+            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.state == DomainState.FIXED or d2.state == DomainState.FIXED))
 
     else:
         domains_changed_not_fixed_or_dependent_or_locked = [
-            domain for domain in domains_changed if not (domain.type == DomainType.FIXED or domain.type == DomainType.DEPENDENT or domain.type == DomainType.LOCKED)
+            domain for domain in domains_changed if not (domain.state == DomainState.FIXED or domain.state == DomainState.DEPENDENT or domain.state == DomainState.LOCKED)
         ]
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
@@ -379,7 +379,7 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[
     elif isinstance(part, Strand):
         domains = part.domains if not exclude_fixed else list(part.unfixed_domains())
     elif isinstance(part, DomainPair):
-        domains = [domain for domain in part.individual_parts() if not (exclude_fixed and domain.type == DomainType.FIXED)]
+        domains = [domain for domain in part.individual_parts() if not (exclude_fixed and domain.state == DomainState.FIXED)]
     elif isinstance(part, (StrandPair, Complex)):
         domains_per_strand = [
             strand.domains if not exclude_fixed else strand.unfixed_domains() for strand in part.individual_parts()
@@ -398,9 +398,9 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[
     assignable_domains_connected_to_domain = []
 
     for domain in domains:
-        if domain.type == DomainType.ASSIGNABLE:
+        if domain.state == DomainState.ASSIGNABLE:
             assignable_domains.add(domain)
-        elif domain.type == DomainType.LOCKED:
+        elif domain.state == DomainState.LOCKED:
             assignable_domains_connected_to_domain = domain.assignable_ancestors_or_descendants()
 
             assignable_domains.update(assignable_domains_connected_to_domain)
@@ -672,20 +672,20 @@ def _check_design(design: nc.Design) -> None:
     for strand in design.strands:
         for domain in strand.domains:
             # noinspection PyProtectedMember
-            if domain._pool is None and domain.type == DomainType.ASSIGNABLE:
+            if domain._pool is None and domain.state == DomainState.ASSIGNABLE:
                 raise ValueError(
                     f'The strand {strand.name} has an '
                     f'assignable domain {domain.name} '
                     f'with pool set to None.'
                 )
             # noinspection PyProtectedMember
-            elif domain._pool is not None and domain.type == DomainType.FIXED:
+            elif domain._pool is not None and domain.state == DomainState.FIXED:
                 raise ValueError(
                     f'The strand {strand.name} has a '
                     f'domain {domain.name} that is fixed, even though that Domain has a '
                     f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.'
                 )
-            elif domain._pool is not None and domain.type == DomainType.DEPENDENT and domain.type == DomainType.LOCKED:
+            elif domain._pool is not None and domain.state == DomainState.DEPENDENT and domain.state == DomainState.LOCKED:
                 raise ValueError(
                     f'The strand {strand.name} has a '
                     f'domain {domain.name} that is dependent or locked, even though that Domain has a '
@@ -1226,11 +1226,11 @@ def _reassign_domains(
     domains_changed: tuple[Domain, ...] = tuple(domains_changed_list)
 
     # fixed Domains should never be blamed for constraint violation
-    assert all(not domain_changed.type == DomainType.FIXED for domain_changed in domains_changed)
+    assert all(not domain_changed.state == DomainState.FIXED for domain_changed in domains_changed)
 
     # dependent and locked domains also cannot be blamed, since their assignable source should have been blamed
-    assert all(not domain_changed.type == DomainType.DEPENDENT for domain_changed in domains_changed)
-    assert all(not domain_changed.type == DomainType.LOCKED for domain_changed in domains_changed)
+    assert all(not domain_changed.state == DomainState.DEPENDENT for domain_changed in domains_changed)
+    assert all(not domain_changed.state == DomainState.LOCKED for domain_changed in domains_changed)
 
     original_sequences: dict[Domain, str] = {}
 
@@ -1586,7 +1586,7 @@ def assign_sequences_to_domains_randomly_from_pools(
     """
     at_least_one_domain_unfixed = False
     assignable_domains = [
-        domain for domain in design.domains if domain.type == DomainType.ASSIGNABLE
+        domain for domain in design.domains if domain.state == DomainState.ASSIGNABLE
     ]
     for domain in assignable_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
@@ -1602,7 +1602,7 @@ def assign_sequences_to_domains_randomly_from_pools(
                 f"and the search will not replace it."
             )
         if overwrite_existing_sequences:
-            if domain.type != DomainType.FIXED:
+            if domain.state != DomainState.FIXED:
                 at_least_one_domain_unfixed = True
                 new_sequence = domain.pool.generate_sequence(rng, domain.sequence(), warn_no_seqs_found)
                 domain.set_sequence(new_sequence)
@@ -1610,18 +1610,18 @@ def assign_sequences_to_domains_randomly_from_pools(
             else:
                 logger.info(skip_nonfixed_msg)
         else:
-            if domain.type != DomainType.FIXED:
+            if domain.state != DomainState.FIXED:
                 # even though we don't assign a new sequence here, we want to record that at least one
                 # domain is not fixed so that we know it is eligible to be overwritten during the search
                 at_least_one_domain_unfixed = True
-            if domain.type != DomainType.FIXED and not domain.has_sequence():
+            if domain.state != DomainState.FIXED and not domain.has_sequence():
                 new_sequence = domain.pool.generate_sequence(
                     rng, previous_sequence=None, warn_no_seqs_found=warn_no_seqs_found
                 )
                 domain.set_sequence(new_sequence)
                 assert len(domain.sequence()) == domain.length
             elif warn_fixed_sequences:
-                if domain.type == DomainType.FIXED:
+                if domain.state == DomainState.FIXED:
                     logger.info(skip_fixed_msg)
                 else:
                     logger.info(skip_nonfixed_msg)
@@ -1810,7 +1810,7 @@ class EvaluationSet:
         domain_to_score = {
             domain: sum(violation.score for violation in domain_violations)
             for domain, domain_violations in domain_to_violations.items()
-            if domain.type != DomainType.FIXED
+            if domain.state != DomainState.FIXED
         }
         domain_to_score = sort_dict_by_value(domain_to_score)
         return domain_to_score

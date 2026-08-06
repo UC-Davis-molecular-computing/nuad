@@ -5,6 +5,7 @@ import itertools
 
 import nuad.search as ns  # type: ignore
 import nuad.constraints as nc
+from examples.strand_displacement import design
 
 # TODO: Go over each constraint, using NUPACK
 #   - check pfunc for each strand
@@ -76,8 +77,8 @@ def get_signal_domain(gate: Union[int, str]) -> nc.Domain:
         d_2: nc.Domain = nc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL)
         d: nc.Domain = nc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d_2, d_13])
 
-        d_13.set_state(nc.DomainType.LOCKED)
-        d_2.set_state(nc.DomainType.LOCKED)
+        d_13.set_state(nc.DomainState.LOCKED)
+        d_2.set_state(nc.DomainState.LOCKED)
 
         recognition_domains_and_subdomains[f'ss{gate}'] = d_13
         recognition_domains_and_subdomains[f's{gate}'] = d_2
@@ -168,9 +169,12 @@ def gate_base_strand(gate: int) -> nc.Strand:
     :return: Gate base strand
     :rtype: dc.Strand
     """
+    domain_T_replicate = TOEHOLD_DOMAIN.create_domain_with_mismatches(
+        name=f"T_replicate", pick_dependent_seq=lambda seq, rng: seq
+    )
     d = get_signal_domain(gate)
     s: nc.Strand = nc.Strand(
-        domains=[TOEHOLD_DOMAIN, d, TOEHOLD_DOMAIN],
+        domains=[TOEHOLD_DOMAIN, d, domain_T_replicate],
         starred_domain_indices=[0, 1, 2],
         name=f'gate_base_{gate}',
     )

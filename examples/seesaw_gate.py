@@ -60,13 +60,26 @@ def seesaw_signal_strand(gate1: int, gate2: int) -> nc.Strand:
 #    T*         S1*      s1*   T*
 # [=====--=============--==--=====>
 def gate_base_strand(gate: int) -> nc.Strand:
-    d = f"{SIGNAL_DOMAIN_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
-    d_sub = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate}{COMPLEMENT_SUFFIX}"
-    s: nc.Strand = design.add_strand([TOEHOLD_COMPLEMENT, d, d_sub, TOEHOLD_COMPLEMENT], name=f"gate {gate}")
-    s.domains[0].pool = TOEHOLD_DOMAIN_POOL
-    s.domains[1].pool = NON_SUB_LONG_DOMAIN_POOL
-    s.domains[2].pool = SUB_LONG_DOMAIN_POOL
-    s.domains[3].pool = TOEHOLD_DOMAIN_POOL
+    d_name = f"{SIGNAL_DOMAIN_PREFIX}{gate}"
+    d_sub_name = f"{SIGNAL_DOMAIN_SUB_PREFIX}{gate}"
+
+    domain_T = design.domains_by_name[TOEHOLD_DOMAIN]
+    domain_S = design.domains_by_name[d_name]
+    domain_s = design.domains_by_name[d_sub_name]
+
+    # T appears twice, non-consecutively, on this strand (both ends). nuad forbids
+    # reusing the same Domain object non-consecutively within one strand, so create
+    # a second Domain forced (via dependency) to always have T's exact sequence.
+    domain_T2 = domain_T.create_domain_with_mismatches(
+        name=f"T2_{gate}", pick_dependent_seq=lambda seq, rng: seq
+    )
+
+    s: nc.Strand = design.add_strand(
+        domains=[domain_T, domain_S, domain_s, domain_T2],
+        starred_domain_indices=[0, 1, 2, 3],
+        name=f"gate {gate}",
+    )
+
     return s
 
 
@@ -259,7 +272,7 @@ g_5_s_2_5_complex_constraint = nc.nupack_complex_base_pair_probability_constrain
 
 #        S5
 # [===============>
-waste_5_strand = waste_strand(5)
+# waste_5_strand = waste_strand(5)
 
 #                   S5       s5
 #             14          2  10

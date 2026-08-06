@@ -1564,8 +1564,22 @@ def add_quotes(string: str) -> str:
 
 
 def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
-    # should be called from function whose return type is the type being constructed from JSON, e.g.,
-    # Design or Strand, given by ret_type. This helps give a useful error message
+    """
+    Look up `main_key` (or one of `legacy_keys`, in order, for backward compatibility)
+    in `json_map`, returning its value.
+
+    Intended to be called from a `from_json_serializable`-style method whose return type
+    is `ret_type` (e.g., `Design` or `Strand`), so a useful error message naming the
+    object being constructed can be raised if none of the keys is found.
+
+    :param ret_type: the class being reconstructed from `json_map`, used only to name it in the error message
+    :param json_map: JSON dict to look up the field in
+    :param main_key: the current/preferred key to look up
+    :param legacy_keys: older key names to fall back on, for reading JSON written by older versions
+    :return: value found at `main_key` or the first matching key in `legacy_keys`
+    :raises ValueError: if none of `main_key` or `legacy_keys` is present in `json_map`
+    """
+
     for key in (main_key,) + legacy_keys:
         if key in json_map:
             return json_map[key]
@@ -1622,7 +1636,7 @@ class Part(ABC):
         # individual domains/strands
         pass
 
-class DomainType(str, Enum):
+class DomainState(str, Enum):
     """The four mutually states of Domain"""
     ASSIGNABLE = 'Assignable'
     DEPENDENT = 'Dependent'
@@ -1718,7 +1732,7 @@ class Domain(Part, JSONSerializable):
     for DNA sequence design.
     """
 
-    type: DomainType = DomainType.ASSIGNABLE
+    state: DomainState = DomainState.ASSIGNABLE
     """
     A :any:`Domain` can either be assignable, fixed, dependent, or locked:
     
@@ -1789,7 +1803,7 @@ class Domain(Part, JSONSerializable):
         for subdomain in self._subdomains:
             subdomain.parents.append(self)
 
-        if self.type != DomainType.ASSIGNABLE and weight is not None:
+        if self.state != DomainState.ASSIGNABLE and weight is not None:
             raise ValueError(
                 'cannot set Domain.weight when it is not assignable, '
                 'since non-assignable domains (locked or dependent) cannot be picked to change in the search, '
@@ -1799,7 +1813,7 @@ class Domain(Part, JSONSerializable):
         if locked:
             self.set_locked()
         else:
-            self.type = DomainType.ASSIGNABLE
+            self.state = DomainState.ASSIGNABLE
 
         if weight is not None:
             self.weight = weight
@@ -1853,7 +1867,7 @@ class Domain(Part, JSONSerializable):
             dct[domain_pool_name_key] = self._pool.name
         if self.has_sequence():
             dct[sequence_key] = self.sequence()
-        dct[state_key] = self.type
+        dct[state_key] = self.state
         if self.label is not None:
             dct[label_key] = self.label
 
@@ -1882,7 +1896,7 @@ class Domain(Part, JSONSerializable):
         """
         name: str = mandatory_field(Domain, json_map, name_key)
         sequence: str | None = json_map.get(sequence_key)
-        state: DomainType = json_map.get(state_key)
+        state: DomainState = json_map.get(state_key)
 
         label: str | None = json_map.get(label_key)
 
@@ -1976,11 +1990,11 @@ class Domain(Part, JSONSerializable):
 
     @property
     def fixed(self):
-        return self.type == DomainType.FIXED
+        return self.state == DomainState.FIXED
 
 
     def set_locked(self):
-        self.type = DomainType.LOCKED
+        self.state = DomainState.LOCKED
 
     @subdomains.setter
     def subdomains(self, new_subdomains: list['Domain']) -> None:
@@ -2010,7 +2024,7 @@ class Domain(Part, JSONSerializable):
         """
         if self._length is not None:
             return self._length
-        if self.type == DomainType.FIXED:
+        if self.state == DomainState.FIXED:
             if not self.has_sequence():
                 raise ValueError(f'Domain {self.name} is fixed but has no sequence assigned yet')
             return len(self.sequence())
@@ -2038,8 +2052,8 @@ class Domain(Part, JSONSerializable):
     def length(self, length: int):
         self._length = length
 
-    def set_state(self, new_state: DomainType):
-        if new_state == DomainType.FIXED:
+    def set_state(self, new_state: DomainState):
+        if new_state == DomainState.FIXED:
             if len(self._subdomains) > 0:
                 raise ValueError(
                     f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
@@ -2049,7 +2063,7 @@ class Domain(Part, JSONSerializable):
                     f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
                 )
 
-        self.type = new_state
+        self.state = new_state
 
     def sequence(self) -> str:
         """
@@ -2068,12 +2082,12 @@ class Domain(Part, JSONSerializable):
 
         :param fixed: this parameter gets true only when is called by :meth:`Domain.set_fixed_sequence`.
         """
-        if self.type == DomainType.FIXED:
+        if self.state == DomainState.FIXED:
             raise ValueError(
                 'cannot assign a new sequence to this Domain; its sequence is fixed as '
                 f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
-        if self.type == DomainType.LOCKED:
+        if self.state == DomainState.LOCKED:
             raise ValueError(
                 'cannot assign a new sequence to this Domain; its sequence is locked_dependent on '
                 f'{", ".join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}'
@@ -2113,12 +2127,12 @@ class Domain(Part, JSONSerializable):
         #         f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
         #     )
         # else:
-        if self.type == DomainType.FIXED:
+        if self.state == DomainState.FIXED:
             raise ValueError(
                 f'cannot assign a new sequence to Domain {self.name}; its sequence is fixed as '
                 f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
-        self.type = None  # temporary
+        self.state = None  # temporary
 
         self.set_sequence(fixed_sequence, fixed=True)
 
@@ -2131,7 +2145,7 @@ class Domain(Part, JSONSerializable):
                 f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
             )
 
-        self.type = DomainType.FIXED
+        self.state = DomainState.FIXED
 
     def notify_sequence_changed(self, rng: np.random.Generator, notifier_domain: Domain) -> None:
         """
@@ -2155,7 +2169,7 @@ class Domain(Part, JSONSerializable):
                              f"does not have the same length as the {self.name} domain sequence.")
         dependent_domain = Domain(name=name)
         dependent_domain.length = correct_length
-        dependent_domain.type = DomainType.DEPENDENT
+        dependent_domain.state = DomainState.DEPENDENT
         self.dependents.append((dependent_domain, pick_dependent_seq))
 
         return dependent_domain
@@ -2229,7 +2243,7 @@ class Domain(Part, JSONSerializable):
     def _is_assignable(self) -> bool:
         """Return true if self is assignable (not dependent or fixed or locked).
         """
-        return True if self.type == DomainType.ASSIGNABLE else False
+        return True if self.state == DomainState.ASSIGNABLE else False
 
     def _contains_any_assignable_subdomain_recursively(self) -> bool:
         """Returns true if the subdomain graph rooted at this domain contains
@@ -2439,16 +2453,16 @@ class Domain(Part, JSONSerializable):
         return False
 
     def unlocked_ancestor_or_descendants(self) -> List[Domain]:
-        if not self.type == DomainType.LOCKED:
+        if not self.state == DomainState.LOCKED:
             raise ValueError(f'cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}')
 
         for domain in self.ancestors():
-            if not self.type == DomainType.LOCKED:
+            if not self.state == DomainState.LOCKED:
                 return [domain]
 
         unlocked_descendants = []
         for domain in self._get_all_domains_from_this_subtree():
-            if not self.type == DomainType.LOCKED:
+            if not self.state == DomainState.LOCKED:
                 unlocked_descendants.append(domain)
 
         return unlocked_descendants
@@ -2461,7 +2475,7 @@ class Domain(Part, JSONSerializable):
         :return:  the assignable :any:`Domain` that this domain sequence changes if its sequence gets modified, which is *itself* if it is already assignable.
         """
 
-        if self.type != DomainType.ASSIGNABLE:
+        if self.state != DomainState.ASSIGNABLE:
             return self.assignable_ancestors_or_descendants()
         else:
             return [self]
@@ -2477,13 +2491,13 @@ class Domain(Part, JSONSerializable):
 
         """
 
-        if self.type != DomainType.LOCKED:
+        if self.state != DomainState.LOCKED:
             raise ValueError(f"cannot call assignable_ancestors_or_descendants on an unlocked domain Domain {self.name}")
 
         # first try ancestors
         assignable_ancestors = []
         for domain in self.ancestors():
-            if domain.type == DomainType.ASSIGNABLE:
+            if domain.state == DomainState.ASSIGNABLE:
                 assignable_ancestors.append(domain)
         if assignable_ancestors:
             return assignable_ancestors
@@ -2493,7 +2507,7 @@ class Domain(Part, JSONSerializable):
         return assignable_descendants
 
     def _assignable_descendants(self) -> list[Domain]:
-        if self.type == DomainType.ASSIGNABLE:
+        if self.state == DomainState.ASSIGNABLE:
             return [self]
 
         assignable_descendants = []
@@ -2682,6 +2696,13 @@ class VendorFields(JSONSerializable):
 
 
 def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
+    """
+    Validate that a `VendorFields` string field is present and non-empty.
+
+    :param value: the field's current value
+    :param field_name: name of the field, used only in the error message
+    :raises ValueError: if `value` is None or the empty string
+    """
     if value is None:
         raise ValueError(f"field {field_name} in VendorFields cannot be None")
     if len(value) == 0:
@@ -2738,6 +2759,13 @@ def set_domains_memoryviews(
 def _assign_back_preexisting_sequences(
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
+    """
+    Write each domain's previously-recorded sequence back into its memoryview, after
+    `set_domains_memoryviews` has reallocated a new shared buffer for its subdomain tree.
+
+    :param domain_to_preexisting_sequence: map from each domain that had a sequence
+        assigned before its memoryview was reallocated, to that sequence
+    """
     for domain, sequence in domain_to_preexisting_sequence.items():
         domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
 
@@ -2787,6 +2815,22 @@ def _assign_intervals_to_subdomains_and_parents(
     visited_names: Set[str],
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
+    """
+   Recursively assign byte-offset intervals (within the shared memoryview buffer for a
+   subdomain tree) to `domain`'s subdomains and parents that haven't been visited yet.
+
+   Called from `_assign_intervals` for the domain a traversal started from, and
+   recursively from `_assign_intervals_subdomain`/`_assign_intervals_parent` thereafter.
+   Also validates, via `validate_subdomain_lengths`, that `domain`'s subdomain lengths
+   sum to its own length.
+
+   :param domain: the domain whose subdomains and parents should be visited next
+   :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+   :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+   :param visited_names: names of domains already assigned an interval, updated in place
+   :param domain_to_preexisting_sequence: map from domain to a sequence it had before its
+       memoryview was reallocated, updated in place for later restoration
+   """
     validate_subdomain_lengths(domain)
 
     if domain.memoryview_sequence is not None:
@@ -2823,9 +2867,18 @@ def _assign_intervals_subdomain(
     visited_names: Set,
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
-    # domain is the current domain we are processing
-    # the interval indices are set based on this domain's parent interval
+    """
+    Assign a byte-offset interval to `domain`, a not-yet-visited subdomain of `parent`,
+    based on `parent`'s already-assigned interval and `domain`'s position among
+    `parent.subdomains`, then recurse into `domain`'s own subdomains/parents.
 
+    :param domain: the (not yet visited) subdomain being assigned an interval
+    :param parent: `domain`'s parent, whose interval has already been assigned
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a preexisting sequence, updated in place
+    """
     assert domain in parent.subdomains
 
     visited_names.add(domain.name)
@@ -2862,9 +2915,18 @@ def _assign_intervals_parent(
     visited_names: Set,
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
-    # domain is the current domain we are processing
-    # the interval indices are set based on this domain's subdomain indices
+    """
+    Assign a byte-offset interval to `domain`, a not-yet-visited parent of `subdomain`,
+    based on `subdomain`'s already-assigned interval and its position among
+    `domain.subdomains`, then recurse into `domain`'s own subdomains/parents.
 
+    :param domain: the (not yet visited) parent domain being assigned an interval
+    :param subdomain: `domain`'s subdomain, whose interval has already been assigned
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a preexisting sequence, updated in place
+    """
     assert subdomain in domain.subdomains
 
     visited_names.add(domain.name)
@@ -3300,13 +3362,13 @@ class Strand(Part, JSONSerializable):
     @property
     def fixed(self) -> bool:
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
-        return all(domain.type == DomainType.FIXED for domain in self.domains)
+        return all(domain.state == DomainState.FIXED for domain in self.domains)
 
     def unfixed_domains(self) -> tuple[Domain, ...]:
         """
         :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.state` is not `State.FIXED`
         """
-        return tuple(domain for domain in self.domains if domain.type != DomainType.FIXED)
+        return tuple(domain for domain in self.domains if domain.state != DomainState.FIXED)
 
     @property
     def name(self) -> str:
@@ -3499,7 +3561,7 @@ class DomainPair(Part, Iterable[Domain]):
 
     @property
     def fixed(self) -> bool:
-        return self.domain1.type == DomainType.FIXED and self.domain2.type == DomainType.FIXED
+        return self.domain1.state == DomainState.FIXED and self.domain2.state == DomainState.FIXED
 
     def __iter__(self) -> Iterator[Domain]:
         yield self.domain1
@@ -4147,20 +4209,20 @@ class Design(JSONSerializable):
         domain: Domain
         if domain_name in self.domains_by_name:
             domain = self.domains_by_name[domain_name]
-            if domain.type == DomainType.FIXED:
+            if domain.state == DomainState.FIXED:
                 raise ValueError(f"The fixed domain {domain_name} cannot have subdomains.")
         else:
             domain = Domain(name=domain_name)
             self.domains_by_name[domain_name] = domain
 
 
-        assert domain.type != DomainType.FIXED
+        assert domain.state != DomainState.FIXED
         if keep_domain_assignable:
-            if domain.type == DomainType.DEPENDENT:
+            if domain.state == DomainState.DEPENDENT:
                 raise ValueError(f"The dependent domain {domain_name} cannot be assignable.")
-            elif domain.type == DomainType.LOCKED:
+            elif domain.state == DomainState.LOCKED:
                 raise ValueError(f"The domain {domain_name} is already locked, so cannot be made assignable.")
-            assert domain.type == DomainType.ASSIGNABLE
+            assert domain.state == DomainState.ASSIGNABLE
 
 
 
@@ -4197,10 +4259,10 @@ class Design(JSONSerializable):
             #
             # subdomains.append(subdomain)
 
-            if subdomain.type != DomainType.ASSIGNABLE:
+            if subdomain.state != DomainState.ASSIGNABLE:
                 # in case there is a predefined unlocked ancestor for domain:
-                if subdomain.type != DomainType.LOCKED:
-                    unlocked_ancestor = [anc for anc in domain.ancestors() if anc.type != DomainType.LOCKED]
+                if subdomain.state != DomainState.LOCKED:
+                    unlocked_ancestor = [anc for anc in domain.ancestors() if anc.state != DomainState.LOCKED]
                     if unlocked_ancestor:
                         raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
                                          f" in a subdomain graph, but found more in the path(s) "
@@ -4211,23 +4273,23 @@ class Design(JSONSerializable):
                                          f" in a subdomain graph, but found more in the path(s) "
                                          f"with keeping the domain {domain.name} assignable and "
                                          f"its unlocked subdomain {subdomain_name}")
-            elif domain.type == DomainType.LOCKED:
+            elif domain.state == DomainState.LOCKED:
                 # Now we know subdomain.type is Assignable, and domain.type is Locked,
                 # Default would normally be to make each subdomain Assignable,
                 # but only if there is no unlocked ancestor; otherwise we make all subdomains Locked
                 # to maintain the rule of one unlocked domain per path.
-                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.type != DomainType.LOCKED]
+                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.state != DomainState.LOCKED]
                 if unlocked_ancestor:
-                    subdomain.type = DomainType.LOCKED
+                    subdomain.state = DomainState.LOCKED
                 else:
-                    subdomain.type = DomainType.ASSIGNABLE
+                    subdomain.state = DomainState.ASSIGNABLE
             else:
                 # This means parent is not locked, so subdomain must be locked 
                 # to enforce exactly one unlocked domain on each path.
-                if not keep_domain_assignable and domain.type == DomainType.ASSIGNABLE:
-                    domain.type = DomainType.LOCKED
+                if not keep_domain_assignable and domain.state == DomainState.ASSIGNABLE:
+                    domain.state = DomainState.LOCKED
                 else:
-                    subdomain.type = DomainType.LOCKED
+                    subdomain.state = DomainState.LOCKED
 
 
         subdomains_total_length = sum(length for _, length in subdomain_names_and_lengths)
@@ -5089,9 +5151,9 @@ has a name, and the design contains a nuad strand with that name."""
         # copy sequences
         for domain in self._domains:
             other_domain = other.domains_by_name[domain.name]
-            if other_domain.type == DomainType.FIXED and not other_domain.has_sequence():
+            if other_domain.state == DomainState.FIXED and not other_domain.has_sequence():
                 domain.set_fixed_sequence(other_domain.sequence())
-            elif other_domain.has_sequence() and other_domain.type == DomainType.ASSIGNABLE:
+            elif other_domain.has_sequence() and other_domain.state == DomainState.ASSIGNABLE:
                 domain.set_sequence(other_domain.sequence())
 
         # no need to compute_derived_fields if we already called it above,
@@ -5169,10 +5231,10 @@ has a name, and the design contains a nuad strand with that name."""
         self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
     ) -> list[Domain]:
         # No need to define visited_domains, since the singly-connectedness is already verified.
-        if domain.type != DomainType.LOCKED:
+        if domain.state != DomainState.LOCKED:
             unlocked_subdomains.append(domain)
 
-            if domain.type == DomainType.FIXED:
+            if domain.state == DomainState.FIXED:
                 # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
                 return unlocked_subdomains
 
@@ -5194,7 +5256,7 @@ has a name, and the design contains a nuad strand with that name."""
     def _check_exactly_one_unlocked_in_every_path(self, subdomain_graph: nx.DiGraph) -> None:
         # first, make sure that every domain has exactly one state:
         for domain in self._domains:
-            if domain.type is None:
+            if domain.state is None:
                 raise ValueError(f'domain {domain.name} has no states.')
 
         source_nodes = [node for node, degree in subdomain_graph.in_degree() if degree == 0]
@@ -5238,19 +5300,19 @@ has a name, and the design contains a nuad strand with that name."""
     def _create_dependency_digraph(self) -> nx.DiGraph:
         graph = nx.DiGraph()
 
-        unlocked_domains = [domain for domain in self._domains if domain.type != DomainType.LOCKED]
+        unlocked_domains = [domain for domain in self._domains if domain.state != DomainState.LOCKED]
 
         for unlocked_domain in unlocked_domains:
             graph.add_node(unlocked_domain)
             for sd in unlocked_domain.subdomains:
-                if sd.type != DomainType.FIXED:
+                if sd.state != DomainState.FIXED:
                     graph.add_edge(unlocked_domain, sd, color='red')
                     self._add_red_edge_pointing_subdomains(sd, graph)
                     unlocked_domain.locked_dependents.append(sd)
                 else:
                     graph.add_node(sd)
             for parent in unlocked_domain.parents:
-                if parent.type != DomainType.FIXED:
+                if parent.state != DomainState.FIXED:
                     graph.add_edge(unlocked_domain, parent, color='red')
                     self._add_red_edge_pointing_parents(parent, graph)
                     unlocked_domain.locked_dependents.append(parent)
@@ -5298,7 +5360,7 @@ has a name, and the design contains a nuad strand with that name."""
 
     def _check_each_dependent_exactly_one_dependee(self, graph: nx.DiGraph) -> None:
         for domain in self.domains:
-            if domain.type == DomainType.DEPENDENT:
+            if domain.state == DomainState.DEPENDENT:
                 dependees = []
                 for pred in graph.predecessors(domain):
                     if graph[pred][domain].get('color') == 'blue':
@@ -5789,6 +5851,15 @@ def create_domain_pairs_with_dict(domain_pairs: Sequence[DomainPair]) -> dict[Do
 
 
 def _check_at_most_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    """
+    Raise an error if both `param1` and `param2` are specified (non-None).
+
+    :param param1: first parameter's current value
+    :param param2: second parameter's current value
+    :param name1: name of `param1`, used only in the error message
+    :param name2: name of `param2`, used only in the error message
+    :raises ValueError: if both `param1` and `param2` are not None
+    """
     if param1 is not None and param2 is not None:
         raise ValueError(
             f"must specify at most one of parameters {name1} or {name2}, "
@@ -5804,6 +5875,15 @@ def _check_at_least_one_parameter_specified(param1: Any, param2: Any, name1: str
 
 
 def _check_exactly_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    """
+    Raise an error unless exactly one of `param1`, `param2` is specified (non-None).
+
+    :param param1: first parameter's current value
+    :param param2: second parameter's current value
+    :param name1: name of `param1`, used only in the error message
+    :param name2: name of `param2`, used only in the error message
+    :raises ValueError: if both are not None, or both are None
+    """
     if param1 is not None and param2 is not None:
         raise ValueError(
             f"must specify exactly one of parameters {name1} or {name2}, "
@@ -6739,16 +6819,23 @@ and make parallel processing more efficient:
 
 
 def _check_vienna_rna_installed() -> None:
+    """
+    Verify that ViennaRNA is installed and its executables (e.g. RNAduplex) are on the
+    PATH, by attempting a trivial RNAduplex call.
+
+    :raises ImportError: if the executable can't be found, with a message pointing to
+        installation instructions
+    """
     try:
         nv.rna_duplex_multiple([('ACGT', 'TGCA')])
     except FileNotFoundError:
         raise ImportError(
             """
-Vienna RNA is not installed correctly. Please install it and ensure that 
-executables such as RNAduplex can be called from the command line. 
-Installation instructions can be found at 
-https://github.com/UC-Davis-molecular-computing/dsd#installation and 
-https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
+            Vienna RNA is not installed correctly. Please install it and ensure that 
+            executables such as RNAduplex can be called from the command line. 
+            Installation instructions can be found at 
+            https://github.com/UC-Davis-molecular-computing/dsd#installation and 
+            https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
         )
 
 
@@ -6961,7 +7048,18 @@ def rna_plex_domain_pairs_constraint(
 def get_domain_pairs_from_thresholds_dict(
     thresholds: dict[tuple[Domain, bool, Domain, bool] | tuple[Domain, Domain], tuple[float, float]],
 ) -> tuple[DomainPair, ...]:
-    # gather pairs of domains referenced in `thresholds`
+    """
+    Extract the `DomainPair`s referenced by the keys of a `thresholds` dict.
+
+    Each key is either a 2-tuple `(domain1, domain2)` or a 4-tuple
+    `(domain1, starred1, domain2, starred2)`; this builds one `DomainPair` per key.
+
+    :param thresholds: map from a domain pair (see above) to an
+        `(low_threshold, high_threshold)` energy interval
+    :return: tuple of `DomainPair`s, one per key in `thresholds`
+    :raises ValueError: if a key is neither a 2-tuple nor a 4-tuple, or if both forms
+        of the same pair appear as separate keys
+    """
     domain_pairs = []
     for key, _ in thresholds.items():
         if len(key) == 2:
@@ -7005,8 +7103,26 @@ def domain_pairs_nonorthogonal_constraint(
     max_energy: float = 0.0,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
-    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAmultifold
+    """
+    Shared implementation behind the RNAduplex/RNAplex/RNAmultifold "nonorthogonal
+    domain pairs" constraints: for each domain pair with an explicit
+    `(low_threshold, high_threshold)` window in `thresholds`, compute its binding
+    energy with `evaluation_function` and penalize energies outside that window.
 
+    :param evaluation_function: batch binding-energy function (e.g. `rna_duplex_multiple`)
+    :param tool_name: name of the underlying tool, used in the default `description`
+    :param thresholds: map from a domain pair (2-tuple, or 4-tuple with starredness) to
+        its `(low_threshold, high_threshold)` energy window in kcal/mol
+    :param temperature: temperature (Celsius) at which to compute energies
+    :param weight: weight to assign the resulting constraint
+    :param score_transfer_function: function applied to the constraint's excess value
+    :param description: description of constraint; auto-generated if not given
+    :param short_description: short description of constraint suitable for logging
+    :param max_energy: passed through to `evaluation_function`
+    :param parameters_filename: ViennaRNA parameters file to use
+    :return: a `DomainPairsConstraint` penalizing domain pairs whose energy falls
+        outside their specified threshold window
+    """
     if description is None:
         description = f"domain pair {tool_name} energies for nonorthogonal domains at {temperature}C"
 
@@ -7268,8 +7384,18 @@ def rna_multifold_domain_pairs_nonorthogonal_constraint(
 def _populate_strand_list_and_pairs(
     strands: Iterable[Strand] | None, pairs: Iterable[tuple[Strand, Strand]] | None
 ) -> tuple[list[Strand], list[tuple[Strand, Strand]]]:
-    # assert exactly one of strands or pairs is None, then populate the other since both are used below
-    # also normalize both to be a list instead of iterable
+    """
+    Given exactly one of `strands` or `pairs`, populate and return both, as lists.
+
+    If `strands` is given, `pairs` becomes all pairs of strands (including a strand
+    with itself). If `pairs` is given, `strands` becomes the deduplicated (by name)
+    list of strands appearing in any pair.
+
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :return: `(strands, pairs)`, both as lists
+    :raises ValueError: if both or neither of `strands`/`pairs` is given
+    """
     if strands is None and pairs is None:
         raise ValueError("exactly one of strands or pairs must be specified, but neither is")
     elif strands is not None and pairs is not None:
@@ -7413,11 +7539,30 @@ def _strand_pairs_constraints_by_number_matching_domains(
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     ignore_missing_thresholds: bool = False,
 ) -> list[SPC]:
-    # function to share common code between
-    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
-    # and
-    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
+    """
+    Shared implementation behind `rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    and `rna_multifold_strand_pair_constraints_by_number_matching_domains`: groups strand
+    pairs by how many domains they share, then builds one constraint per group via
+    `constraint_creator`, using the threshold specified for that group size.
 
+    :param constraint_creator: factory building a single constraint (type `SPC`) for one
+        group of same-matching-domain-count strand pairs
+    :param thresholds: map from number of matching domains to the energy threshold for
+        strand pairs with that many domains in common
+    :param temperature: temperature (Celsius) at which to compute energies
+    :param weight: weight to assign each resulting constraint
+    :param score_transfer_function: function applied to each constraint's excess value
+    :param descriptions: optional map from matching-domain count to a description
+    :param short_descriptions: optional map from matching-domain count to a short description
+    :param parallel: whether to evaluate constraints in parallel
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :param ignore_missing_thresholds: if False, require a threshold for every distinct
+        matching-domain count present in `pairs`
+    :return: one constraint per key in `thresholds`
+    :raises ValueError: if `thresholds`'s keys don't match the matching-domain counts
+        present in `pairs`, and `ignore_missing_thresholds` is False
+    """
     check_strand_against_itself = True
     pairs = _normalize_strands_pairs_disjoint_parameters(strands, pairs, check_strand_against_itself)
 
@@ -7461,9 +7606,19 @@ def _normalize_domains_pairs_disjoint_parameters(
     pairs: Iterable[tuple[Domain, Domain]],
     check_domain_against_itself: bool,
 ) -> tuple[tuple[Domain, Domain], ...]:
-    # Enforce that exactly one of domains or pairs is not None, and if domains is specified,
-    # set pairs to be all pairs from domains. Return those pairs; if pairs is specified,
-    # just return it. Also normalize to return a tuple.
+    """
+    Given exactly one of `domains` or `pairs`, return the pairs to check as a tuple.
+
+    If `domains` is given, all pairs of domains are generated (including a domain with
+    itself, if `check_domain_against_itself`). If `pairs` is given, it's returned directly.
+
+    :param domains: domains to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit domain pairs to check, or None if `domains` is given instead
+    :param check_domain_against_itself: whether to pair a domain with itself when
+        generating pairs from `domains`
+    :return: tuple of domain pairs to check
+    :raises ValueError: if both or neither of `domains`/`pairs` is given
+    """
     if domains is None and pairs is None:
         raise ValueError("exactly one of domains or pairs must be specified, but neither is")
     elif domains is not None and pairs is not None:
@@ -7484,9 +7639,19 @@ def _normalize_strands_pairs_disjoint_parameters(
     pairs: Iterable[tuple[Strand, Strand]] | None,
     check_strand_against_itself: bool,
 ) -> Iterable[tuple[Strand, Strand]]:
-    # Enforce that exactly one of strands or pairs is not None, and if strands is specified,
-    # set pairs to be all pairs from strands. Return those pairs; if pairs is specified,
-    # just return it. Also normalize to return a tuple.
+    """
+    Given exactly one of `strands` or `pairs`, return the pairs to check as a tuple.
+
+    If `strands` is given, all pairs of strands are generated (including a strand with
+    itself, if `check_strand_against_itself`). If `pairs` is given, it's returned directly.
+
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :param check_strand_against_itself: whether to pair a strand with itself when
+        generating pairs from `strands`
+    :return: tuple of strand pairs to check
+    :raises ValueError: if both or neither of `strands`/`pairs` is given
+    """
     if strands is None and pairs is None:
         raise ValueError("exactly one of strands or pairs must be specified, but neither is")
     elif strands is not None and pairs is not None:
@@ -7915,6 +8080,27 @@ def update_diagonal(
     prev_prev_larger: bool,
     gc_double: bool,
 ) -> np.ndarray:
+    """
+    Compute one anti-diagonal of the longest-complementary-subsequence dynamic-programming
+    table from the previous two anti-diagonals, as part of the "anti-diagonal" algorithm
+    used by `longest_complementary_subsequences`.
+
+    :param arr1: 2D array of sequences (rows) as integer base codes, 5' --> 3'
+    :param arr2: 2D array of sequences (rows) as integer base codes, 3' --> 5' (already
+        reversed and WC-complemented by the caller)
+    :param diag_prev: the anti-diagonal immediately before the one being computed
+    :param diag_prev_prev: the anti-diagonal two before the one being computed;
+        overwritten in place and returned as the new current diagonal
+    :param eq_idxs: scratch boolean array, reused across calls, for base-match positions
+    :param gc_idxs: scratch boolean array, reused across calls, for matching G-C positions
+        (only used if `gc_double`)
+    :param i: index of the anti-diagonal being computed
+    :param prev_prev_larger: whether `diag_prev_prev` has one more entry than `diag_prev`
+        (alternates each step, as diagonal lengths alternate while sweeping the DP table)
+    :param gc_double: whether to score a G-C match as 2 instead of 1
+    :return: the newly computed diagonal (same array object as `diag_prev_prev`, now
+        overwritten, returned for readability)
+    """
     s1len = arr1.shape[1]
     s2len = arr2.shape[1]
     assert s1len == s2len  # for now, assume same length, but should be relaxed
@@ -7975,6 +8161,16 @@ def update_diagonal(
 
 
 def lcs(seqs1: Sequence[str], seqs2: Sequence[str], gc_double: bool) -> list[int]:
+    """
+    Compute, for each pair `(seqs1[i], seqs2[i])`, the length of the longest
+    complementary (Watson-Crick) subsequence between the two.
+
+    :param seqs1: DNA sequences, oriented 5' --> 3'
+    :param seqs2: DNA sequences, oriented 5' --> 3' (reversed internally so the search
+        aligns them for complementary, rather than plain, subsequence matching)
+    :param gc_double: whether to score a G-C complementary pair as 2 instead of 1
+    :return: list of longest-complementary-subsequence lengths, one per pair
+    """
     arr1 = nn.seqs2arr(seqs1)
     arr2 = nn.seqs2arr(seqs2)
     arr2 = np.flip(arr2, axis=1)
@@ -8409,6 +8605,17 @@ def energy_excess_domains(
     domain1: Domain,
     domain2: Domain,
 ) -> float:
+    """
+    Like `energy_excess`, but looks up the threshold from a per-domain-pool-pair dict
+    if `threshold` isn't already a single number.
+
+    :param energy: computed binding energy between `domain1` and `domain2`
+    :param threshold: either a single threshold to use for every pair, or a map from
+        `(domain1.pool, domain2.pool)` to the threshold for that pair of pools
+    :param domain1: first domain in the pair (used only to look up its pool, if needed)
+    :param domain2: second domain in the pair (used only to look up its pool, if needed)
+    :return: `threshold - energy` (positive means the energy is violating the threshold)
+    """
     threshold_value = 0.0  # noqa
     if isinstance(threshold, Number):
         threshold_value = threshold
@@ -8573,7 +8780,14 @@ def _alter_scores_by_transfer(
     sets_excesses: list[tuple[OrderedSet[Domain], float]],
     transfer_callback: Callable[[float], float],
 ) -> list[tuple[OrderedSet[Domain], float]]:
+    """
+    Apply a score-transfer function to a list of (domain-set, excess) pairs, clamping
+    negative excess (a satisfied constraint) to a weight of 0.
 
+    :param sets_excesses: list of (domain set, excess) pairs
+    :param transfer_callback: function mapping a non-negative excess to a weight
+    :return: list of (domain set, weight) pairs, weight 0 wherever excess was negative
+    """
     sets_weights: list[tuple[OrderedSet[Domain], float]] = []
     for set_, excess in sets_excesses:
         if excess < 0:
