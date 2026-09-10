@@ -1,0 +1,15 @@
+# Line-ending normalization.
+#
+# This repo is developed on both Windows and macOS/Linux, and the working tree
+# is sometimes shared directly between machines (e.g. via a synced folder), so
+# the bytes on disk must be identical everywhere. Store LF in the repository and
+# check LF out on every platform, regardless of each machine's core.autocrlf.
+* text=auto eol=lf
+
+# Windows batch files must keep CRLF or cmd.exe can mis-parse them.
+*.bat text eol=crlf
+
+# Binary files: never convert.
+*.png  binary
+*.pdf  binary
+*.xls  binary
