@@ -52,8 +52,9 @@ nuad = ['nupack_viennaRNA_parameter_files/*.par']
 version = { attr = 'nuad.__version__.version' }
 
 [tool.ruff]
+# target-version is deliberately not set: ruff infers it from requires-python above,
+# so the minimum supported Python is declared in exactly one place.
 line-length = 120
-target-version = 'py310'
 
 [tool.ruff.format]
 # Use single quotes for strings.
