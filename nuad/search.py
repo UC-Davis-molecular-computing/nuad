@@ -25,7 +25,7 @@ import textwrap
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeVar, Mapping, Literal
+from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeAlias, TypeVar, Mapping, Literal
 from concurrent.futures import Future, ThreadPoolExecutor
 
 import numpy as np  # noqa
@@ -101,7 +101,7 @@ def default_output_directory() -> str:
     return os.path.join('output', f'{script_name_no_ext()}--{timestamp()}')
 
 
-type TupleDesignParts = (
+TupleDesignParts: TypeAlias = (
     tuple[Domain, ...]
     | tuple[Strand, ...]
     | tuple[DomainPair, ...]

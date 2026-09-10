@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import re
 from typing import Dict, List
@@ -2030,6 +2031,12 @@ class TestSubdomains:
         assert C in domains
 
 
+# NUPACK is not distributed on PyPI (it ships as a licensed wheel), so it is not
+# installed in CI. nuad imports it lazily, so only this test actually needs it.
+nupack_installed = importlib.util.find_spec('nupack') is not None
+
+
+@pytest.mark.skipif(not nupack_installed, reason='nupack is not installed')
 class TestNUPACK:
     def test_pfunc(self) -> None:
         seq = 'ACGTACGTAGCTGATCCAGCTGATCG'
