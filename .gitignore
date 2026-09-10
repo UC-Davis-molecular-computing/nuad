@@ -144,3 +144,6 @@ notebooks/.virtual_documents/
 
 # Reference papers kept locally, not tracked in the repo
 papers/
+
+# Local venv activation helper (machine-specific)
+activate-mac-venv.sh
