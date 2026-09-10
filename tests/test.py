@@ -72,7 +72,7 @@ def construct_strand(design: Design, domain_names: List[str], domain_lengths: Li
 
 class TestIntersectingDomains:
     def test_strand_intersecting_domains(self) -> None:
-        """
+        r"""
         Test strand construction with nested subdomains
 
         .. code-block:: none
@@ -363,7 +363,7 @@ def extract_letters(message_string: str, first_word: str, second_word: str) -> L
 
 class TestDependencyRelatedFunctions:
     def test_dependency_graph_initiation(self) -> None:
-        """                  a
+        r"""                  a
                             |  \
                            b    e      e is assignable
                           | \   \\
@@ -419,7 +419,7 @@ class TestDependencyRelatedFunctions:
         assert X.sequence() == 'CTCGA'
 
     def test_dependency_graph_is_legal(self) -> None:
-        """
+        r"""
 
                                               p-15       p depends on d, (d depends on c - checked for cycle detection)
                                            / \     \\
@@ -490,7 +490,7 @@ class TestDependencyRelatedFunctions:
         assert c.sequence() == a.sequence()[5:]
 
     def test_check_exactly_one_unlocked_in_every_path(self):
-        """                  a
+        r"""                  a
                             |  \
                            b    e      e is assignable
                           | \   \\
@@ -554,7 +554,7 @@ class TestDependencyRelatedFunctions:
             design.check_subdomain_graphs_legal()
 
     def test_check_strand_dag_inclusion_legal(self):
-        """                          a                      p1       p1 depends on d1, (d1 depends on c1 - checked for cycle detection)
+        r"""                          a                      p1       p1 depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
                                    b    e             a1   h1  \\
                                   / \   \\          /  \        \\
@@ -622,7 +622,7 @@ class TestDependencyRelatedFunctions:
         assert 'f' in expected_subdomains
 
     def test_every_domain_overlap_with_a_strand(self):
-        """                          a                     p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
+        r"""                          a                     p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
                                    b    e             a1   h1  \\
                                   /  \   \\          /  \        \\
@@ -698,7 +698,7 @@ class TestDependencyRelatedFunctions:
         assert 'h1' in expected_subdomains
 
     def test_all_domains_affected(self):
-        """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
+        r"""                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
                                     |  \                / \   \\
                                    b    e             a1   h1  \\
                                   / \   \\          /  \        \\
@@ -756,7 +756,7 @@ class TestDependencyRelatedFunctions:
 
 class TestDagObjectCreation:
     def test_init(self) -> None:
-        """                        D 20
+        r"""                        D 20
                                 /      \
                               A 10
                             /   \
@@ -819,7 +819,7 @@ class TestDagObjectCreation:
 
 class TestAllIntersectingDomains:
     def test_init(self):
-        """                        D 20
+        r"""                        D 20
                                         /      \
                                       A 10
                                     /   \
@@ -881,7 +881,7 @@ class TestAllIntersectingDomains:
 
 class AllDomainsInDAG:
     def test_init(self):
-        """                        D 20
+        r"""                        D 20
                                         /      \
                                       A 10
                                     /   \
@@ -929,7 +929,7 @@ class AllDomainsInDAG:
 
 class AllDomainsInTree:
     def test_init(self):
-        """                               D 20
+        r"""                               D 20
                                         /      \
                                       A 10
                                     /   \
@@ -977,7 +977,7 @@ class AllDomainsInTree:
 
 class TestSubdomainGraphsLegal:
     def test_init(self):
-        """                        D 20
+        r"""                        D 20
                                             /      \
                                           A 10
                                         /   \
@@ -1694,7 +1694,7 @@ class TestSubdomains:
             a.set_fixed_sequence('TTTTTTTTT')
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
-        """
+        r"""
         Test that constructing a domain by setting fixed to False when all subdomains
         are fixed should raise ValueError
 
@@ -1906,7 +1906,7 @@ class TestSubdomains:
         assert domains['h'].sequence() == sequence[18:]
 
     def test_assign_dna_sequence_to_leaf(self):
-        """
+        r"""
         Test assigning dna sequence to E, F and propagate upward to b
 
         .. code-block:: none
@@ -1927,7 +1927,7 @@ class TestSubdomains:
         assert domains['b'].sequence() == 'CATAGCTTTCC'
 
     def test_assign_dna_sequence_mixed(self):
-        """
+        r"""
         Test assigning dna sequence to E, F, and C and propgate to entire tree.
 
         .. code-block:: none
@@ -1976,7 +1976,7 @@ class TestSubdomains:
         assert domains['h'].sequence() == 'GGGGGGGG'
 
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
-        """
+        r"""
         Test error is raised if assigning dna sequence to domain when subdomains
         length do not add up to domain length.
 
@@ -1998,7 +1998,7 @@ class TestSubdomains:
             a.set_sequence('A' * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
-        """Test constructing a strand using a dependent subdomain (not parent)
+        r"""Test constructing a strand using a dependent subdomain (not parent)
 
         .. code-block:: none
 
