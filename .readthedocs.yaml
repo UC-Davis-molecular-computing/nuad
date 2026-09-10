@@ -9,21 +9,26 @@ version: 2
 build:
   os: ubuntu-latest
   tools:
-    python: "3.10"
-    # You can also specify other tool versions:
-    # nodejs: "16"
-    # rust: "1.55"
-    # golang: "1.17"
+    # Matches the Python version used by the "Docs Check" GitHub Actions workflow.
+    # Sphinx 9 requires >= 3.12, so an older Python here would silently resolve an
+    # older Sphinx than CI builds with.
+    python: "3.12"
 
-# Build documentation in the docs/ directory with Sphinx
+# Build documentation in the doc/ directory with Sphinx
 sphinx:
-   configuration: doc/conf.py
+  configuration: doc/conf.py
 
 # If using Sphinx, optionally build your docs in additional formats such as PDF
 # formats:
 #    - pdf
 
-# Optionally declare the Python requirements required to build your docs
+# Install nuad itself plus the [doc] extra, so the dependency list lives only in
+# pyproject.toml. Sphinx autodoc *imports* the nuad modules to read their docstrings
+# and signatures, so nuad's own runtime dependencies have to be installed too --
+# except nupack, which doc/conf.py mocks via autodoc_mock_imports.
 python:
-   install:
-   - requirements: doc/requirements.txt
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - doc
