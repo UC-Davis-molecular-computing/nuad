@@ -25,7 +25,8 @@ import textwrap
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Callable, Deque, Generic, Iterable, Iterator, TypeAlias, TypeVar, Mapping, Literal
+from typing import Any, Generic, TypeAlias, TypeVar, Literal
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 
 import numpy as np  # noqa
@@ -1485,7 +1486,7 @@ def _find_highest_index_in_directory(directory: str, filename_start: str, ext: s
 
 
 n_in_last_n_calls = 50
-time_last_n_calls: Deque = deque(maxlen=n_in_last_n_calls)
+time_last_n_calls: deque = deque(maxlen=n_in_last_n_calls)
 time_last_n_calls_available = False
 
 

@@ -21,7 +21,8 @@ import random
 import subprocess as sub
 import sys
 from multiprocessing.pool import ThreadPool
-from typing import Iterable, List, Sequence, TypeVar, cast
+from typing import TypeVar, cast
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 import RNA
@@ -260,7 +261,7 @@ def nupack_complex_base_pair_probabilities(
     return nupack_complex_result
 
 
-def call_subprocess(command_strs: List[str], user_input: str) -> tuple[str, str]:
+def call_subprocess(command_strs: list[str], user_input: str) -> tuple[str, str]:
     """
     Calls system command through a subprocess. Assumes running on a POSIX operating system.
 
@@ -431,7 +432,7 @@ def rna_duplex_multiple_deprecated(
     if os_is_windows:
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
-    command_strs: List[str] = [
+    command_strs: list[str] = [
         'RNAduplex',
         '-P',
         full_parameters_filename,
@@ -566,7 +567,7 @@ def rna_plex_multiple(
     if os_is_windows:
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
-    command_strs: List[str] = [
+    command_strs: list[str] = [
         'RNAplex',
         '-P',
         full_parameters_filename,

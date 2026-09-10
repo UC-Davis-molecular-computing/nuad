@@ -7,7 +7,6 @@ import os
 import logging
 
 import nuad.constraints as nc  # type: ignore
-import nuad.vienna_nupack as nv  # type: ignore
 import nuad.search as ns  # type: ignore
 
 

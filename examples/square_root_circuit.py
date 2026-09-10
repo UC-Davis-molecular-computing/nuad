@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from math import ceil, floor
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Optional, Union
+from collections.abc import Iterable
 import itertools
 
 import nuad.search as ns  # type: ignore
 import nuad.constraints as nc
-from examples.strand_displacement import design
 
 # TODO: Go over each constraint, using NUPACK
 #   - check pfunc for each strand
@@ -59,8 +59,8 @@ TOEHOLD_DOMAIN: nc.Domain = nc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
 FUEL_DOMAIN: nc.Domain = nc.Domain('fuel')
 FUEL_DOMAIN.set_fixed_sequence('CATTTTTTTTTTTCA')
 
-recognition_domains_and_subdomains: Dict[str, nc.Domain] = {}
-recognition_domains: Set[nc.Domain] = set()
+recognition_domains_and_subdomains: dict[str, nc.Domain] = {}
+recognition_domains: set[nc.Domain] = set()
 
 
 def get_signal_domain(gate: Union[int, str]) -> nc.Domain:
@@ -279,7 +279,7 @@ def reporter_bottom_strand(gate) -> nc.Strand:
 
 
 def input_gate_complex_constraint(
-    input_gate_complexes: List[nc.Complex],
+    input_gate_complexes: list[nc.Complex],
 ) -> nc.ComplexConstraint:
     """Returns a input:gate complex constraint
 
@@ -326,8 +326,8 @@ def input_gate_complex_constraint(
 
 
 def gate_output_complex_constraint(
-    gate_output_complexes: List[nc.Complex],
-    base_pair_prob_by_type: Optional[Dict[nc.BasePairType, float]] = None,
+    gate_output_complexes: list[nc.Complex],
+    base_pair_prob_by_type: Optional[dict[nc.BasePairType, float]] = None,
     description: str = 'gate:output',
 ) -> nc.ComplexConstraint:
     """Returns a gate:output complex constraint
@@ -389,7 +389,7 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
     :rtype: dc.DomainPairConstraint
     """
 
-    def evaluate(seqs: Tuple[str, ...], domain_pair: Optional[nc.DomainPair]) -> nc.Result:
+    def evaluate(seqs: tuple[str, ...], domain_pair: Optional[nc.DomainPair]) -> nc.Result:
         seq1, seq2 = seqs
         if domain_pair is not None:
             domain1, domain2 = domain_pair.domain1, domain_pair.domain2
@@ -441,7 +441,7 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
     )
 
 
-def strand_substring_constraint(strands: List[nc.Strand], substrings: List[str]) -> nc.StrandConstraint:
+def strand_substring_constraint(strands: list[nc.Strand], substrings: list[str]) -> nc.StrandConstraint:
     """Returns a strand constraint that restricts the substrings in the strand
     sequence
 
@@ -459,7 +459,7 @@ def strand_substring_constraint(strands: List[nc.Strand], substrings: List[str])
                 return True
         return False
 
-    def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
+    def evaluate(seqs: tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
         seq = seqs[0]
         if violated(seq):
             violation_str = '** violation**'
@@ -481,17 +481,17 @@ def strand_substring_constraint(strands: List[nc.Strand], substrings: List[str])
 class SeesawCircuit:
     """Class for keeping track of a seesaw circuit and its DNA representation."""
 
-    seesaw_gates: List['SeesawGate']
-    strands: List[nc.Strand] = field(init=False, default_factory=list)
-    constraints: List[nc.ComplexConstraint] = field(init=False, default_factory=list)
+    seesaw_gates: list['SeesawGate']
+    strands: list[nc.Strand] = field(init=False, default_factory=list)
+    constraints: list[nc.ComplexConstraint] = field(init=False, default_factory=list)
 
-    signal_strands: Dict[Tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
-    fuel_strands: Dict[int, nc.Strand] = field(init=False, default_factory=dict)
-    gate_base_strands: Dict[int, nc.Strand] = field(init=False, default_factory=dict)
-    threshold_top_strands: Dict[int, nc.Strand] = field(init=False, default_factory=dict)
-    threshold_bottom_strands: Dict[Tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
-    reporter_top_strands: Dict[int, nc.Strand] = field(init=False, default_factory=dict)
-    reporter_bottom_strands: Dict[Tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
+    signal_strands: dict[tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
+    fuel_strands: dict[int, nc.Strand] = field(init=False, default_factory=dict)
+    gate_base_strands: dict[int, nc.Strand] = field(init=False, default_factory=dict)
+    threshold_top_strands: dict[int, nc.Strand] = field(init=False, default_factory=dict)
+    threshold_bottom_strands: dict[tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
+    reporter_top_strands: dict[int, nc.Strand] = field(init=False, default_factory=dict)
+    reporter_bottom_strands: dict[tuple[int, int], nc.Strand] = field(init=False, default_factory=dict)
 
     def _set_gate_base_strands(self) -> None:
         """Sets self.gate_base_strands
@@ -499,7 +499,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all gates
-        gates: Set[int] = set()
+        gates: set[int] = set()
         for seesaw_gate in self.seesaw_gates:
             gate_name = seesaw_gate.gate_name
             if gate_name in gates:
@@ -515,7 +515,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all input, gate pairs
-        input_gate_pairs: Set[Tuple[int, int]] = set()
+        input_gate_pairs: set[tuple[int, int]] = set()
         for seesaw_gate in self.seesaw_gates:
             gate_name = seesaw_gate.gate_name
             if gate_name in input_gate_pairs:
@@ -532,7 +532,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all gates with fuel
-        gates_with_fuel: Set[int] = set()
+        gates_with_fuel: set[int] = set()
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.has_fuel:
                 gate_name = seesaw_gate.gate_name
@@ -548,7 +548,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all input, gate pairs with threshold
-        input_gate_pairs_with_threshold: Set[Tuple[int, int]] = set()
+        input_gate_pairs_with_threshold: set[tuple[int, int]] = set()
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
@@ -568,7 +568,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all gates with threshold
-        gates_with_threshold_but_not_reporter: Set[int] = set()
+        gates_with_threshold_but_not_reporter: set[int] = set()
 
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
@@ -587,7 +587,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all gates that are reporter
-        gates_that_are_reporter: Set[int] = set()
+        gates_that_are_reporter: set[int] = set()
 
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.is_reporter:
@@ -604,7 +604,7 @@ class SeesawCircuit:
         :raises ValueError: If duplicate gate name found
         """
         # Set of all reporter gates
-        reporter_gates: Set[Tuple[int, int]] = set()
+        reporter_gates: set[tuple[int, int]] = set()
         for seesaw_gate in self.seesaw_gates:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
@@ -648,7 +648,7 @@ class SeesawCircuit:
 
     def _add_gate_output_complex_constriant(self) -> None:
         """Adds gate:output complexes to self.constraint"""
-        gate_output_strands: List[Tuple[nc.Strand, ...]] = []
+        gate_output_strands: list[tuple[nc.Strand, ...]] = []
 
         for (gate, _), s in self.signal_strands.items():
             if gate in self.gate_base_strands:
@@ -661,7 +661,7 @@ class SeesawCircuit:
 
     def _add_gate_fuel_complex_constriant(self) -> None:
         """Adds gate:fuel complexes to self.constraint"""
-        gate_output_strands: List[Tuple[nc.Strand, ...]] = []
+        gate_output_strands: list[tuple[nc.Strand, ...]] = []
 
         for gate in self.fuel_strands:
             if gate in self.fuel_strands:
@@ -697,7 +697,7 @@ class SeesawCircuit:
               16                      35
              s2*   T*        S5*       s5*
         """
-        threshold_strands: List[Tuple[nc.Strand, ...]] = []
+        threshold_strands: list[tuple[nc.Strand, ...]] = []
         for (_, gate), thres_bottom_strand in self.threshold_bottom_strands.items():
             waste_strand = self.threshold_top_strands[gate]
             threshold_strands.append((waste_strand, thres_bottom_strand))
@@ -730,7 +730,7 @@ class SeesawCircuit:
                             36                       55
                            s2*   T*        S5*       s5*
         """
-        threshold_waste_strands: List[Tuple[nc.Strand, ...]] = []
+        threshold_waste_strands: list[tuple[nc.Strand, ...]] = []
         for (
             input_,
             gate,
@@ -764,7 +764,7 @@ class SeesawCircuit:
                                    33
                T*        S6*       s6*
         """
-        reporter_strands: List[Tuple[nc.Strand, ...]] = []
+        reporter_strands: list[tuple[nc.Strand, ...]] = []
         for (_, gate), reporter_bottom_strand_ in self.reporter_bottom_strands.items():
             waste_strand = self.reporter_top_strands[gate]
             reporter_strands.append((waste_strand, reporter_bottom_strand_))
@@ -796,7 +796,7 @@ class SeesawCircuit:
                                                       53
                                   T*        S6*       s6*
         """
-        reporter_waste_strands: List[Tuple[nc.Strand, ...]] = []
+        reporter_waste_strands: list[tuple[nc.Strand, ...]] = []
         for (
             input_,
             gate,
@@ -834,15 +834,15 @@ class SeesawGate:
     """Class for keeping track of seesaw gate and its input."""
 
     gate_name: int
-    inputs: List[int]
+    inputs: list[int]
     has_threshold: bool
     has_fuel: bool
     is_reporter: bool = False
 
 
 def and_or_gate(
-    integrating_gate_name: int, amplifying_gate_name: int, inputs: List[int]
-) -> Tuple[SeesawGate, SeesawGate]:
+    integrating_gate_name: int, amplifying_gate_name: int, inputs: list[int]
+) -> tuple[SeesawGate, SeesawGate]:
     """Returns two SeesawGate objects (the integrating gate and amplifying
     gate) that implements the AND or OR gate
 
@@ -941,7 +941,7 @@ def main() -> None:
     #     print(c)
     # exit(0)
 
-    constraints: List[nc.Constraint] = [
+    constraints: list[nc.Constraint] = [
         base_difference_constraint(recognition_domains),
         strand_substring_constraint(non_fuel_strands, ILLEGAL_SUBSTRINGS),
     ]

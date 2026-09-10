@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import nuad.constraints as nc
 import nuad.search as ns  # type: ignore
@@ -201,7 +201,7 @@ reporter_complex = nc.Complex(reporter_top, reporter_bottom)
 reporter_complex_constraint = nc.nupack_complex_base_pair_probability_constraint(strand_complexes=[reporter_complex])
 
 
-def four_g_constraint_evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
+def four_g_constraint_evaluate(seqs: tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
     seq = seqs[0]
     excess = 1000 if 'GGGG' in seq else 0
     violation_str = '' if 'GGGG' not in strand.sequence() else '** violation**'

@@ -33,23 +33,11 @@ from multiprocessing.pool import ThreadPool
 from numbers import Number
 from typing import (
     Any,
-    Callable,
-    Collection,
-    DefaultDict,
-    Dict,
-    FrozenSet,
     Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
     cast,
 )
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 
 import networkx as nx
 import numpy as np
@@ -1558,7 +1546,7 @@ def add_quotes(string: str) -> str:
     return f'"{string}"'
 
 
-def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
+def mandatory_field(ret_type: type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
     """
     Look up `main_key` (or one of `legacy_keys`, in order, for backward compatibility)
     in `json_map`, returning its value.
@@ -1680,7 +1668,7 @@ class Domain(Part, JSONSerializable):
          based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
     """
 
-    dependents: list[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(init=False, default_factory=list)
+    dependents: list[tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(init=False, default_factory=list)
     """
     List of tuples of :any:`Domain`'s and dependency functions which their sequence depends on this :any:`Domain`'s
      sequence. 
@@ -1774,7 +1762,7 @@ class Domain(Part, JSONSerializable):
         label: str | None = None,
         subdomains: Iterable[Domain] = (),
         parents: Iterable[Domain] = (),
-        dependents: (List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
+        dependents: (list[tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
         weight: float | None = None,
     ) -> None:
         if subdomains is None:
@@ -2262,7 +2250,7 @@ class Domain(Part, JSONSerializable):
 
         return False
 
-    def all_domains_in_tree(self) -> List['Domain']:
+    def all_domains_in_tree(self) -> list['Domain']:
         """
         :return:
             list of all domains in the same subdomain tree as this domain (including itself)
@@ -2271,7 +2259,7 @@ class Domain(Part, JSONSerializable):
         domains.extend(self._get_all_domains_from_this_subtree())
         return domains
 
-    def all_domains_in_dag(self) -> Set['Domain']:
+    def all_domains_in_dag(self) -> set['Domain']:
         """
 
         :return: list of all :any:`Domain`'s in the same connected component (in the subdomain graph) as this :any:`Domain`.
@@ -2322,7 +2310,7 @@ class Domain(Part, JSONSerializable):
         # remove_duplicates()
         return domains
 
-    def all_domains_affected_by_sequence_change(self) -> List['Domain']:
+    def all_domains_affected_by_sequence_change(self) -> list['Domain']:
         """:return: List of :any:`Domain`'s that their sequence changes by this :any:`Domain` sequence modification."""
         domains = self.all_domains_intersecting()
         stack = domains.copy()
@@ -2342,7 +2330,7 @@ class Domain(Part, JSONSerializable):
 
         return domains
 
-    def remove_duplicates(self, domains: List[Domain]) -> List[Domain]:
+    def remove_duplicates(self, domains: list[Domain]) -> list[Domain]:
         """
 
         List of domains that their sequence changes by self sequence modification
@@ -2363,7 +2351,7 @@ class Domain(Part, JSONSerializable):
 
             return domains_without_duplicates
 
-    def ancestors(self) -> List['Domain']:
+    def ancestors(self) -> list['Domain']:
         """
         :return:
             list of all domains that are ancestors of this one, NOT including this domain
@@ -2387,7 +2375,7 @@ class Domain(Part, JSONSerializable):
 
         return list(all_ancestors)
 
-    def decsendents(self) -> List[Domain]:
+    def decsendents(self) -> list[Domain]:
 
         subdomains = self.subdomains
         decsendents = set()
@@ -2407,7 +2395,7 @@ class Domain(Part, JSONSerializable):
 
         return list(decsendents)
 
-    def _get_all_domains_from_parents(self) -> List['Domain']:
+    def _get_all_domains_from_parents(self) -> list['Domain']:
         # note that this gets "sibling/cousin" domains as well
         # call _ancestors to get only ancestors
         domains = []
@@ -2454,7 +2442,7 @@ class Domain(Part, JSONSerializable):
 
         return False
 
-    def unlocked_ancestor_or_descendants(self) -> List[Domain]:
+    def unlocked_ancestor_or_descendants(self) -> list[Domain]:
         if not self.state == DomainState.LOCKED:
             raise ValueError(f'cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}')
 
@@ -2522,7 +2510,7 @@ class Domain(Part, JSONSerializable):
         return assignable_descendants
 
 
-def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
+def domains_shared_ancestor(list_of_domains: list[Domain]) -> Domain:
     """
 
     :param list_of_domains: list of :any:`Domain`'s to calculate if there is any :any:`Domain` having all of them as its descendants.
@@ -2714,7 +2702,7 @@ def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
 
 def set_domains_memoryviews(
     initial_domain: Domain,
-) -> Tuple[Set, Dict[str, Tuple[int, int]]]:
+) -> tuple[set, dict[str, tuple[int, int]]]:
     """
     Computes the memoryview fields of all the domains comprising the polytree contaiting `initial_domain`.
     :param initial_domain:The domain for which a memoryview has not been set and the memoryview assin
@@ -2760,7 +2748,7 @@ def set_domains_memoryviews(
 
 
 def _assign_back_preexisting_sequences(
-    domain_to_preexisting_sequence: Dict[Domain, str],
+    domain_to_preexisting_sequence: dict[Domain, str],
 ) -> None:
     """
     Write each domain's previously-recorded sequence back into its memoryview, after
@@ -2775,10 +2763,10 @@ def _assign_back_preexisting_sequences(
 
 def _assign_intervals(
     domain: Domain,
-    domain_name_to_interval: Dict[str, Tuple[int, int]],
-    domain_name_to_domain: Dict[str, Domain],
-    visited_names: Set[str],
-    domain_to_preexisting_sequence: Dict[Domain, str],
+    domain_name_to_interval: dict[str, tuple[int, int]],
+    domain_name_to_domain: dict[str, Domain],
+    visited_names: set[str],
+    domain_to_preexisting_sequence: dict[Domain, str],
 ) -> None:
     """recursively traversing the directed acyclic graph by beginning from domain"""
     visited_names.add(domain.name)
@@ -2813,10 +2801,10 @@ def validate_subdomain_lengths(domain: Domain) -> None:
 
 def _assign_intervals_to_subdomains_and_parents(
     domain: Domain,
-    domain_name_to_interval: Dict[str, Tuple[int, int]],
-    domain_name_to_domain: Dict[str, Domain],
-    visited_names: Set[str],
-    domain_to_preexisting_sequence: Dict[Domain, str],
+    domain_name_to_interval: dict[str, tuple[int, int]],
+    domain_name_to_domain: dict[str, Domain],
+    visited_names: set[str],
+    domain_to_preexisting_sequence: dict[Domain, str],
 ) -> None:
     """
     Recursively assign byte-offset intervals (within the shared memoryview buffer for a
@@ -2865,10 +2853,10 @@ def _assign_intervals_to_subdomains_and_parents(
 def _assign_intervals_subdomain(
     domain: Domain,
     parent: Domain,
-    domain_name_to_interval: Dict[str, Tuple[int, int]],
-    domain_name_to_domain: Dict[str, Domain],
-    visited_names: Set,
-    domain_to_preexisting_sequence: Dict[Domain, str],
+    domain_name_to_interval: dict[str, tuple[int, int]],
+    domain_name_to_domain: dict[str, Domain],
+    visited_names: set,
+    domain_to_preexisting_sequence: dict[Domain, str],
 ) -> None:
     """
     Assign a byte-offset interval to `domain`, a not-yet-visited subdomain of `parent`,
@@ -2913,10 +2901,10 @@ def _assign_intervals_subdomain(
 def _assign_intervals_parent(
     domain: Domain,
     subdomain: Domain,
-    domain_name_to_interval: Dict[str, Tuple[int, int]],
-    domain_name_to_domain: Dict[str, Domain],
-    visited_names: Set,
-    domain_to_preexisting_sequence: Dict[Domain, str],
+    domain_name_to_interval: dict[str, tuple[int, int]],
+    domain_name_to_domain: dict[str, Domain],
+    visited_names: set,
+    domain_to_preexisting_sequence: dict[Domain, str],
 ) -> None:
     """
     Assign a byte-offset interval to `domain`, a not-yet-visited parent of `subdomain`,
@@ -3175,7 +3163,7 @@ class Strand(Part, JSONSerializable):
         return tuple(domain_names)
 
     def domain_names_tuple_unstarred(self):
-        domain_names: List[str] = []
+        domain_names: list[str] = []
         for idx, domain in enumerate(self.domains):
             domain_names.append(domain.get_name(starred=False))
         return tuple(domain_names)
@@ -3827,12 +3815,12 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
-    _domains_interned: Dict[str, Domain]
+    _domains_interned: dict[str, Domain]
 
     #################################################
     # derived fields, so not specified in constructor
 
-    _domains: List[Domain] = field(init=False)
+    _domains: list[Domain] = field(init=False)
     """
     List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
 
@@ -3860,7 +3848,7 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
-    domain_to_affected_domains: Dict[Domain, List[Domain]] = field(init=False)
+    domain_to_affected_domains: dict[Domain, list[Domain]] = field(init=False)
     """
     Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes 
     by key's sequence modification.
@@ -4037,7 +4025,7 @@ class Design(JSONSerializable):
 
         domains_json = mandatory_field(Design, json_map, domains_key)
         domains: list[Domain] = []
-        domain_to_subdomains_names: dict[Domain, List[str]] = {}
+        domain_to_subdomains_names: dict[Domain, list[str]] = {}
 
         for domain_json in domains_json:
             domain, subdomains_names = Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
@@ -4077,8 +4065,8 @@ class Design(JSONSerializable):
 
     def add_strand(
         self,
-        domain_names: List[str] | None = None,
-        domains: List[Domain] | None = None,
+        domain_names: list[str] | None = None,
+        domains: list[Domain] | None = None,
         starred_domain_indices: Iterable[int] | None = None,
         group: str = default_strand_group,
         name: str | None = None,
@@ -4194,7 +4182,7 @@ class Design(JSONSerializable):
         return strand
 
     def add_subdomains(
-        self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]], keep_domain_assignable: bool = False
+        self, domain_name: str, subdomain_names_and_lengths: list[tuple[str, int]], keep_domain_assignable: bool = False
     ) -> None:
         """
         :param domain_name: name of the domain we want to add subdomains to
@@ -10351,7 +10339,7 @@ def __get_base_pair_domain_endpoints_to_check(
                 f'Violating domain: {domain_name_complement}'
             )
     # End Input Validation #
-    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
+    addr_translation_table: dict[StrandDomainAddress, list[StrandDomainAddress]] = {}
     strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     addr_to_starting_base_pair_idx: dict[StrandDomainAddress, int] = _get_addr_to_starting_base_pair_idx(strand_complex)

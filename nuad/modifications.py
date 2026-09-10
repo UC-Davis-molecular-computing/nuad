@@ -3,7 +3,8 @@ from __future__ import annotations
 import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import AbstractSet, Any, Dict
+from collections.abc import Set as AbstractSet
+from typing import Any
 
 import scadnano as sc
 
@@ -87,12 +88,12 @@ class Modification(JSONSerializable, ABC):
         if self.id == _default_modification_id:
             object.__setattr__(self, 'id', self.vendor_code)
 
-    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> dict[str, Any]:
         ret = {mod_vendor_code_key: self.vendor_code, mod_id_key: self.id}
         return ret
 
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'Modification':  # remove quotes when Py3.6 support dropped
+    def from_json(json_map: dict[str, Any]) -> 'Modification':  # remove quotes when Py3.6 support dropped
         location = json_map[mod_location_key]
         if location == "5'":
             return Modification5Prime.from_json(json_map)
@@ -113,14 +114,14 @@ class Modification(JSONSerializable, ABC):
 class Modification5Prime(Modification):
     """5' modification of DNA sequence, e.g., biotin or Cy3."""
 
-    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "5'"
         return ret
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'Modification5Prime':
+    def from_json(json_map: dict[str, Any]) -> 'Modification5Prime':
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "5'"
@@ -139,14 +140,14 @@ class Modification5Prime(Modification):
 class Modification3Prime(Modification):
     """3' modification of DNA sequence, e.g., biotin or Cy3."""
 
-    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = "3'"
         return ret
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'Modification3Prime':
+    def from_json(json_map: dict[str, Any]) -> 'Modification3Prime':
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == "3'"
@@ -177,7 +178,7 @@ class ModificationInternal(Modification):
         if self.allowed_bases is not None and not isinstance(self.allowed_bases, frozenset):
             object.__setattr__(self, 'allowed_bases', frozenset(self.allowed_bases))
 
-    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> dict[str, Any]:
         ret = super().to_json_serializable(suppress_indent)
         ret[mod_location_key] = 'internal'
         if self.allowed_bases is not None:
@@ -188,7 +189,7 @@ class ModificationInternal(Modification):
 
     # remove quotes when Py3.6 support dropped
     @staticmethod
-    def from_json(json_map: Dict[str, Any]) -> 'ModificationInternal':
+    def from_json(json_map: dict[str, Any]) -> 'ModificationInternal':
         id_ = json_map[mod_id_key]
         location = json_map[mod_location_key]
         assert location == 'internal'

@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Union
+from typing import Any, Union
 
 
 class NoIndent:
@@ -13,7 +13,7 @@ class NoIndent:
 
 class JSONSerializable(ABC):
     @abstractmethod
-    def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, Dict[str, Any]]:
+    def to_json_serializable(self, suppress_indent: bool = True) -> Union[NoIndent, dict[str, Any]]:
         raise NotImplementedError()
 
 

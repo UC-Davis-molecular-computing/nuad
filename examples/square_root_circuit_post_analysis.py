@@ -1,7 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from square_root_circuit import reporter_top_strand
-from typing import List, Iterable, Dict, Tuple
+from collections.abc import Iterable
 from itertools import chain, combinations
 from functools import reduce
 from collections import defaultdict
@@ -66,14 +65,14 @@ class ReporterTopStrand(Strand):
     name: str
 
 
-signal_strands: List[SignalStrand] = []
-fuel_strands: List[FuelStrand] = []
-gate_base_strands: List[GateBaseStrand] = []
-threshold_bottom_strands: List[ThresholdBottomStrand] = []
-threshold_top_strands: List[ThresholdTopStrand] = []
-reporter_bottom_strands: List[ReporterBottomStrand] = []
-reporter_top_strands: List[ReporterTopStrand] = []
-strand_iterators: List[Iterable[Strand]] = [
+signal_strands: list[SignalStrand] = []
+fuel_strands: list[FuelStrand] = []
+gate_base_strands: list[GateBaseStrand] = []
+threshold_bottom_strands: list[ThresholdBottomStrand] = []
+threshold_top_strands: list[ThresholdTopStrand] = []
+reporter_bottom_strands: list[ReporterBottomStrand] = []
+reporter_top_strands: list[ReporterTopStrand] = []
+strand_iterators: list[Iterable[Strand]] = [
     signal_strands,
     fuel_strands,
     gate_base_strands,
@@ -204,9 +203,9 @@ def main():
     global longest_strand_name_length
     longest_strand_name_length = reduce(lambda acc, cur: max(acc, len(cur.name)), strands(), 0)
 
-    gate_5p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
-    gate_3p_to_signal_strands: Dict[str, List[SignalStrand]] = defaultdict(list)
-    gate_3p_gate_5p_to_signal_strands: Dict[Tuple[str, str], SignalStrand] = {}
+    gate_5p_to_signal_strands: dict[str, list[SignalStrand]] = defaultdict(list)
+    gate_3p_to_signal_strands: dict[str, list[SignalStrand]] = defaultdict(list)
+    gate_3p_gate_5p_to_signal_strands: dict[tuple[str, str], SignalStrand] = {}
     global signal_strands
     for s in signal_strands:
         gate_5p = s.gate_5p
@@ -244,7 +243,7 @@ def main():
             calculate_and_print_pairs_and_mfe([input_strand, gate_base_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each gate:fuel complex')
-    gate_to_gate_base_strand: Dict[str, GateBaseStrand] = {s.gate: s for s in gate_base_strands}
+    gate_to_gate_base_strand: dict[str, GateBaseStrand] = {s.gate: s for s in gate_base_strands}
     for fuel_strand in fuel_strands:
         assert fuel_strand.gate_3p in gate_to_gate_base_strand
         gate_base_strand = gate_to_gate_base_strand[fuel_strand.gate_3p]
@@ -267,7 +266,7 @@ def main():
         calculate_and_print_pairs_and_mfe([signal_strand, threshold_bottom_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each reporter complex')
-    gate_to_reporter_top_strand: Dict[int, ReporterTopStrand] = {s.gate: s for s in reporter_top_strands}
+    gate_to_reporter_top_strand: dict[int, ReporterTopStrand] = {s.gate: s for s in reporter_top_strands}
     for reporter_bottom_strand in reporter_bottom_strands:
         assert reporter_bottom_strand.gate in gate_to_reporter_top_strand
         reporter_top_strand = gate_to_reporter_top_strand[reporter_bottom_strand.gate]

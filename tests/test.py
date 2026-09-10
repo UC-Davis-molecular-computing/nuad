@@ -1,7 +1,6 @@
 import importlib.util
 import os
 import re
-from typing import Dict, List
 import numpy
 import openpyxl
 import pytest
@@ -25,7 +24,7 @@ from nuad.constraints import (
 )
 from nuad.search import Evaluation
 
-_domain_pools: Dict[int, DomainPool] = {}
+_domain_pools: dict[int, DomainPool] = {}
 
 
 def assign_domain_pool_of_length(length: int) -> DomainPool:
@@ -44,7 +43,7 @@ def assign_domain_pool_of_length(length: int) -> DomainPool:
         return new_domain_pool
 
 
-def construct_strand(design: Design, domain_names: List[str], domain_lengths: List[int]) -> Strand:
+def construct_strand(design: Design, domain_names: list[str], domain_lengths: list[int]) -> Strand:
     """Constructs a strand with given domain names and domain lengths.
 
     :param domain_names: Names of the domain on the strand
@@ -353,7 +352,7 @@ class TestExportDNASequences:
             os.remove(filename)
 
 
-def extract_letters(message_string: str, first_word: str, second_word: str) -> List:
+def extract_letters(message_string: str, first_word: str, second_word: str) -> list:
     start = message_string.find(first_word) + len(first_word)
     end = message_string.find(second_word, start)
     letters_substring = message_string[start:end]
@@ -1842,7 +1841,7 @@ class TestSubdomains:
             strand = Strand(domains=[a], starred_domain_indices=[])
             _design = Design(strands=[strand])
 
-    def sample_nested_domains(self) -> Dict[str, Domain]:
+    def sample_nested_domains(self) -> dict[str, Domain]:
         r"""Returns domains with the following subdomain hierarchy:
 
         .. code-block:: none

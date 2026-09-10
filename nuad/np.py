@@ -17,7 +17,7 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 import itertools
-from typing import Collection, Iterable, Iterator, Sequence
+from collections.abc import Collection, Iterable, Iterator, Sequence
 
 import numpy as np
 

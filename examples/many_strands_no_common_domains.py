@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import argparse
 import os
 import logging
-from typing import List
 
 import nuad.constraints as nc  # type: ignore
 import nuad.search as ns  # type: ignore
@@ -77,7 +76,7 @@ def main() -> None:
     parallel = False
     # parallel = True
 
-    numpy_filters: List[nc.NumpyFilter] = [
+    numpy_filters: list[nc.NumpyFilter] = [
         nc.NearestNeighborEnergyFilter(-9.3, -9.0, 52.0),
         # nc.BaseCountFilter(base='G', high_count=1),
         # nc.BaseEndFilter(bases=('C', 'G')),
