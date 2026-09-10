@@ -1,3 +1,2 @@
-include requirements.txt
 include LICENSE
 include nuad/nupack_viennaRNA_parameter_files/*.par

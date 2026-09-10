@@ -23,15 +23,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
-      - name: Install dependencies
-        run: |
-          # NUPACK is not on PyPI; it ships as a licensed wheel. This workflow used to
-          # get it from the unhumbleben/nupack:latest image, but that image was built in
-          # 2022 and only contains wheels for CPython 3.6-3.9 -- none for the versions
-          # tested here. nuad imports nupack lazily, so the suite runs without it and the
-          # single NUPACK-only test skips itself.
-          grep -vx 'nupack' requirements.txt > "${RUNNER_TEMP}/requirements-ci.txt"
-          python -m pip install -r "${RUNNER_TEMP}/requirements-ci.txt"
+      - name: Install nuad and test dependencies
+        # The [nupack] extra is deliberately not installed: NUPACK is not on PyPI, so it
+        # cannot be resolved here. nuad imports it lazily, so the suite runs without it
+        # and the single NUPACK-only test skips itself.
+        run: python -m pip install -e '.[test]'
       - name: Test with pytest
-        run: |
-          python -m pytest tests/test.py -v
+        run: python -m pytest tests/test.py -v
