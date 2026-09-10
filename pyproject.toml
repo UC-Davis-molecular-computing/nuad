@@ -1,10 +1,12 @@
+# NOTE: ruff.toml takes precedence over these tables and pyproject.toml is *not* merged
+# into it, so any setting here must also be set in ruff.toml to take effect.
 [tool.ruff]
 line-length = 120
 target-version = "py310"
 
 [tool.ruff.format]
-# Use single quotes for strings.
-quote-style = "single"
+# Use double quotes for strings, matching the rest of the codebase.
+quote-style = "double"
 
 # Like Black, indent with spaces, rather than tabs.
 indent-style = "space"
