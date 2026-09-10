@@ -97,27 +97,27 @@ class Stopwatch:
         return self.duration_ns / 1_000_000_000.0
 
     def nanoseconds_str(self) -> str:
-        return f"{self.nanoseconds()}"
+        return f'{self.nanoseconds()}'
 
     def microseconds_str(self, precision: int = 2) -> str:
-        return f"{self.microseconds():.{precision}f}"
+        return f'{self.microseconds():.{precision}f}'
 
     def milliseconds_str(self, precision: int = 2, width: int | None = None) -> str:
-        width_spec = "" if width is None else width
-        return f"{self.milliseconds():{width_spec}.{precision}f}"
+        width_spec = '' if width is None else width
+        return f'{self.milliseconds():{width_spec}.{precision}f}'
 
     def seconds_str(self, precision: int = 2) -> str:
-        return f"{self.seconds():.{precision}f}"
+        return f'{self.seconds():.{precision}f}'
 
     def __str__(self) -> str:
         time_ = self.milliseconds()
         if time_ >= 1000:
-            return "{:.2f} s".format(time_ / 1000)
+            return '{:.2f} s'.format(time_ / 1000)
         if time_ >= 1:
-            return "{:.2f} ms".format(time_)
+            return '{:.2f} ms'.format(time_)
         if time_ >= 0.001:
-            return "{:.2f} μs".format(time_ * 1000)
-        return "{:.2f} ns".format(time_ * 1_000_000)
+            return '{:.2f} μs'.format(time_ * 1000)
+        return '{:.2f} ns'.format(time_ * 1_000_000)
 
     def time_in_units(
         self,
@@ -125,14 +125,14 @@ class Stopwatch:
         units: str,
     ) -> str:
         ns = self.nanoseconds()
-        if units == "s":
-            return f"{ns / 10**9:.2f} s"
-        elif units == "ms":
-            return f"{ns / 10**6:.2f} ms"
-        elif units == "us":
-            return f"{ns / 10**3:.2f} μs"
-        elif units == "ns":
-            return f"{ns:.2f} ns"
+        if units == 's':
+            return f'{ns / 10**9:.2f} s'
+        elif units == 'ms':
+            return f'{ns / 10**6:.2f} ms'
+        elif units == 'us':
+            return f'{ns / 10**3:.2f} μs'
+        elif units == 'ns':
+            return f'{ns:.2f} ns'
         else:
             raise ValueError(f"units = {units} is not a legal unit, please choose one of 's', 'ms', 'us', 'ns'")
 
@@ -175,9 +175,9 @@ class Stopwatch:
                 logger.info(the_msg)
 
         if units is None:
-            print_local(f"time for {msg}: {self}")
+            print_local(f'time for {msg}: {self}')
         else:
-            print_local(f"time for {msg}: {self.time_in_units(units)}")
+            print_local(f'time for {msg}: {self.time_in_units(units)}')
 
         if restart:
             self.restart()

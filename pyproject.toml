@@ -1,12 +1,13 @@
-# NOTE: ruff.toml takes precedence over these tables and pyproject.toml is *not* merged
-# into it, so any setting here must also be set in ruff.toml to take effect.
+# Ruff configuration. This is the only ruff config file in the repo -- note that if a
+# ruff.toml is ever added alongside it, ruff would use that *instead of* these tables
+# rather than merging the two, and everything here would be silently ignored.
 [tool.ruff]
 line-length = 120
 target-version = "py310"
 
 [tool.ruff.format]
-# Use double quotes for strings, matching the rest of the codebase.
-quote-style = "double"
+# Use single quotes for strings.
+quote-style = "single"
 
 # Like Black, indent with spaces, rather than tabs.
 indent-style = "space"

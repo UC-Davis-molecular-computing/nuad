@@ -1,4 +1,0 @@
-# NOTE: when a ruff.toml exists, ruff uses it *instead of* the [tool.ruff] tables in
-# pyproject.toml -- the two are not merged. Keep this file and pyproject.toml in sync.
-line-length = 120
-target-version = "py310"

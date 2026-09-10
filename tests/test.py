@@ -38,7 +38,7 @@ def assign_domain_pool_of_length(length: int) -> DomainPool:
     if length in _domain_pools:
         return _domain_pools[length]
     else:
-        new_domain_pool = DomainPool(f"POOL_{length}", length)
+        new_domain_pool = DomainPool(f'POOL_{length}', length)
         _domain_pools[length] = new_domain_pool
         return new_domain_pool
 
@@ -56,11 +56,11 @@ def construct_strand(design: Design, domain_names: List[str], domain_lengths: Li
     """
     if len(domain_names) != len(domain_lengths):
         raise ValueError(
-            f"domain_names and domain_lengths need to contain same"
-            f"number of elements but instead found that "
-            f"domain_names contained {len(domain_names)} names "
-            f"but domain_lengths contained {len(domain_lengths)} "
-            f"lengths"
+            f'domain_names and domain_lengths need to contain same'
+            f'number of elements but instead found that '
+            f'domain_names contained {len(domain_names)} names '
+            f'but domain_lengths contained {len(domain_lengths)} '
+            f'lengths'
         )
     s: Strand = design.add_strand(domain_names=domain_names)
     for i, length in enumerate(domain_lengths):
@@ -83,21 +83,21 @@ class TestIntersectingDomains:
              E   F g   h
         """
 
-        E = Domain("e", assign_domain_pool_of_length(5))
+        E = Domain('e', assign_domain_pool_of_length(5))
         E.set_state(DomainState.ASSIGNABLE)
-        F = Domain("f", assign_domain_pool_of_length(5))
+        F = Domain('f', assign_domain_pool_of_length(5))
         F.set_state(DomainState.ASSIGNABLE)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.DEPENDENT)
-        h = Domain("h", assign_domain_pool_of_length(5))
+        h = Domain('h', assign_domain_pool_of_length(5))
         h.set_state(DomainState.DEPENDENT)
 
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[E, F])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[E, F])
         b.set_state(DomainState.DEPENDENT)
-        C = Domain("C", assign_domain_pool_of_length(10), subdomains=[g, h])
+        C = Domain('C', assign_domain_pool_of_length(10), subdomains=[g, h])
         C.set_state(DomainState.ASSIGNABLE)
 
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, C])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, C])
         E.set_state(DomainState.DEPENDENT)
 
         all_domains = [a, b, C, E, F, g, h]
@@ -151,8 +151,8 @@ class TestIntersectingDomains:
 
 class TestSampleSubstrings:
     def test_substrings(self) -> None:
-        sampler = nc.SubstringSampler(supersequence="abcdefghij", substring_length=4, except_start_indices=[2, 3, 5])
-        assert sampler.extended_supersequence == "abcdefghij"
+        sampler = nc.SubstringSampler(supersequence='abcdefghij', substring_length=4, except_start_indices=[2, 3, 5])
+        assert sampler.extended_supersequence == 'abcdefghij'
         assert sampler.start_indices == (0, 1, 4, 6)
 
         # sample lots of substrings to ensure we get them all
@@ -168,13 +168,13 @@ class TestSampleSubstrings:
         #  bcde
         #     efgh
         #       ghij
-        assert substrings == ["abcd", "bcde", "efgh", "ghij"]
+        assert substrings == ['abcd', 'bcde', 'efgh', 'ghij']
 
     def test_substrings_circular(self) -> None:
         sampler_circular = nc.SubstringSampler(
-            supersequence="abcdefghij", substring_length=4, except_start_indices=[1, 3, 5], circular=True
+            supersequence='abcdefghij', substring_length=4, except_start_indices=[1, 3, 5], circular=True
         )
-        assert sampler_circular.extended_supersequence == "abcdefghijabc"
+        assert sampler_circular.extended_supersequence == 'abcdefghijabc'
         assert sampler_circular.start_indices == (0, 2, 4, 6, 7, 8, 9)
 
         # sample lots of substrings to ensure we get them all
@@ -193,13 +193,13 @@ class TestSampleSubstrings:
         #        hija
         #         ijab
         #          jabc
-        assert substrings == ["abcd", "cdef", "efgh", "ghij", "hija", "ijab", "jabc"]
+        assert substrings == ['abcd', 'cdef', 'efgh', 'ghij', 'hija', 'ijab', 'jabc']
 
     def test_substrings_circular_except_overlapping_indices(self) -> None:
         sampler = nc.SubstringSampler(
-            supersequence="abcdefghij", substring_length=3, except_overlapping_indices=[2, 7], circular=True
+            supersequence='abcdefghij', substring_length=3, except_overlapping_indices=[2, 7], circular=True
         )
-        assert sampler.extended_supersequence == "abcdefghijab"
+        assert sampler.extended_supersequence == 'abcdefghijab'
         assert sampler.start_indices == (3, 4, 8, 9)
 
         # sample lots of substrings to ensure we get them all
@@ -215,17 +215,17 @@ class TestSampleSubstrings:
         #     efg
         #         ija
         #          jab
-        assert substrings == ["def", "efg", "ija", "jab"]
+        assert substrings == ['def', 'efg', 'ija', 'jab']
 
 
 class TestModifyDesignAfterCreated:
     def setup_method(self) -> None:
         self.design = nc.Design()
-        self.design.add_strand(domain_names=["x", "y"])
+        self.design.add_strand(domain_names=['x', 'y'])
 
     def add_domain(self):
         strand = self.design.strands[0]
-        strand.domains.append(nc.Domain("z"))
+        strand.domains.append(nc.Domain('z'))
         self.design.compute_derived_fields()
         return strand
 
@@ -235,13 +235,13 @@ class TestModifyDesignAfterCreated:
         assert len(self.design.domains) == 3
 
         actual_domain_names = sorted([d.name for d in self.design.domains])
-        assert actual_domain_names == ["x", "y", "z"]
+        assert actual_domain_names == ['x', 'y', 'z']
 
-        assert strand.name == "x-y-z"
+        assert strand.name == 'x-y-z'
 
     def test_add_domain_assign_sequence(self):
         strand = self.add_domain()
-        pool = DomainPool("a domain pool", 10)
+        pool = DomainPool('a domain pool', 10)
         for domain in strand.domains:
             domain.pool = pool
         rng = numpy.random.default_rng(0)
@@ -271,10 +271,10 @@ class TestFromScadnanoDesign:
         d01: sc.Domain = s0.domains[1]
         d10: sc.Domain = s1.domains[0]
         d11: sc.Domain = s1.domains[1]
-        d00.set_name("x")
-        d01.set_name("y")
-        d10.set_name("x")
-        d11.set_name("y*")
+        d00.set_name('x')
+        d01.set_name('y')
+        d10.set_name('x')
+        d11.set_name('y*')
 
         dsd_design = nc.Design.from_scadnano_design(sc_design)
         dsd_d00 = dsd_design.strands[0].domains[0]
@@ -282,10 +282,10 @@ class TestFromScadnanoDesign:
         dsd_d10 = dsd_design.strands[1].domains[0]
         dsd_d11 = dsd_design.strands[1].domains[1]
 
-        assert dsd_d00.name == "x"
-        assert dsd_d01.name == "y"
-        assert dsd_d10.name == "x"
-        assert dsd_d11.name == "y"
+        assert dsd_d00.name == 'x'
+        assert dsd_d01.name == 'y'
+        assert dsd_d10.name == 'x'
+        assert dsd_d11.name == 'y'
 
         assert dsd_d00 is dsd_d10
         assert dsd_d01 is dsd_d11
@@ -293,13 +293,13 @@ class TestFromScadnanoDesign:
 
 class TestExportDNASequences:
     def test_idt_bulk_export(self) -> None:
-        custom_idt = nc.VendorFields(scale="100nm", purification="PAGE")
+        custom_idt = nc.VendorFields(scale='100nm', purification='PAGE')
         design = nc.Design()
-        design.add_strand(domain_names=["a", "b*", "c", "d*"], name="s0", vendor_fields=custom_idt)
-        design.add_strand(domain_names=["d", "c*", "e", "f"], name="s1")
+        design.add_strand(domain_names=['a', 'b*', 'c', 'd*'], name='s0', vendor_fields=custom_idt)
+        design.add_strand(domain_names=['d', 'c*', 'e', 'f'], name='s1')
 
         #        a       b       c       d       e           f
-        seqs = ["AACG", "CCGT", "GGTA", "TTAC", "AAAACCCC", "AAAAGGGG"]
+        seqs = ['AACG', 'CCGT', 'GGTA', 'TTAC', 'AAAACCCC', 'AAAAGGGG']
         # s0: AACG-ACGG-GGTA-GTAA
         # s1: TTAC-TACC-AAAACCCC-AAAAGGGG
         for domain, seq in zip(design.domains, seqs):
@@ -307,30 +307,30 @@ class TestExportDNASequences:
 
         idt_bulk_input = design.to_idt_bulk_input_format()
         for i, line in enumerate(idt_bulk_input.splitlines()):
-            name, seq, scale, pur = line.split(",")
+            name, seq, scale, pur = line.split(',')
             if i == 0:
-                assert name == "s0"
-                assert seq == "AACGACGGGGTAGTAA"
-                assert scale == "100nm"
-                assert pur == "PAGE"
+                assert name == 's0'
+                assert seq == 'AACGACGGGGTAGTAA'
+                assert scale == '100nm'
+                assert pur == 'PAGE'
             elif i == 1:
-                assert name == "s1"
-                assert seq == "TTACTACCAAAACCCCAAAAGGGG"
-                assert scale == "25nm"
-                assert pur == "STD"
+                assert name == 's1'
+                assert seq == 'TTACTACCAAAACCCCAAAAGGGG'
+                assert scale == '25nm'
+                assert pur == 'STD'
 
     def test_write_idt_plate_excel_file(self) -> None:
         strand_len = 10
 
         # add 10 strands in excess of 3 plates
         for plate_type in [sc.PlateType.wells96, sc.PlateType.wells384]:
-            filename = f"test_excel_export_{plate_type.num_wells_per_plate()}.xlsx"
+            filename = f'test_excel_export_{plate_type.num_wells_per_plate()}.xlsx'
 
             design = nc.Design()
             for strand_idx in range(3 * plate_type.num_wells_per_plate() + 10):
                 idt = nc.VendorFields()
-                strand = design.add_strand(name=f"s{strand_idx}", domain_names=[f"d{strand_idx}"], vendor_fields=idt)
-                strand.domains[0].set_fixed_sequence("T" * strand_len)
+                strand = design.add_strand(name=f's{strand_idx}', domain_names=[f'd{strand_idx}'], vendor_fields=idt)
+                strand.domains[0].set_fixed_sequence('T' * strand_len)
 
             design.write_idt_plate_excel_file(filename=filename, plate_type=plate_type)
 
@@ -357,7 +357,7 @@ def extract_letters(message_string: str, first_word: str, second_word: str) -> L
     end = message_string.find(second_word, start)
     letters_substring = message_string[start:end]
 
-    return [sub.strip() for sub in letters_substring.split(",")]
+    return [sub.strip() for sub in letters_substring.split(',')]
 
 
 class TestDependencyRelatedFunctions:
@@ -376,25 +376,25 @@ class TestDependencyRelatedFunctions:
         ):
             return sequence[::-1]
 
-        d = Domain("d", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
         d.set_state(DomainState.FIXED)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.FIXED)
-        c = Domain("c", assign_domain_pool_of_length(10))
+        c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainState.ASSIGNABLE)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.ASSIGNABLE)
-        b = Domain("b", assign_domain_pool_of_length(15), subdomains=[c, f])
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
         b.set_state(DomainState.LOCKED)
-        X = Domain("X", assign_domain_pool_of_length(5))
+        X = Domain('X', assign_domain_pool_of_length(5))
         X.set_state(DomainState.DEPENDENT)
         e = Domain(
-            "e",
+            'e',
             assign_domain_pool_of_length(5),
             dependents=[(X, dependency_function_reverses_sequence)],
         )
         e.set_state(DomainState.ASSIGNABLE)
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
         a.set_state(DomainState.LOCKED)
 
         design = nc.Design()
@@ -414,8 +414,8 @@ class TestDependencyRelatedFunctions:
         assert set(dependency_graph.nodes) == {a, b, e, c, f, X}
         assert set(dependency_graph.edges) == {(c, b), (f, b), (b, a), (e, a), (e, X)}
 
-        e.set_sequence("AGCTC")
-        assert X.sequence() == "CTCGA"
+        e.set_sequence('AGCTC')
+        assert X.sequence() == 'CTCGA'
 
     def test_dependency_graph_is_legal(self) -> None:
         """
@@ -438,16 +438,16 @@ class TestDependencyRelatedFunctions:
             return sequence[::-1] * 3
 
         # create design
-        d = Domain("d", assign_domain_pool_of_length(5))
-        b = Domain("b", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
+        b = Domain('b', assign_domain_pool_of_length(5))
         b.set_state(DomainState.LOCKED)
-        c = Domain("c", assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(5))
         c.set_state(DomainState.LOCKED)
-        a = Domain("a", assign_domain_pool_of_length(10), subdomains=[b, c])
+        a = Domain('a', assign_domain_pool_of_length(10), subdomains=[b, c])
         a.set_state(DomainState.LOCKED)
-        h = Domain("h", assign_domain_pool_of_length(5))
+        h = Domain('h', assign_domain_pool_of_length(5))
         h.set_state(DomainState.LOCKED)
-        p = Domain("p", assign_domain_pool_of_length(15), subdomains=[a, h])
+        p = Domain('p', assign_domain_pool_of_length(15), subdomains=[a, h])
         p.set_state(DomainState.DEPENDENT)
 
         d.dependents.append((p, dependency_function_reverses_sequence_then_three_times_longer))
@@ -462,25 +462,25 @@ class TestDependencyRelatedFunctions:
         design.check_subdomain_graphs_legal()
 
         # Test for cycle exception
-        with pytest.raises(ValueError, match="A cycle was found in the dependency graph: p - a - c - p."):
+        with pytest.raises(ValueError, match='A cycle was found in the dependency graph: p - a - c - p.'):
             design.check_dependency_graphs_legal()
 
         c.dependents = []
         design.check_dependency_graphs_legal()
 
         # test more than one dependee
-        d2 = Domain("d2", assign_domain_pool_of_length(5))
+        d2 = Domain('d2', assign_domain_pool_of_length(5))
         d2.dependents.append((p, dependency_function_reverses_sequence))
         design._domains.append(d2)
 
         # Test for multiple dependees exception
         with pytest.raises(
             ValueError,
-            match="the dependent domain p has more than one dependees: d, d2",
+            match='the dependent domain p has more than one dependees: d, d2',
         ):
             design.check_dependency_graphs_legal()
 
-        d.set_sequence("ACGTC")
+        d.set_sequence('ACGTC')
 
         # Sequence assertions
         assert p.sequence() == dependency_function_reverses_sequence_then_three_times_longer(d.sequence())
@@ -503,25 +503,25 @@ class TestDependencyRelatedFunctions:
         ):
             return sequence[::-1]
 
-        d = Domain("d", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
         d.set_state(DomainState.FIXED)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.FIXED)
-        c = Domain("c", assign_domain_pool_of_length(10))
+        c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainState.ASSIGNABLE)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.ASSIGNABLE)
-        b = Domain("b", assign_domain_pool_of_length(15), subdomains=[c, f])
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
         b.set_state(DomainState.LOCKED)
-        X = Domain("X", assign_domain_pool_of_length(5))
+        X = Domain('X', assign_domain_pool_of_length(5))
         X.set_state(DomainState.DEPENDENT)
         e = Domain(
-            "e",
+            'e',
             assign_domain_pool_of_length(5),
             dependents=[(X, dependency_function_reverses_sequence)],
         )
         e.set_state(DomainState.ASSIGNABLE)
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
         a.set_state(DomainState.LOCKED)
 
         design = nc.Design()
@@ -535,8 +535,8 @@ class TestDependencyRelatedFunctions:
         a.set_state(DomainState.ASSIGNABLE)
 
         expected_message = (
-            "There must be exactly one unlocked subdomain in every source-to-sink path in a "
-            "subdomain graph, but found more in the path(s) with source domain a and unlocked domains a, c"
+            'There must be exactly one unlocked subdomain in every source-to-sink path in a '
+            'subdomain graph, but found more in the path(s) with source domain a and unlocked domains a, c'
         )
         with pytest.raises(ValueError, match=re.escape(expected_message)):
             design.check_subdomain_graphs_legal()
@@ -546,8 +546,8 @@ class TestDependencyRelatedFunctions:
         b.state = DomainState.ASSIGNABLE
 
         expected_message = (
-            "There must be exactly one unlocked subdomain in every source-to-sink path in a "
-            "subdomain graph, but found more in the path(s) with source domain a and unlocked domains b, c"
+            'There must be exactly one unlocked subdomain in every source-to-sink path in a '
+            'subdomain graph, but found more in the path(s) with source domain a and unlocked domains b, c'
         )
         with pytest.raises(ValueError, match=re.escape(expected_message)):
             design.check_subdomain_graphs_legal()
@@ -566,37 +566,37 @@ class TestDependencyRelatedFunctions:
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain("d", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
         d.set_state(DomainState.FIXED)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.FIXED)
-        c = Domain("c", assign_domain_pool_of_length(10))
+        c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainState.ASSIGNABLE)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.ASSIGNABLE)
-        b = Domain("b", assign_domain_pool_of_length(15), subdomains=[c, f])
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
         b.set_state(DomainState.LOCKED)
-        X = Domain("X", assign_domain_pool_of_length(5))
+        X = Domain('X', assign_domain_pool_of_length(5))
         X.set_state(DomainState.DEPENDENT)
         e = Domain(
-            "e",
+            'e',
             assign_domain_pool_of_length(5),
             dependents=[(X, dependency_function)],
         )
         e.set_state(DomainState.ASSIGNABLE)
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
         a.set_state(DomainState.LOCKED)
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5))
-        b1 = Domain("b1", assign_domain_pool_of_length(5))
+        d1 = Domain('d1', assign_domain_pool_of_length(5))
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
         b1.set_state(DomainState.LOCKED)
-        c1 = Domain("c1", assign_domain_pool_of_length(5))
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
         c1.set_state(DomainState.LOCKED)
-        a1 = Domain("a1", assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
         a1.set_state(DomainState.LOCKED)
-        h1 = Domain("h1", assign_domain_pool_of_length(5))
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
         h1.set_state(DomainState.LOCKED)
-        p1 = Domain("p1", assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
         p1.set_state(DomainState.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
 
@@ -613,12 +613,12 @@ class TestDependencyRelatedFunctions:
         # error.value contains the actual exception object raised
         exception_msg = str(error.value)
 
-        expected_ancestor = extract_letters(exception_msg, "ancestor", "non-consecutively")
-        expected_subdomains = extract_letters(exception_msg, "subdomains", "with shared")
+        expected_ancestor = extract_letters(exception_msg, 'ancestor', 'non-consecutively')
+        expected_subdomains = extract_letters(exception_msg, 'subdomains', 'with shared')
 
-        assert "b" in expected_ancestor
-        assert "c" in expected_subdomains
-        assert "f" in expected_subdomains
+        assert 'b' in expected_ancestor
+        assert 'c' in expected_subdomains
+        assert 'f' in expected_subdomains
 
     def test_every_domain_overlap_with_a_strand(self):
         """                          a                     p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
@@ -634,38 +634,38 @@ class TestDependencyRelatedFunctions:
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain("d", assign_domain_pool_of_length(5))
-        d.set_fixed_sequence("TATAT")
-        g = Domain("g", assign_domain_pool_of_length(5))
-        g.set_fixed_sequence("TATAT")
-        c = Domain("c", assign_domain_pool_of_length(10))
+        d = Domain('d', assign_domain_pool_of_length(5))
+        d.set_fixed_sequence('TATAT')
+        g = Domain('g', assign_domain_pool_of_length(5))
+        g.set_fixed_sequence('TATAT')
+        c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainState.ASSIGNABLE)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.ASSIGNABLE)
-        b = Domain("b", assign_domain_pool_of_length(15), subdomains=[c, f])
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
         b.set_state(DomainState.LOCKED)
-        X = Domain("X", assign_domain_pool_of_length(5))
+        X = Domain('X', assign_domain_pool_of_length(5))
         X.set_state(DomainState.DEPENDENT)
         e = Domain(
-            "e",
+            'e',
             assign_domain_pool_of_length(5),
             dependents=[(X, dependency_function)],
         )
         e.set_state(DomainState.ASSIGNABLE)
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
         a.set_state(DomainState.LOCKED)
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5))
+        d1 = Domain('d1', assign_domain_pool_of_length(5))
         d1.set_state(DomainState.ASSIGNABLE)
-        b1 = Domain("b1", assign_domain_pool_of_length(5))
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
         b1.set_state(DomainState.LOCKED)
-        c1 = Domain("c1", assign_domain_pool_of_length(5))
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
         c1.set_state(DomainState.LOCKED)
-        a1 = Domain("a1", assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
         a1.set_state(DomainState.LOCKED)
-        h1 = Domain("h1", assign_domain_pool_of_length(5))
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
         h1.set_state(DomainState.LOCKED)
-        p1 = Domain("p1", assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
         p1.set_state(DomainState.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
 
@@ -676,12 +676,12 @@ class TestDependencyRelatedFunctions:
         with pytest.raises(ValueError) as error:
             design.check_subdomain_graphs_legal()
 
-        expected_subdomains = extract_letters(str(error.value), "subdomain(s)", "are")
+        expected_subdomains = extract_letters(str(error.value), 'subdomain(s)', 'are')
         print(expected_subdomains)
-        assert "e" in expected_subdomains
-        assert "f" in expected_subdomains
-        assert "b1" in expected_subdomains
-        assert "c1" in expected_subdomains
+        assert 'e' in expected_subdomains
+        assert 'f' in expected_subdomains
+        assert 'b1' in expected_subdomains
+        assert 'c1' in expected_subdomains
 
         # Modify design
         design.strands = []
@@ -691,10 +691,10 @@ class TestDependencyRelatedFunctions:
         with pytest.raises(ValueError) as error:
             design.check_subdomain_graphs_legal()
 
-        expected_subdomains = extract_letters(str(error.value), "subdomain(s)", "are")
-        assert "c" in expected_subdomains
-        assert "e" in expected_subdomains  # Note: Ensure variable consistency or use expected_subdomains
-        assert "h1" in expected_subdomains
+        expected_subdomains = extract_letters(str(error.value), 'subdomain(s)', 'are')
+        assert 'c' in expected_subdomains
+        assert 'e' in expected_subdomains  # Note: Ensure variable consistency or use expected_subdomains
+        assert 'h1' in expected_subdomains
 
     def test_all_domains_affected(self):
         """                          a                      p1       p depends on d1, (d1 depends on c1 - checked for cycle detection)
@@ -710,37 +710,37 @@ class TestDependencyRelatedFunctions:
         def dependency_function(sequence: str, rng: numpy.random.Generator = numpy.random.default_rng()):
             return sequence[::-1] * 3
 
-        d = Domain("d", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
         d.set_state(DomainState.FIXED)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.FIXED)
-        c = Domain("c", assign_domain_pool_of_length(10))
+        c = Domain('c', assign_domain_pool_of_length(10))
         c.set_state(DomainState.LOCKED)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.ASSIGNABLE)
-        b = Domain("b", assign_domain_pool_of_length(15), subdomains=[c, f])
+        b = Domain('b', assign_domain_pool_of_length(15), subdomains=[c, f])
         b.set_state(DomainState.LOCKED)
-        X = Domain("X", assign_domain_pool_of_length(5))
+        X = Domain('X', assign_domain_pool_of_length(5))
         X.set_state(DomainState.DEPENDENT)
         e = Domain(
-            "e",
+            'e',
             assign_domain_pool_of_length(5),
             dependents=[(X, dependency_function)],
         )
         e.set_state(DomainState.ASSIGNABLE)
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, e])
         a.set_state(DomainState.LOCKED)
 
-        d1 = Domain("d1", assign_domain_pool_of_length(5))
-        b1 = Domain("b1", assign_domain_pool_of_length(5))
+        d1 = Domain('d1', assign_domain_pool_of_length(5))
+        b1 = Domain('b1', assign_domain_pool_of_length(5))
         b1.set_state(DomainState.LOCKED)
-        c1 = Domain("c1", assign_domain_pool_of_length(5))
+        c1 = Domain('c1', assign_domain_pool_of_length(5))
         c1.set_state(DomainState.LOCKED)
-        a1 = Domain("a1", assign_domain_pool_of_length(10), subdomains=[b1, c1])
+        a1 = Domain('a1', assign_domain_pool_of_length(10), subdomains=[b1, c1])
         a1.set_state(DomainState.LOCKED)
-        h1 = Domain("h1", assign_domain_pool_of_length(5))
+        h1 = Domain('h1', assign_domain_pool_of_length(5))
         h1.set_state(DomainState.LOCKED)
-        p1 = Domain("p1", assign_domain_pool_of_length(15), subdomains=[a1, h1])
+        p1 = Domain('p1', assign_domain_pool_of_length(15), subdomains=[a1, h1])
         p1.set_state(DomainState.DEPENDENT)
         d1.dependents.append((p1, dependency_function))
 
@@ -765,53 +765,53 @@ class TestDagObjectCreation:
                                      /\
                                     x  y
                     """
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.DEPENDENT)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.DEPENDENT)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.DEPENDENT)
 
-        x = Domain("x", assign_domain_pool_of_length(2))
+        x = Domain('x', assign_domain_pool_of_length(2))
         x.set_state(DomainState.DEPENDENT)
-        y = Domain("y", assign_domain_pool_of_length(3))
+        y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainState.DEPENDENT)
-        h = Domain("h", assign_domain_pool_of_length(5), subdomains=[x, y])
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
         h.set_state(DomainState.DEPENDENT)
 
-        i = Domain("i", assign_domain_pool_of_length(5))
+        i = Domain('i', assign_domain_pool_of_length(5))
         i.set_state(DomainState.DEPENDENT)
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
         b.set_state(DomainState.DEPENDENT)
         c = Domain(
-            "c",
+            'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
         c.set_state(DomainState.DEPENDENT)
 
-        A = Domain("A", assign_domain_pool_of_length(20), subdomains=[b, c])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
         A.set_state(DomainState.DEPENDENT)
-        B = Domain("B", assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         B.set_state(DomainState.DEPENDENT)
 
         visited, domain_name_to_interval = nc.set_domains_memoryviews(h)
-        assert visited == {"A", "b", "c", "e", "f", "g", "h", "i", "B", "x", "y"}
+        assert visited == {'A', 'b', 'c', 'e', 'f', 'g', 'h', 'i', 'B', 'x', 'y'}
 
         # assert dag._length_of_shared_subdomains(dag.domain_name_to_domain["D"], dag.domain_name_to_domain["h"]) == 11
 
         assert b.parents[0] == A
-        assert domain_name_to_interval["x"] == (15, 17)
-        assert domain_name_to_interval["y"] == (17, 20)
+        assert domain_name_to_interval['x'] == (15, 17)
+        assert domain_name_to_interval['y'] == (17, 20)
 
-        assert domain_name_to_interval["e"] == (0, 5)
-        assert domain_name_to_interval["f"] == (5, 10)
-        assert domain_name_to_interval["g"] == (10, 15)
-        assert domain_name_to_interval["h"] == (15, 20)
-        assert domain_name_to_interval["i"] == (20, 25)
+        assert domain_name_to_interval['e'] == (0, 5)
+        assert domain_name_to_interval['f'] == (5, 10)
+        assert domain_name_to_interval['g'] == (10, 15)
+        assert domain_name_to_interval['h'] == (15, 20)
+        assert domain_name_to_interval['i'] == (20, 25)
 
-        assert domain_name_to_interval["A"] == (0, 20)
-        assert domain_name_to_interval["B"] == (10, 25)
+        assert domain_name_to_interval['A'] == (0, 20)
+        assert domain_name_to_interval['B'] == (10, 25)
 
         # self.assertEqual((0, 25), dag.domain_name_to_interval["D"])
 
@@ -828,34 +828,34 @@ class TestAllIntersectingDomains:
                                              /\
                                             x  y
                             """
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.DEPENDENT)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.DEPENDENT)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.DEPENDENT)
 
-        x = Domain("x", assign_domain_pool_of_length(2))
+        x = Domain('x', assign_domain_pool_of_length(2))
         x.set_state(DomainState.DEPENDENT)
-        y = Domain("y", assign_domain_pool_of_length(3))
+        y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainState.DEPENDENT)
-        h = Domain("h", assign_domain_pool_of_length(5), subdomains=[x, y])
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
         h.set_state(DomainState.DEPENDENT)
 
-        i = Domain("i", assign_domain_pool_of_length(5))
+        i = Domain('i', assign_domain_pool_of_length(5))
         i.set_state(DomainState.DEPENDENT)
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
         b.set_state(DomainState.DEPENDENT)
         c = Domain(
-            "c",
+            'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
         c.set_state(DomainState.DEPENDENT)
 
-        A = Domain("A", assign_domain_pool_of_length(20), subdomains=[b, c])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
         A.set_state(DomainState.ASSIGNABLE)
-        B = Domain("B", assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         B.set_state(DomainState.ASSIGNABLE)
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
@@ -865,17 +865,17 @@ class TestAllIntersectingDomains:
         for d in A_intersected_domains:
             A_intersected_domain_names.add(d.name)
 
-        assert A_intersected_domain_names == {"A", "b", "c", "e", "f", "g", "h", "B", "x", "y"}
+        assert A_intersected_domain_names == {'A', 'b', 'c', 'e', 'f', 'g', 'h', 'B', 'x', 'y'}
         i_intersected_domains = i.all_domains_intersecting()
         i_intersected_domain_names = set()
         for d in i_intersected_domains:
             i_intersected_domain_names.add(d.name)
-        assert i_intersected_domain_names == {"B", "i"}
+        assert i_intersected_domain_names == {'B', 'i'}
 
         x_intersected_domains = x.all_domains_intersecting()
         x_intersected_domain_names = {d.name for d in x_intersected_domains}
 
-        assert x_intersected_domain_names == {"A", "c", "h", "B", "x"}
+        assert x_intersected_domain_names == {'A', 'c', 'h', 'B', 'x'}
 
 
 class AllDomainsInDAG:
@@ -890,40 +890,40 @@ class AllDomainsInDAG:
                                              /\
                                             x  y
                             """
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.DEPENDENT)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.DEPENDENT)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.DEPENDENT)
 
-        x = Domain("x", assign_domain_pool_of_length(2))
+        x = Domain('x', assign_domain_pool_of_length(2))
         x.set_state(DomainState.DEPENDENT)
-        y = Domain("y", assign_domain_pool_of_length(3))
+        y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainState.DEPENDENT)
-        h = Domain("h", assign_domain_pool_of_length(5), subdomains=[x, y])
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
         h.set_state(DomainState.DEPENDENT)
 
-        i = Domain("i", assign_domain_pool_of_length(5))
+        i = Domain('i', assign_domain_pool_of_length(5))
         i.set_state(DomainState.DEPENDENT)
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
         b.set_state(DomainState.DEPENDENT)
         c = Domain(
-            "c",
+            'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
         c.set_state(DomainState.DEPENDENT)
 
-        A = Domain("A", assign_domain_pool_of_length(20), subdomains=[b, c])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
         A.set_state(DomainState.ASSIGNABLE)
-        B = Domain("B", assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         B.set_state(DomainState.ASSIGNABLE)
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
         # )
         dag_domains = {d.name for d in i.all_domains_in_dag()}
-        assert dag_domains == {"A", "b", "c", "e", "f", "g", "h", "i", "B", "x", "y"}
+        assert dag_domains == {'A', 'b', 'c', 'e', 'f', 'g', 'h', 'i', 'B', 'x', 'y'}
 
 
 class AllDomainsInTree:
@@ -938,40 +938,40 @@ class AllDomainsInTree:
                                              /\
                                             x  y
                             """
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.DEPENDENT)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.DEPENDENT)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.DEPENDENT)
 
-        x = Domain("x", assign_domain_pool_of_length(2))
+        x = Domain('x', assign_domain_pool_of_length(2))
         x.set_state(DomainState.LOCKED)
-        y = Domain("y", assign_domain_pool_of_length(3))
+        y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainState.DEPENDENT)
-        h = Domain("h", assign_domain_pool_of_length(5), subdomains=[x, y])
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
         h.set_state(DomainState.DEPENDENT)
 
-        i = Domain("i", assign_domain_pool_of_length(5))
+        i = Domain('i', assign_domain_pool_of_length(5))
         i.set_state(DomainState.DEPENDENT)
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
         b.set_state(DomainState.DEPENDENT)
         c = Domain(
-            "c",
+            'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
         c.set_state(DomainState.DEPENDENT)
 
-        A = Domain("A", assign_domain_pool_of_length(20), subdomains=[b, c])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
         A.set_state(DomainState.ASSIGNABLE)
-        B = Domain("B", assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         B.set_state(DomainState.ASSIGNABLE)
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
         # )
         tree_domains = {d.name for d in i.all_domains_in_tree()}
-        assert tree_domains == {"B", "i", "h", "g", "x", "y"}
+        assert tree_domains == {'B', 'i', 'h', 'g', 'x', 'y'}
 
 
 class TestSubdomainGraphsLegal:
@@ -986,33 +986,33 @@ class TestSubdomainGraphsLegal:
                                                  /\
                                                 x  y
                                 """
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.DEPENDENT)
-        f = Domain("f", assign_domain_pool_of_length(5))
+        f = Domain('f', assign_domain_pool_of_length(5))
         f.set_state(DomainState.DEPENDENT)
-        g = Domain("g", assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.LOCKED)
 
-        x = Domain("x", assign_domain_pool_of_length(2))
+        x = Domain('x', assign_domain_pool_of_length(2))
         x.set_state(DomainState.LOCKED)
-        y = Domain("y", assign_domain_pool_of_length(3))
+        y = Domain('y', assign_domain_pool_of_length(3))
         y.set_state(DomainState.LOCKED)
-        h = Domain("h", assign_domain_pool_of_length(5), subdomains=[x, y])
+        h = Domain('h', assign_domain_pool_of_length(5), subdomains=[x, y])
         h.set_state(DomainState.LOCKED)
 
-        i = Domain("i", assign_domain_pool_of_length(5))
+        i = Domain('i', assign_domain_pool_of_length(5))
         i.set_state(DomainState.LOCKED)
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[e, f])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[e, f])
         b.set_state(DomainState.LOCKED)
         c = Domain(
-            "c",
+            'c',
             assign_domain_pool_of_length(10),
             subdomains=[g, h],
         )
 
-        A = Domain("A", assign_domain_pool_of_length(20), subdomains=[b, c])
+        A = Domain('A', assign_domain_pool_of_length(20), subdomains=[b, c])
         A.set_state(DomainState.LOCKED)
-        B = Domain("B", assign_domain_pool_of_length(15), subdomains=[g, h, i])
+        B = Domain('B', assign_domain_pool_of_length(15), subdomains=[g, h, i])
         # D = Domain(
         #     "D", assign_domain_pool_of_length(25), dependent=False, subdomains=[A, B]
         # )
@@ -1045,7 +1045,7 @@ class TestNumpyFilters:
 class TestInsertDomains:
     def setup_method(self) -> None:
         self.design = Design()
-        self.design.add_strand(domain_names=["a", "b*", "c", "d*"])
+        self.design.add_strand(domain_names=['a', 'b*', 'c', 'd*'])
         self.strand = self.design.strands[0]
 
     def test_no_insertion(self) -> None:
@@ -1056,37 +1056,37 @@ class TestInsertDomains:
     def test_append_domain_unstarred(self) -> None:
         # 0 1  2 3  4
         # a-b*-c-d*-e
-        self.strand.append_domain(Domain("e"))
+        self.strand.append_domain(Domain('e'))
         assert self.strand.starred_domain_indices == {1, 3}
 
     def test_append_domain_starred(self) -> None:
         # 0 1  2 3  4design
         # a-b*-c-d*-e*
-        self.strand.append_domain(Domain("e"), starred=True)
+        self.strand.append_domain(Domain('e'), starred=True)
         assert self.strand.starred_domain_indices == {1, 3, 4}
 
     def test_prepend_domain_unstarred(self) -> None:
         # 0 1 2  3  4
         # e-a-b*-c-d*
-        self.strand.prepend_domain(Domain("e"))
+        self.strand.prepend_domain(Domain('e'))
         assert self.strand.starred_domain_indices == {2, 4}
 
     def test_prepend_domain_starred(self) -> None:
         # 0  1 2  3  4
         # e*-a-b*-c-d*
-        self.strand.prepend_domain(Domain("e"), starred=True)
+        self.strand.prepend_domain(Domain('e'), starred=True)
         assert self.strand.starred_domain_indices == {0, 2, 4}
 
     def test_insert_idx_2_domain_unstarred(self) -> None:
         # 0 1  2 3 4
         # a-b*-e-c-d*
-        self.strand.insert_domain(2, Domain("e"))
+        self.strand.insert_domain(2, Domain('e'))
         assert self.strand.starred_domain_indices == {1, 4}
 
     def test_insert_idx_2_domain_starred(self) -> None:
         # 0 1  2  3 4
         # a-b*-e*-c-d*
-        self.strand.insert_domain(2, Domain("e"), starred=True)
+        self.strand.insert_domain(2, Domain('e'), starred=True)
         assert self.strand.starred_domain_indices == {1, 2, 4}
 
 
@@ -1107,8 +1107,8 @@ class TestExteriorBaseTypeOfDomain3PEnd:
                  b*       a*
         """
         design = Design()
-        top_strand = construct_strand(design, ["a", "b"], [2, 13])
-        bot_strand = construct_strand(design, ["b*", "a*"], [13, 2])
+        top_strand = construct_strand(design, ['a', 'b'], [2, 13])
+        bot_strand = construct_strand(design, ['b*', 'a*'], [13, 2])
 
         top_a = top_strand.address_of_domain(0)
 
@@ -1119,7 +1119,7 @@ class TestExteriorBaseTypeOfDomain3PEnd:
             == BasePairType.ADJACENT_TO_EXTERIOR_BASE_PAIR
         )
 
-    @pytest.mark.skip("MISMATCH detection has not been implemented")
+    @pytest.mark.skip('MISMATCH detection has not been implemented')
     def test_mismatch(self):
         """Test MISMATCH is properly classified
 
@@ -1131,8 +1131,8 @@ class TestExteriorBaseTypeOfDomain3PEnd:
             [=====--=--=====>
                c*   d    a*
         """
-        top_strand = construct_strand(["a", "b", "c"], [5, 1, 5])
-        bot_strand = construct_strand(["c*", "d", "a*"], [5, 1, 5])
+        top_strand = construct_strand(['a', 'b', 'c'], [5, 1, 5])
+        bot_strand = construct_strand(['c*', 'd', 'a*'], [5, 1, 5])
 
         top_a = top_strand.address_of_domain(0)
 
@@ -1140,7 +1140,7 @@ class TestExteriorBaseTypeOfDomain3PEnd:
 
         assert _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses) == BasePairType.MISMATCH
 
-    @pytest.mark.skip("BULGE_LOOP_3P detection has not been implemented")
+    @pytest.mark.skip('BULGE_LOOP_3P detection has not been implemented')
     def test_bulge_loop_3p(self):
         """Test BULGE_LOOP_3P is properly classified
 
@@ -1152,8 +1152,8 @@ class TestExteriorBaseTypeOfDomain3PEnd:
             [=====-----=====>
                c*        a*
         """
-        top_strand = construct_strand(["a", "b", "c"], [5, 1, 5])
-        bot_strand = construct_strand(["c*", "a*"], [5, 5])
+        top_strand = construct_strand(['a', 'b', 'c'], [5, 1, 5])
+        bot_strand = construct_strand(['c*', 'a*'], [5, 5])
 
         all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
@@ -1161,7 +1161,7 @@ class TestExteriorBaseTypeOfDomain3PEnd:
 
         assert _exterior_base_type_of_domain_3p_end(top_a, all_bound_domain_addresses) == BasePairType.BULGE_LOOP_3P
 
-    @pytest.mark.skip("BULGE_LOOP_5P detection has not been implemented")
+    @pytest.mark.skip('BULGE_LOOP_5P detection has not been implemented')
     def test_bulge_loop_5p(self):
         """Test BULGE_LOOP_5P is properly classified
 
@@ -1173,8 +1173,8 @@ class TestExteriorBaseTypeOfDomain3PEnd:
             [=====-----=====>
                c*        a*
         """
-        top_strand = construct_strand(["a", "c"], [5, 5])
-        bot_strand = construct_strand(["c*", "d", "a*"], [5, 1, 5])
+        top_strand = construct_strand(['a', 'c'], [5, 5])
+        bot_strand = construct_strand(['c*', 'd', 'a*'], [5, 1, 5])
 
         all_bound_domain_addresses = _get_implicitly_bound_domain_addresses([top_strand, bot_strand])
 
@@ -1215,17 +1215,17 @@ class TestGetBasePairDomainEndpointsToCheck:
                                |              |   |
                               INTERIOR_TO_STRAND  DANGLE_3P
         """
-        ssg = Domain("ssg", assign_domain_pool_of_length(13))
+        ssg = Domain('ssg', assign_domain_pool_of_length(13))
         ssg.set_state(DomainState.LOCKED)
-        sg = Domain("sg", assign_domain_pool_of_length(2))
+        sg = Domain('sg', assign_domain_pool_of_length(2))
         sg.set_state(DomainState.LOCKED)
-        Sg = Domain("Sg", assign_domain_pool_of_length(15), subdomains=[sg, ssg])
-        T = Domain("T", assign_domain_pool_of_length(5))
-        ssi = Domain("ssi", assign_domain_pool_of_length(13))
+        Sg = Domain('Sg', assign_domain_pool_of_length(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_length(5))
+        ssi = Domain('ssi', assign_domain_pool_of_length(13))
         ssi.set_state(DomainState.LOCKED)
-        si = Domain("si", assign_domain_pool_of_length(2))
+        si = Domain('si', assign_domain_pool_of_length(2))
         si.set_state(DomainState.DEPENDENT)
-        Si = Domain("Si", assign_domain_pool_of_length(15), subdomains=[si, ssi])
+        Si = Domain('Si', assign_domain_pool_of_length(15), subdomains=[si, ssi])
 
         input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
         gate_base_strand = Strand(domains=[T, Sg, T], starred_domain_indices=[0, 1, 2])
@@ -1296,8 +1296,8 @@ class TestGetBasePairDomainEndpointsToCheck:
                INTERIOR_TO_STRAND      DANGLE_5P
         """
         design = Design()
-        output_strand = construct_strand(design, ["so", "So", "T", "sg", "Sg"], [2, 13, 5, 2, 13])
-        gate_base_strand = construct_strand(design, ["T*", "Sg*", "sg*", "T*"], [5, 13, 2, 5])
+        output_strand = construct_strand(design, ['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
+        gate_base_strand = construct_strand(design, ['T*', 'Sg*', 'sg*', 'T*'], [5, 13, 2, 5])
         gate_output_complex = [output_strand, gate_base_strand]
 
         output_t = output_strand.address_of_domain(2)
@@ -1358,8 +1358,8 @@ class TestGetBasePairDomainEndpointsToCheck:
                        INTERIOR_TO_STRAND   BLUNT_END
         """
         design = Design()
-        waste_strand = construct_strand(design, ["sg", "Sg"], [2, 13])
-        threshold_base_strand = construct_strand(design, ["si*", "T*", "Sg*", "sg*"], [2, 5, 13, 2])
+        waste_strand = construct_strand(design, ['sg', 'Sg'], [2, 13])
+        threshold_base_strand = construct_strand(design, ['si*', 'T*', 'Sg*', 'sg*'], [2, 5, 13, 2])
         threshold_complex = [waste_strand, threshold_base_strand]
 
         expected = set(
@@ -1411,16 +1411,16 @@ class TestGetBasePairDomainEndpointsToCheck:
                             ADJACENT_TO_EXTERIOR_BASE_PAIR
         """
 
-        ssg = Domain("ssg", assign_domain_pool_of_length(13))
+        ssg = Domain('ssg', assign_domain_pool_of_length(13))
         ssg.set_state(DomainState.LOCKED)
-        sg = Domain("sg", assign_domain_pool_of_length(2))
+        sg = Domain('sg', assign_domain_pool_of_length(2))
         sg.set_state(DomainState.LOCKED)
-        Sg = Domain("Sg", assign_domain_pool_of_length(15), subdomains=[sg, ssg])
-        T = Domain("T", assign_domain_pool_of_length(5))
-        ssi = Domain("ssi", assign_domain_pool_of_length(13))
-        si = Domain("si", assign_domain_pool_of_length(2))
+        Sg = Domain('Sg', assign_domain_pool_of_length(15), subdomains=[sg, ssg])
+        T = Domain('T', assign_domain_pool_of_length(5))
+        ssi = Domain('ssi', assign_domain_pool_of_length(13))
+        si = Domain('si', assign_domain_pool_of_length(2))
         si.set_state(DomainState.LOCKED)
-        Si = Domain("Si", assign_domain_pool_of_length(15), subdomains=[si, ssi])
+        Si = Domain('Si', assign_domain_pool_of_length(15), subdomains=[si, ssi])
 
         input_strand = Strand(domains=[Sg, T, Si], starred_domain_indices=[])
         threshold_base_strand = Strand(domains=[si, T, Sg], starred_domain_indices=[0, 1, 2])
@@ -1487,8 +1487,8 @@ class TestGetBasePairDomainEndpointsToCheck:
                INTERIOR_TO_STRAND   BLUNT_END
         """
         design = Design()
-        waste_strand = construct_strand(design, ["so", "So"], [2, 13])
-        reporter_base_strand = construct_strand(design, ["T*", "So*", "so*"], [5, 13, 2])
+        waste_strand = construct_strand(design, ['so', 'So'], [2, 13])
+        reporter_base_strand = construct_strand(design, ['T*', 'So*', 'so*'], [5, 13, 2])
         reporter_complex = [waste_strand, reporter_base_strand]
 
         expected = set(
@@ -1539,8 +1539,8 @@ class TestGetBasePairDomainEndpointsToCheck:
                                    INTERIOR_TO_STRAND  BLUNT_END
         """
         design = Design()
-        output_strand = construct_strand(design, ["so", "So", "T", "sg", "Sg"], [2, 13, 5, 2, 13])
-        reporter_base_strand = construct_strand(design, ["T*", "So*", "so*"], [5, 13, 2])
+        output_strand = construct_strand(design, ['so', 'So', 'T', 'sg', 'Sg'], [2, 13, 5, 2, 13])
+        reporter_base_strand = construct_strand(design, ['T*', 'So*', 'so*'], [5, 13, 2])
         reporter_waste_complex = [output_strand, reporter_base_strand]
 
         expected = set(
@@ -1576,7 +1576,7 @@ class TestGetBasePairDomainEndpointsToCheck:
 class TestStrandDomainAddress:
     def setup_method(self):
         design = Design()
-        self.strand = construct_strand(design, ["a", "b", "c"], [10, 20, 30])
+        self.strand = construct_strand(design, ['a', 'b', 'c'], [10, 20, 30])
         self.addr = StrandDomainAddress(self.strand, 1)
 
     def test_init(self):
@@ -1615,16 +1615,16 @@ class TestSubdomains:
             <--=====--=====--=====--=====]
         """
 
-        b = Domain("b", assign_domain_pool_of_length(5))
+        b = Domain('b', assign_domain_pool_of_length(5))
         b.set_state(DomainState.LOCKED)
-        c = Domain("c", assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(5))
         c.set_state(DomainState.LOCKED)
-        d = Domain("d", assign_domain_pool_of_length(5))
+        d = Domain('d', assign_domain_pool_of_length(5))
         d.set_state(DomainState.LOCKED)
-        e = Domain("e", assign_domain_pool_of_length(5))
+        e = Domain('e', assign_domain_pool_of_length(5))
         e.set_state(DomainState.LOCKED)
 
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, c, d, e])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, c, d, e])
 
         assert a.subdomains == [b, c, d, e]
         assert b.parents[0] == a
@@ -1642,13 +1642,13 @@ class TestSubdomains:
                / \
              [b] [c]
         """
-        b = Domain("b", assign_domain_pool_of_length(5))
+        b = Domain('b', assign_domain_pool_of_length(5))
         b.set_state(DomainState.FIXED)
-        c = Domain("c", assign_domain_pool_of_length(4))
+        c = Domain('c', assign_domain_pool_of_length(4))
         c.set_state(DomainState.FIXED)
 
         with pytest.raises(ValueError):
-            _a = Domain("a", assign_domain_pool_of_length(9), subdomains=[b, c])
+            _a = Domain('a', assign_domain_pool_of_length(9), subdomains=[b, c])
             _a.set_state(DomainState.FIXED)
 
     def test_construct_unfixed_domain_with_unfixed_subdomain(self):
@@ -1662,11 +1662,11 @@ class TestSubdomains:
                / \
               b  [c]
         """
-        b = Domain("b", assign_domain_pool_of_length(5))
-        c = Domain("c", assign_domain_pool_of_length(4))
+        b = Domain('b', assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(4))
         c.set_state(DomainState.FIXED)
 
-        a = Domain("a", assign_domain_pool_of_length(9), subdomains=[b, c])
+        a = Domain('a', assign_domain_pool_of_length(9), subdomains=[b, c])
         assert not a.fixed
 
     def test_error_construct_fixed_domain_with_unfixed_subdomain(self):
@@ -1680,17 +1680,17 @@ class TestSubdomains:
                / \
               b  [c]
         """
-        b = Domain("b", assign_domain_pool_of_length(5))
-        c = Domain("c", assign_domain_pool_of_length(4))
+        b = Domain('b', assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(4))
         c.set_state(DomainState.FIXED)
 
         with pytest.raises(ValueError):
             a = Domain(
-                "a",
+                'a',
                 assign_domain_pool_of_length(9),
                 subdomains=[b, c],
             )
-            a.set_fixed_sequence("TTTTTTTTT")
+            a.set_fixed_sequence('TTTTTTTTT')
 
     def test_error_constructed_unfixed_domain_with_fixed_subdomains(self):
         """
@@ -1703,13 +1703,13 @@ class TestSubdomains:
                / \
              [b] [c]
         """
-        b = Domain("b", assign_domain_pool_of_length(5))
-        c = Domain("c", assign_domain_pool_of_length(4))
+        b = Domain('b', assign_domain_pool_of_length(5))
+        c = Domain('c', assign_domain_pool_of_length(4))
         b.set_state(DomainState.FIXED)
         c.set_state(DomainState.FIXED)
 
         with pytest.raises(ValueError):
-            a = Domain("a", assign_domain_pool_of_length(9), subdomains=[b, c])
+            a = Domain('a', assign_domain_pool_of_length(9), subdomains=[b, c])
             a.set_state(DomainState.FIXED)
 
     def test_construct_strand(self):
@@ -1724,18 +1724,18 @@ class TestSubdomains:
               / \   / \
              E   F g   h
         """
-        E = Domain("e", assign_domain_pool_of_length(5))
-        F = Domain("f", assign_domain_pool_of_length(5))
-        g = Domain("g", assign_domain_pool_of_length(5))
+        E = Domain('e', assign_domain_pool_of_length(5))
+        F = Domain('f', assign_domain_pool_of_length(5))
+        g = Domain('g', assign_domain_pool_of_length(5))
         g.set_state(DomainState.LOCKED)
-        h = Domain("h", assign_domain_pool_of_length(5))
+        h = Domain('h', assign_domain_pool_of_length(5))
         h.set_state(DomainState.LOCKED)
 
-        b = Domain("b", assign_domain_pool_of_length(10), subdomains=[E, F])
+        b = Domain('b', assign_domain_pool_of_length(10), subdomains=[E, F])
         b.set_state(DomainState.LOCKED)
-        C = Domain("C", assign_domain_pool_of_length(10), subdomains=[g, h])
+        C = Domain('C', assign_domain_pool_of_length(10), subdomains=[g, h])
 
-        a = Domain("a", assign_domain_pool_of_length(20), subdomains=[b, C])
+        a = Domain('a', assign_domain_pool_of_length(20), subdomains=[b, C])
         a.set_state(DomainState.LOCKED)
 
         # Test that constructor runs without errors
@@ -1831,9 +1831,9 @@ class TestSubdomains:
             |
             a
         """
-        a = Domain("a", assign_domain_pool_of_length(5))
+        a = Domain('a', assign_domain_pool_of_length(5))
         a.set_state(DomainState.LOCKED)
-        b = Domain("b", assign_domain_pool_of_length(5), subdomains=[a])
+        b = Domain('b', assign_domain_pool_of_length(5), subdomains=[a])
         b.set_state(DomainState.LOCKED)
         a.subdomains = [b]
 
@@ -1855,21 +1855,21 @@ class TestSubdomains:
         :return: Map of domain name to domain object.
         :rtype: Dict[str, Domain]
         """
-        E: Domain = Domain("E", assign_domain_pool_of_length(5))
+        E: Domain = Domain('E', assign_domain_pool_of_length(5))
         E.set_state(DomainState.ASSIGNABLE)
-        F: Domain = Domain("F", assign_domain_pool_of_length(6))
+        F: Domain = Domain('F', assign_domain_pool_of_length(6))
         F.set_state(DomainState.ASSIGNABLE)
-        g: Domain = Domain("g", assign_domain_pool_of_length(7))
+        g: Domain = Domain('g', assign_domain_pool_of_length(7))
         g.set_state(DomainState.LOCKED)
-        h: Domain = Domain("h", assign_domain_pool_of_length(8))
+        h: Domain = Domain('h', assign_domain_pool_of_length(8))
         h.set_state(DomainState.LOCKED)
 
-        b: Domain = Domain("b", assign_domain_pool_of_length(11), subdomains=[E, F])
+        b: Domain = Domain('b', assign_domain_pool_of_length(11), subdomains=[E, F])
         b.set_state(DomainState.LOCKED)
-        C: Domain = Domain("C", assign_domain_pool_of_length(15), subdomains=[g, h])
+        C: Domain = Domain('C', assign_domain_pool_of_length(15), subdomains=[g, h])
         C.set_state(DomainState.ASSIGNABLE)
 
-        a: Domain = Domain("a", assign_domain_pool_of_length(26), subdomains=[b, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(26), subdomains=[b, C])
         a.set_state(DomainState.LOCKED)
 
         return {domain.name: domain for domain in [a, b, C, E, F, g, h]}
@@ -1887,22 +1887,22 @@ class TestSubdomains:
              E   F g   h
         """
         domains = self.sample_nested_domains()
-        sequence = "CATAGCTTTCTTGTTCTGATCGGAAC"
-        a = domains["a"]
+        sequence = 'CATAGCTTTCTTGTTCTGATCGGAAC'
+        a = domains['a']
 
         with pytest.raises(ValueError):
             a.set_sequence(sequence)  # since a is locked
 
         assert not a.has_sequence()
-        domains["E"].set_sequence(sequence[0:5])
-        domains["F"].set_sequence(sequence[5:11])
-        assert domains["b"].sequence() == sequence[0:11]
-        domains["C"].set_sequence(sequence[11:])
+        domains['E'].set_sequence(sequence[0:5])
+        domains['F'].set_sequence(sequence[5:11])
+        assert domains['b'].sequence() == sequence[0:11]
+        domains['C'].set_sequence(sequence[11:])
 
-        g_domain = domains["g"]
+        g_domain = domains['g']
         assert g_domain.sequence() == sequence[11:18]
-        assert domains["g"].sequence() == sequence[11:18]
-        assert domains["h"].sequence() == sequence[18:]
+        assert domains['g'].sequence() == sequence[11:18]
+        assert domains['h'].sequence() == sequence[18:]
 
     def test_assign_dna_sequence_to_leaf(self):
         """
@@ -1917,13 +1917,13 @@ class TestSubdomains:
              E   F g   h
         """
         domains = self.sample_nested_domains()
-        E = domains["E"]
-        F = domains["F"]
-        E.set_sequence("CATAG")
-        F.set_sequence("CTTTCC")
-        assert E.sequence() == "CATAG"
-        assert F.sequence() == "CTTTCC"
-        assert domains["b"].sequence() == "CATAGCTTTCC"
+        E = domains['E']
+        F = domains['F']
+        E.set_sequence('CATAG')
+        F.set_sequence('CTTTCC')
+        assert E.sequence() == 'CATAG'
+        assert F.sequence() == 'CTTTCC'
+        assert domains['b'].sequence() == 'CATAGCTTTCC'
 
     def test_assign_dna_sequence_mixed(self):
         """
@@ -1938,41 +1938,41 @@ class TestSubdomains:
              E   F g   h
         """
         domains = self.sample_nested_domains()
-        E = domains["E"]
-        F = domains["F"]
-        C = domains["C"]
-        E.set_sequence("CATAG")
-        F.set_sequence("CTTTCT")
-        C.set_sequence("TGTTCTGATCGGAAC")
+        E = domains['E']
+        F = domains['F']
+        C = domains['C']
+        E.set_sequence('CATAG')
+        F.set_sequence('CTTTCT')
+        C.set_sequence('TGTTCTGATCGGAAC')
 
         # Assert initial assignment is correct
-        assert domains["a"].sequence() == "CATAGCTTTCTTGTTCTGATCGGAAC"
-        assert domains["b"].sequence() == "CATAGCTTTCT"
-        assert domains["C"].sequence() == "TGTTCTGATCGGAAC"
-        assert domains["E"].sequence() == "CATAG"
-        assert domains["F"].sequence() == "CTTTCT"
-        assert domains["g"].sequence() == "TGTTCTG"
-        assert domains["h"].sequence() == "ATCGGAAC"
+        assert domains['a'].sequence() == 'CATAGCTTTCTTGTTCTGATCGGAAC'
+        assert domains['b'].sequence() == 'CATAGCTTTCT'
+        assert domains['C'].sequence() == 'TGTTCTGATCGGAAC'
+        assert domains['E'].sequence() == 'CATAG'
+        assert domains['F'].sequence() == 'CTTTCT'
+        assert domains['g'].sequence() == 'TGTTCTG'
+        assert domains['h'].sequence() == 'ATCGGAAC'
 
         # Assert subsequent reassignment to leaf is correct
-        F.set_sequence("ATGTTT")
-        assert domains["a"].sequence() == "CATAGATGTTTTGTTCTGATCGGAAC"
-        assert domains["b"].sequence() == "CATAGATGTTT"
-        assert domains["C"].sequence() == "TGTTCTGATCGGAAC"
-        assert domains["E"].sequence() == "CATAG"
-        assert domains["F"].sequence() == "ATGTTT"
-        assert domains["g"].sequence() == "TGTTCTG"
-        assert domains["h"].sequence() == "ATCGGAAC"
+        F.set_sequence('ATGTTT')
+        assert domains['a'].sequence() == 'CATAGATGTTTTGTTCTGATCGGAAC'
+        assert domains['b'].sequence() == 'CATAGATGTTT'
+        assert domains['C'].sequence() == 'TGTTCTGATCGGAAC'
+        assert domains['E'].sequence() == 'CATAG'
+        assert domains['F'].sequence() == 'ATGTTT'
+        assert domains['g'].sequence() == 'TGTTCTG'
+        assert domains['h'].sequence() == 'ATCGGAAC'
 
         # Assert subsequent reassignment to internal node is correct
-        C.set_sequence("GGGGGGGGGGGGGGG")
-        assert domains["a"].sequence() == "CATAGATGTTTGGGGGGGGGGGGGGG"
-        assert domains["b"].sequence() == "CATAGATGTTT"
-        assert domains["C"].sequence() == "GGGGGGGGGGGGGGG"
-        assert domains["E"].sequence() == "CATAG"
-        assert domains["F"].sequence() == "ATGTTT"
-        assert domains["g"].sequence() == "GGGGGGG"
-        assert domains["h"].sequence() == "GGGGGGGG"
+        C.set_sequence('GGGGGGGGGGGGGGG')
+        assert domains['a'].sequence() == 'CATAGATGTTTGGGGGGGGGGGGGGG'
+        assert domains['b'].sequence() == 'CATAGATGTTT'
+        assert domains['C'].sequence() == 'GGGGGGGGGGGGGGG'
+        assert domains['E'].sequence() == 'CATAG'
+        assert domains['F'].sequence() == 'ATGTTT'
+        assert domains['g'].sequence() == 'GGGGGGG'
+        assert domains['h'].sequence() == 'GGGGGGGG'
 
     def test_error_assign_dna_sequence_to_parent_with_incorrect_size_subdomain(self):
         """
@@ -1985,16 +1985,16 @@ class TestSubdomains:
                 /   \
                B     C
         """
-        B: Domain = Domain("B", assign_domain_pool_of_length(10))
+        B: Domain = Domain('B', assign_domain_pool_of_length(10))
         B.set_state(DomainState.ASSIGNABLE)
-        C: Domain = Domain("C", assign_domain_pool_of_length(20))
+        C: Domain = Domain('C', assign_domain_pool_of_length(20))
         C.set_state(DomainState.ASSIGNABLE)
 
-        a: Domain = Domain("a", assign_domain_pool_of_length(15), subdomains=[B, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(15), subdomains=[B, C])
         a.set_state(DomainState.LOCKED)
 
         with pytest.raises(ValueError):
-            a.set_sequence("A" * 15)
+            a.set_sequence('A' * 15)
 
     def test_construct_strand_using_dependent_subdomain(self) -> None:
         """Test constructing a strand using a dependent subdomain (not parent)
@@ -2009,15 +2009,15 @@ class TestSubdomains:
 
         Test constructing a strand using g.
         """
-        g = self.sample_nested_domains()["g"]
+        g = self.sample_nested_domains()['g']
         Strand(domains=[g], starred_domain_indices=[])
 
     def test_design_finds_independent_subdomains(self) -> None:
-        B: Domain = Domain("B", assign_domain_pool_of_length(10))
+        B: Domain = Domain('B', assign_domain_pool_of_length(10))
         B.set_state(DomainState.ASSIGNABLE)
-        C: Domain = Domain("C", assign_domain_pool_of_length(20))
+        C: Domain = Domain('C', assign_domain_pool_of_length(20))
         C.set_state(DomainState.ASSIGNABLE)
-        a: Domain = Domain("a", assign_domain_pool_of_length(30), subdomains=[B, C])
+        a: Domain = Domain('a', assign_domain_pool_of_length(30), subdomains=[B, C])
         a.set_state(DomainState.LOCKED)
 
         strand_a: Strand = Strand(domains=[a], starred_domain_indices=[])
@@ -2032,14 +2032,14 @@ class TestSubdomains:
 
 class TestNUPACK:
     def test_pfunc(self) -> None:
-        seq = "ACGTACGTAGCTGATCCAGCTGATCG"
+        seq = 'ACGTACGTAGCTGATCCAGCTGATCG'
         energy = nv.pfunc(seq)
         assert energy < 0
 
 
 def _make_domain(name: str, length: int = 8, fixed: bool = False) -> Domain:
     """Helper to create a Domain with a DomainPool of a given length."""
-    pool = DomainPool(f"pool_{name}", length)
+    pool = DomainPool(f'pool_{name}', length)
     domain = Domain(name, pool)
     domain.set_state(DomainState.FIXED)
     return domain
@@ -2047,7 +2047,7 @@ def _make_domain(name: str, length: int = 8, fixed: bool = False) -> Domain:
 
 def _make_result(excess: float, score: float, part: nc.Part) -> nc.Result:
     """Helper to create a Result with a specific score (bypassing score_transfer_function)."""
-    result = nc.Result(excess=excess, summary=f"excess={excess}")
+    result = nc.Result(excess=excess, summary=f'excess={excess}')
     result.score = score
     result.part = part
     return result
@@ -2064,5 +2064,5 @@ def _make_domain_constraint(description: str, weight: float = 1.0) -> nc.DomainC
         description=description,
         short_description=description,
         weight=weight,
-        evaluate=lambda seqs, part: nc.Result(excess=0.0, summary="dummy"),
+        evaluate=lambda seqs, part: nc.Result(excess=0.0, summary='dummy'),
     )
