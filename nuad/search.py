@@ -86,6 +86,7 @@ from nuad.stopwatch import Stopwatch
 # if no bugs this should be unnecessary
 ASSERT_VIOLATIONS_ARE_ACCURATE = False
 
+
 def new_process_pool(cpu_count: int) -> pathos.pools.ProcessPool:
     return pathos.pools.ProcessPool(processes=cpu_count)
 
@@ -240,11 +241,21 @@ def _determine_domain_pairs_to_check(
                 with_replacement=constraint.check_domain_against_itself,
                 where=nc.not_strict_subdomain,
             )
-            domain_pairs_to_check = tuple(DomainPair(d1, d2) for d1, d2 in pairs if not (d1.state == DomainState.FIXED or d2.state == DomainState.FIXED))
+            domain_pairs_to_check = tuple(
+                DomainPair(d1, d2)
+                for d1, d2 in pairs
+                if not (d1.state == DomainState.FIXED or d2.state == DomainState.FIXED)
+            )
 
     else:
         domains_changed_not_fixed_or_dependent_or_locked = [
-            domain for domain in domains_changed if not (domain.state == DomainState.FIXED or domain.state == DomainState.DEPENDENT or domain.state == DomainState.LOCKED)
+            domain
+            for domain in domains_changed
+            if not (
+                domain.state == DomainState.FIXED
+                or domain.state == DomainState.DEPENDENT
+                or domain.state == DomainState.LOCKED
+            )
         ]
         # either all pairs, or just constraint.domain_pairs if specified
         if constraint.domain_pairs is not None:
@@ -361,6 +372,7 @@ def _strands_containing_domains(domains: Iterable[Domain] | None, strands: list[
         strands_set = OrderedSet(strand for strand in strands for domain in domains if domain in strand.domains)
         return list(strands_set)
 
+
 def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[Domain, ...]:
     """
     :param part:
@@ -379,7 +391,9 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[
     elif isinstance(part, Strand):
         domains = part.domains if not exclude_fixed else list(part.unfixed_domains())
     elif isinstance(part, DomainPair):
-        domains = [domain for domain in part.individual_parts() if not (exclude_fixed and domain.state == DomainState.FIXED)]
+        domains = [
+            domain for domain in part.individual_parts() if not (exclude_fixed and domain.state == DomainState.FIXED)
+        ]
     elif isinstance(part, (StrandPair, Complex)):
         domains_per_strand = [
             strand.domains if not exclude_fixed else strand.unfixed_domains() for strand in part.individual_parts()
@@ -388,8 +402,8 @@ def _assignable_domains_in_part(part: DesignPart, exclude_fixed: bool) -> tuple[
         domains = list(domain_iterable)
     else:
         raise AssertionError(
-            f'part {part} not recognized as one of Domain, Strand, '
-            f'DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}'
+            f"part {part} not recognized as one of Domain, Strand, "
+            f"DomainPair, StrandPair, or Complex; it is type {part.__class__.__name__}"
         )
 
     # Convert direct domains to independent domains.
@@ -674,22 +688,24 @@ def _check_design(design: nc.Design) -> None:
             # noinspection PyProtectedMember
             if domain._pool is None and domain.state == DomainState.ASSIGNABLE:
                 raise ValueError(
-                    f'The strand {strand.name} has an '
-                    f'assignable domain {domain.name} '
-                    f'with pool set to None.'
+                    f"The strand {strand.name} has an assignable domain {domain.name} with pool set to None."
                 )
             # noinspection PyProtectedMember
             elif domain._pool is not None and domain.state == DomainState.FIXED:
                 raise ValueError(
-                    f'The strand {strand.name} has a '
-                    f'domain {domain.name} that is fixed, even though that Domain has a '
-                    f'DomainPool.\nA Domain cannot be fixed and have a DomainPool.'
+                    f"The strand {strand.name} has a "
+                    f"domain {domain.name} that is fixed, even though that Domain has a "
+                    f"DomainPool.\nA Domain cannot be fixed and have a DomainPool."
                 )
-            elif domain._pool is not None and domain.state == DomainState.DEPENDENT and domain.state == DomainState.LOCKED:
+            elif (
+                domain._pool is not None
+                and domain.state == DomainState.DEPENDENT
+                and domain.state == DomainState.LOCKED
+            ):
                 raise ValueError(
-                    f'The strand {strand.name} has a '
-                    f'domain {domain.name} that is dependent or locked, even though that Domain has a '
-                    f'DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool.'
+                    f"The strand {strand.name} has a "
+                    f"domain {domain.name} that is dependent or locked, even though that Domain has a "
+                    f"DomainPool.\nA Domain cannot be dependent or locked and have a DomainPool."
                 )
 
 
@@ -928,12 +944,14 @@ class SearchParameters:
                 )
             idx += 1
 
+
 def set_memoryviews(design: nc.Design) -> None:
     domains = design.domains
 
     for domain in domains:
         if domain.memoryview_sequence is None:
             nc.set_domains_memoryviews(domain)
+
 
 def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> bool:
     # unconditionally stop when max_iterations is reached, if specified
@@ -951,6 +969,7 @@ def _done(iteration: int, params: SearchParameters, eval_set: EvaluationSet) -> 
             return False
 
     return True
+
 
 def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
@@ -1025,7 +1044,7 @@ def search_for_sequences(design: nc.Design, params: SearchParameters) -> None:
     """
 
     if params.random_seed is not None:
-        logger.info(f'using random seed of {params.random_seed}; use this same seed to reproduce this run')
+        logger.info(f"using random seed of {params.random_seed}; use this same seed to reproduce this run")
 
     design.compute_derived_fields()
     design.check_names_unique()
@@ -1308,13 +1327,13 @@ def script_name_no_ext() -> str:
 
 def timestamp() -> str:
     now = datetime.datetime.now(datetime.timezone.utc)
-    time_str = now.strftime('%Y-%m-%dT%H.%M.%S')
+    time_str = now.strftime("%Y-%m-%dT%H.%M.%S")
     return time_str
 
 
 def _restart_from_directory(
     directories: _Directories, design: nc.Design, params: SearchParameters
-    ) -> tuple[int, np.random.Generator | None]:
+) -> tuple[int, np.random.Generator | None]:
 
     # NOTE: If the subdirectory design/ exists, then this restarts from highest index found in the
     # subdirectory, NOT from "design_best.json" file, which is ignored in that case.
@@ -1375,7 +1394,8 @@ run of the search algorithm had been allowed to continue."""
         logger.warning(
             f"""\
             Using stored random seed from file {rng_filename} to produce search results
-            identical to those that would have happened if the search had not been stopped.""")
+            identical to those that would have happened if the search had not been stopped."""
+        )
 
     # this is really ugly how we do this, taking parts of the design from `design`,
     # parts from `design_stored`, and parts from the stored DomainPools, but this seems to be necessary
@@ -1585,9 +1605,7 @@ def assign_sequences_to_domains_randomly_from_pools(
         are subject to change by the subsequent search algorithm.
     """
     at_least_one_domain_unfixed = False
-    assignable_domains = [
-        domain for domain in design.domains if domain.state == DomainState.ASSIGNABLE
-    ]
+    assignable_domains = [domain for domain in design.domains if domain.state == DomainState.ASSIGNABLE]
     for domain in assignable_domains:
         skip_nonfixed_msg = skip_fixed_msg = None
         if warn_fixed_sequences and domain.has_sequence():
@@ -1646,6 +1664,7 @@ V = TypeVar("V")
 
 
 # convenience methods for iterating over 2D dicts
+
 
 def keys_2d(dct: dict[K1, dict[K2, V]]) -> Iterator[tuple[K1, K2]]:
     for first_key in dct.keys():
@@ -1780,7 +1799,9 @@ class EvaluationSet:
         self.reset_all()
         for constraint in self.constraints:
             self.evaluate_constraint(constraint, design, None, None, params)
-        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(self.assignable_domain_to_violations)
+        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(
+            self.assignable_domain_to_violations
+        )
         self.update_scores_and_counts()
         if ASSERT_VIOLATIONS_ARE_ACCURATE:
             _assert_violations_are_accurate(self.evaluations, self.violations)
@@ -1844,9 +1865,9 @@ class EvaluationSet:
 
     @staticmethod
     def evaluate_singular_constraint_parallel(
-            constraint: SingularConstraint[DesignPart],
-            parts: TupleDesignParts,
-            score_transfer_function: Callable[[float], float],
+        constraint: SingularConstraint[DesignPart],
+        parts: TupleDesignParts,
+        score_transfer_function: Callable[[float], float],
     ) -> list[nc.Result]:
         if len(parts) == 0:
             return []
@@ -1954,7 +1975,6 @@ class EvaluationSet:
             domains = _assignable_domains_in_part(result.part, exclude_fixed=False)
             evaluation = Evaluation(constraint=constraint, assignable_domains=domains, result=result)
 
-
             evals_of_constraint[result.part] = evaluation
             for domain in domains:
                 domain_to_evals[domain].append(evaluation)
@@ -2013,7 +2033,9 @@ class EvaluationSet:
         self.update_domain_keyed_dicts(was_violated)
 
         # update domain_to_score so _reassign_domains picks domains based on current violations
-        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(self.assignable_domain_to_violations)
+        self.assignable_domain_to_score = EvaluationSet.sum_assignable_domain_scores(
+            self.assignable_domain_to_violations
+        )
 
         self.reset_new()
         if ASSERT_VIOLATIONS_ARE_ACCURATE:
@@ -2137,7 +2159,6 @@ class EvaluationSet:
 def _assert_violations_are_accurate(
     evaluations: dict[Constraint, dict[nc.Part, Evaluation]],
     violations: dict[Constraint, dict[nc.Part, Evaluation]],
-
 ) -> None:
     # go through all violations and ensure the violations in it are all in evaluations
     for (constraint, part), viol in items_2d(violations):
@@ -2171,6 +2192,7 @@ class Evaluation(Generic[DesignPart]):
     # :any:`Domain`'s that were involved in violating :py:data:`Evaluation.constraint`
 
     result: nc.Result
+
     def __repr__(self) -> str:
         return (
             f"Evaluation({self.constraint.short_description}, score={self.score:.2f}, "

@@ -21,27 +21,27 @@ EXTENDED_TOEHOLD_LENGTH = 2
 TOEHOLD_LENGTH = 5
 
 # Constants -- Illegal DNA Base sequences
-ILLEGAL_SUBSTRINGS_FOUR = ['G' * 4, 'C' * 4]
-ILLEGAL_SUBSTRINGS_FIVE = ['A' * 5, 'T' * 5]
+ILLEGAL_SUBSTRINGS_FOUR = ["G" * 4, "C" * 4]
+ILLEGAL_SUBSTRINGS_FIVE = ["A" * 5, "T" * 5]
 ILLEGAL_SUBSTRINGS = ILLEGAL_SUBSTRINGS_FOUR + ILLEGAL_SUBSTRINGS_FIVE
 
 # NumpyConstraints
-three_letter_code_constraint = nc.RestrictBasesFilter(('A', 'C', 'T'))
+three_letter_code_constraint = nc.RestrictBasesFilter(("A", "C", "T"))
 no_gggg_constraint = nc.ForbiddenSubstringFilter(ILLEGAL_SUBSTRINGS_FOUR)
 no_aaaaa_constraint = nc.ForbiddenSubstringFilter(ILLEGAL_SUBSTRINGS_FIVE)
-c_content_constraint = nc.BaseCountFilter('C', floor(0.7 * SIGNAL_DOMAIN_LENGTH), ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
+c_content_constraint = nc.BaseCountFilter("C", floor(0.7 * SIGNAL_DOMAIN_LENGTH), ceil(0.3 * SIGNAL_DOMAIN_LENGTH))
 
 # Domain pools
-SUBDOMAIN_SS_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_SS_POOL', SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
-SUBDOMAIN_S_POOL: nc.DomainPool = nc.DomainPool(f'SUBDOMAIN_S_POOL', EXTENDED_TOEHOLD_LENGTH)
+SUBDOMAIN_SS_POOL: nc.DomainPool = nc.DomainPool(f"SUBDOMAIN_SS_POOL", SIGNAL_DOMAIN_LENGTH - EXTENDED_TOEHOLD_LENGTH)
+SUBDOMAIN_S_POOL: nc.DomainPool = nc.DomainPool(f"SUBDOMAIN_S_POOL", EXTENDED_TOEHOLD_LENGTH)
 TOEHOLD_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    name='TOEHOLD_DOMAIN_POOL',
+    name="TOEHOLD_DOMAIN_POOL",
     length=TOEHOLD_LENGTH,
     numpy_filters=[three_letter_code_constraint],
 )
 
 SIGNAL_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
-    name='SIGNAL_DOMAIN_POOL',
+    name="SIGNAL_DOMAIN_POOL",
     length=SIGNAL_DOMAIN_LENGTH,
     numpy_filters=[
         three_letter_code_constraint,
@@ -55,9 +55,9 @@ SIGNAL_DOMAIN_POOL: nc.DomainPool = nc.DomainPool(
 dc_complex_constraint = nc.nupack_complex_base_pair_probability_constraint
 
 # Stores all domains used in design
-TOEHOLD_DOMAIN: nc.Domain = nc.Domain('T', pool=TOEHOLD_DOMAIN_POOL)
-FUEL_DOMAIN: nc.Domain = nc.Domain('fuel')
-FUEL_DOMAIN.set_fixed_sequence('CATTTTTTTTTTTCA')
+TOEHOLD_DOMAIN: nc.Domain = nc.Domain("T", pool=TOEHOLD_DOMAIN_POOL)
+FUEL_DOMAIN: nc.Domain = nc.Domain("fuel")
+FUEL_DOMAIN.set_fixed_sequence("CATTTTTTTTTTTCA")
 
 recognition_domains_and_subdomains: Dict[str, nc.Domain] = {}
 recognition_domains: Set[nc.Domain] = set()
@@ -72,21 +72,21 @@ def get_signal_domain(gate: Union[int, str]) -> nc.Domain:
     :return: Domain
     :rtype: Domain
     """
-    if f'S{gate}' not in recognition_domains_and_subdomains:
-        d_13: nc.Domain = nc.Domain(f'ss{gate}', pool=SUBDOMAIN_SS_POOL)
-        d_2: nc.Domain = nc.Domain(f's{gate}', pool=SUBDOMAIN_S_POOL)
-        d: nc.Domain = nc.Domain(f'S{gate}', pool=SIGNAL_DOMAIN_POOL, subdomains=[d_2, d_13])
+    if f"S{gate}" not in recognition_domains_and_subdomains:
+        d_13: nc.Domain = nc.Domain(f"ss{gate}", pool=SUBDOMAIN_SS_POOL)
+        d_2: nc.Domain = nc.Domain(f"s{gate}", pool=SUBDOMAIN_S_POOL)
+        d: nc.Domain = nc.Domain(f"S{gate}", pool=SIGNAL_DOMAIN_POOL, subdomains=[d_2, d_13])
 
         d_13.set_state(nc.DomainState.LOCKED)
         d_2.set_state(nc.DomainState.LOCKED)
 
-        recognition_domains_and_subdomains[f'ss{gate}'] = d_13
-        recognition_domains_and_subdomains[f's{gate}'] = d_2
-        recognition_domains_and_subdomains[f'S{gate}'] = d
+        recognition_domains_and_subdomains[f"ss{gate}"] = d_13
+        recognition_domains_and_subdomains[f"s{gate}"] = d_2
+        recognition_domains_and_subdomains[f"S{gate}"] = d
         assert d not in recognition_domains
         recognition_domains.add(d)
 
-    return recognition_domains_and_subdomains[f'S{gate}']
+    return recognition_domains_and_subdomains[f"S{gate}"]
 
 
 def set_domain_pool(domain: nc.Domain, domain_pool: nc.DomainPool) -> None:
@@ -101,7 +101,7 @@ def set_domain_pool(domain: nc.Domain, domain_pool: nc.DomainPool) -> None:
     if domain._pool:
         if domain.pool is not domain_pool:
             raise AssertionError(
-                f'Assigning pool {domain_pool} to domain {domain} but {domain} already has domain pool {domain_pool}'
+                f"Assigning pool {domain_pool} to domain {domain} but {domain} already has domain pool {domain_pool}"
             )
     else:
         domain.pool = domain_pool
@@ -130,7 +130,7 @@ def signal_strand(gate3p: Union[int, str], gate5p: Union[int, str]) -> nc.Strand
     d3p = get_signal_domain(gate3p)
     d5p = get_signal_domain(gate5p)
 
-    name = f'signal_{gate3p}_{gate5p}'
+    name = f"signal_{gate3p}_{gate5p}"
     return nc.Strand(domains=[d5p, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
 
 
@@ -151,7 +151,7 @@ def fuel_strand(gate: int) -> nc.Strand:
     d3p = get_signal_domain(gate)
     fuel = FUEL_DOMAIN
 
-    name = f'fuel_{gate}'
+    name = f"fuel_{gate}"
     return nc.Strand(domains=[fuel, TOEHOLD_DOMAIN, d3p], starred_domain_indices=[], name=name)
 
 
@@ -176,7 +176,7 @@ def gate_base_strand(gate: int) -> nc.Strand:
     s: nc.Strand = nc.Strand(
         domains=[TOEHOLD_DOMAIN, d, domain_T_replicate],
         starred_domain_indices=[0, 1, 2],
-        name=f'gate_base_{gate}',
+        name=f"gate_base_{gate}",
     )
     return s
 
@@ -199,13 +199,13 @@ def threshold_bottom_strand(input_: int, gate: int) -> nc.Strand:
     :rtype: dc.Strand
     """
     # Note, this assumes that this input signal domain has already been built
-    d_input_sub = recognition_domains_and_subdomains[f's{input_}']
+    d_input_sub = recognition_domains_and_subdomains[f"s{input_}"]
     d_gate = get_signal_domain(gate)
 
     s: nc.Strand = nc.Strand(
         domains=[d_input_sub, TOEHOLD_DOMAIN, d_gate],
         starred_domain_indices=[0, 1, 2],
-        name=f'threshold_bottom_{input_}_{gate}',
+        name=f"threshold_bottom_{input_}_{gate}",
     )
     return s
 
@@ -228,7 +228,7 @@ def threshold_top_strand(gate: int) -> nc.Strand:
     s: nc.Strand = nc.Strand(
         domains=[get_signal_domain(gate)],
         starred_domain_indices=[],
-        name=f'threshold_top_{gate}',
+        name=f"threshold_top_{gate}",
     )
     return s
 
@@ -251,7 +251,7 @@ def reporter_top_strand(gate: int) -> nc.Strand:
     s: nc.Strand = nc.Strand(
         domains=[get_signal_domain(gate)],
         starred_domain_indices=[],
-        name=f'reporter_top_{gate}',
+        name=f"reporter_top_{gate}",
     )
     return s
 
@@ -273,7 +273,7 @@ def reporter_bottom_strand(gate) -> nc.Strand:
     s: nc.Strand = nc.Strand(
         domains=[TOEHOLD_DOMAIN, get_signal_domain(gate)],
         starred_domain_indices=[0, 1],
-        name=f'reporter_bottom_{gate}',
+        name=f"reporter_bottom_{gate}",
     )
     return s
 
@@ -315,20 +315,20 @@ def input_gate_complex_constraint(
     assert len(template_complex) == 2
     template_top_strand = template_complex[0]
     template_bot_strand = template_complex[1]
-    addr_t = template_top_strand.address_of_first_domain_occurence('T')
-    addr_t_star = template_bot_strand.address_of_first_domain_occurence('T*')
+    addr_t = template_top_strand.address_of_first_domain_occurence("T")
+    addr_t_star = template_bot_strand.address_of_first_domain_occurence("T*")
     return dc_complex_constraint(
         strand_complexes=input_gate_complexes,
         nonimplicit_base_pairs=[(addr_t, addr_t_star)],
-        description='input:gate Complex',
-        short_description='input:gate',
+        description="input:gate Complex",
+        short_description="input:gate",
     )
 
 
 def gate_output_complex_constraint(
     gate_output_complexes: List[nc.Complex],
     base_pair_prob_by_type: Optional[Dict[nc.BasePairType, float]] = None,
-    description: str = 'gate:output',
+    description: str = "gate:output",
 ) -> nc.ComplexConstraint:
     """Returns a gate:output complex constraint
 
@@ -368,14 +368,14 @@ def gate_output_complex_constraint(
     assert len(template_complex) == 2
     template_top_strand = template_complex[0]
     template_bot_strand = template_complex[1]
-    addr_t = template_top_strand.address_of_first_domain_occurence('T')
-    addr_t_star = template_bot_strand.address_of_last_domain_occurence('T*')
+    addr_t = template_top_strand.address_of_first_domain_occurence("T")
+    addr_t_star = template_bot_strand.address_of_last_domain_occurence("T*")
     return dc_complex_constraint(
         strand_complexes=gate_output_complexes,
         nonimplicit_base_pairs=[(addr_t, addr_t_star)],
         base_pair_prob_by_type=base_pair_prob_by_type,
-        description=f'{description} Complex',
-        short_description=f'{description}',
+        description=f"{description} Complex",
+        short_description=f"{description}",
     )
 
 
@@ -418,15 +418,15 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
 
         if result > 0:
             summary = (
-                f'Too many matches between domains {domain1} and {domain2}\n'
-                f'\t{domain1}: {domain1.sequence}\n'
-                f'\t{domain2}: {domain2.sequence}\n'
+                f"Too many matches between domains {domain1} and {domain2}\n"
+                f"\t{domain1}: {domain1.sequence}\n"
+                f"\t{domain2}: {domain2.sequence}\n"
             )
         else:
             summary = (
-                f'Sufficient difference between domains {domain1} and {domain2}\n'
-                f'\t{domain1}: {domain1.sequence}\n'
-                f'\t{domain2}: {domain2.sequence}\n'
+                f"Sufficient difference between domains {domain1} and {domain2}\n"
+                f"\t{domain1}: {domain1.sequence}\n"
+                f"\t{domain2}: {domain2.sequence}\n"
             )
 
         return nc.Result(excess=result, summary=summary)
@@ -436,8 +436,8 @@ def base_difference_constraint(domains: Iterable[nc.Domain]) -> nc.DomainPairCon
     return nc.DomainPairConstraint(
         pairs=tuple(pairs),
         evaluate=evaluate,
-        description='base difference constraint',
-        short_description='base difference constraint',
+        description="base difference constraint",
+        short_description="base difference constraint",
     )
 
 
@@ -462,16 +462,16 @@ def strand_substring_constraint(strands: List[nc.Strand], substrings: List[str])
     def evaluate(seqs: Tuple[str, ...], strand: Optional[nc.Strand]) -> nc.Result:
         seq = seqs[0]
         if violated(seq):
-            violation_str = '** violation**'
+            violation_str = "** violation**"
             score = 100
         else:
-            violation_str = ''
+            violation_str = ""
             score = 0
-        return nc.Result(excess=score, summary=f'{strand.name}: {strand.sequence()}{violation_str}')
+        return nc.Result(excess=score, summary=f"{strand.name}: {strand.sequence()}{violation_str}")
 
     return nc.StrandConstraint(
-        description='Strand Substring Constraint',
-        short_description='Strand Substring Constraint',
+        description="Strand Substring Constraint",
+        short_description="Strand Substring Constraint",
         evaluate=evaluate,
         strands=tuple(strands),
     )
@@ -481,7 +481,7 @@ def strand_substring_constraint(strands: List[nc.Strand], substrings: List[str])
 class SeesawCircuit:
     """Class for keeping track of a seesaw circuit and its DNA representation."""
 
-    seesaw_gates: List['SeesawGate']
+    seesaw_gates: List["SeesawGate"]
     strands: List[nc.Strand] = field(init=False, default_factory=list)
     constraints: List[nc.ComplexConstraint] = field(init=False, default_factory=list)
 
@@ -503,7 +503,7 @@ class SeesawCircuit:
         for seesaw_gate in self.seesaw_gates:
             gate_name = seesaw_gate.gate_name
             if gate_name in gates:
-                raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
             if not seesaw_gate.is_reporter:
                 gates.add(gate_name)
 
@@ -519,7 +519,7 @@ class SeesawCircuit:
         for seesaw_gate in self.seesaw_gates:
             gate_name = seesaw_gate.gate_name
             if gate_name in input_gate_pairs:
-                raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
             for input_ in seesaw_gate.inputs:
                 assert (input_, gate_name) not in input_gate_pairs
                 input_gate_pairs.add((input_, gate_name))
@@ -537,7 +537,7 @@ class SeesawCircuit:
             if seesaw_gate.has_fuel:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in gates_with_fuel:
-                    raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                    raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
                 gates_with_fuel.add(gate_name)
 
         self.fuel_strands = {gate: fuel_strand(gate) for gate in gates_with_fuel}
@@ -553,7 +553,7 @@ class SeesawCircuit:
             if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in input_gate_pairs_with_threshold:
-                    raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                    raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
                 for input_ in seesaw_gate.inputs:
                     assert (input_, gate_name) not in input_gate_pairs_with_threshold
                     input_gate_pairs_with_threshold.add((input_, gate_name))
@@ -574,7 +574,7 @@ class SeesawCircuit:
             if seesaw_gate.has_threshold and not seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in gates_with_threshold_but_not_reporter:
-                    raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                    raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
                 gates_with_threshold_but_not_reporter.add(gate_name)
 
         self.threshold_top_strands = {
@@ -593,7 +593,7 @@ class SeesawCircuit:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in gates_that_are_reporter:
-                    raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                    raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
                 gates_that_are_reporter.add(gate_name)
 
         self.reporter_top_strands = {gate: reporter_top_strand(gate) for gate in gates_that_are_reporter}
@@ -609,7 +609,7 @@ class SeesawCircuit:
             if seesaw_gate.is_reporter:
                 gate_name = seesaw_gate.gate_name
                 if gate_name in reporter_gates:
-                    raise ValueError(f'Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found')
+                    raise ValueError(f"Invalid seesaw circuit: Multiple gates labeled {{gate_name}} found")
                 inputs = seesaw_gate.inputs
                 assert len(inputs) == 1
                 reporter_gates.add((inputs[0], gate_name))
@@ -677,7 +677,7 @@ class SeesawCircuit:
             gate_output_complex_constraint(
                 gate_output_complexes,
                 base_pair_prob_by_type={nc.BasePairType.UNPAIRED: 0.8},
-                description='gate:fuel',
+                description="gate:fuel",
             )
         )
 
@@ -707,8 +707,8 @@ class SeesawCircuit:
         self.constraints.append(
             dc_complex_constraint(
                 threshold_complexes,
-                description='Threshold Complex',
-                short_description='threshold',
+                description="Threshold Complex",
+                short_description="threshold",
             )
         )
 
@@ -743,8 +743,8 @@ class SeesawCircuit:
         self.constraints.append(
             dc_complex_constraint(
                 threshold_waste_complexes,
-                description='Threshold Waste Complex',
-                short_description='threshold waste',
+                description="Threshold Waste Complex",
+                short_description="threshold waste",
             )
         )
 
@@ -774,8 +774,8 @@ class SeesawCircuit:
         self.constraints.append(
             dc_complex_constraint(
                 reporter_complexes,
-                description='Reporter Complex',
-                short_description='reporter',
+                description="Reporter Complex",
+                short_description="reporter",
             )
         )
 
@@ -809,8 +809,8 @@ class SeesawCircuit:
         self.constraints.append(
             dc_complex_constraint(
                 reporter_waste_complexes,
-                description='Reporter Waste Complex',
-                short_description='reporter waste',
+                description="Reporter Waste Complex",
+                short_description="reporter waste",
             )
         )
 
@@ -949,7 +949,7 @@ def main() -> None:
     design = nc.Design(strands=strands)
     params = ns.SearchParameters(
         constraints=constraints,
-        out_directory='output/square_root_circuit',
+        out_directory="output/square_root_circuit",
         # weigh_violations_equally=True,
         # restart=True
     )
@@ -957,5 +957,5 @@ def main() -> None:
     ns.search_for_sequences(design, params)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

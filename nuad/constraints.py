@@ -83,7 +83,7 @@ name_key = "name"
 sequence_key = "sequence"
 state_key = "state"
 label_key = "label"
-domain_subdomains_names_key = ("domain_subdomains_names")
+domain_subdomains_names_key = "domain_subdomains_names"
 strands_key = "strands"
 domains_key = "domains"
 domain_pools_key = "domain_pools"
@@ -111,8 +111,8 @@ vendor_purification_key = "purification"
 vendor_plate_key = "plate"
 vendor_well_key = "well"
 
-default_vendor_scale = '25nm'
-default_vendor_purification = 'STD'
+default_vendor_scale = "25nm"
+default_vendor_purification = "STD"
 
 T = TypeVar("T")
 KeyFunction = Callable[[T], Any]
@@ -130,7 +130,7 @@ set of all DNA bases.
 class M13Variant(enum.Enum):
     """Variants of M13mp18 viral genome. "Standard" variant is p7249. Other variants are longer."""
 
-    p7249 = 'p7249'
+    p7249 = "p7249"
     """"Standard" variant of M13mp18; 7249 bases long, available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7249
@@ -140,19 +140,19 @@ class M13Variant(enum.Enum):
     http://www.bayoubiolabs.com/biochemicat/vectors/pUCM13/ 
     """  # noqa
 
-    p7560 = 'p7560'
+    p7560 = "p7560"
     """Variant of M13mp18 that is 7560 bases long. Available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7560
     """
 
-    p8064 = 'p8064'
+    p8064 = "p8064"
     """Variant of M13mp18 that is 8064 bases long. Available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
     """
 
-    p8634 = 'p8634'
+    p8634 = "p8634"
     """Variant of M13mp18 that is 8634 bases long. At the time of this writing, not listed as available
     from any biotech vender, but Tilibit will make it for you if you ask. 
     (https://www.tilibit.com/pages/contact-us)
@@ -530,7 +530,6 @@ class NearestNeighborEnergyFilter(NumpyFilter):
         if self.low_energy is not None and self.high_energy is not None and self.low_energy > self.high_energy:
             raise ValueError(f"low_energy = {self.low_energy} must be less than high_energy = {self.high_energy}")
 
-
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""
         wcenergies = nn.calculate_wc_energies(seqs.seqarr, self.temperature)
@@ -617,7 +616,6 @@ class BaseEndFilter(NumpyFilter):
     def __post_init__(self) -> None:
         self.name = "base_end"
         if not self.five_prime and not self.three_prime:
-
             raise ValueError("at least one of five_prime or three_prime must be True")
         if not (set(self.bases) < {"A", "C", "G", "T"}):
             raise ValueError(f"bases must be a strict subset of {{A,C,G,T}} but is {self.bases}")
@@ -690,7 +688,6 @@ class BaseAtPositionFilter(NumpyFilter):
         self.name = "base_at_position"
         self.bases = [self.bases] if isinstance(self.bases, str) else list(self.bases)
         if not (set(self.bases) < all_dna_bases):
-
             raise ValueError(f"bases must be a strict subset of {all_dna_bases} but is {self.bases}")
 
         if len(self.bases) == 0:
@@ -1100,7 +1097,6 @@ class DomainPool(JSONSerializable):
         ):
             raise ValueError("exactly one of length or possible_sequences should be specified")
 
-
         if self.possible_sequences is not None:
             if isinstance(self.possible_sequences, list):
                 if len(self.possible_sequences) == 0:
@@ -1259,7 +1255,6 @@ class DomainPool(JSONSerializable):
             whether `sequence` satisfies all constraints in :data:`DomainPool.sequence_filters`
         """
         return all(constraint(sequence) for constraint in self.sequence_filters)
-
 
     def generate_all_sequences(self) -> list[str]:
         """
@@ -1597,7 +1592,6 @@ def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys:
 
 @dataclass
 class Part(ABC):
-
     _hash: int | None = field(init=False, repr=False, compare=False, default=None)
 
     def __eq__(self, other: Part) -> bool:
@@ -1636,12 +1630,15 @@ class Part(ABC):
         # individual domains/strands
         pass
 
+
 class DomainState(str, Enum):
     """The four mutually states of Domain"""
-    ASSIGNABLE = 'Assignable'
-    DEPENDENT = 'Dependent'
-    LOCKED = 'Locked'
-    FIXED = 'Fixed'
+
+    ASSIGNABLE = "Assignable"
+    DEPENDENT = "Dependent"
+    LOCKED = "Locked"
+    FIXED = "Fixed"
+
 
 @dataclass
 class Domain(Part, JSONSerializable):
@@ -1778,7 +1775,6 @@ class Domain(Part, JSONSerializable):
         subdomains: Iterable[Domain] = (),
         parents: Iterable[Domain] = (),
         dependents: (List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
-
         weight: float | None = None,
     ) -> None:
         if subdomains is None:
@@ -1793,11 +1789,11 @@ class Domain(Part, JSONSerializable):
         self.label = label
         self.dependents = dependents
         self._subdomains = list(subdomains)
-        self.parents= list(parents)
+        self.parents = list(parents)
         self.locked_dependents = []
 
-        if self.name.endswith('*'):
-            raise ValueError(f'Domain name cannot end with *\ndomain name = {self.name}')
+        if self.name.endswith("*"):
+            raise ValueError(f"Domain name cannot end with *\ndomain name = {self.name}")
 
         # Set parents field for all subdomains.
         for subdomain in self._subdomains:
@@ -1805,9 +1801,9 @@ class Domain(Part, JSONSerializable):
 
         if self.state != DomainState.ASSIGNABLE and weight is not None:
             raise ValueError(
-                'cannot set Domain.weight when it is not assignable, '
-                'since non-assignable domains (locked or dependent) cannot be picked to change in the search, '
-                'which is the probability that Domain.weight affects'
+                "cannot set Domain.weight when it is not assignable, "
+                "since non-assignable domains (locked or dependent) cannot be picked to change in the search, "
+                "which is the probability that Domain.weight affects"
             )
 
         if locked:
@@ -1879,7 +1875,9 @@ class Domain(Part, JSONSerializable):
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
-    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> tuple[Domain, list[str]]:
+    def from_json_serializable(
+        json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None
+    ) -> tuple[Domain, list[str]]:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1923,7 +1921,6 @@ class Domain(Part, JSONSerializable):
         #     subdomain = Domain.from_json_serializable(subdomain_json, pool_with_name, domains_added)
         #     subdomains.append(subdomain)
         #     subdomain.parents.append(domain)
-
 
         domain._length = len(sequence)
         domain.set_sequence(sequence)
@@ -1969,7 +1966,7 @@ class Domain(Part, JSONSerializable):
         self._pool = new_pool
 
     @property
-    def subdomains(self) -> list['Domain']:
+    def subdomains(self) -> list["Domain"]:
         """
         Subdomains of this :any:`Domain`.
 
@@ -1992,12 +1989,11 @@ class Domain(Part, JSONSerializable):
     def fixed(self):
         return self.state == DomainState.FIXED
 
-
     def set_locked(self):
         self.state = DomainState.LOCKED
 
     @subdomains.setter
-    def subdomains(self, new_subdomains: list['Domain']) -> None:
+    def subdomains(self, new_subdomains: list["Domain"]) -> None:
         self._subdomains = new_subdomains
         for s in new_subdomains:
             s.parents.append(self)
@@ -2026,7 +2022,7 @@ class Domain(Part, JSONSerializable):
             return self._length
         if self.state == DomainState.FIXED:
             if not self.has_sequence():
-                raise ValueError(f'Domain {self.name} is fixed but has no sequence assigned yet')
+                raise ValueError(f"Domain {self.name} is fixed but has no sequence assigned yet")
             return len(self.sequence())
         if self._pool is None:
             return None
@@ -2042,11 +2038,11 @@ class Domain(Part, JSONSerializable):
                 return self._pool.possible_sequences.substring_length
             else:
                 raise ValueError(
-                    'possible_sequences should be list of strings or SuperSequence but is '
-                    f'{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}'
+                    "possible_sequences should be list of strings or SuperSequence but is "
+                    f"{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}"
                 )
         else:
-            assert False, 'unreachable'
+            assert False, "unreachable"
 
     @length.setter
     def length(self, length: int):
@@ -2056,11 +2052,11 @@ class Domain(Part, JSONSerializable):
         if new_state == DomainState.FIXED:
             if len(self._subdomains) > 0:
                 raise ValueError(
-                    f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
+                    f"Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed"
                 )
             if len(self.parents) > 0:
                 raise ValueError(
-                    f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
+                    f"Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed"
                 )
 
         self.state = new_state
@@ -2073,7 +2069,7 @@ class Domain(Part, JSONSerializable):
         if not self.has_sequence():
             raise ValueError(f"sequence has not been set for Domain {self.name}.")
         assert self.memoryview_sequence is not None
-        return self.memoryview_sequence.tobytes().decode(encoding='ascii')
+        return self.memoryview_sequence.tobytes().decode(encoding="ascii")
 
     def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
         """
@@ -2084,19 +2080,19 @@ class Domain(Part, JSONSerializable):
         """
         if self.state == DomainState.FIXED:
             raise ValueError(
-                'cannot assign a new sequence to this Domain; its sequence is fixed as '
-                f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
+                "cannot assign a new sequence to this Domain; its sequence is fixed as "
+                f"{self.memoryview_sequence.tobytes().decode(encoding='ascii')}"
             )
         if self.state == DomainState.LOCKED:
             raise ValueError(
-                'cannot assign a new sequence to this Domain; its sequence is locked_dependent on '
-                f'{", ".join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}'
+                "cannot assign a new sequence to this Domain; its sequence is locked_dependent on "
+                f"{', '.join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}"
             )
 
         if self.has_length() and len(new_sequence) != self.length:
             raise ValueError(
-                f'incorrect length for new_sequence={new_sequence};\n'
-                f'it is length {len(new_sequence)}, but this domain is length {self.length}'
+                f"incorrect length for new_sequence={new_sequence};\n"
+                f"it is length {len(new_sequence)}, but this domain is length {self.length}"
             )
 
         validate_subdomain_lengths(self)
@@ -2106,11 +2102,9 @@ class Domain(Part, JSONSerializable):
         if self.memoryview_sequence is None:
             set_domains_memoryviews(self)
 
-
-        self.memoryview_sequence[:] = new_sequence.encode(encoding='ascii')
+        self.memoryview_sequence[:] = new_sequence.encode(encoding="ascii")
 
         self.notify_sequence_changed(np.random.default_rng(), self)
-
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -2129,8 +2123,8 @@ class Domain(Part, JSONSerializable):
         # else:
         if self.state == DomainState.FIXED:
             raise ValueError(
-                f'cannot assign a new sequence to Domain {self.name}; its sequence is fixed as '
-                f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
+                f"cannot assign a new sequence to Domain {self.name}; its sequence is fixed as "
+                f"{self.memoryview_sequence.tobytes().decode(encoding='ascii')}"
             )
         self.state = None  # temporary
 
@@ -2138,11 +2132,11 @@ class Domain(Part, JSONSerializable):
 
         if len(self._subdomains) > 0:
             raise ValueError(
-                f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
+                f"Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed"
             )
         if len(self.parents) > 0:
             raise ValueError(
-                f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
+                f"Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed"
             )
 
         self.state = DomainState.FIXED
@@ -2159,14 +2153,18 @@ class Domain(Part, JSONSerializable):
             assert locked_dependent != notifier_domain
             locked_dependent.notify_sequence_changed(rng, notifier_domain)
 
-    def create_domain_with_mismatches(self, name: str, pick_dependent_seq: Callable[[str, np.random.Generator], str]) -> Domain:
+    def create_domain_with_mismatches(
+        self, name: str, pick_dependent_seq: Callable[[str, np.random.Generator], str]
+    ) -> Domain:
 
-        #test if pick_domain returns a sequence with the same length as the current domain's sequence
+        # test if pick_domain returns a sequence with the same length as the current domain's sequence
         correct_length = self.length
-        arbitrary_seq = 'A'* correct_length
+        arbitrary_seq = "A" * correct_length
         if len(pick_dependent_seq(arbitrary_seq, np.random.Generator.random)) != correct_length:
-            raise ValueError(f"Thr sequence returned by the mismatch/dependency function {pick_dependent_seq.__qualname__}"
-                             f"does not have the same length as the {self.name} domain sequence.")
+            raise ValueError(
+                f"Thr sequence returned by the mismatch/dependency function {pick_dependent_seq.__qualname__}"
+                f"does not have the same length as the {self.name} domain sequence."
+            )
         dependent_domain = Domain(name=name)
         dependent_domain.length = correct_length
         dependent_domain.state = DomainState.DEPENDENT
@@ -2223,8 +2221,8 @@ class Domain(Part, JSONSerializable):
                  If this domain has subdomains, False if any subdomain has not been assigned
                  a sequence.
         """
-        return self.memoryview_sequence is not None and '?' not in self.memoryview_sequence.tobytes().decode(
-            encoding='ascii'
+        return self.memoryview_sequence is not None and "?" not in self.memoryview_sequence.tobytes().decode(
+            encoding="ascii"
         )
 
     @staticmethod
@@ -2241,8 +2239,7 @@ class Domain(Part, JSONSerializable):
         return domain_name[:-1] if domain_name[-1] == "*" else domain_name + "*"
 
     def _is_assignable(self) -> bool:
-        """Return true if self is assignable (not dependent or fixed or locked).
-        """
+        """Return true if self is assignable (not dependent or fixed or locked)."""
         return True if self.state == DomainState.ASSIGNABLE else False
 
     def _contains_any_assignable_subdomain_recursively(self) -> bool:
@@ -2260,8 +2257,7 @@ class Domain(Part, JSONSerializable):
 
         return False
 
-
-    def all_domains_in_tree(self) -> List['Domain']:
+    def all_domains_in_tree(self) -> List["Domain"]:
         """
         :return:
             list of all domains in the same subdomain tree as this domain (including itself)
@@ -2270,7 +2266,7 @@ class Domain(Part, JSONSerializable):
         domains.extend(self._get_all_domains_from_this_subtree())
         return domains
 
-    def all_domains_in_dag(self) -> Set['Domain']:
+    def all_domains_in_dag(self) -> Set["Domain"]:
         """
 
         :return: list of all :any:`Domain`'s in the same connected component (in the subdomain graph) as this :any:`Domain`.
@@ -2295,7 +2291,7 @@ class Domain(Part, JSONSerializable):
 
         return domains
 
-    def all_domains_intersecting(self) -> list['Domain']:
+    def all_domains_intersecting(self) -> list["Domain"]:
         """
 
         :return: list of all :any:`Domain` intersecting this one, meaning those domains in the subdomain DAG
@@ -2321,8 +2317,7 @@ class Domain(Part, JSONSerializable):
         # remove_duplicates()
         return domains
 
-
-    def all_domains_affected_by_sequence_change(self) -> List['Domain']:
+    def all_domains_affected_by_sequence_change(self) -> List["Domain"]:
         """:return: List of :any:`Domain`'s that their sequence changes by this :any:`Domain` sequence modification."""
         domains = self.all_domains_intersecting()
         stack = domains.copy()
@@ -2376,15 +2371,16 @@ class Domain(Part, JSONSerializable):
             older_ancestors = []
             for ancestor in ancestors:
                 if ancestor in all_ancestors:
-                    raise ValueError(f"There is a cycle in the domain graph containg the domain {self.name}, "
-                                     f"traversing the domain {ancestor.name}.")
+                    raise ValueError(
+                        f"There is a cycle in the domain graph containg the domain {self.name}, "
+                        f"traversing the domain {ancestor.name}."
+                    )
                 all_ancestors.add(ancestor)
                 if ancestor.parents:
                     older_ancestors.extend(ancestor.parents)
             ancestors = older_ancestors.copy()
 
         return list(all_ancestors)
-
 
     def decsendents(self) -> List[Domain]:
 
@@ -2395,8 +2391,10 @@ class Domain(Part, JSONSerializable):
             later_subdomains = []
             for sd in subdomains:
                 if sd in decsendents:
-                    raise ValueError(f"There is a cycle in the domain graph containg the domain {self.name}, "
-                                     f"traversing the domain {sd.name}.")
+                    raise ValueError(
+                        f"There is a cycle in the domain graph containg the domain {self.name}, "
+                        f"traversing the domain {sd.name}."
+                    )
                 decsendents.add(sd)
                 if sd.subdomains:
                     later_subdomains.extend(sd.subdomains)
@@ -2404,8 +2402,7 @@ class Domain(Part, JSONSerializable):
 
         return list(decsendents)
 
-
-    def _get_all_domains_from_parents(self) -> List['Domain']:
+    def _get_all_domains_from_parents(self) -> List["Domain"]:
         # note that this gets "sibling/cousin" domains as well
         # call _ancestors to get only ancestors
         domains = []
@@ -2454,7 +2451,7 @@ class Domain(Part, JSONSerializable):
 
     def unlocked_ancestor_or_descendants(self) -> List[Domain]:
         if not self.state == DomainState.LOCKED:
-            raise ValueError(f'cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}')
+            raise ValueError(f"cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}")
 
         for domain in self.ancestors():
             if not self.state == DomainState.LOCKED:
@@ -2492,7 +2489,9 @@ class Domain(Part, JSONSerializable):
         """
 
         if self.state != DomainState.LOCKED:
-            raise ValueError(f"cannot call assignable_ancestors_or_descendants on an unlocked domain Domain {self.name}")
+            raise ValueError(
+                f"cannot call assignable_ancestors_or_descendants on an unlocked domain Domain {self.name}"
+            )
 
         # first try ancestors
         assignable_ancestors = []
@@ -2517,6 +2516,7 @@ class Domain(Part, JSONSerializable):
 
         return assignable_descendants
 
+
 def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
     """
 
@@ -2535,7 +2535,6 @@ def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
             return item
 
     return None
-
 
 
 def domains_neq_constraint(
@@ -2570,7 +2569,6 @@ def domains_neq_constraint(
         a :any:`DomainPairConstraint` ensuring no two domain sequences contain each other as a substring
         (in particular, if they are equal length, then they are not the same domain)
     """
-
 
     def evaluate_domains_neq(seqs: tuple[str, ...], domains: tuple[Domain, Domain] | None) -> Result:  # noqa
         s1, s2 = seqs
@@ -2744,7 +2742,7 @@ def set_domains_memoryviews(
     # Build initial sequence bytearray and assign a memoryview to it
     max_end = max(end for _, end in domain_name_to_interval.values())
     # ? shouldn't it be max_end + 1 ?
-    memoryview_full = memoryview(bytearray('?' * max_end, encoding='ascii'))
+    memoryview_full = memoryview(bytearray("?" * max_end, encoding="ascii"))
 
     # assign the corresponding initial value to each domain's memoryview_sequence field
     for domain_name, domain in domain_name_to_domain.items():
@@ -2767,7 +2765,7 @@ def _assign_back_preexisting_sequences(
         assigned before its memoryview was reallocated, to that sequence
     """
     for domain, sequence in domain_to_preexisting_sequence.items():
-        domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
+        domain.memoryview_sequence[:] = sequence.encode(encoding="ascii")
 
 
 def _assign_intervals(
@@ -2783,7 +2781,7 @@ def _assign_intervals(
     domain_name_to_domain[domain.name] = domain
 
     if domain.memoryview_sequence is not None:
-        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding='ascii')
+        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding="ascii")
 
     _assign_intervals_to_subdomains_and_parents(
         domain,
@@ -2802,8 +2800,8 @@ def validate_subdomain_lengths(domain: Domain) -> None:
     total_length = sum(sd.length for sd in domain.subdomains)
     if total_length != domain.length:
         raise ValueError(
-            f'Domain {domain.name} length {domain.length} != '
-            f'subdomains total length {total_length}. '
+            f"Domain {domain.name} length {domain.length} != "
+            f"subdomains total length {total_length}. "
             f"subdomains' lengths: {', '.join(f'{subdomain.name} = {subdomain.length}' for subdomain in domain.subdomains)}, "
         )
 
@@ -2816,25 +2814,25 @@ def _assign_intervals_to_subdomains_and_parents(
     domain_to_preexisting_sequence: Dict[Domain, str],
 ) -> None:
     """
-   Recursively assign byte-offset intervals (within the shared memoryview buffer for a
-   subdomain tree) to `domain`'s subdomains and parents that haven't been visited yet.
+    Recursively assign byte-offset intervals (within the shared memoryview buffer for a
+    subdomain tree) to `domain`'s subdomains and parents that haven't been visited yet.
 
-   Called from `_assign_intervals` for the domain a traversal started from, and
-   recursively from `_assign_intervals_subdomain`/`_assign_intervals_parent` thereafter.
-   Also validates, via `validate_subdomain_lengths`, that `domain`'s subdomain lengths
-   sum to its own length.
+    Called from `_assign_intervals` for the domain a traversal started from, and
+    recursively from `_assign_intervals_subdomain`/`_assign_intervals_parent` thereafter.
+    Also validates, via `validate_subdomain_lengths`, that `domain`'s subdomain lengths
+    sum to its own length.
 
-   :param domain: the domain whose subdomains and parents should be visited next
-   :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
-   :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
-   :param visited_names: names of domains already assigned an interval, updated in place
-   :param domain_to_preexisting_sequence: map from domain to a sequence it had before its
-       memoryview was reallocated, updated in place for later restoration
-   """
+    :param domain: the domain whose subdomains and parents should be visited next
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a sequence it had before its
+        memoryview was reallocated, updated in place for later restoration
+    """
     validate_subdomain_lengths(domain)
 
     if domain.memoryview_sequence is not None:
-        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding='ascii')
+        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding="ascii")
 
     for sd in domain.subdomains:
         if sd.name not in visited_names:
@@ -2952,7 +2950,9 @@ def _assign_intervals_parent(
         domain_to_preexisting_sequence,
     )
 
+
 default_strand_group = "default_strand_group"
+
 
 @dataclass
 class Strand(Part, JSONSerializable):
@@ -3256,7 +3256,7 @@ class Strand(Part, JSONSerializable):
         if len(self.modifications_int) > 0:
             mods_dict = {}
             for offset, mod in self.modifications_int.items():
-                mods_dict[f'{offset}'] = mod.id
+                mods_dict[f"{offset}"] = mod.id
             dct[nm.modifications_int_key] = NoIndent(mods_dict) if suppress_indent else mods_dict
 
         return dct
@@ -3402,7 +3402,6 @@ class Strand(Part, JSONSerializable):
         """
         return StrandDomainAddress(self, domain_idx)
 
-
     def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> "StrandDomainAddress":
         """
         Returns :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
@@ -3521,16 +3520,16 @@ class Strand(Part, JSONSerializable):
 @dataclass
 class DomainPair(Part, Iterable[Domain]):
     domain1: Domain
-    'First domain'
+    "First domain"
 
     domain2: Domain
-    'Second domain'
+    "Second domain"
 
     starred1: bool = False
-    'Whether first domain is starred (not used in most constraints)'
+    "Whether first domain is starred (not used in most constraints)"
 
     starred2: bool = False
-    'Whether second domain is starred (not used in most constraints)'
+    "Whether second domain is starred (not used in most constraints)"
 
     _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
 
@@ -3547,7 +3546,7 @@ class DomainPair(Part, Iterable[Domain]):
 
     @property
     def name(self) -> str:
-        return self.domain1.get_name(self.starred1) + ', ' + self.domain2.get_name(self.starred2)
+        return self.domain1.get_name(self.starred1) + ", " + self.domain2.get_name(self.starred2)
 
     def key(self) -> str:
         return self._key
@@ -3699,12 +3698,7 @@ def _export_dummy_scadnano_design_for_idt_export(
         sc_domains = []
         prev_end = 0
         for domain in strand.domains:
-            sc_domain = sc.Domain(
-                helix=helix_idx,
-                forward=True,
-                start=prev_end,
-                end=prev_end + domain.length
-            )
+            sc_domain = sc.Domain(helix=helix_idx, forward=True, start=prev_end, end=prev_end + domain.length)
             prev_end = sc_domain.end
             sc_domains.append(sc_domain)
         sc_strand = sc.Strand(
@@ -3910,8 +3904,8 @@ class Design(JSONSerializable):
                     name = domain_in_dag.name
                     if name in self.domains_by_name and domain_in_dag is not self.domains_by_name[name]:
                         raise ValueError(
-                            f'domain names must be unique, '
-                            f'but I found two different domains with name {domain_in_dag.name}'
+                            f"domain names must be unique, "
+                            f"but I found two different domains with name {domain_in_dag.name}"
                         )
                     self.domains_by_name[domain_in_dag.name] = domain_in_dag
 
@@ -4047,13 +4041,12 @@ class Design(JSONSerializable):
 
         domains_by_name = {domain.name: domain for domain in domains}
 
-        #add subdomains
+        # add subdomains
         for domain, subdomain_names in domain_to_subdomains_names.items():
             for subdomain_name in subdomain_names:
                 subdomain = domains_by_name[subdomain_name]
                 domain.subdomains.append(subdomain)
                 subdomain.parents.append(domain)
-
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [
@@ -4077,126 +4070,127 @@ class Design(JSONSerializable):
 
         return design
 
-
     def add_strand(
-            self,
-            domain_names: List[str] | None = None,
-            domains: List[Domain] | None = None,
-            starred_domain_indices: Iterable[int] | None = None,
-            group: str = default_strand_group,
-            name: str | None = None,
-            label: str | None = None,
-            vendor_fields: VendorFields | None = None,
-        ) -> Strand:
-            """
-            This is an alternative way to create strands instead of calling the :any:`Strand` constructor
-            explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
-            to specify :any:`Domain`'s simply by giving a name.
+        self,
+        domain_names: List[str] | None = None,
+        domains: List[Domain] | None = None,
+        starred_domain_indices: Iterable[int] | None = None,
+        group: str = default_strand_group,
+        name: str | None = None,
+        label: str | None = None,
+        vendor_fields: VendorFields | None = None,
+    ) -> Strand:
+        """
+        This is an alternative way to create strands instead of calling the :any:`Strand` constructor
+        explicitly. It behaves similarly to the :any:`Strand` constructor, but it has an option
+        to specify :any:`Domain`'s simply by giving a name.
 
-            A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
-            `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
-            If `domain_names` is specified, then by convention those that end with a ``*`` are
-            assumed to be starred.
+        A :any:`Strand` can be created either by listing explicit :any:`Domain` objects via parameter
+        `domains` (as in the :any:`Strand` constructor), or by giving names via parameter `domain_names`.
+        If `domain_names` is specified, then by convention those that end with a ``*`` are
+        assumed to be starred.
 
-            In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
-            a new domain name that has not been encountered.
-            Also, :any:`Domain`'s created in this way are "interned" as variables
-            in a cache stored in the :any:`Design` object;
-            no two :any:`Domain`'s with the same name in this design will be created,
-            and subsequent uses of the same name will refer to the same :any:`Domain` object.
+        In particular, :any:`Domain` objects are created as needed, whenever the :any:`Design` sees
+        a new domain name that has not been encountered.
+        Also, :any:`Domain`'s created in this way are "interned" as variables
+        in a cache stored in the :any:`Design` object;
+        no two :any:`Domain`'s with the same name in this design will be created,
+        and subsequent uses of the same name will refer to the same :any:`Domain` object.
 
-            :param domain_names:
-                Names of the :any:`Domain`'s on this :any:`Strand`.
-                :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
-                is specified; if the domain name has already been used (or its complement via the convention
-                that names ending in a `*` are the complement of the domain whose name is equal but without
-                ending in a `*`), then the same :any:`Domain` object is reused.
-                Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
-            :param domains:
-                list of :any:`Domain`'s on this :any:`Strand`.
-                Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
-                :data:`Strand.starred_domain_indices`.
-            :param starred_domain_indices:
-                Indices of :any:`Domain`'s in `domains` that are starred.
-                Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
-                :data:`Strand.domains`.
-            :param group:
-                name of group of this :any:`Strand`.
-            :param name:
-                Name of this :any:`Strand`.
-            :param label:
-                Label to associate with this :any:`Strand`.
-            :param vendor_fields:
-                :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
-                methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
-            :return:
-                the :any:`Strand` that is created
-            """
-            if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
-                    domain_names is None and not (domains is not None and starred_domain_indices is not None)
-            ):
-                raise ValueError(
-                    'exactly one of domain_names or '
-                    'domains and starred_domain_indices must be non-None\n'
-                    f'domain_names: {domain_names}\n'
-                    f'domains: {domains}\n'
-                    f'starred_domain_indices: {starred_domain_indices}'
-                    f"{domain_names}.")
-
-            elif domain_names is not None:
-                domains = []
-                starred_domain_indices = OrderedSet()
-                for idx, domain_name in enumerate(domain_names):
-                    is_starred = domain_name.endswith('*')
-                    if is_starred:
-                        domain_name = domain_name[:-1]
-
-                    domain: Domain
-                    if domain_name not in self.domains_by_name:
-                        domain = Domain(name=domain_name)
-                        self.domains_by_name[domain_name] = domain
-                    else:
-                        domain = self.domains_by_name[domain_name]
-
-                    domains.append(domain)
-                    if is_starred:
-                        starred_domain_indices.add(idx)
-
-            domains_of_strand = list(domains)  # type: ignore
-            strand = Strand(
-                domains=domains_of_strand,
-                starred_domain_indices=starred_domain_indices,
-                group=group,
-                name=name,
-                label=label,
-                vendor_fields=vendor_fields,
+        :param domain_names:
+            Names of the :any:`Domain`'s on this :any:`Strand`.
+            :any:`Domain` objects are created by the :any:`Design` as needed whenever a new domain name
+            is specified; if the domain name has already been used (or its complement via the convention
+            that names ending in a `*` are the complement of the domain whose name is equal but without
+            ending in a `*`), then the same :any:`Domain` object is reused.
+            Mutually exclusive with :data:`Strand.domains` and :data:`Strand.starred_domain_indices`.
+        :param domains:
+            list of :any:`Domain`'s on this :any:`Strand`.
+            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+            :data:`Strand.starred_domain_indices`.
+        :param starred_domain_indices:
+            Indices of :any:`Domain`'s in `domains` that are starred.
+            Mutually exclusive with :data:`Strand.domain_names`, and must be specified jointly with
+            :data:`Strand.domains`.
+        :param group:
+            name of group of this :any:`Strand`.
+        :param name:
+            Name of this :any:`Strand`.
+        :param label:
+            Label to associate with this :any:`Strand`.
+        :param vendor_fields:
+            :any:`VendorFields` object to associate with this :any:`Strand`; needed to call
+            methods for exporting to IDT formats (e.g., :meth:`Strand.write_idt_bulk_input_file`)
+        :return:
+            the :any:`Strand` that is created
+        """
+        if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
+            domain_names is None and not (domains is not None and starred_domain_indices is not None)
+        ):
+            raise ValueError(
+                "exactly one of domain_names or "
+                "domains and starred_domain_indices must be non-None\n"
+                f"domain_names: {domain_names}\n"
+                f"domains: {domains}\n"
+                f"starred_domain_indices: {starred_domain_indices}"
+                f"{domain_names}."
             )
 
-            for existing_strand in self.strands:
-                if strand.name == existing_strand.name:
+        elif domain_names is not None:
+            domains = []
+            starred_domain_indices = OrderedSet()
+            for idx, domain_name in enumerate(domain_names):
+                is_starred = domain_name.endswith("*")
+                if is_starred:
+                    domain_name = domain_name[:-1]
+
+                domain: Domain
+                if domain_name not in self.domains_by_name:
+                    domain = Domain(name=domain_name)
+                    self.domains_by_name[domain_name] = domain
+                else:
+                    domain = self.domains_by_name[domain_name]
+
+                domains.append(domain)
+                if is_starred:
+                    starred_domain_indices.add(idx)
+
+        domains_of_strand = list(domains)  # type: ignore
+        strand = Strand(
+            domains=domains_of_strand,
+            starred_domain_indices=starred_domain_indices,
+            group=group,
+            name=name,
+            label=label,
+            vendor_fields=vendor_fields,
+        )
+
+        for existing_strand in self.strands:
+            if strand.name == existing_strand.name:
+                raise ValueError(
+                    f"strand name {strand.name} already exists for this strand:\n"
+                    f"  {existing_strand}\n"
+                    f"so it cannot be used for the new strand\n"
+                    f"  {strand}"
+                )
+        self.strands.append(strand)
+        for domain_in_strand in strand.domains:
+            domains_in_dag = domain_in_strand.all_domains_in_dag()
+            for domain in domains_in_dag:
+                if domain not in self._domains:
+                    self._domains.append(domain)
+                name = domain.name
+                if name in self.domains_by_name and domain is not self.domains_by_name[name]:
                     raise ValueError(
-                        f'strand name {strand.name} already exists for this strand:\n'
-                        f'  {existing_strand}\n'
-                        f'so it cannot be used for the new strand\n'
-                        f'  {strand}'
+                        f"domain names must be unique, but I found two different domains with name {domain.name}"
                     )
-            self.strands.append(strand)
-            for domain_in_strand in strand.domains:
-                domains_in_dag = domain_in_strand.all_domains_in_dag()
-                for domain in domains_in_dag:
-                    if domain not in self._domains:
-                        self._domains.append(domain)
-                    name = domain.name
-                    if name in self.domains_by_name and domain is not self.domains_by_name[name]:
-                        raise ValueError(
-                            f'domain names must be unique, but I found two different domains with name {domain.name}'
-                        )
-                    self.domains_by_name[domain.name] = domain
+                self.domains_by_name[domain.name] = domain
 
-            return strand
+        return strand
 
-    def add_subdomains(self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]],
-                       keep_domain_assignable: bool = False) -> None:
+    def add_subdomains(
+        self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]], keep_domain_assignable: bool = False
+    ) -> None:
         """
         :param domain_name: name of the domain we want to add subdomains to
         :param subdomain_names_and_lengths: list of tuples of subdomain names and their length
@@ -4215,7 +4209,6 @@ class Design(JSONSerializable):
             domain = Domain(name=domain_name)
             self.domains_by_name[domain_name] = domain
 
-
         assert domain.state != DomainState.FIXED
         if keep_domain_assignable:
             if domain.state == DomainState.DEPENDENT:
@@ -4223,8 +4216,6 @@ class Design(JSONSerializable):
             elif domain.state == DomainState.LOCKED:
                 raise ValueError(f"The domain {domain_name} is already locked, so cannot be made assignable.")
             assert domain.state == DomainState.ASSIGNABLE
-
-
 
         # If assignable or locked before, now domain is locked;
         # what if it was dependent?
@@ -4235,8 +4226,10 @@ class Design(JSONSerializable):
             if subdomain_name in self.domains_by_name:
                 subdomain = self.domains_by_name[subdomain_name]
                 if subdomain.has_length() and subdomain.length != length:
-                    raise ValueError(f"The subdomain {subdomain_name} has already the length {subdomain.length}"
-                                     f" which is different from the new length {length}.")
+                    raise ValueError(
+                        f"The subdomain {subdomain_name} has already the length {subdomain.length}"
+                        f" which is different from the new length {length}."
+                    )
             else:
                 subdomain = Domain(name=subdomain_name)
                 self.domains_by_name[subdomain_name] = subdomain
@@ -4264,15 +4257,19 @@ class Design(JSONSerializable):
                 if subdomain.state != DomainState.LOCKED:
                     unlocked_ancestor = [anc for anc in domain.ancestors() if anc.state != DomainState.LOCKED]
                     if unlocked_ancestor:
-                        raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
-                                         f" in a subdomain graph, but found more in the path(s) "
-                                         f"with domain {domain.name} and unlocked domains "
-                                         f"{unlocked_ancestor}, {subdomain_name}")
+                        raise ValueError(
+                            f"There must be exactly one unlocked subdomain in every source-to-sink path"
+                            f" in a subdomain graph, but found more in the path(s) "
+                            f"with domain {domain.name} and unlocked domains "
+                            f"{unlocked_ancestor}, {subdomain_name}"
+                        )
                     if keep_domain_assignable:
-                        raise ValueError(f"There must be exactly one unlocked subdomain in every source-to-sink path"
-                                         f" in a subdomain graph, but found more in the path(s) "
-                                         f"with keeping the domain {domain.name} assignable and "
-                                         f"its unlocked subdomain {subdomain_name}")
+                        raise ValueError(
+                            f"There must be exactly one unlocked subdomain in every source-to-sink path"
+                            f" in a subdomain graph, but found more in the path(s) "
+                            f"with keeping the domain {domain.name} assignable and "
+                            f"its unlocked subdomain {subdomain_name}"
+                        )
             elif domain.state == DomainState.LOCKED:
                 # Now we know subdomain.type is Assignable, and domain.type is Locked,
                 # Default would normally be to make each subdomain Assignable,
@@ -4284,23 +4281,23 @@ class Design(JSONSerializable):
                 else:
                     subdomain.state = DomainState.ASSIGNABLE
             else:
-                # This means parent is not locked, so subdomain must be locked 
+                # This means parent is not locked, so subdomain must be locked
                 # to enforce exactly one unlocked domain on each path.
                 if not keep_domain_assignable and domain.state == DomainState.ASSIGNABLE:
                     domain.state = DomainState.LOCKED
                 else:
                     subdomain.state = DomainState.LOCKED
 
-
         subdomains_total_length = sum(length for _, length in subdomain_names_and_lengths)
         if domain.has_length() and domain.length != subdomains_total_length:
-            raise ValueError(f"The domain {domain.name} has length {domain.length}, "
-                             f"but its subdomains total length is {subdomains_total_length}")
+            raise ValueError(
+                f"The domain {domain.name} has length {domain.length}, "
+                f"but its subdomains total length is {subdomains_total_length}"
+            )
         elif not domain.has_length():
             domain.length = subdomains_total_length
 
         domain.subdomains = list(subdomains)
-
 
     @staticmethod
     def assign_modifications_to_strands(
@@ -4849,7 +4846,6 @@ class Design(JSONSerializable):
                         partial assignment."""
                     )
 
-
     def shared_strands_with_scadnano_design(
         self, sc_design: sc.Design, ignored_strands: Collection[Strand] = ()
     ) -> list[tuple[Strand, list[sc.Strand]]]:
@@ -5068,9 +5064,9 @@ has a name, and the design contains a nuad strand with that name."""
 
     @staticmethod
     def _assign_to_strand_with_partial_sequence(
-            sc_strand: sc.Strand,
-            sc_design: sc.Design,
-            sc_domain_name_tuples: dict[tuple[str, ...], Strand],
+        sc_strand: sc.Strand,
+        sc_design: sc.Design,
+        sc_domain_name_tuples: dict[tuple[str, ...], Strand],
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
@@ -5166,15 +5162,14 @@ has a name, and the design contains a nuad strand with that name."""
         Check that all domain graphs (if subdomains are used) are acyclic (form directed acyclic graphs).
         """
         try:
-            cycle = nx.find_cycle(subdomain_graph, orientation='original')
+            cycle = nx.find_cycle(subdomain_graph, orientation="original")
             cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
 
             raise ValueError(
-                f'A cycle was found in the subdomain graph: {" - ".join(node.name for node in cycle_nodes)}'
+                f"A cycle was found in the subdomain graph: {' - '.join(node.name for node in cycle_nodes)}"
             )
         except nx.NetworkXNoCycle:
             pass
-
 
     def _check_subdomain_graph_is_singly_connected(self, subdomain_graph: nx.DiGraph) -> None:
         """
@@ -5199,12 +5194,12 @@ has a name, and the design contains a nuad strand with that name."""
                         paths_from_source[sd] += paths_from_source[node]
                         if paths_from_source[sd] > 1:
                             all_paths = nx.all_simple_paths(subdomain_graph, source_node, sd)
-                            paths_str = '\n'.join(' - '.join(str(node.name) for node in path) for path in all_paths)
+                            paths_str = "\n".join(" - ".join(str(node.name) for node in path) for path in all_paths)
 
                             raise ValueError(
-                                f'Subdomain graph is not singly connected.'
-                                f' More than one path from {source_node.name} to {sd.name}: '
-                                f'\n{paths_str}'
+                                f"Subdomain graph is not singly connected."
+                                f" More than one path from {source_node.name} to {sd.name}: "
+                                f"\n{paths_str}"
                             )
 
     def check_subdomain_graphs_legal(self) -> None:
@@ -5241,11 +5236,11 @@ has a name, and the design contains a nuad strand with that name."""
             for subdomain in domain.subdomains:
                 unlockeds = self._traverse_source_to_sink_path(original_source, subdomain, [])
                 if len(unlockeds) > 0:
-                    unlocked_domains_str = ', '.join(subdomain.name for subdomain in unlockeds)
+                    unlocked_domains_str = ", ".join(subdomain.name for subdomain in unlockeds)
                     raise ValueError(
-                        'There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,'
-                        f' but found more in the path(s) with source domain {original_source.name} and '
-                        f'unlocked domains {domain.name}, {unlocked_domains_str}'
+                        "There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,"
+                        f" but found more in the path(s) with source domain {original_source.name} and "
+                        f"unlocked domains {domain.name}, {unlocked_domains_str}"
                     )
         else:
             for subdomain in domain.subdomains:
@@ -5257,7 +5252,7 @@ has a name, and the design contains a nuad strand with that name."""
         # first, make sure that every domain has exactly one state:
         for domain in self._domains:
             if domain.state is None:
-                raise ValueError(f'domain {domain.name} has no states.')
+                raise ValueError(f"domain {domain.name} has no states.")
 
         source_nodes = [node for node, degree in subdomain_graph.in_degree() if degree == 0]
 
@@ -5267,10 +5262,10 @@ has a name, and the design contains a nuad strand with that name."""
 
             # To check whether a path didn't have any unlocked node
             if sum(domain.length for domain in unlocked_subdomains) != source.length:
-                unlocked_subdomains_str = ', '.join(
+                unlocked_subdomains_str = ", ".join(
                     [unlocked_subdomain.name for unlocked_subdomain in unlocked_subdomains]
                 )
-                raise ValueError(f'the unlocked domains are not enough: {unlocked_subdomains_str}.')
+                raise ValueError(f"the unlocked domains are not enough: {unlocked_subdomains_str}.")
 
     def check_dependency_graphs_legal(self) -> None:
         """Check dependency graphs are consistent and the relevant error raises if not: being acyclic and
@@ -5306,14 +5301,14 @@ has a name, and the design contains a nuad strand with that name."""
             graph.add_node(unlocked_domain)
             for sd in unlocked_domain.subdomains:
                 if sd.state != DomainState.FIXED:
-                    graph.add_edge(unlocked_domain, sd, color='red')
+                    graph.add_edge(unlocked_domain, sd, color="red")
                     self._add_red_edge_pointing_subdomains(sd, graph)
                     unlocked_domain.locked_dependents.append(sd)
                 else:
                     graph.add_node(sd)
             for parent in unlocked_domain.parents:
                 if parent.state != DomainState.FIXED:
-                    graph.add_edge(unlocked_domain, parent, color='red')
+                    graph.add_edge(unlocked_domain, parent, color="red")
                     self._add_red_edge_pointing_parents(parent, graph)
                     unlocked_domain.locked_dependents.append(parent)
                 else:
@@ -5326,7 +5321,7 @@ has a name, and the design contains a nuad strand with that name."""
 
     def _add_red_edge_pointing_subdomains(self, domain: Domain, graph: nx.DiGraph) -> None:
         for sd in domain.subdomains:
-            graph.add_edge(domain, sd, color='red')
+            graph.add_edge(domain, sd, color="red")
             self._add_red_edge_pointing_subdomains(sd, graph)
             domain.locked_dependents.append(sd)
 
@@ -5335,7 +5330,7 @@ has a name, and the design contains a nuad strand with that name."""
 
     def _add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
         for parent in domain.parents:
-            graph.add_edge(domain, parent, color='red')
+            graph.add_edge(domain, parent, color="red")
             self._add_red_edge_pointing_parents(parent, graph)
             domain.locked_dependents.append(parent)
         if domain.dependents:
@@ -5343,17 +5338,17 @@ has a name, and the design contains a nuad strand with that name."""
 
     def _add_blue_edge_pointing_dependents(self, domain: Domain, graph: nx.DiGraph) -> None:
         for dependent, _ in domain.dependents:
-            graph.add_edge(domain, dependent, color='blue')
+            graph.add_edge(domain, dependent, color="blue")
             if dependent.dependents:
                 self._add_blue_edge_pointing_dependents(dependent, graph)
 
     def _check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
         try:
-            cycle = nx.find_cycle(dependency_graph, orientation='original')
+            cycle = nx.find_cycle(dependency_graph, orientation="original")
             cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
 
             raise ValueError(
-                f'A cycle was found in the dependency graph: {" - ".join(node.name for node in cycle_nodes)}.'
+                f"A cycle was found in the dependency graph: {' - '.join(node.name for node in cycle_nodes)}."
             )
         except nx.NetworkXNoCycle:
             pass
@@ -5363,15 +5358,15 @@ has a name, and the design contains a nuad strand with that name."""
             if domain.state == DomainState.DEPENDENT:
                 dependees = []
                 for pred in graph.predecessors(domain):
-                    if graph[pred][domain].get('color') == 'blue':
+                    if graph[pred][domain].get("color") == "blue":
                         dependees.append(pred)
                 if len(dependees) > 1:
                     raise ValueError(
-                        f'the dependent domain {domain.name} has more than one dependees: '
-                        f'{", ".join([dependee.name for dependee in dependees])}'
+                        f"the dependent domain {domain.name} has more than one dependees: "
+                        f"{', '.join([dependee.name for dependee in dependees])}"
                     )
                 if len(dependees) == 0:
-                    raise ValueError(f'the dependent domain {domain.name} has no dependees.')
+                    raise ValueError(f"the dependent domain {domain.name} has no dependees.")
 
     def check_names_unique(self) -> None:
         # domain names already checked in compute_derived_fields()
@@ -5394,12 +5389,12 @@ has a name, and the design contains a nuad strand with that name."""
                 visiting_dag_idx = domain_to_dag_idx[domain]
                 if prev_dag_idx != visiting_dag_idx:
                     if visiting_dag_idx in visited_dag_idxs:
-                        dag_subdomains_str = ', '.join(
+                        dag_subdomains_str = ", ".join(
                             [sd.name for sd in dags[visiting_dag_idx].intersection(set(strand.domains))]
                         )
                         raise ValueError(
-                            f'A strand cannot overlap with a domain discontinuously: '
-                            f'Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag_idx].intersection(set(strand.domains))))} non-consecutively'
+                            f"A strand cannot overlap with a domain discontinuously: "
+                            f"Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag_idx].intersection(set(strand.domains))))} non-consecutively"
                         )
                     else:
                         if prev_dag_idx != -1:
@@ -5418,9 +5413,9 @@ has a name, and the design contains a nuad strand with that name."""
 
         non_overlapping_subdomains = graph_leaves - overlapping_leaves
         if non_overlapping_subdomains:
-            non_overlapping_subdomains_str = ', '.join([sd.name for sd in non_overlapping_subdomains])
+            non_overlapping_subdomains_str = ", ".join([sd.name for sd in non_overlapping_subdomains])
             raise ValueError(
-                f'The subdomain(s) {non_overlapping_subdomains_str} are not overlapping with any strand in the design.'
+                f"The subdomain(s) {non_overlapping_subdomains_str} are not overlapping with any strand in the design."
             )
 
     def check_strand_names_unique(self) -> None:
@@ -6746,6 +6741,8 @@ def rna_duplex_strand_pair_constraint(
         pairs=pairs_tuple,
         parallel=parallel,
     )
+
+
 def chunker(
     sequence: Sequence[T],
     chunk_length: int | None = None,
@@ -6827,7 +6824,7 @@ def _check_vienna_rna_installed() -> None:
         installation instructions
     """
     try:
-        nv.rna_duplex_multiple([('ACGT', 'TGCA')])
+        nv.rna_duplex_multiple([("ACGT", "TGCA")])
     except FileNotFoundError:
         raise ImportError(
             """
@@ -7088,7 +7085,6 @@ def get_domain_pairs_from_thresholds_dict(
 S = TypeVar("S", str, bytes, bytearray)
 
 PairsEvaluationFunction = Callable[[Sequence[tuple[S, S]], logging.Logger, float, str, float], tuple[float, ...]]
-
 
 
 def domain_pairs_nonorthogonal_constraint(
@@ -7494,12 +7490,14 @@ def strand_pairs_by_number_matching_domains(
 
     return strand_pairs
 
+
 SPC = TypeVar(
     "SPC",
     StrandPairConstraint,
     StrandPairsConstraint,
     covariant=True,
 )
+
 
 class _StrandPairsConstraintCreator(Protocol[SPC]):
     # Used to specify type of function that
@@ -7667,6 +7665,7 @@ def _normalize_strands_pairs_disjoint_parameters(
     pairs_tuple = pairs if isinstance(pairs, tuple) else tuple(pairs)
     return pairs_tuple
 
+
 def rna_multifold_strand_pair_constraints_by_number_matching_domains(
     *,
     thresholds: dict[int, float],
@@ -7695,9 +7694,7 @@ def rna_multifold_strand_pair_constraints_by_number_matching_domains(
         }
 
     if short_descriptions is None:
-        short_descriptions = {
-            num_matching: f"RNAmfPair{num_matching}comp" for num_matching, _ in thresholds.items()
-        }
+        short_descriptions = {num_matching: f"RNAmfPair{num_matching}comp" for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_multifold_strand_pair_constraint,
@@ -7804,18 +7801,18 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
 
 
 def rna_plex_strand_pairs_constraints_by_number_matching_domains(
-        *,
-        thresholds: dict[int, float],
-        temperature: float = nv.default_temperature,
-        weight: float = 1.0,
-        score_transfer_function: Callable[[float], float] | None = None,
-        descriptions: dict[int, str] | None = None,
-        short_descriptions: dict[int, str] | None = None,
-        parallel: bool = False,
-        strands: Iterable[Strand] | None = None,
-        pairs: Iterable[tuple[Strand, Strand]] | None = None,
-        parameters_filename: str = nv.default_vienna_rna_parameter_filename,
-        ignore_missing_thresholds: bool = False,
+    *,
+    thresholds: dict[int, float],
+    temperature: float = nv.default_temperature,
+    weight: float = 1.0,
+    score_transfer_function: Callable[[float], float] | None = None,
+    descriptions: dict[int, str] | None = None,
+    short_descriptions: dict[int, str] | None = None,
+    parallel: bool = False,
+    strands: Iterable[Strand] | None = None,
+    pairs: Iterable[tuple[Strand, Strand]] | None = None,
+    parameters_filename: str = nv.default_vienna_rna_parameter_filename,
+    ignore_missing_thresholds: bool = False,
 ) -> list[StrandPairsConstraint]:
     """
     Convenience function for creating many constraints as returned by
@@ -7865,9 +7862,9 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                    _pair_default_description("strand", "RNAplex", threshold, temperature)
-                    + f" for strands with {num_matching} complementary "
-                      f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description("strand", "RNAplex", threshold, temperature)
+                + f" for strands with {num_matching} complementary "
+                f"{'domain' if num_matching == 1 else 'domains'}"
             )
             for num_matching, threshold in thresholds.items()
         }
@@ -7890,6 +7887,7 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
         pairs=pairs,
         ignore_missing_thresholds=ignore_missing_thresholds,
     )
+
 
 def longest_complementary_subsequences_python_loop(arr1: np.ndarray, arr2: np.ndarray, gc_double: bool) -> list[int]:
     """
@@ -10271,9 +10269,7 @@ def _get_base_pair_domain_endpoints_to_check(
     # return __get_base_pair_domain_endpoints_to_check(
     #     leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
     # )
-    return __get_base_pair_domain_endpoints_to_check(
-        strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
-    )
+    return __get_base_pair_domain_endpoints_to_check(strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs)
 
 
 def __get_base_pair_domain_endpoints_to_check(
@@ -10563,7 +10559,7 @@ def nupack_complex_base_pair_probability_constraint(
 
     # Start Input Validation
     if len(strand_complexes) == 0:
-        raise ValueError('strand_complexes list cannot be empty.')
+        raise ValueError("strand_complexes list cannot be empty.")
 
     strand_complex_template = strand_complexes[0]
 
@@ -10574,7 +10570,7 @@ def nupack_complex_base_pair_probability_constraint(
 
     for strand in strand_complex_template:
         if type(strand) is not Strand:
-            raise ValueError(f'Complex at index 0 contained non-Strand object: {type(strand)}')
+            raise ValueError(f"Complex at index 0 contained non-Strand object: {type(strand)}")
 
     for strand_complex in strand_complexes:
         for strand in strand_complex:
@@ -10654,7 +10650,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
             err_sq += e**2
         # summary
         if len(bps) == 0:
-            summary = '\tAll base pairs satisfy thresholds.'
+            summary = "\tAll base pairs satisfy thresholds."
         else:
             summary_list = []
             for bp in bps:

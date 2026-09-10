@@ -1,1 +1,5 @@
 line-length = 120
+
+# Jupyter notebooks are exploratory scratch work, not part of the package;
+# some contain placeholder code that is not valid Python.
+extend-exclude = ["*.ipynb"]

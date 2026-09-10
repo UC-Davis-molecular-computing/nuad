@@ -142,6 +142,7 @@ def pfunc(
 
     return float(dg)
 
+
 def tupleize(seqs: S | Iterable[S]) -> tuple[S, ...]:
     return cast(tuple[S, ...], (seqs,)) if isinstance(seqs, (str, bytes, bytearray)) else tuple(seqs)
 
@@ -722,6 +723,7 @@ def _fix_filename_windows(parameters_filename: str) -> str:
     parameters_filename = parameters_filename.replace("\\", "/")
     return parameters_filename
 
+
 def rna_multifold(
     seqs: Sequence[S],
     temperature: float = default_temperature,
@@ -756,7 +758,6 @@ def rna_multifold(
     RNA.cvar.noGU = not gu_wobble
     load_params_viennarna()
 
-
     fc = RNA.fold_compound("&".join(seqs))
     _, energy = fc.pf()
     return min(energy, max_energy)
@@ -782,8 +783,7 @@ def rna_multifold_multiple(
     del logger, parameters_filename  # unused, kept for signature parity
 
     return tuple(
-        rna_multifold(seqs, temperature=temperature, max_energy=max_energy, gu_wobble=gu_wobble)
-        for seqs in seq_tuples
+        rna_multifold(seqs, temperature=temperature, max_energy=max_energy, gu_wobble=gu_wobble) for seqs in seq_tuples
     )
 
 
@@ -825,7 +825,6 @@ def binding_complement(
     magnesium: float = default_magnesium,
     subtract_indv: bool = True,
 ) -> float:
-
     """Computes the complex free energy of a strand with its perfect Watson-Crick complement.
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.

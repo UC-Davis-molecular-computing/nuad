@@ -70,9 +70,7 @@ def gate_base_strand(gate: int) -> nc.Strand:
     # T appears twice, non-consecutively, on this strand (both ends). nuad forbids
     # reusing the same Domain object non-consecutively within one strand, so create
     # a second Domain forced (via dependency) to always have T's exact sequence.
-    domain_T2 = domain_T.create_domain_with_mismatches(
-        name=f"T2_{gate}", pick_dependent_seq=lambda seq, rng: seq
-    )
+    domain_T2 = domain_T.create_domain_with_mismatches(name=f"T2_{gate}", pick_dependent_seq=lambda seq, rng: seq)
 
     s: nc.Strand = design.add_strand(
         domains=[domain_T, domain_S, domain_s, domain_T2],
