@@ -141,3 +141,6 @@ dmypy.json
 
 # JupyterLab virtual documents (regenerated; not valid JSON)
 notebooks/.virtual_documents/
+
+# Reference papers kept locally, not tracked in the repo
+papers/
