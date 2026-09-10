@@ -138,3 +138,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /.claude
+
+# JupyterLab virtual documents (regenerated; not valid JSON)
+notebooks/.virtual_documents/
