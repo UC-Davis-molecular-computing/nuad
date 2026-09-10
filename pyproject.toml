@@ -66,5 +66,6 @@ indent-style = 'space'
 # Like Black, respect magic trailing commas.
 skip-magic-trailing-comma = false
 
-# Like Black, automatically detect the appropriate line ending.
-line-ending = 'auto'
+# Always write LF, matching the `* text=auto eol=lf` rule in .gitattributes,
+# so formatting on Windows can never reintroduce CRLF.
+line-ending = 'lf'
