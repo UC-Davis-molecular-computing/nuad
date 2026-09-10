@@ -1704,9 +1704,9 @@ class Domain(Part, JSONSerializable):
 
     memoryview_sequence: memoryview | None = field(init=False, repr=False, default=None, compare=False, hash=False)
     """
-    This :any:`Domain`'s sequence is accessed by this memoryview object. 
+    This :any:`Domain`'s sequence is accessed by this memoryview object.
     In fact, each :any:`Domain` accesses its portion of the shared buffer (which here a is bytearray created in
-     :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
+    :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
     """
 
     weight: float = 1.0
@@ -1732,29 +1732,29 @@ class Domain(Part, JSONSerializable):
     state: DomainState = DomainState.ASSIGNABLE
     """
     A :any:`Domain` can either be assignable, fixed, dependent, or locked:
-    
+
     - fixed: this :any:`Domain`'s DNA sequence cannot be changed by the search algorithm
-    :py:meth:`search.search_for_dna_sequences`
-    
+      :py:meth:`search.search_for_dna_sequences`
+
     - dependent: The dependent domains will have their sequences
-    calculated from the non-dependent ones.
-    A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example,
-    suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of
-    d's sequence are determined by c's.
-    
-    - assignable: Such :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for 
-    sequence assignment. The default value for :attr:`Domain.state` is `State.ASSIGNABLE`.
-    
+      calculated from the non-dependent ones.
+      A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example,
+      suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of
+      d's sequence are determined by c's.
+
+    - assignable: Such :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for
+      sequence assignment. The default value for :attr:`Domain.state` is `State.ASSIGNABLE`.
+
     - locked: :any:`Domain`’s can be subdivided hierarchically into
-    a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly
-    one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked
-    domains will have their sequences calculated from the unlocked ones.
-    A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are
-    7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several
-    other strands, it will have several domains, but they cannot be set independently of each other. This can be
-    done by creating a strand with a single long domain, which is subdivided into many locked child domains 
-    (i.e. :any:`Domain.subdomains`). Only the entire strand, the root domain, can be assigned at once, changing every
-    domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
+      a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly
+      one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked
+      domains will have their sequences calculated from the unlocked ones.
+      A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are
+      7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several
+      other strands, it will have several domains, but they cannot be set independently of each other. This can be
+      done by creating a strand with a single long domain, which is subdivided into many locked child domains
+      (i.e. :any:`Domain.subdomains`). Only the entire strand, the root domain, can be assigned at once, changing every
+      domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
     """
 
     _length: int | None = None
@@ -1886,8 +1886,8 @@ class Domain(Part, JSONSerializable):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
-        :param domains_added
-        #TODO
+        :param domains_added:
+            TODO
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
@@ -1987,6 +1987,11 @@ class Domain(Part, JSONSerializable):
 
     @property
     def fixed(self):
+        """
+        Whether this :any:`Domain` is fixed, i.e. whether its :data:`Domain.state` is
+        :data:`DomainState.FIXED`. A fixed :any:`Domain` has a DNA sequence that the search
+        algorithm cannot change.
+        """
         return self.state == DomainState.FIXED
 
     def set_locked(self):
