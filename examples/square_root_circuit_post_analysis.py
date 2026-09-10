@@ -73,8 +73,15 @@ threshold_bottom_strands: List[ThresholdBottomStrand] = []
 threshold_top_strands: List[ThresholdTopStrand] = []
 reporter_bottom_strands: List[ReporterBottomStrand] = []
 reporter_top_strands: List[ReporterTopStrand] = []
-strand_iterators: List[Iterable[Strand]] = [signal_strands, fuel_strands, gate_base_strands, threshold_bottom_strands,
-                                            threshold_top_strands, reporter_bottom_strands, reporter_top_strands]
+strand_iterators: List[Iterable[Strand]] = [
+    signal_strands,
+    fuel_strands,
+    gate_base_strands,
+    threshold_bottom_strands,
+    threshold_top_strands,
+    reporter_bottom_strands,
+    reporter_top_strands,
+]
 longest_strand_name_length: int
 
 
@@ -109,8 +116,9 @@ def process_line(line: str) -> None:
         input = strand_name_split[2]
         gate = strand_name_split[3]
         assert len(line_split) == 5
-        threshold_bottom_strands.append(ThresholdBottomStrand(
-            input=input, gate=gate, sequence=sequence, name=strand_name))
+        threshold_bottom_strands.append(
+            ThresholdBottomStrand(input=input, gate=gate, sequence=sequence, name=strand_name)
+        )
     elif strand_name.startswith('threshold_top'):
         assert len(strand_name_split) == 3
         gate = strand_name_split[2]
@@ -127,7 +135,7 @@ def process_line(line: str) -> None:
         assert len(line_split) == 3
         reporter_top_strands.append(ReporterTopStrand(gate=gate, sequence=sequence, name=strand_name))
     else:
-        raise ValueError("Unexpected strand name")
+        raise ValueError('Unexpected strand name')
 
 
 def strands() -> Iterable[Strand]:
@@ -139,7 +147,7 @@ def format_strand_name(name) -> str:
 
 
 binding_width = 5
-binding_percision = 5
+binding_precision = 5
 
 
 def calculate_and_print_binding(strand1: Strand, strand2: Strand, is_expected_to_bind: bool = False) -> None:
@@ -147,7 +155,9 @@ def calculate_and_print_binding(strand1: Strand, strand2: Strand, is_expected_to
     if is_expected_to_bind:
         is_expected_to_bind_str = '(expected to bind)'
     binding_val = binding(strand1.sequence, strand2.sequence)
-    print(f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val: {binding_width}.{binding_percision}} {is_expected_to_bind_str}')
+    print(
+        f'{format_strand_name(strand1.name)} | {format_strand_name(strand2.name)} | binding: {binding_val: {binding_width}.{binding_precision}} {is_expected_to_bind_str}'
+    )
 
 
 # Define physical model
@@ -249,9 +259,11 @@ def main():
 
     print('\nCalculating base-pairing probabilities and MFE for each threshold waste complex')
     for threshold_bottom_strand in threshold_bottom_strands:
-        assert (threshold_bottom_strand.input, threshold_bottom_strand.gate) in gate_3p_gate_5p_to_signal_strands
-        signal_strand = gate_3p_gate_5p_to_signal_strands[(
-            threshold_bottom_strand.input, threshold_bottom_strand.gate)]
+        assert (
+            threshold_bottom_strand.input,
+            threshold_bottom_strand.gate,
+        ) in gate_3p_gate_5p_to_signal_strands
+        signal_strand = gate_3p_gate_5p_to_signal_strands[(threshold_bottom_strand.input, threshold_bottom_strand.gate)]
         calculate_and_print_pairs_and_mfe([signal_strand, threshold_bottom_strand])
 
     print('\nCalculating base-pairing probabilities and MFE for each reporter complex')

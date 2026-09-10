@@ -11,8 +11,8 @@ Also important are two other types of constraints
 legal to use a DNA sequence: subclasses of the abstract base class :any:`NumpyFilter`,
 and  :any:`SequenceFilter`, an alias for a function taking a string as input and returning a bool.
 
-See the README on the GitHub page for more detailed explaination of these classes:
-https://github.com/UC-Davis-molecular-computing/dsd#data-model
+See the README on the GitHub page for more detailed explanation of these classes:
+https://github.com/UC-Davis-molecular-computing/nuad#data-model
 """
 
 from __future__ import annotations
@@ -35,15 +35,23 @@ from typing import (
     Any,
     Callable,
     Collection,
+    DefaultDict,
+    Dict,
+    FrozenSet,
     Generic,
     Iterable,
     Iterator,
+    List,
+    Optional,
     Sequence,
+    Set,
+    Tuple,
     Type,
     TypeVar,
     cast,
 )
 
+import networkx as nx
 import numpy as np
 import scadnano as sc  # type: ignore
 from ordered_set import OrderedSet
@@ -59,7 +67,7 @@ try:
 except ImportError:
     from typing_extensions import Protocol
 
-# from dsd.stopwatch import Stopwatch
+# from nuad.stopwatch import Stopwatch
 
 try:
     from scadnano import Design as scDesign  # type: ignore
@@ -71,48 +79,49 @@ except ModuleNotFoundError:
     scStrand = Any
     scDomain = Any
 
-name_key = "name"
-sequence_key = "sequence"
-fixed_key = "fixed"
-label_key = "label"
-strands_key = "strands"
-domains_key = "domains"
-domain_pools_key = "domain_pools"
-domain_pools_num_sampled_key = "domain_pools_num_sampled"
-domain_names_key = "domain_names"
-starred_domain_indices_key = "starred_domain_indices"
-group_key = "group"
-domain_pool_name_key = "pool_name"
-length_key = "length"
-substring_length_key = "substring_length"
-except_indices_key = "except_start_indices"
-circular_key = "circular"
-strand_name_in_strand_pool_key = "strand_name"
-sequences_key = "sequences"
-replace_with_close_sequences_key = "replace_with_close_sequences"
-hamming_probability_key = "hamming_probability"
-possible_sequences_key = "possible_sequences"
-num_sequences_to_generate_upper_limit_key = "num_sequences_to_generate_upper_limit"
-num_sequences_to_generate_key = "num_sequences_to_generate"
-rng_state_key = "rng_state"
+name_key = 'name'
+sequence_key = 'sequence'
+state_key = 'state'
+label_key = 'label'
+domain_subdomains_names_key = 'domain_subdomains_names'
+strands_key = 'strands'
+domains_key = 'domains'
+domain_pools_key = 'domain_pools'
+domain_pools_num_sampled_key = 'domain_pools_num_sampled'
+domain_names_key = 'domain_names'
+starred_domain_indices_key = 'starred_domain_indices'
+group_key = 'group'
+domain_pool_name_key = 'pool_name'
+length_key = 'length'
+substring_length_key = 'substring_length'
+except_indices_key = 'except_start_indices'
+circular_key = 'circular'
+strand_name_in_strand_pool_key = 'strand_name'
+sequences_key = 'sequences'
+replace_with_close_sequences_key = 'replace_with_close_sequences'
+hamming_probability_key = 'hamming_probability'
+possible_sequences_key = 'possible_sequences'
+num_sequences_to_generate_upper_limit_key = 'num_sequences_to_generate_upper_limit'
+num_sequences_to_generate_key = 'num_sequences_to_generate'
+rng_state_key = 'rng_state'
 
-vendor_fields_key = "vendor_fields"
-vendor_scale_key = "scale"
-vendor_purification_key = "purification"
-vendor_plate_key = "plate"
-vendor_well_key = "well"
+vendor_fields_key = 'vendor_fields'
+vendor_scale_key = 'scale'
+vendor_purification_key = 'purification'
+vendor_plate_key = 'plate'
+vendor_well_key = 'well'
 
-default_vendor_scale = "25nm"
-default_vendor_purification = "STD"
+default_vendor_scale = '25nm'
+default_vendor_purification = 'STD'
 
-T = TypeVar("T")
+T = TypeVar('T')
 KeyFunction = Callable[[T], Any]
 
 # Complex = tuple['Strand', ...]
 # """A Complex is a group of :any:`Strand`'s, in general that we expect to be bound by complementary
 # :any:`Domain`'s."""
 
-all_dna_bases: set[str] = {"A", "C", "G", "T"}
+all_dna_bases: set[str] = {'A', 'C', 'G', 'T'}
 """
 set of all DNA bases.
 """
@@ -121,7 +130,7 @@ set of all DNA bases.
 class M13Variant(enum.Enum):
     """Variants of M13mp18 viral genome. "Standard" variant is p7249. Other variants are longer."""
 
-    p7249 = "p7249"
+    p7249 = 'p7249'
     """"Standard" variant of M13mp18; 7249 bases long, available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7249
@@ -131,19 +140,19 @@ class M13Variant(enum.Enum):
     http://www.bayoubiolabs.com/biochemicat/vectors/pUCM13/ 
     """  # noqa
 
-    p7560 = "p7560"
+    p7560 = 'p7560'
     """Variant of M13mp18 that is 7560 bases long. Available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p7560
     """
 
-    p8064 = "p8064"
+    p8064 = 'p8064'
     """Variant of M13mp18 that is 8064 bases long. Available from, for example
 
     https://www.tilibit.com/collections/scaffold-dna/products/single-stranded-scaffold-dna-type-p8064
     """
 
-    p8634 = "p8634"
+    p8634 = 'p8634'
     """Variant of M13mp18 that is 8634 bases long. At the time of this writing, not listed as available
     from any biotech vender, but Tilibit will make it for you if you ask. 
     (https://www.tilibit.com/pages/contact-us)
@@ -161,7 +170,7 @@ class M13Variant(enum.Enum):
             return 8064
         if self is M13Variant.p8634:
             return 8634
-        raise AssertionError("should be unreachable")
+        raise AssertionError('should be unreachable')
 
     def scadnano_variant(self) -> sc.M13Variant:
         if self is M13Variant.p7249:
@@ -172,7 +181,7 @@ class M13Variant(enum.Enum):
             return sc.M13Variant.p8064
         if self is M13Variant.p8634:
             return sc.M13Variant.p8634
-        raise AssertionError("should be unreachable")
+        raise AssertionError('should be unreachable')
 
 
 def m13(rotation: int = 5587, variant: M13Variant = M13Variant.p7249) -> str:
@@ -221,14 +230,14 @@ def m13_substrings_of_length(
     :any:`Design` represents a small portion of the full M13 sequence,
     and part of the sequence design process is to choose a rotation of M13 to use.
     One can set that strand to have a single :any:`Domain`,
-    which contains dependent subdomains (those with :data:`Domain.dependent` set to True).
+    which contains locked subdomains (those with :attr:`Domain.state` set to `State.LOCKED`).
     These subdomains are the smaller domains where M13 attaches to other :any:`Strand`'s in the
     :any:`Design`. Then, give the parent :any:`Domain` a :any:`DomainPool` with
     :data:`DomainPool.possible_sequences` set to the return value of this function,
     to allow the search to explore different rotations of M13.
 
     For example, suppose `m13_subdomains` is a list containing :any:`Domain`'s from the :any:`Design`,
-    which are consecutive subdomains of M13 from 5' to 3' (all with :data:`Domain.dependent` set to True),
+    which are consecutive subdomains of M13 from 5' to 3' (all with :attr:Domain.state` set to `State.LOCKED`),
     and `m13_length` is the sum of their lengths (note this needs to be calculated manually since the
     following code assumes no :any:`Domain` in `m13_subdomains` has a :any:`DomainPool` yet, thus none
     yet have a length).
@@ -297,12 +306,13 @@ def default_score_transfer_function(x: float) -> float:
     return max(0.0, x**3)
 
 
-logger = logging.Logger("dsd", level=logging.DEBUG)
+logger = logging.Logger('dsd', level=logging.DEBUG)
+
 """
-Global logger instance used throughout dsd.
+Global logger instance used throughout nuad.
 
 Call ``logger.removeHandler(logger.handlers[0])`` to stop screen output (assuming that you haven't added
-or removed any handlers to the dsd logger instance already; by default there is one StreamHandler, and
+or removed any handlers to the nuad logger instance already; by default there is one StreamHandler, and
 removing it will stop screen output).
 
 Call ``logger.addHandler(logging.FileHandler(filename))`` to direct to a file.
@@ -419,7 +429,7 @@ class NumpyFilter(ABC):
     to evaluate than a :any:`NumpyFilter`.
     """
 
-    name: str = field(init=False, default="TODO: give a concrete name to this NumpyFilter")
+    name: str = field(init=False, default='TODO: give a concrete name to this NumpyFilter')
     """Name of this :any:`NumpyFilter`."""
 
     @abstractmethod
@@ -472,16 +482,17 @@ class RestrictBasesFilter(NumpyFilter):
     """Bases to use. Must be a strict subset of {'A', 'C', 'G', 'T'} with at least two bases."""
 
     def __post_init__(self) -> None:
-        self.name = "restrict_bases"
-        if not set(self.bases) < {"A", "C", "G", "T"}:
+
+        self.name = 'restrict_bases'
+        if not set(self.bases) < {'A', 'C', 'G', 'T'}:
             raise ValueError(f"bases must be a proper subset of {{'A', 'C', 'G', 'T'}}; cannot be {self.bases}")
         if len(self.bases) <= 1:
-            raise ValueError("bases cannot be size 1 or smaller")
+            raise ValueError('bases cannot be size 1 or smaller')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Should never be called directly; it is handled specially by the library when initially
         generating sequences."""
-        raise AssertionError("This should never be called directly.")
+        raise AssertionError('This should never be called directly.')
 
 
 @dataclass
@@ -512,11 +523,12 @@ class NearestNeighborEnergyFilter(NumpyFilter):
     """Temperature in Celsius at which to calculate nearest-neighbor energy."""
 
     def __post_init__(self) -> None:
-        self.name = "nearest_neighbor_energy"
+
+        self.name = 'nearest_neighbor_energy'
         if self.low_energy is None and self.high_energy is None:
-            raise ValueError("at least one of low_energy or high-energy must be specified")
+            raise ValueError('at least one of low_energy or high-energy must be specified')
         if self.low_energy is not None and self.high_energy is not None and self.low_energy > self.high_energy:
-            raise ValueError(f"low_energy = {self.low_energy} must be less than high_energy = {self.high_energy}")
+            raise ValueError(f'low_energy = {self.low_energy} must be less than high_energy = {self.high_energy}')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences with nearest-neighbor energies outside of an interval."""
@@ -557,14 +569,14 @@ class BaseCountFilter(NumpyFilter):
     """
 
     def __post_init__(self) -> None:
-        self.name = "base_count"
+        self.name = 'base_count'
         if self.low is None and self.high is None:
-            raise ValueError("at least one of low_count or high_count must be specified")
+            raise ValueError('at least one of low_count or high_count must be specified')
         if len(self.bases) == 0:
-            raise ValueError("bases cannot be empty")
+            raise ValueError('bases cannot be empty')
         for base in self.bases:
             if base not in all_dna_bases:
-                raise ValueError(f"base {base} is not a valid DNA base; must be one of {all_dna_bases}")
+                raise ValueError(f'base {base} is not a valid DNA base; must be one of {all_dna_bases}')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences whose counts of a certain bases are outside of an interval."""
@@ -602,13 +614,14 @@ class BaseEndFilter(NumpyFilter):
     """ Whether to apply to 3' end of sequence (right end of DNA sequence, highest index)."""
 
     def __post_init__(self) -> None:
-        self.name = "base_end"
+        self.name = 'base_end'
         if not self.five_prime and not self.three_prime:
-            raise ValueError("at least one of five_prime or three_prime must be True")
-        if not (set(self.bases) < {"A", "C", "G", "T"}):
-            raise ValueError(f"bases must be a strict subset of {{A,C,G,T}} but is {self.bases}")
+            raise ValueError('at least one of five_prime or three_prime must be True')
+        if not (set(self.bases) < {'A', 'C', 'G', 'T'}):
+            raise ValueError(f'bases must be a strict subset of {{A,C,G,T}} but is {self.bases}')
+
         if len(self.bases) == 0:
-            raise ValueError("bases cannot be empty")
+            raise ValueError('bases cannot be empty')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Keeps sequences with the given bases at given distance from the 5' or 3' end."""
@@ -616,8 +629,8 @@ class BaseEndFilter(NumpyFilter):
 
         if seqs.seqlen <= self.distance_from_end:
             raise ValueError(
-                f"cannot specify distance from end of {self.distance_from_end} "
-                f"when sequences only have length {seqs.seqlen}"
+                f'cannot specify distance from end of {self.distance_from_end} '
+                f'when sequences only have length {seqs.seqlen}'
             )
 
         if self.five_prime:
@@ -645,7 +658,7 @@ class BaseEndFilter(NumpyFilter):
         elif self.three_prime:
             seqarr_pass = seqs.seqarr[good_right]  # noqa
         else:
-            raise AssertionError("unreachable")
+            raise AssertionError('unreachable')
 
         return nn.DNASeqList(seqarr=seqarr_pass)
 
@@ -672,18 +685,19 @@ class BaseAtPositionFilter(NumpyFilter):
     """Position of base to check."""
 
     def __post_init__(self) -> None:
-        self.name = "base_at_position"
+        self.name = 'base_at_position'
         self.bases = [self.bases] if isinstance(self.bases, str) else list(self.bases)
         if not (set(self.bases) < all_dna_bases):
-            raise ValueError(f"bases must be a strict subset of {all_dna_bases} but is {self.bases}")
+            raise ValueError(f'bases must be a strict subset of {all_dna_bases} but is {self.bases}')
+
         if len(self.bases) == 0:
-            raise ValueError("bases cannot be empty")
+            raise ValueError('bases cannot be empty')
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences that don't have one of the given bases at the given position."""
         assert isinstance(self.bases, list)
         if not 0 <= self.position < seqs.seqlen:
-            raise ValueError(f"position must be between 0 and {seqs.seqlen} but it is {self.position}")
+            raise ValueError(f'position must be between 0 and {seqs.seqlen} but it is {self.position}')
         mid = seqs.seqarr[:, self.position]
         good = np.zeros(shape=len(seqs), dtype=bool)
         for base in self.bases:
@@ -713,27 +727,27 @@ class ForbiddenSubstringFilter(NumpyFilter):
     """
 
     def __post_init__(self) -> None:
-        self.name = "forbidden_substrings"
+        self.name = 'forbidden_substrings'
 
         self.substrings = [self.substrings] if isinstance(self.substrings, str) else list(self.substrings)
 
         lengths = {len(substring) for substring in self.substrings}
         if len(lengths) > 1:
             raise ValueError(
-                f"all substrings must have same length, but they have these lengths: "
-                f"{lengths}\n"
-                f"substrings: {self.substrings}"
+                f'all substrings must have same length, but they have these lengths: '
+                f'{lengths}\n'
+                f'substrings: {self.substrings}'
             )
 
         for substring in self.substrings:
             if not (set(substring) < all_dna_bases):
                 raise ValueError(
-                    "must contain only letters from {A,C,G,T} but it is "
-                    f"{substring}, which has extra letters "
-                    f"{set(substring) - all_dna_bases}"
+                    'must contain only letters from {A,C,G,T} but it is '
+                    f'{substring}, which has extra letters '
+                    f'{set(substring) - all_dna_bases}'
                 )
             if len(substring) == 0:
-                raise ValueError("substring cannot be empty")
+                raise ValueError('substring cannot be empty')
 
     def length(self) -> int:
         """
@@ -793,30 +807,31 @@ class RunsOfBasesFilter(NumpyFilter):
         :param bases: Can either be a single base, or a collection (e.g., list, tuple, set).
         :param length: length of run to forbid
         """
-        self.name = "runs_of_bases"
+        self.name = 'runs_of_bases'
         self.bases = [bases] if isinstance(bases, str) else list(bases)
         self.length = length
         if not (set(self.bases) < all_dna_bases):
-            raise ValueError(f"bases must be a strict subset of {{A,C,G,T}} but is {self.bases}")
+            raise ValueError(f'bases must be a strict subset of {{A,C,G,T}} but is {self.bases}')
+
         if len(self.bases) == 0:
-            raise ValueError("bases cannot be empty")
+            raise ValueError('bases cannot be empty')
         if self.length <= 0:
-            raise ValueError(f"length must be positive, but it is {self.length}")
+            raise ValueError(f'length must be positive, but it is {self.length}')
         if self.length == 1:
             allowed_bases = all_dna_bases - set(self.bases)
             logger.warning(
-                "You have specified a RunsOfBasesFilter with length = 1. "
-                "Although this will work, it essentially says to forbid using any of the bases "
-                f"in {set(self.bases)}, i.e., only use bases in {allowed_bases}. "
-                f"It is more efficient to use the constraint "
-                f"RestrictBasesFilter({allowed_bases})."
+                'You have specified a RunsOfBasesFilter with length = 1. '
+                'Although this will work, it essentially says to forbid using any of the bases '
+                f'in {set(self.bases)}, i.e., only use bases in {allowed_bases}. '
+                f'It is more efficient to use the constraint '
+                f'RestrictBasesFilter({allowed_bases}).'
             )
 
     def remove_violating_sequences(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         """Remove sequences that have a run of given length of bases from given bases."""
         substrings = list(
             map(
-                lambda lst: "".join(lst),
+                lambda lst: ''.join(lst),
                 itertools.product(self.bases, repeat=self.length),
             )
         )
@@ -893,8 +908,8 @@ class SubstringSampler(JSONSerializable):
     ) -> None:
         if except_start_indices is not None and except_overlapping_indices is not None:
             raise ValueError(
-                "at most one of the parameters except_start_indices or "
-                "except_overlapping_indices can be specified, but you specified both of them"
+                'at most one of the parameters except_start_indices or '
+                'except_overlapping_indices can be specified, but you specified both of them'
             )
         self.supersequence = supersequence
         self.substring_length = substring_length
@@ -1063,6 +1078,7 @@ class DomainPool(JSONSerializable):
     """
 
     sequence_filters: list[SequenceFilter] = field(compare=False, hash=False, default_factory=list, repr=False)
+
     """
     :any:`SequenceFilter`'s shared by all :any:`Domain`'s in this :any:`DomainPool`.
     This is used to choose potential sequences to assign to the :any:`Domain`'s in this :any:`DomainPool`
@@ -1079,28 +1095,28 @@ class DomainPool(JSONSerializable):
         if (self.length is None and self.possible_sequences is None) or (
             self.length is not None and self.possible_sequences is not None
         ):
-            raise ValueError("exactly one of length or possible_sequences should be specified")
+            raise ValueError('exactly one of length or possible_sequences should be specified')
 
         if self.possible_sequences is not None:
             if isinstance(self.possible_sequences, list):
                 if len(self.possible_sequences) == 0:
-                    raise ValueError("possible_sequences cannot be empty")
+                    raise ValueError('possible_sequences cannot be empty')
                 first_seq = self.possible_sequences[0]
                 length = len(first_seq)
                 for idx, seq in enumerate(self.possible_sequences):
                     if len(seq) != length:
                         raise ValueError(
-                            f"ERROR: Two sequences in possible_sequence of DomainPool "
+                            f'ERROR: Two sequences in possible_sequence of DomainPool '
                             f'"{self.name}" have different lengths:\n'
-                            f"first sequence {first_seq} has length {length}\n"
+                            f'first sequence {first_seq} has length {length}\n'
                             f'and sequence "{seq}", index {idx} in the list possible_sequences,\n'
-                            f"has length {len(seq)}."
+                            f'has length {len(seq)}.'
                         )
 
             if len(self.numpy_filters) > 0:
-                raise ValueError("If possible_sequences is specified, then numpy_filters should not be specified.")
+                raise ValueError('If possible_sequences is specified, then numpy_filters should not be specified.')
             if len(self.sequence_filters) > 0:
-                raise ValueError("If possible_sequences is specified, then sequence_filters should not be specified.")
+                raise ValueError('If possible_sequences is specified, then sequence_filters should not be specified.')
 
         if self.length is not None:
             if len(self.hamming_probability) == 0:  # sets default probability distribution if the user does not
@@ -1123,23 +1139,23 @@ class DomainPool(JSONSerializable):
             for numpy_filter in self.numpy_filters:
                 if not isinstance(numpy_filter, NumpyFilter):
                     raise ValueError(
-                        "each element of numpy_filters must be an instance of "
-                        "NumpyFilter, "
-                        f"but the element at index {idx} is of type {type(numpy_filter)}"
+                        'each element of numpy_filters must be an instance of '
+                        'NumpyFilter, '
+                        f'but the element at index {idx} is of type {type(numpy_filter)}'
                     )
                 elif isinstance(numpy_filter, RunsOfBasesFilter):
                     if numpy_filter.length > self.length:
                         raise ValueError(
                             f'DomainPool "{self.name}" has length {self.length}, but a '
-                            f"RunsOfBasesFilter was specified with larger length "
-                            f"{numpy_filter.length}, which is not allowed"
+                            f'RunsOfBasesFilter was specified with larger length '
+                            f'{numpy_filter.length}, which is not allowed'
                         )
                 elif isinstance(numpy_filter, ForbiddenSubstringFilter):
                     if numpy_filter.length() > self.length:
                         raise ValueError(
                             f'DomainPool "{self.name}" has length {self.length}, but a '
-                            f"ForbiddenSubstringFilter was specified with larger length "
-                            f"{numpy_filter.length()}, which is not allowed"
+                            f'ForbiddenSubstringFilter was specified with larger length '
+                            f'{numpy_filter.length()}, which is not allowed'
                         )
                 idx += 1
 
@@ -1150,10 +1166,10 @@ class DomainPool(JSONSerializable):
                 # https://stackoverflow.com/questions/624926/how-do-i-detect-whether-a-python-variable-is-a-function
                 if not callable(seq_constraint):
                     raise ValueError(
-                        "each element of numpy_filters must be an instance of "
-                        "SequenceFilter (i.e., be a function that takes a single string "
-                        "and returns a bool), "
-                        f"but the element at index {idx} is of type {type(seq_constraint)}"
+                        'each element of numpy_filters must be an instance of '
+                        'SequenceFilter (i.e., be a function that takes a single string '
+                        'and returns a bool), '
+                        f'but the element at index {idx} is of type {type(seq_constraint)}'
                     )
                 idx += 1
 
@@ -1172,9 +1188,9 @@ class DomainPool(JSONSerializable):
 
     def to_json_serializable(self, suppress_indent: bool = True) -> dict[str, Any]:
         if self.length is None and self.possible_sequences is None:
-            raise ValueError("exactly one of length or possible_sequences should be None, but both are")
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
         if self.length is not None and self.possible_sequences is not None:
-            raise ValueError("exactly one of length or possible_sequences should be None, but neither is")
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
 
         dct = {
             name_key: self.name,
@@ -1189,8 +1205,8 @@ class DomainPool(JSONSerializable):
                 dct[possible_sequences_key] = self.possible_sequences.to_json_serializable(suppress_indent)
             else:
                 raise ValueError(
-                    "possible_sequences should be list of strings or SuperSequence but is "
-                    f"{type(self.possible_sequences)}: {self.possible_sequences}"
+                    'possible_sequences should be list of strings or SuperSequence but is '
+                    f'{type(self.possible_sequences)}: {self.possible_sequences}'
                 )
         if self.length is not None:
             dct[length_key] = self.length
@@ -1208,9 +1224,9 @@ class DomainPool(JSONSerializable):
         possible_sequences = json_map.get(possible_sequences_key)
 
         if length is None and possible_sequences is None:
-            raise ValueError("exactly one of length or possible_sequences should be None, but both are")
+            raise ValueError('exactly one of length or possible_sequences should be None, but both are')
         if length is not None and possible_sequences is not None:
-            raise ValueError("exactly one of length or possible_sequences should be None, but neither is")
+            raise ValueError('exactly one of length or possible_sequences should be None, but neither is')
 
         return DomainPool(
             name=name,
@@ -1328,8 +1344,8 @@ class DomainPool(JSONSerializable):
                 sequence = self.possible_sequences.sample_substring(rng)
             else:
                 raise ValueError(
-                    "possible_sequences should be list of strings or SuperSequence but is "
-                    f"{type(self.possible_sequences)}: {self.possible_sequences}"
+                    'possible_sequences should be list of strings or SuperSequence but is '
+                    f'{type(self.possible_sequences)}: {self.possible_sequences}'
                 )
         elif not self.replace_with_close_sequences or previous_sequence is None:
             sequence = self._get_next_sequence_satisfying_numpy_and_sequence_constraints(rng)
@@ -1355,7 +1371,7 @@ class DomainPool(JSONSerializable):
             num_to_generate = 100
 
             if len(available_distances_list) == 0:
-                raise ValueError("out of Hamming distances to try, quitting")
+                raise ValueError('out of Hamming distances to try, quitting')
 
             # sample a Hamming distance that we haven't tried yet
             available_distances_arr = np.array(available_distances_list)
@@ -1432,15 +1448,15 @@ class DomainPool(JSONSerializable):
 
                 if warn_no_seqs_found and generated_all_seqs:
                     logger.info(
-                        f"\nGenerated all DNA sequences Hamming distance {sampled_distance} "
-                        f"from the previous sequence {previous_sequence} and not found one that passed the "
-                        f"NumpyFilters and SequenceFilters. Trying another distance."
+                        f'\nGenerated all DNA sequences Hamming distance {sampled_distance} '
+                        f'from the previous sequence {previous_sequence} and not found one that passed the '
+                        f'NumpyFilters and SequenceFilters. Trying another distance.'
                     )
                 elif warn_no_seqs_found and num_to_generate >= max_to_generate_before_moving_on:
                     logger.info(
-                        f"\nGenerated > {max_to_generate_before_moving_on} DNA sequences Hamming "
-                        f"distance {sampled_distance} from the previous sequence {previous_sequence} and not "
-                        f"found one that passed the NumpyFilters and SequenceFilters. Trying another distance."
+                        f'\nGenerated > {max_to_generate_before_moving_on} DNA sequences Hamming '
+                        f'distance {sampled_distance} from the previous sequence {previous_sequence} and not '
+                        f'found one that passed the NumpyFilters and SequenceFilters. Trying another distance.'
                     )
 
                 if sequence is None and (generated_all_seqs or num_to_generate >= max_to_generate_before_moving_on):
@@ -1451,7 +1467,7 @@ class DomainPool(JSONSerializable):
 
                 num_to_generate *= 2
 
-        raise AssertionError("should be unreachable")
+        raise AssertionError('should be unreachable')
 
     def _get_next_sequence_satisfying_numpy_and_sequence_constraints(self, rng: np.random.Generator) -> str:
         num_to_generate = 100
@@ -1471,24 +1487,24 @@ class DomainPool(JSONSerializable):
             if num_to_generate > 10**9:
                 raise NotImplementedError(
                     "We've generated over 1 billion random DNA sequences of length "
-                    f"{self.length} and found none that passed the NumpyConstraints "
-                    f"and "
-                    "SequenceConstraints. Try relaxing the constraints so "
+                    f'{self.length} and found none that passed the NumpyConstraints '
+                    f'and '
+                    'SequenceConstraints. Try relaxing the constraints so '
                     "that it's more likely a random sequence satisfies the "
-                    "constraints."
+                    'constraints.'
                 )
             if num_to_generate == num_sequences_total:
                 raise NotImplementedError(
-                    f"We generated all possible {num_sequences_total} DNA sequences "
-                    f"of length {self.length} and found none that passed the "
-                    f"NumpyConstraints and "
-                    "SequenceConstraints. Try relaxing the constraints so that "
-                    "some sequence satisfies the constraints."
+                    f'We generated all possible {num_sequences_total} DNA sequences '
+                    f'of length {self.length} and found none that passed the '
+                    f'NumpyConstraints and '
+                    'SequenceConstraints. Try relaxing the constraints so that '
+                    'some sequence satisfies the constraints.'
                 )
 
             num_to_generate *= 2
 
-        raise AssertionError("should be unreachable")
+        raise AssertionError('should be unreachable')
 
     def _generate_random_sequences_passing_numpy_filters(
         self, rng: np.random.Generator, num_to_generate: int
@@ -1496,6 +1512,7 @@ class DomainPool(JSONSerializable):
         bases = self._bases_to_use()
         length = self.length
         assert length is not None
+
         seqs = nn.DNASeqList(
             length=length,
             alphabet=bases,
@@ -1512,10 +1529,10 @@ class DomainPool(JSONSerializable):
         if log_numpy_generation:
             num_decimals = len(str(num_to_generate))
             logger.debug(
-                f"generated {num_to_generate:{num_decimals}} sequences "
-                f"of length {length:2}, "
-                f"of which {num_passed:{num_decimals}} "
-                f"passed the numpy sequence constraints"
+                f'generated {num_to_generate:{num_decimals}} sequences '
+                f'of length {length:2}, '
+                f'of which {num_passed:{num_decimals}} '
+                f'passed the numpy sequence constraints'
             )
 
     def _bases_to_use(self) -> Collection[str]:
@@ -1523,7 +1540,7 @@ class DomainPool(JSONSerializable):
         for filter_ in self.numpy_filters:
             if isinstance(filter_, RestrictBasesFilter):
                 return filter_.bases
-        return "A", "C", "G", "T"
+        return 'A', 'C', 'G', 'T'
 
     def _apply_numpy_filters(self, seqs: nn.DNASeqList) -> nn.DNASeqList:
         # filter sequence not passing numpy filters, but skip RestrictBasesFilter since
@@ -1542,19 +1559,33 @@ def add_quotes(string: str) -> str:
 
 
 def mandatory_field(ret_type: Type, json_map: dict, main_key: str, *legacy_keys: str) -> Any:
-    # should be called from function whose return type is the type being constructed from JSON, e.g.,
-    # Design or Strand, given by ret_type. This helps give a useful error message
+    """
+    Look up `main_key` (or one of `legacy_keys`, in order, for backward compatibility)
+    in `json_map`, returning its value.
+
+    Intended to be called from a `from_json_serializable`-style method whose return type
+    is `ret_type` (e.g., `Design` or `Strand`), so a useful error message naming the
+    object being constructed can be raised if none of the keys is found.
+
+    :param ret_type: the class being reconstructed from `json_map`, used only to name it in the error message
+    :param json_map: JSON dict to look up the field in
+    :param main_key: the current/preferred key to look up
+    :param legacy_keys: older key names to fall back on, for reading JSON written by older versions
+    :return: value found at `main_key` or the first matching key in `legacy_keys`
+    :raises ValueError: if none of `main_key` or `legacy_keys` is present in `json_map`
+    """
+
     for key in (main_key,) + legacy_keys:
         if key in json_map:
             return json_map[key]
     ret_type_name = ret_type.__name__
     msg_about_keys = f'the key "{main_key}"'
     if len(legacy_keys) > 0:
-        msg_about_keys += f" (or any of the following legacy keys: {', '.join(map(add_quotes, legacy_keys))})"
+        msg_about_keys += f' (or any of the following legacy keys: {", ".join(map(add_quotes, legacy_keys))})'
     msg = (
-        f"I was looking for {msg_about_keys} in the JSON encoding of a {ret_type_name}, "
-        f"but I did not find it."
-        f"\n\nThis occurred when reading this JSON object:\n{json_map}"
+        f'I was looking for {msg_about_keys} in the JSON encoding of a {ret_type_name}, '
+        f'but I did not find it.'
+        f'\n\nThis occurred when reading this JSON object:\n{json_map}'
     )
     raise ValueError(msg)
 
@@ -1600,11 +1631,20 @@ class Part(ABC):
         pass
 
 
+class DomainState(str, Enum):
+    """The four mutually states of Domain"""
+
+    ASSIGNABLE = 'Assignable'
+    DEPENDENT = 'Dependent'
+    LOCKED = 'Locked'
+    FIXED = 'Fixed'
+
+
 @dataclass
 class Domain(Part, JSONSerializable):
     """
     Represents a contiguous substring of the DNA sequence of a :any:`Strand`, which is intended
-    to be either single-stranded, or to bind fully to the Watson-Crick complement of the :any:`Domain`.
+    to be either single-stranded, or to bind fully to the reverse complement of the :any:`Domain`.
 
     If two domains are complementary, they are represented by the same :any:`Domain` object.
     They are distinguished only by whether the :any:`Strand` object containing them has the
@@ -1629,23 +1669,51 @@ class Domain(Part, JSONSerializable):
     length and individual :any:`DomainConstraint`'s.
     """
 
-    # TODO: `set_sequence_recursive_up`
-
-    #        - if parent is not none, make recursive call to set_sequence_recursive_up
-    # TODO: `set_sequence_recursive_down`
-    #        - iterate over children, call set_sequence
-    _sequence: str | None = field(init=False, repr=False, default=None, compare=False, hash=False)
+    _subdomains: list[Domain] = field(init=False, default_factory=list)
     """
-    DNA sequence assigned to this :any:`Domain`. This is assumed to be the sequence of the unstarred
-    variant; the starred variant has the reverse complement,
-    accessible via :meth:`Domain.starred_sequence()`.
+    List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
+    """
+
+    parents: list[Domain] = field(init=False, default_factory=list)
+    """
+        :any:`Domain`'s of which this is a subdomain. Note, this is not set manually, these are set by the library
+         based on the :attr:`Domain.subdomains` of other domains in the same subdomain graph.
+    """
+
+    dependents: list[Tuple[Domain, Callable[[str, np.random.Generator], str]]] = field(init=False, default_factory=list)
+    """
+    List of tuples of :any:`Domain`'s and dependency functions which their sequence depends on this :any:`Domain`'s
+     sequence. 
+    Each tuple pairs a dependent :any:`Domain` with a user-defined function that computes the dependent :any:`Domain`'s
+     sequence based this :any:`Domain` sequence (its dependee) and randomness. 
+    """
+
+    locked_dependents: list[Domain] = field(init=False, default_factory=list)
+    """ 
+    List of locked :any:`Domain`'s in the :any:`Domain.subdomains` or :any:`Domain.parents` list. 
+
+    If this :any:`Domain` is locked, it will be exactly one or the other. If this :any:`Domain`' is unlocked,
+    then all domains in this Domain's parents and subdomains are in :any:`Domain.locked_dependents`.
+
+    If this Domain is locked or  if an unlocked domain is a descendant of this Domain, then locked_dependents is
+    all parents (which will all be locked since there is an unlocked descendant). Otherwise (thus must be true since
+    all source-sink paths have exactly one unlocked domain) an unlocked domain is an ancestor of this, and then set
+    locked_dependents equal to all subdomains (which will all be locked since there is an unlocked ancestor) of this
+    domain.
+    """
+
+    memoryview_sequence: memoryview | None = field(init=False, repr=False, default=None, compare=False, hash=False)
+    """
+    This :any:`Domain`'s sequence is accessed by this memoryview object.
+    In fact, each :any:`Domain` accesses its portion of the shared buffer (which here a is bytearray created in
+    :func:`set_domains_memoryviews`) through memoryview slicing, eliminating data copying.
     """
 
     weight: float = 1.0
     """
     Weight to apply before picking domain at random to change when re-assigning DNA sequences during search.
-    Should only be changed for independent domains. (those with :data:`Domain.dependent` set to False)
-    
+    Should only be changed for assignable domains.
+
     Normally a domain's probability of being changed is proportional to the total score of violations it
     causes, but that total score is first multiplied by :data:`Domain.weight`. This is useful,
     for instance, to weight a domain lower when it has many subdomains that intersect many strands,
@@ -1654,106 +1722,94 @@ class Domain(Part, JSONSerializable):
     close to optimized, this will likely cause the score to go up.
     """
 
-    fixed: bool = False
-    """
-    Whether this :any:`Domain`'s DNA sequence is fixed, i.e., cannot be changed by the
-    search algorithm :py:meth:`search.search_for_dna_sequences`.
-
-    Note: If a domain is fixed then all of its subdomains must also be fixed.
-    """
-
     label: str | None = None
     """
     Optional "label" string to associate to this :any:`Domain`.
-
     Useful for associating extra information with the :any:`Domain` that will be serialized, for example,
     for DNA sequence design.
     """
 
-    dependent: bool = False
+    state: DomainState = DomainState.ASSIGNABLE
     """
-    Whether this :any:`Domain`'s DNA sequence is dependent on others. Usually this is not the case.
-    However, domains can be subdivided hierarchically into a tree of domains by setting 
-    :data:`Domain.subdomains` to describe the tree. In this case exactly
-    one domain along every path from the root to any leaf must be independent, and the rest dependent:
-    the dependent domains will have their sequences calculated from the indepenedent ones.
-    
-    A possible use case is that one strand represents a subsequence of M13 of length 300,
-    of which there are 7249 possible DNA sequences to assign based on the different
-    rotations of M13. If this strand is bound to several other strands, it will have
-    several domains, but they cannot be set independently of each other.
-    This can be done by creating a strand with a single long domain, which is subdivided into many dependent 
-    child domains.
-    Only the entire strand, the root domain, can be assigned at once, changing every domain at once,
-    so the domains are dependent on the root domain's assigned sequence.
+    A :any:`Domain` can either be assignable, fixed, dependent, or locked:
+
+    - fixed: this :any:`Domain`'s DNA sequence cannot be changed by the search algorithm
+      :py:meth:`search.search_for_dna_sequences`
+
+    - dependent: The dependent domains will have their sequences
+      calculated from the non-dependent ones.
+      A possible use case is modeling DNA-strand displacement reactions when there are base-pair mismatches. For example,
+      suppose Domain d is dependent on Domain c, where d and c have sequence mismatches. Therefore, specific indices of
+      d's sequence are determined by c's.
+
+    - assignable: Such :any:`Domain`’s DNA sequence may be directly selected by the search algorithm for
+      sequence assignment. The default value for :attr:`Domain.state` is `State.ASSIGNABLE`.
+
+    - locked: :any:`Domain`’s can be subdivided hierarchically into
+      a directed acyclic graph of domains by setting :any:`Domain.subdomains` to describe it. In this case exactly
+      one :any:`Domain` along every path from the root to any leaf must be unlocked, and the rest locked: the locked
+      domains will have their sequences calculated from the unlocked ones.
+      A possible use case is that one strand represents a subsequence of M13 of length 300, of which there are
+      7249 possible DNA sequences to assign based on the different rotations of M13. If this strand is bound to several
+      other strands, it will have several domains, but they cannot be set independently of each other. This can be
+      done by creating a strand with a single long domain, which is subdivided into many locked child domains
+      (i.e. :any:`Domain.subdomains`). Only the entire strand, the root domain, can be assigned at once, changing every
+      domain at once, so the domains are locked-dependent on the root domain’s assigned sequence.
     """
 
-    length: int | None = None
+    _length: int | None = None
     """
-    Length of this domain. If None, then the method :meth:`Domain.get_length` asks :data:`Domain.pool`
-    for the length. However, a :any:`Domain` with :data:`Domain.dependent` set to True has no
+    Length of this domain. If None, then the method :meth:`Domain.length` asks :data:`Domain.pool`
+    for the length. However, a :any:`Domain` with :attr:`Domain.state` set to `state.LOCKED` or `state.DEPENDNET` has no
     :data:`Domain.pool`. For such domains, it is necessary to set a :data:`Domain.length` field directly.
     """
 
-    _subdomains: list[Domain] = field(init=False, default_factory=list)
-    """List of smaller subdomains whose concatenation is this domain. If empty, then there are no subdomains.
-    """
-
-    parent: Domain | None = field(init=False, default=None)
-    """Domain of which this is a subdomain. Note, this is not set manually, this is set by the library based 
-    on the :data:`Domain.subdomains` of other domains in the same tree.
-    """
-
-    _key: str = field(init=False, default="", compare=False, hash=False)
+    _key: str = field(init=False, default='', compare=False, hash=False)
 
     def __init__(
         self,
         name: str,
         pool: DomainPool | None = None,
-        *,
-        sequence: str | None = None,
-        fixed: bool = False,
+        locked: bool = False,
         label: str | None = None,
-        dependent: bool = False,
-        subdomains: list[Domain] | None = None,
+        subdomains: Iterable[Domain] = (),
+        parents: Iterable[Domain] = (),
+        dependents: (List[Tuple[Domain, Callable[[str, np.random.Generator], str]]] | None) = None,
         weight: float | None = None,
     ) -> None:
         if subdomains is None:
             subdomains = []
+        if parents is None:
+            parents = []
+        if dependents is None:
+            dependents = []
         self._name = name
-        self._starred_name = name + "*"
+        self._starred_name = name + '*'
         self._pool = pool
-        self._sequence = sequence
-        self.fixed = fixed
         self.label = label
-        self.dependent = dependent
-        self._subdomains = subdomains
-        self._key = f"Domain({self.name})"
+        self.dependents = dependents
+        self._subdomains = list(subdomains)
+        self.parents = list(parents)
+        self.locked_dependents = []
 
-        if self.name.endswith("*"):
-            raise ValueError(f"Domain name cannot end with *\ndomain name = {self.name}")
+        if self.name.endswith('*'):
+            raise ValueError(f'Domain name cannot end with *\ndomain name = {self.name}')
 
-        if self.fixed:
-            if len(self._subdomains) != 0:
-                raise ValueError(
-                    f"Domain is fixed, so cannot have subdomains,\n"
-                    f"but {len(self._subdomains)} subdomains were given:\n"
-                    f"{self._subdomains}"
-                )
-
-        # set parent field for all subdomains.
+        # Set parents field for all subdomains.
         for subdomain in self._subdomains:
-            subdomain.parent = self
+            subdomain.parents.append(self)
 
-        if self.dependent:
-            if weight is not None:
-                raise ValueError(
-                    "cannot set Domain.weight when Domain.dependent is True, "
-                    "since dependent domains cannot be picked to change in the search, "
-                    "which is the probability that DOmain.weight affects"
-                )
-            if len(self._subdomains) > 0:
-                self.length = sum(subdomain.get_length() for subdomain in self._subdomains)
+        if self.state != DomainState.ASSIGNABLE and weight is not None:
+            raise ValueError(
+                'cannot set Domain.weight when it is not assignable, '
+                'since non-assignable domains (locked or dependent) cannot be picked to change in the search, '
+                'which is the probability that Domain.weight affects'
+            )
+
+        if locked:
+            self.set_locked()
+        else:
+            self.state = DomainState.ASSIGNABLE
 
         if weight is not None:
             self.weight = weight
@@ -1775,12 +1831,12 @@ class Domain(Part, JSONSerializable):
                 break
         if all_sd_unassigned:
             return
-        sb_seqs = [sd.sequence() if sd.has_sequence() else "?" * sd.get_length() for sd in self._subdomains]
-        self._sequence = "".join(sb_seqs)
+        sb_seqs = [sd.sequence() if sd.has_sequence() else '?' * sd.length for sd in self._subdomains]
+        self.set_sequence(''.join(sb_seqs))
 
     @staticmethod
     def name_of_part_type(self) -> str:
-        return "domain"
+        return 'domain'
 
     def key(self) -> str:
         return self._key
@@ -1801,19 +1857,27 @@ class Domain(Part, JSONSerializable):
             Dictionary ``d`` representing this :any:`Domain` that is "naturally" JSON serializable,
             by calling ``json.dumps(d)``.
         """
+
         dct: dict[str, Any] = {name_key: self.name}
         if self._pool is not None:
             dct[domain_pool_name_key] = self._pool.name
         if self.has_sequence():
-            dct[sequence_key] = self._sequence
-            if self.fixed:
-                dct[fixed_key] = True
+            dct[sequence_key] = self.sequence()
+        dct[state_key] = self.state
         if self.label is not None:
             dct[label_key] = self.label
+
+        if self.subdomains:
+            dct[domain_subdomains_names_key] = [subdomain.name for subdomain in self.subdomains]
+        else:
+            dct[domain_subdomains_names_key] = []
+
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
-    def from_json_serializable(json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None) -> Domain:
+    def from_json_serializable(
+        json_map: dict[str, Any], pool_with_name: dict[str, DomainPool] | None
+    ) -> tuple[Domain, list[str]]:
         """
         :param json_map:
             JSON serializable object encoding this :any:`Domain`, as returned by
@@ -1822,13 +1886,15 @@ class Domain(Part, JSONSerializable):
             dict mapping name to :any:`DomainPool` with that name; required to rehydrate :any:`Domain`'s.
             If None, then a DomainPool with no constraints is created with the name and domain length
             found in the JSON.
+        :param domains_added:
+            TODO
         :return:
             :any:`Domain` represented by dict `json_map`, assuming it was created by
             :py:meth:`Domain.to_json_serializable`.
         """
         name: str = mandatory_field(Domain, json_map, name_key)
         sequence: str | None = json_map.get(sequence_key)
-        fixed: bool = json_map.get(fixed_key, False)
+        state: DomainState = json_map.get(state_key)
 
         label: str | None = json_map.get(label_key)
 
@@ -1842,8 +1908,26 @@ class Domain(Part, JSONSerializable):
         else:
             pool = None
 
-        domain: Domain = Domain(name=name, sequence=sequence, fixed=fixed, pool=pool, label=label)
-        return domain
+        domain: Domain = Domain(name=name, pool=pool, label=label)
+
+        subdomains_names = mandatory_field(Domain, json_map, domain_subdomains_names_key)
+
+        # subdomains: list[Domain] = []
+        # subdomains_json = mandatory_field(Domain, json_map, domain_subdomains_names_key)
+        # print(domain.name)
+        # print(subdomains_json)
+        # print("---------------------")
+        # for subdomain_json in subdomains_json:
+        #     subdomain = Domain.from_json_serializable(subdomain_json, pool_with_name, domains_added)
+        #     subdomains.append(subdomain)
+        #     subdomain.parents.append(domain)
+
+        domain._length = len(sequence)
+        domain.set_sequence(sequence)
+        domain.set_state(state)
+        # domain.subdomains = subdomains
+
+        return domain, subdomains_names
 
     @property
     def name(self) -> str:
@@ -1858,7 +1942,7 @@ class Domain(Part, JSONSerializable):
         :param new_name: new name to set
         """
         self._name = new_name
-        self._starred_name = new_name + "*"
+        self._starred_name = new_name + '*'
 
     @property
     def pool(self) -> DomainPool:
@@ -1866,7 +1950,7 @@ class Domain(Part, JSONSerializable):
         :return: :any:`DomainPool` of this :any:`Domain`
         """
         if self._pool is None:
-            raise ValueError(f"pool has not been set for Domain {self.name}")
+            raise ValueError(f'pool has not been set for Domain {self.name}')
         return self._pool
 
     @pool.setter
@@ -1877,41 +1961,47 @@ class Domain(Part, JSONSerializable):
         """
         if self._pool is not None and new_pool is not self._pool:
             raise ValueError(
-                f"Assigning pool {new_pool} to domain {self} but {self} already has domain pool {self._pool}"
+                f'Assigning pool {new_pool} to domain {self} but {self} already has domain pool {self._pool}'
             )
         self._pool = new_pool
 
     @property
-    def subdomains(self) -> list["Domain"]:
+    def subdomains(self) -> list['Domain']:
         """
         Subdomains of this :any:`Domain`.
 
-        Used in connection with :data:`Domain.dependent` to declare that
-        some :any:`Domain`'s are contained within other domains (forming a tree in general),
-        and domains with :data:`Domain.dependent` set to True automatically take their sequences from
-        independent domains.
 
-        WARNING: this can be a bit tricky to determine the order when setting these.
-        The subdomains should be listed in 5' to 3' order for UNSTARRED domains.
-        If there is a starred domain with starred subdomains, they would be listed in
-        REVERSE order.
+        Used in connection with :attr:`Domain.state` to declare that some :any:`Domain`’s are contained within other
+        domains (forming a directed graph in general), and domains with :attr:`Domain.state` set to `State.LOCKED`
+        automatically take their sequences from assignable or dependent domains.
 
-        For example, if there is a domain `dom*`  ``[--------->`` of length 11
-        with two subdomains `sub1*` ``[----->`` of length 7 and `sub2*` ``[-->`` of length 4
-        (put together they look like ``[----->[-->``)
-        that appear
-        in that order left to right (5' to 3'), then one would assign the domain `dom` to have subdomains
-        ``[sub2, sub1]``, since the UNSTARRED domains appear ``<-----]<--]``, i.e., in 5' to 3' order
-        for the unstarred domains, first the length 4 domain `dom2` appears,
-        then the length 7 domain `dom1`.
+        WARNING: this can be a bit tricky to determine the order when setting these. The subdomains should be listed
+         in 5’ to 3’ order for UNSTARRED domains. If there is a starred domain with starred subdomains, they would be
+          listed in REVERSE order.
+
+        For example, if there is a domain dom* [---------> of length 11 with two subdomains sub1* [-----> of length 7
+        and sub2* [--> of length 4 (put together they look like [----->[-->) that appear in that order left to right
+        (5’ to 3’), then one would assign the domain dom to have subdomains [sub2, sub1], since the UNSTARRED domains appear <-----]<--], i.e., in 5’ to 3’ order for the unstarred domains, first the length 4 domain dom2 appears, then the length 7 domain dom1.
         """
         return self._subdomains
 
+    @property
+    def fixed(self):
+        """
+        Whether this :any:`Domain` is fixed, i.e. whether its :data:`Domain.state` is
+        :data:`DomainState.FIXED`. A fixed :any:`Domain` has a DNA sequence that the search
+        algorithm cannot change.
+        """
+        return self.state == DomainState.FIXED
+
+    def set_locked(self):
+        self.state = DomainState.LOCKED
+
     @subdomains.setter
-    def subdomains(self, new_subdomains: list["Domain"]) -> None:
+    def subdomains(self, new_subdomains: list['Domain']) -> None:
         self._subdomains = new_subdomains
         for s in new_subdomains:
-            s.parent = self
+            s.parents.append(self)
 
     def has_length(self) -> bool:
         """
@@ -1920,28 +2010,27 @@ class Domain(Part, JSONSerializable):
             to it, or it has a :any:`DomainPool`.
         """
         return (
-            self._sequence is not None
-            or (self._pool is not None and self._pool.length is not None)
+            (self._pool is not None and self._pool.length is not None)
             or self.length is not None
+            or self.memoryview_sequence is not None
         )
 
-    def get_length(self) -> int:
+    @property
+    def length(self) -> int:
         """
         :return:
             Length of this domain (delegates to pool)
         :raises ValueError:
             if no :any:`DomainPool` has been set for this :any:`Domain`
         """
-        if self.length is not None:
-            return self.length
-        if self.fixed and self._sequence is not None:
-            return len(self._sequence)
+        if self._length is not None:
+            return self._length
+        if self.state == DomainState.FIXED:
+            if not self.has_sequence():
+                raise ValueError(f'Domain {self.name} is fixed but has no sequence assigned yet')
+            return len(self.sequence())
         if self._pool is None:
-            raise ValueError(
-                f"No DomainPool has been set for domain {self.name}, "
-                f"so it has no length yet.\n"
-                "Assign a DomainPool (which has a length field) to give this Domain a length."
-            )
+            return None
         if self._pool.length is not None:
             return self._pool.length
         elif self._pool.possible_sequences is not None:
@@ -1954,82 +2043,73 @@ class Domain(Part, JSONSerializable):
                 return self._pool.possible_sequences.substring_length
             else:
                 raise ValueError(
-                    "possible_sequences should be list of strings or SuperSequence but is "
-                    f"{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}"
+                    'possible_sequences should be list of strings or SuperSequence but is '
+                    f'{type(self._pool.possible_sequences)}: {self._pool.possible_sequences}'
                 )
-        assert False, "unreachable"
+        else:
+            assert False, 'unreachable'
+
+    @length.setter
+    def length(self, length: int):
+        self._length = length
+
+    def set_state(self, new_state: DomainState):
+        if new_state == DomainState.FIXED:
+            if len(self._subdomains) > 0:
+                raise ValueError(
+                    f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
+                )
+            if len(self.parents) > 0:
+                raise ValueError(
+                    f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
+                )
+
+        self.state = new_state
 
     def sequence(self) -> str:
         """
         :return: DNA sequence of this domain (unstarred version)
         :raises ValueError: If no sequence has been assigned.
         """
-        if self._sequence is None or "?" in self._sequence:
-            raise ValueError(f"sequence has not been set for Domain {self.name}\nsequence: {self._sequence}")
-        return self._sequence
+        if not self.has_sequence():
+            raise ValueError(f'sequence has not been set for Domain {self.name}.')
+        assert self.memoryview_sequence is not None
+        return self.memoryview_sequence.tobytes().decode(encoding='ascii')
 
-    def set_sequence(self, new_sequence: str) -> None:
+    def set_sequence(self, new_sequence: str, fixed: bool = False) -> None:
         """
-        :param new_sequence: new DNA sequence to set
+
+        :param new_sequence:  new DNA sequence to set
+
+        :param fixed: this parameter gets true only when is called by :meth:`Domain.set_fixed_sequence`.
         """
-        if self.fixed:
-            raise ValueError(f"cannot assign a new sequence to this Domain; its sequence is fixed as {self._sequence}")
-        if self.has_length() and len(new_sequence) != self.get_length():
+        if self.state == DomainState.FIXED:
             raise ValueError(
-                f"incorrect length for new_sequence={new_sequence};\n"
-                f"it is length {len(new_sequence)}, but this domain is length {self.get_length()}"
+                'cannot assign a new sequence to this Domain; its sequence is fixed as '
+                f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
             )
-        # Check that total length of subdomains (if used) adds up domain length.
-        if len(self._subdomains) != 0:
-            sd_total_length = 0
-            for sd in self._subdomains:
-                sd_total_length += sd.get_length()
-            if sd_total_length != self.get_length():
-                raise ValueError(
-                    f"Domain {self} is length {self.get_length()} but subdomains {self._subdomains} "
-                    f"have total length of {sd_total_length}"
-                )
-        self._sequence = new_sequence
-        self._set_subdomain_sequences(new_sequence)
-        self._set_parent_sequence(new_sequence)
+        if self.state == DomainState.LOCKED:
+            raise ValueError(
+                'cannot assign a new sequence to this Domain; its sequence is locked_dependent on '
+                f'{", ".join([unlocked_domain.name for unlocked_domain in self.unlocked_ancestor_or_descendants()])}'
+            )
 
-    def _set_subdomain_sequences(self, new_sequence: str) -> None:
-        """Sets sequence for all subdomains.
+        if self.has_length() and len(new_sequence) != self.length:
+            raise ValueError(
+                f'incorrect length for new_sequence={new_sequence};\n'
+                f'it is length {len(new_sequence)}, but this domain is length {self.length}'
+            )
 
-        :param new_sequence: Sequence assigned to this domain.
-        :type new_sequence: str
-        """
-        sequence_idx = 0
-        for sd in self._subdomains:
-            sd_len = sd.get_length()
-            sd_sequence = new_sequence[sequence_idx : sequence_idx + sd_len]
-            sd._sequence = sd_sequence
-            sd._set_subdomain_sequences(sd_sequence)
-            sequence_idx += sd_len
+        validate_subdomain_lengths(self)
 
-    def _set_parent_sequence(self, new_sequence: str) -> None:
-        """Set parent sequence and propagate upwards
+        if fixed:
+            self._length = len(new_sequence)
+        if self.memoryview_sequence is None:
+            set_domains_memoryviews(self)
 
-        :param new_sequence: new sequence
-        :type new_sequence: str
-        """
-        parent = self.parent
-        if parent is not None:
-            if parent._sequence is None:
-                parent._sequence = "?" * parent.get_length()
-            # Add up lengths of subdomains, add new_sequence
-            idx = 0
-            assert self in parent._subdomains
-            sd: Domain | None = None
-            for sd in parent._subdomains:
-                if sd == self:
-                    break
-                else:
-                    idx += sd.get_length()
-            assert sd is not None
-            old_sequence = parent._sequence
-            parent._sequence = old_sequence[:idx] + new_sequence + old_sequence[idx + sd.get_length() :]
-            parent._set_parent_sequence(parent._sequence)
+        self.memoryview_sequence[:] = new_sequence.encode(encoding='ascii')
+
+        self.notify_sequence_changed(np.random.default_rng(), self)
 
     def set_fixed_sequence(self, fixed_sequence: str) -> None:
         """
@@ -2040,10 +2120,62 @@ class Domain(Part, JSONSerializable):
 
         :param fixed_sequence: new fixed DNA sequence to set
         """
-        self._sequence = fixed_sequence
-        self._set_subdomain_sequences(fixed_sequence)
-        self._set_parent_sequence(fixed_sequence)
-        self.fixed = True
+        # if self.type == DomainType.FIXED and self.memoryview_sequence.tobytes():
+        #     raise ValueError(
+        #         'cannot assign a new sequence to this Domain; its sequence is fixed as '
+        #         f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
+        #     )
+        # else:
+        if self.state == DomainState.FIXED:
+            raise ValueError(
+                f'cannot assign a new sequence to Domain {self.name}; its sequence is fixed as '
+                f'{self.memoryview_sequence.tobytes().decode(encoding="ascii")}'
+            )
+        self.state = None  # temporary
+
+        self.set_sequence(fixed_sequence, fixed=True)
+
+        if len(self._subdomains) > 0:
+            raise ValueError(
+                f'Domain {self.name} is fixed, but has subdomains: {self._subdomains}, which is not allowed'
+            )
+        if len(self.parents) > 0:
+            raise ValueError(
+                f'Domain {self.name} is fixed, but is a subdomain of the following domains: {self.parents}, which is not allowed'
+            )
+
+        self.state = DomainState.FIXED
+
+    def notify_sequence_changed(self, rng: np.random.Generator, notifier_domain: Domain) -> None:
+        """
+        :param notifier_domain: The domain which its sequence has been changed and resulted this function call.
+        """
+
+        for dependent, f in self.dependents:
+            new_dependent_sequence = f(self.sequence(), rng)
+            dependent.set_sequence(new_dependent_sequence)
+        for locked_dependent in self.locked_dependents:
+            assert locked_dependent != notifier_domain
+            locked_dependent.notify_sequence_changed(rng, notifier_domain)
+
+    def create_domain_with_mismatches(
+        self, name: str, pick_dependent_seq: Callable[[str, np.random.Generator], str]
+    ) -> Domain:
+
+        # test if pick_domain returns a sequence with the same length as the current domain's sequence
+        correct_length = self.length
+        arbitrary_seq = 'A' * correct_length
+        if len(pick_dependent_seq(arbitrary_seq, np.random.Generator.random)) != correct_length:
+            raise ValueError(
+                f'Thr sequence returned by the mismatch/dependency function {pick_dependent_seq.__qualname__}'
+                f'does not have the same length as the {self.name} domain sequence.'
+            )
+        dependent_domain = Domain(name=name)
+        dependent_domain.length = correct_length
+        dependent_domain.state = DomainState.DEPENDENT
+        self.dependents.append((dependent_domain, pick_dependent_seq))
+
+        return dependent_domain
 
     @property
     def starred_name(self) -> str:
@@ -2055,16 +2187,16 @@ class Domain(Part, JSONSerializable):
     @property
     def starred_sequence(self) -> str:
         """
-        :return: Watson-Crick complement of DNA sequence assigned to this :any:`Domain`.
+        :return: reverse complement of DNA sequence assigned to this :any:`Domain`.
         """
-        if self._sequence is None:
-            raise ValueError("no DNA sequence has been assigned to this Domain")
-        return nv.rc(self._sequence)
+        if not self.has_sequence():
+            return None
+        return nv.wc(self.sequence())
 
     def get_name(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the name
-        :return: The value :data:`Domain.name` or :data:`Domain.starred_name`, depending on
+        :return: The value :data:`Domain.name` or :attr:`Domain.starred_name`, depending on
                  the value of parameter `starred`.
         """
         return self._starred_name if starred else self._name
@@ -2072,13 +2204,21 @@ class Domain(Part, JSONSerializable):
     def concrete_sequence(self, starred: bool) -> str:
         """
         :param starred: whether to return the starred or unstarred version of the sequence
-        :return: The value :data:`Domain.sequence` or :data:`Domain.starred_sequence`, depending on
+        :return: The value :data:`Domain.sequence()` or :data:`Domain.starred_sequence()`, depending on
                  the value of parameter `starred`.
         :raises ValueError: if this :any:`Domain` does not have a sequence assigned
         """
-        if self._sequence is None:
-            raise ValueError(f"no DNA sequence has been assigned to Domain {self}")
-        return self.starred_sequence if starred else self._sequence
+        # if self._sequence is None:
+        #     raise ValueError(f"no DNA sequence has been assigned to Domain {self}")
+        if not self.has_sequence():
+            raise ValueError(f'no DNA sequence has been assigned to Domain {self}')
+        if self.starred_sequence is None:
+            raise AssertionError(
+                'starred_sequence() should return starred version of the sequence if the domain has a sequence.'
+                'Something went wrong in the logic of nuad.'
+            )
+        # return self._starred_sequence if starred else self._sequence
+        return self.starred_sequence if starred else self.sequence()
 
     def has_sequence(self) -> bool:
         """
@@ -2086,7 +2226,9 @@ class Domain(Part, JSONSerializable):
                  If this domain has subdomains, False if any subdomain has not been assigned
                  a sequence.
         """
-        return self._sequence is not None and "?" not in self._sequence
+        return self.memoryview_sequence is not None and '?' not in self.memoryview_sequence.tobytes().decode(
+            encoding='ascii'
+        )
 
     @staticmethod
     def complementary_domain_name(domain_name: str) -> str:
@@ -2099,140 +2241,181 @@ class Domain(Part, JSONSerializable):
         :return:
             name of complementary domain
         """
-        return domain_name[:-1] if domain_name[-1] == "*" else domain_name + "*"
+        return domain_name[:-1] if domain_name[-1] == '*' else domain_name + '*'
 
-    def _is_independent(self) -> bool:
-        """Return true if self is independent (not dependent or fixed).
+    def _is_assignable(self) -> bool:
+        """Return true if self is assignable (not dependent or fixed or locked)."""
+        return True if self.state == DomainState.ASSIGNABLE else False
 
-        :return: [description]
-        """
-        return not self.dependent or self.fixed
-
-    def _contains_any_independent_subdomain_recursively(self) -> bool:
+    def _contains_any_assignable_subdomain_recursively(self) -> bool:
         """Returns true if the subdomain graph rooted at this domain contains
-        at least one independent subdomain.
+        at least one assignable subdomain.
 
         :rtype: bool
         """
-        if self._is_independent():
+        if self._is_assignable():
             return True
 
         for sd in self._subdomains:
-            if sd._contains_any_independent_subdomain_recursively():
+            if sd._contains_any_assignable_subdomain_recursively():
                 return True
 
         return False
 
-    def _check_subdomain_graph_is_uniquely_assignable(self) -> None:
-        """Checks that the subdomain graph that this domain is part of is
-        uniquely assignable. Meaning that all paths from the root to the
-        leaf of the subdomain graph contains exaclty one independent subdomain.
-        """
-        if self.parent is None:
-            self._check_exactly_one_independent_subdomain_all_paths()
-        else:
-            self.parent._check_subdomain_graph_is_uniquely_assignable()
-
-    def _check_exactly_one_independent_subdomain_all_paths(self) -> None:
-        """Checks if all paths in the subdomains graph from the self to
-        a leaf subdomain contains exactly one independent (dependent = False or
-        fixed = True) subdomain (could be this one).
-
-        :raises ValueError: if condition is not satisfied
-        """
-        self_independent = not self.dependent or self.fixed
-
-        if self_independent:
-            # Since this domain is independent, check that there are no more independent subdomains
-            # in any children recursively
-            for sd in self._subdomains:
-                if sd._contains_any_independent_subdomain_recursively():
-                    # Too many independent subdomains in this path
-                    raise ValueError(
-                        f"Domain {self} is independent, but subdomain {sd} already contains an "
-                        f"independent subdomain in its subdomain graph"
-                    )
-        else:
-            if len(self._subdomains) == 0:
-                raise ValueError(f"Domain {self} is dependent and does not contain any subdomains.")
-            # Since this domain is dependent, check that each subdomain has
-            # exactly one independent subdomain in all paths.
-            for sd in self._subdomains:
-                try:
-                    sd._check_exactly_one_independent_subdomain_all_paths()
-                except ValueError as e:
-                    raise ValueError(
-                        f"Domain {self} is dependent and could not find exactly one independent subdomain "
-                        f"in subdomain graph rooted at subdomain {sd}. The following error was found: {e}"
-                    )
-
-    def _check_acyclic_subdomain_graph(self, seen_domains: set["Domain"] | None = None) -> None:
-        """Check to see if domain's subdomain graph contains a cycle.
-
-        :param seen_domains: All the domains seen so far (used by implementation)
-        :type seen_domains: Optional[set["Domain"]]
-        :raises ValueError: Cycle found.
-        """
-        if len(self._subdomains) > 0:
-            if seen_domains is None:
-                seen_domains = set()
-
-            if self in seen_domains:
-                raise ValueError(f"Domain {self} found twice in DFS")
-            else:
-                seen_domains.add(self)
-
-            for sd in self._subdomains:
-                try:
-                    sd._check_acyclic_subdomain_graph(seen_domains)
-                except ValueError as e:
-                    raise ValueError(
-                        f"Cycle found in subdomain graph rooted at {self}. Propogated from subdomain {sd}: {e}"
-                    )
-
-    def all_domains_in_tree(self, allow_fixed: bool = False) -> list["Domain"]:
+    def all_domains_in_tree(self) -> List['Domain']:
         """
         :return:
             list of all domains in the same subdomain tree as this domain (including itself)
         """
-        domains = self._get_all_domains_from_parent()
+        domains = self._get_all_domains_from_parents()
         domains.extend(self._get_all_domains_from_this_subtree())
-        if not allow_fixed:
-            domains = [domain for domain in domains if not domain.fixed]
         return domains
 
-    def all_domains_intersecting(self) -> list["Domain"]:
+    def all_domains_in_dag(self) -> Set['Domain']:
         """
-        :return:
-            list of all domains intersecting this one, meaning those domains in the subtree rooted
-            at this domain (including itself), plus any ancestors of this domain.
+
+        :return: list of all :any:`Domain`'s in the same connected component (in the subdomain graph) as this :any:`Domain`.
+
+        """
+        domains = set()
+        stack = [self]
+
+        while stack:
+            domain = stack.pop()
+
+            if domain not in domains:
+                domains.add(domain)
+
+                for sd in domain.subdomains:
+                    if sd not in domains:
+                        stack.append(sd)
+
+                for parent in domain.parents:
+                    if parent not in domains:
+                        stack.append(parent)
+
+        return domains
+
+    def all_domains_intersecting(self) -> list['Domain']:
+        """
+
+        :return: list of all :any:`Domain` intersecting this one, meaning those domains in the subdomain DAG
+         rooted at this :any:`Domain` (including itself), plus any ancestors of this :any:`Domain`.
+
         """
         domains = self.ancestors()
-        domains.extend(self._get_all_domains_from_this_subtree())
+
+        subtree_domains = self._get_all_domains_from_this_subtree(excluded_subdomain=self)
+        domains.extend(subtree_domains)
+
+        tree_subdomains_set = set(domains)
+        not_included_ancestors_from_subdomains = []
+        for domain in subtree_domains:
+            for parent in domain.parents:
+                if parent not in tree_subdomains_set:
+                    not_included_ancestors_from_subdomains.append(parent)
+                    not_included_ancestors_from_subdomains.extend(parent.ancestors())
+                    tree_subdomains_set.update(not_included_ancestors_from_subdomains)
+
+        # including any ancestors of subtree domains that are not included in the subtree:
+        domains.extend(not_included_ancestors_from_subdomains)
+        # remove_duplicates()
         return domains
 
-    def ancestors(self) -> list["Domain"]:
+    def all_domains_affected_by_sequence_change(self) -> List['Domain']:
+        """:return: List of :any:`Domain`'s that their sequence changes by this :any:`Domain` sequence modification."""
+        domains = self.all_domains_intersecting()
+        stack = domains.copy()
+        while stack:
+            domain = stack.pop()
+            for dependent in domain.dependents:
+                dependent_domain = dependent[0]
+                intersecting_domains = dependent_domain.all_domains_intersecting()
+
+                # check any common domains (it happens if the dag has a cycle)
+                common = any(common_domain in intersecting_domains for common_domain in domains)
+                if common:
+                    continue
+
+                stack.extend(intersecting_domains)
+                domains.extend(intersecting_domains)
+
+        return domains
+
+    def remove_duplicates(self, domains: List[Domain]) -> List[Domain]:
+        """
+
+        List of domains that their sequence changes by self sequence modification
+
+        :param domains: List of :any:`Domain`'s to remove dupliactes from.
+
+        :return: New List derived from domains with no duplicated elements.
+        """
+        domains_without_duplicates = []
+        for candidate_domain in domains:
+            duplicate = False
+            for domain in domains_without_duplicates:
+                if domain is candidate_domain:
+                    duplicate = True
+                    break
+            if not duplicate:
+                domains_without_duplicates.append(candidate_domain)
+
+            return domains_without_duplicates
+
+    def ancestors(self) -> List['Domain']:
         """
         :return:
             list of all domains that are ancestors of this one, NOT including this domain
         """
-        ancestor = self.parent
-        all_ancestors = []
-        while ancestor is not None:
-            all_ancestors.append(ancestor)
-            ancestor = ancestor.parent
-        return all_ancestors
 
-    def _get_all_domains_from_parent(self) -> list["Domain"]:
+        ancestors = self.parents
+        all_ancestors = set()
+
+        while ancestors:
+            older_ancestors = []
+            for ancestor in ancestors:
+                if ancestor in all_ancestors:
+                    raise ValueError(
+                        f'There is a cycle in the domain graph containg the domain {self.name}, '
+                        f'traversing the domain {ancestor.name}.'
+                    )
+                all_ancestors.add(ancestor)
+                if ancestor.parents:
+                    older_ancestors.extend(ancestor.parents)
+            ancestors = older_ancestors.copy()
+
+        return list(all_ancestors)
+
+    def decsendents(self) -> List[Domain]:
+
+        subdomains = self.subdomains
+        decsendents = set()
+
+        while subdomains:
+            later_subdomains = []
+            for sd in subdomains:
+                if sd in decsendents:
+                    raise ValueError(
+                        f'There is a cycle in the domain graph containg the domain {self.name}, '
+                        f'traversing the domain {sd.name}.'
+                    )
+                decsendents.add(sd)
+                if sd.subdomains:
+                    later_subdomains.extend(sd.subdomains)
+            subdomains = later_subdomains.copy()
+
+        return list(decsendents)
+
+    def _get_all_domains_from_parents(self) -> List['Domain']:
         # note that this gets "sibling/cousin" domains as well
         # call _ancestors to get only ancestors
         domains = []
-
-        parent = self.parent
-        if parent is not None:
+        parents = self.parents
+        for parent in parents:
             parent_domains = parent._get_all_domains_from_this_subtree(excluded_subdomain=self)
             domains.extend(parent_domains)
-            domains.extend(parent._get_all_domains_from_parent())
+            domains.extend(parent._get_all_domains_from_parents())
 
         return domains
 
@@ -2271,60 +2454,97 @@ class Domain(Part, JSONSerializable):
 
         return False
 
-    def independent_source(self) -> Domain:
-        """
-        Like :meth:`independent_ancestor_or_descendent`,
-        but returns this Domain if it is already independent.
+    def unlocked_ancestor_or_descendants(self) -> List[Domain]:
+        if not self.state == DomainState.LOCKED:
+            raise ValueError(f'cannot call unlocked_ancestor_or_descendants on non-locked Domain {self.name}')
 
-        :return:
-            the independent :any:`Domain` that this domain depends on,
-            which is *itself* if it is already independent
+        for domain in self.ancestors():
+            if not self.state == DomainState.LOCKED:
+                return [domain]
+
+        unlocked_descendants = []
+        for domain in self._get_all_domains_from_this_subtree():
+            if not self.state == DomainState.LOCKED:
+                unlocked_descendants.append(domain)
+
+        return unlocked_descendants
+
+    def assignable_sources(self) -> list[Domain]:
         """
-        if self.dependent:
-            return self.independent_ancestor_or_descendent()
+
+        Like :meth:`assignable_ancestor_or_descendant`, but returns this Domain if it is already assignable.
+
+        :return:  the assignable :any:`Domain` that this domain sequence changes if its sequence gets modified, which is *itself* if it is already assignable.
+        """
+
+        if self.state != DomainState.ASSIGNABLE:
+            return self.assignable_ancestors_or_descendants()
         else:
-            return self
+            return [self]
 
-    def independent_ancestor_or_descendent(self) -> Domain:
+    def assignable_ancestors_or_descendants(self) -> list[Domain]:
         """
-        Find the independent ancestor or descendent of this dependent :any:`Domain`.
-        Raises exception if this is not a dependent :any:`Domain`.
 
-        :return:
-            The independent ancestor or descendent of this :any:`Domain`.
+        Find the assignable ancestor(s) or descendant(s) of this locked :any:`Domain`.
+
+        Raises exception if this is not a locked :any:`Domain`.
+
+        :return: The assignable ancestor or descendant of this :any:`Domain`.
+
         """
-        if not self.dependent:
-            raise ValueError(f"cannot call independent_ancestor_or_descendent on non-dependent Domain {self.name}")
+
+        if self.state != DomainState.LOCKED:
+            raise ValueError(
+                f'cannot call assignable_ancestors_or_descendants on an unlocked domain Domain {self.name}'
+            )
 
         # first try ancestors
-        domain = self
-        while domain.parent is not None:
-            domain = domain.parent
-            if not domain.dependent:
-                return domain
+        assignable_ancestors = []
+        for domain in self.ancestors():
+            if domain.state == DomainState.ASSIGNABLE:
+                assignable_ancestors.append(domain)
+        if assignable_ancestors:
+            return assignable_ancestors
 
-        # then try descendents
-        independent_descendent = self._independent_descendent()
-        if independent_descendent is None:
-            raise ValueError(f"could not find an independent ancestor or descendent of domain {self.name}")
-        return independent_descendent
+        # then try descendants
+        assignable_descendants = self._assignable_descendants()
+        return assignable_descendants
 
-    def _independent_descendent(self) -> Domain | None:
-        if not self.dependent:
-            return self
+    def _assignable_descendants(self) -> list[Domain]:
+        if self.state == DomainState.ASSIGNABLE:
+            return [self]
 
+        assignable_descendants = []
         if len(self.subdomains) > 0:
             for subdomain in self.subdomains:
-                independent_descendent = subdomain._independent_descendent()
-                if independent_descendent is not None:
-                    return independent_descendent
+                assignable_descendants.extend(subdomain._assignable_descendants())
 
-        return None
+        return assignable_descendants
+
+
+def domains_shared_ancestor(list_of_domains: List[Domain]) -> Domain:
+    """
+
+    :param list_of_domains: list of :any:`Domain`'s to calculate if there is any :any:`Domain` having all of them as its descendants.
+
+    :return: The ancestor of all the domains in the `list_of_domains`, or None if there wasn't any.
+
+    """
+
+    list_of_ancestors = []
+    for domain in list_of_domains[1:]:
+        list_of_ancestors.append(set(domain.ancestors()))
+
+    for item in list_of_domains[0].ancestors():
+        if all(item in ancestor_set for ancestor_set in list_of_ancestors):
+            return item
+
+    return None
 
 
 def domains_neq_constraint(
     check_complements: bool = True,
-    short_description: str = "dom neq",
+    short_description: str = 'dom neq',
     weight: float = 1.0,
     min_length: int = 4,
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
@@ -2335,7 +2555,7 @@ def domains_neq_constraint(
     Note that this ensures that no two :any:`Domain`'s are equal if they are the same length.
 
     :param check_complements:
-        whether to also ensure the check for Watson-Crick complements of the sequences
+        whether to also ensure the check for reverse complements of the sequences
     :param short_description:
         short description of constraint suitable for logging to stdout
     :param weight:
@@ -2359,33 +2579,33 @@ def domains_neq_constraint(
         s1, s2 = seqs
         if len(s1) > len(s2):
             s1, s2 = s2, s1
-        summary = ""
+        summary = ''
         score = 0.0
         passed = True
         if len(s1) >= min_length and s1 in s2:
             score = 1.0
-            summary = f"{s1} is a length->={min_length} substring of {s2}"
+            summary = f'{s1} is a length->={min_length} substring of {s2}'
             passed = False
         if check_complements:
             # by symmetry, only need to check c1 versus s2 for WC complement, since
             # (s1 not in s2 <==> c1 in c2) and (c1 in s2 <==> s1 in c2)
             c1 = nv.wc(s1)
             if len(c1) >= min_length and c1 in s2:
-                msg = f"{c1} is a length->={min_length} substring of {s2}"
+                msg = f'{c1} is a length->={min_length} substring of {s2}'
                 if not passed:
-                    summary += f"; {msg}"
+                    summary += f'; {msg}'
                 else:
                     summary = msg
                 score += 1.0
 
         return Result(excess=score, summary=summary)
 
-    _check_at_most_one_parameter_specified(pairs, domains, "pairs", "domains")
+    _check_at_most_one_parameter_specified(pairs, domains, 'pairs', 'domains')
     if pairs is None and domains is not None:
         pairs = itertools.combinations(domains, 2)
 
     return DomainPairConstraint(
-        description=f"domains >= {min_length} neq",
+        description=f'domains >= {min_length} neq',
         short_description=short_description,
         weight=weight,
         check_domain_against_itself=False,
@@ -2434,23 +2654,23 @@ class VendorFields(JSONSerializable):
     """
 
     def __post_init__(self) -> None:
-        _check_vendor_string_not_none_or_empty(self.scale, "scale")
-        _check_vendor_string_not_none_or_empty(self.purification, "purification")
+        _check_vendor_string_not_none_or_empty(self.scale, 'scale')
+        _check_vendor_string_not_none_or_empty(self.purification, 'purification')
         if self.plate is None and self.well is not None:
             raise ValueError(
-                f"VendorFields.plate cannot be None if VendorFields.well is not None\nVendorFields.well = {self.well}"
+                f'VendorFields.plate cannot be None if VendorFields.well is not None\nVendorFields.well = {self.well}'
             )
         if self.plate is not None and self.well is None:
             raise ValueError(
-                f"VendorFields.well cannot be None if VendorFields.plate is not None\nVendorFields.plate = {self.plate}"
+                f'VendorFields.well cannot be None if VendorFields.plate is not None\nVendorFields.plate = {self.plate}'
             )
 
     def to_json_serializable(self, suppress_indent: bool = True, **kwargs: Any) -> NoIndent | dict[str, Any]:
         dct: dict[str, Any] = dict(self.__dict__)
         if self.plate is None:
-            del dct["plate"]
+            del dct['plate']
         if self.well is None:
-            del dct["well"]
+            del dct['well']
         return NoIndent(dct) if suppress_indent else dct
 
     @staticmethod
@@ -2479,13 +2699,264 @@ class VendorFields(JSONSerializable):
 
 
 def _check_vendor_string_not_none_or_empty(value: str, field_name: str) -> None:
+    """
+    Validate that a `VendorFields` string field is present and non-empty.
+
+    :param value: the field's current value
+    :param field_name: name of the field, used only in the error message
+    :raises ValueError: if `value` is None or the empty string
+    """
     if value is None:
-        raise ValueError(f"field {field_name} in VendorFields cannot be None")
+        raise ValueError(f'field {field_name} in VendorFields cannot be None')
     if len(value) == 0:
-        raise ValueError(f"field {field_name} in VendorFields cannot be empty")
+        raise ValueError(f'field {field_name} in VendorFields cannot be empty')
 
 
-default_strand_group = "default_strand_group"
+def set_domains_memoryviews(
+    initial_domain: Domain,
+) -> Tuple[Set, Dict[str, Tuple[int, int]]]:
+    """
+    Computes the memoryview fields of all the domains comprising the polytree contaiting `initial_domain`.
+    :param initial_domain:The domain for which a memoryview has not been set and the memoryview assin
+    :return:A set of all the subdomains for which memoryviews have been calcualted in this method as well as a dictionary
+    of them as keys and their intervals as values.
+    """
+
+    visited_names = set()  # names of the domains contained in this dag
+    domain_name_to_interval = {}  # map each domain name to its indices in the union sequence
+    domain_name_to_domain = {}  # map each domain name to its domain
+    domain_to_existing_sequences = {}  # map each domain with preassigned sequence to its sequence
+
+    _assign_intervals(
+        initial_domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_existing_sequences,
+    )
+
+    intervals = list(domain_name_to_interval.values())
+    minimum = min(start for start, _ in intervals)
+    assert minimum <= 0
+    # Normalize intervals if negative indices exist
+    if minimum < 0:
+        for domain_name, interval in domain_name_to_interval.items():
+            start, end = interval
+            domain_name_to_interval[domain_name] = (start - minimum, end - minimum)
+
+    # Build initial sequence bytearray and assign a memoryview to it
+    max_end = max(end for _, end in domain_name_to_interval.values())
+    # ? shouldn't it be max_end + 1 ?
+    memoryview_full = memoryview(bytearray('?' * max_end, encoding='ascii'))
+
+    # assign the corresponding initial value to each domain's memoryview_sequence field
+    for domain_name, domain in domain_name_to_domain.items():
+        start, end = domain_name_to_interval[domain_name]
+        domain.memoryview_sequence = memoryview_full[start:end]
+
+    _assign_back_preexisting_sequences(domain_to_existing_sequences)
+
+    return visited_names, domain_name_to_interval
+
+
+def _assign_back_preexisting_sequences(
+    domain_to_preexisting_sequence: Dict[Domain, str],
+) -> None:
+    """
+    Write each domain's previously-recorded sequence back into its memoryview, after
+    `set_domains_memoryviews` has reallocated a new shared buffer for its subdomain tree.
+
+    :param domain_to_preexisting_sequence: map from each domain that had a sequence
+        assigned before its memoryview was reallocated, to that sequence
+    """
+    for domain, sequence in domain_to_preexisting_sequence.items():
+        domain.memoryview_sequence[:] = sequence.encode(encoding='ascii')
+
+
+def _assign_intervals(
+    domain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set[str],
+    domain_to_preexisting_sequence: Dict[Domain, str],
+) -> None:
+    """recursively traversing the directed acyclic graph by beginning from domain"""
+    visited_names.add(domain.name)
+    domain_name_to_interval[domain.name] = (0, domain.length)
+    domain_name_to_domain[domain.name] = domain
+
+    if domain.memoryview_sequence is not None:
+        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding='ascii')
+
+    _assign_intervals_to_subdomains_and_parents(
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
+    )
+
+
+def validate_subdomain_lengths(domain: Domain) -> None:
+    """to check that total length of subdomains( if used) adds up domain length"""
+
+    if len(domain.subdomains) == 0:
+        return
+    total_length = sum(sd.length for sd in domain.subdomains)
+    if total_length != domain.length:
+        raise ValueError(
+            f'Domain {domain.name} length {domain.length} != '
+            f'subdomains total length {total_length}. '
+            f"subdomains' lengths: {', '.join(f'{subdomain.name} = {subdomain.length}' for subdomain in domain.subdomains)}, "
+        )
+
+
+def _assign_intervals_to_subdomains_and_parents(
+    domain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set[str],
+    domain_to_preexisting_sequence: Dict[Domain, str],
+) -> None:
+    """
+    Recursively assign byte-offset intervals (within the shared memoryview buffer for a
+    subdomain tree) to `domain`'s subdomains and parents that haven't been visited yet.
+
+    Called from `_assign_intervals` for the domain a traversal started from, and
+    recursively from `_assign_intervals_subdomain`/`_assign_intervals_parent` thereafter.
+    Also validates, via `validate_subdomain_lengths`, that `domain`'s subdomain lengths
+    sum to its own length.
+
+    :param domain: the domain whose subdomains and parents should be visited next
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a sequence it had before its
+        memoryview was reallocated, updated in place for later restoration
+    """
+    validate_subdomain_lengths(domain)
+
+    if domain.memoryview_sequence is not None:
+        domain_to_preexisting_sequence[domain] = domain.memoryview_sequence.tobytes().decode(encoding='ascii')
+
+    for sd in domain.subdomains:
+        if sd.name not in visited_names:
+            _assign_intervals_subdomain(
+                sd,
+                domain,
+                domain_name_to_interval,
+                domain_name_to_domain,
+                visited_names,
+                domain_to_preexisting_sequence,
+            )
+
+    for parent in domain.parents:
+        if parent.name not in visited_names:
+            _assign_intervals_parent(
+                parent,
+                domain,
+                domain_name_to_interval,
+                domain_name_to_domain,
+                visited_names,
+                domain_to_preexisting_sequence,
+            )
+
+
+def _assign_intervals_subdomain(
+    domain: Domain,
+    parent: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set,
+    domain_to_preexisting_sequence: Dict[Domain, str],
+) -> None:
+    """
+    Assign a byte-offset interval to `domain`, a not-yet-visited subdomain of `parent`,
+    based on `parent`'s already-assigned interval and `domain`'s position among
+    `parent.subdomains`, then recurse into `domain`'s own subdomains/parents.
+
+    :param domain: the (not yet visited) subdomain being assigned an interval
+    :param parent: `domain`'s parent, whose interval has already been assigned
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a preexisting sequence, updated in place
+    """
+    assert domain in parent.subdomains
+
+    visited_names.add(domain.name)
+
+    start_relative_to_parent = 0
+
+    for sd in parent.subdomains:
+        if sd is domain:
+            break
+        start_relative_to_parent += sd.length
+
+    parent_interval = domain_name_to_interval[parent.name]
+    parent_start = parent_interval[0]
+    start = parent_start + start_relative_to_parent
+    end = start + domain.length
+
+    domain_name_to_interval[domain.name] = (start, end)
+    domain_name_to_domain[domain.name] = domain
+
+    _assign_intervals_to_subdomains_and_parents(
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
+    )
+
+
+def _assign_intervals_parent(
+    domain: Domain,
+    subdomain: Domain,
+    domain_name_to_interval: Dict[str, Tuple[int, int]],
+    domain_name_to_domain: Dict[str, Domain],
+    visited_names: Set,
+    domain_to_preexisting_sequence: Dict[Domain, str],
+) -> None:
+    """
+    Assign a byte-offset interval to `domain`, a not-yet-visited parent of `subdomain`,
+    based on `subdomain`'s already-assigned interval and its position among
+    `domain.subdomains`, then recurse into `domain`'s own subdomains/parents.
+
+    :param domain: the (not yet visited) parent domain being assigned an interval
+    :param subdomain: `domain`'s subdomain, whose interval has already been assigned
+    :param domain_name_to_interval: map from domain name to (start, end) byte offsets, updated in place
+    :param domain_name_to_domain: map from domain name to `Domain` object, updated in place
+    :param visited_names: names of domains already assigned an interval, updated in place
+    :param domain_to_preexisting_sequence: map from domain to a preexisting sequence, updated in place
+    """
+    assert subdomain in domain.subdomains
+
+    visited_names.add(domain.name)
+
+    subdomain_start_relative_to_domain = 0
+    for sd in domain.subdomains:
+        if sd is subdomain:
+            break
+        subdomain_start_relative_to_domain += sd.length
+
+    subdomain_start, subdomain_end = domain_name_to_interval[subdomain.name]
+    start = subdomain_start - subdomain_start_relative_to_domain
+    end = start + domain.length
+
+    domain_name_to_interval[domain.name] = (start, end)
+    domain_name_to_domain[domain.name] = domain
+
+    _assign_intervals_to_subdomains_and_parents(
+        domain,
+        domain_name_to_interval,
+        domain_name_to_domain,
+        visited_names,
+        domain_to_preexisting_sequence,
+    )
+
+
+default_strand_group = 'default_strand_group'
 
 
 @dataclass
@@ -2557,7 +3028,7 @@ class Strand(Part, JSONSerializable):
     for DNA sequence design.
     """
 
-    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+    _key: str = field(init=False, default='', repr=False, compare=False, hash=False)
 
     def __init__(
         self,
@@ -2591,14 +3062,6 @@ class Strand(Part, JSONSerializable):
         self.group = group
         self._name = name
 
-        # XXX: moved this check to Design constructor to allow subdomain graphs to be
-        # constructed gradually while building up the design
-        # Check that each base in the sequence is assigned by exactly one
-        # independent subdomain.
-        # for d in cast(list[Domain], domains):
-        #     d._check_acyclic_subdomain_graph()  # noqa
-        #     d._check_subdomain_graph_is_uniquely_assignable()  # noqa
-
         self.domains = list(domains)  # type: ignore
         self.starred_domain_indices = frozenset(starred_domain_indices)  # type: ignore
         self.label = label
@@ -2612,7 +3075,7 @@ class Strand(Part, JSONSerializable):
 
     @staticmethod
     def name_of_part_type(self) -> str:
-        return "strand"
+        return 'strand'
 
     def key(self) -> str:
         return self._key
@@ -2656,9 +3119,9 @@ class Strand(Part, JSONSerializable):
         Re-computes derived fields of this :any:`Strand`. Should be called after modifications to the
         Strand. (Done automatically at the start of :meth:`search.search_for_dna_sequences`.)
         """
-        self._domain_names_concatenated = "-".join(self.domain_names_tuple())
+        self._domain_names_concatenated = '-'.join(self.domain_names_tuple())
         self._hash_domain_names_concatenated = hash(self._domain_names_concatenated)
-        self._key = f"Strand({self._hash_domain_names_concatenated})"
+        self._key = f'Strand({self._hash_domain_names_concatenated})'
         self._compute_all_intersecting_domains()
 
     def all_intersecting_domains(self) -> list[Domain]:
@@ -2667,21 +3130,11 @@ class Strand(Part, JSONSerializable):
         return self._all_intersecting_domains
 
     def _compute_all_intersecting_domains(self) -> None:
-        # Check that each base in the sequence is assigned by exactly one independent subdomain.
-        # We normally wait until the Design constructor to check for this to raise an exception,
-        # but here we just check to see whether to bother computing self._all_intersecting_domains.
-        for d in cast(list[Domain], self.domains):
-            try:
-                d._check_acyclic_subdomain_graph()  # noqa
-                d._check_subdomain_graph_is_uniquely_assignable()  # noqa
-            except ValueError:
-                return
-
         self._all_intersecting_domains = []
         for direct_domain in self.domains:
-            for domain_in_tree in direct_domain.all_domains_intersecting():
-                if domain_in_tree not in self._all_intersecting_domains:
-                    self._all_intersecting_domains.append(domain_in_tree)
+            for domain in direct_domain.all_domains_intersecting():
+                if domain not in self._all_intersecting_domains:
+                    self._all_intersecting_domains.append(domain)
 
     def intersects_domain(self, domain: Domain) -> bool:
         """
@@ -2700,9 +3153,9 @@ class Strand(Part, JSONSerializable):
             Sum of lengths of :any:`Domain`'s in this :any:`Strand`.
             Each :any:`Domain` must have a :any:`DomainPool` assigned so that the length is defined.
         """
-        return sum(domain.get_length() for domain in self.domains)
+        return sum(domain.length for domain in self.domains)
 
-    def domain_names_concatenated(self, delim: str = "-") -> str:
+    def domain_names_concatenated(self, delim: str = '-') -> str:
         """
         :param delim:
             Delimiter to put between domain names.
@@ -2721,6 +3174,12 @@ class Strand(Part, JSONSerializable):
             domain_names.append(domain.get_name(is_starred))
         return tuple(domain_names)
 
+    def domain_names_tuple_unstarred(self):
+        domain_names: List[str] = []
+        for idx, domain in enumerate(self.domains):
+            domain_names.append(domain.get_name(starred=False))
+        return tuple(domain_names)
+
     def vendor_dna_sequence(self) -> str:
         """
         :return: DNA sequence as it needs to be typed to order from a synthesis company, with
@@ -2736,7 +3195,7 @@ class Strand(Part, JSONSerializable):
         if self.modification_5p is not None and self.modification_5p.vendor_code is not None:
             ret_list.append(self.modification_5p.vendor_code)
 
-        for offset, base in enumerate(self.sequence(delimiter="")):
+        for offset, base in enumerate(self.sequence(delimiter='')):
             ret_list.append(base)
             if offset in self.modifications_int:  # if internal mod attached to base, replace base
                 mod = self.modifications_int[offset]
@@ -2744,8 +3203,8 @@ class Strand(Part, JSONSerializable):
                     if mod.allowed_bases is not None:
                         if base not in mod.allowed_bases:
                             msg = (
-                                f"internal modification {mod} can only replace one of these bases: "
-                                f"{','.join(mod.allowed_bases)}, but the base at offset {offset} is {base}"
+                                f'internal modification {mod} can only replace one of these bases: '
+                                f'{",".join(mod.allowed_bases)}, but the base at offset {offset} is {base}'
                             )
                             raise ValueError(msg)
                         ret_list[-1] = mod.vendor_code  # replace base with modified base
@@ -2755,7 +3214,7 @@ class Strand(Part, JSONSerializable):
         if self.modification_3p is not None and self.modification_3p.vendor_code is not None:
             ret_list.append(self.modification_3p.vendor_code)
 
-        return "".join(ret_list)
+        return ''.join(ret_list)
 
     def _ensure_modifications_legal(self, check_offsets_legal: bool = False) -> None:
         if check_offsets_legal:
@@ -2763,12 +3222,12 @@ class Strand(Part, JSONSerializable):
             min_offset = min(mod_i_offsets_list) if len(mod_i_offsets_list) > 0 else None
             max_offset = max(mod_i_offsets_list) if len(mod_i_offsets_list) > 0 else None
             if min_offset is not None and min_offset < 0:
-                raise ValueError(f"smallest offset is {min_offset} but must be nonnegative: {self.modifications_int}")
-            if max_offset is not None and max_offset > len(self.sequence(delimiter="")):
+                raise ValueError(f'smallest offset is {min_offset} but must be nonnegative: {self.modifications_int}')
+            if max_offset is not None and max_offset > len(self.sequence(delimiter='')):
                 raise ValueError(
-                    f"largest offset is {max_offset} but must be at most "
-                    f"{len(self.sequence(delimiter=''))}: "
-                    f"{self.modifications_int}"
+                    f'largest offset is {max_offset} but must be at most '
+                    f'{len(self.sequence(delimiter=""))}: '
+                    f'{self.modifications_int}'
                 )
 
     def to_json_serializable(self, suppress_indent: bool = True) -> NoIndent | dict[str, Any]:
@@ -2802,7 +3261,7 @@ class Strand(Part, JSONSerializable):
         if len(self.modifications_int) > 0:
             mods_dict = {}
             for offset, mod in self.modifications_int.items():
-                mods_dict[f"{offset}"] = mod.id
+                mods_dict[f'{offset}'] = mod.id
             dct[nm.modifications_int_key] = NoIndent(mods_dict) if suppress_indent else mods_dict
 
         return dct
@@ -2870,7 +3329,7 @@ class Strand(Part, JSONSerializable):
         """
         return OrderedSet(self.starred_domains())
 
-    def sequence(self, delimiter: str = "") -> str:
+    def sequence(self, delimiter: str = '') -> str:
         """
         :param delimiter:
             Delimiter string to place between sequences of each :any:`Domain` in this :any:`Strand`.
@@ -2894,13 +3353,13 @@ class Strand(Part, JSONSerializable):
             DNA sequence to assign to this :any:`Strand`.
             Must have length = :py:meth:`Strand.length`.
         """
-        if not self.length() == len(sequence):
+        if not self.length == len(sequence):
             raise ValueError(
-                f"Strand {self.name} has length {self.length()}, but DNA sequence {sequence} has length {len(sequence)}"
+                f'Strand {self.name} has length {self.length()}, but DNA sequence {sequence} has length {len(sequence)}'
             )
         start = 0
         for domain in self.domains:
-            end = start + domain.get_length()
+            end = start + domain.length
             domain_sequence = sequence[start:end]
             domain.set_sequence(domain_sequence)
             start = end
@@ -2908,13 +3367,13 @@ class Strand(Part, JSONSerializable):
     @property
     def fixed(self) -> bool:
         """True if every :any:`Domain` on this :any:`Strand` has a fixed DNA sequence."""
-        return all(domain.fixed for domain in self.domains)
+        return all(domain.state == DomainState.FIXED for domain in self.domains)
 
     def unfixed_domains(self) -> tuple[Domain, ...]:
         """
-        :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.fixed` is False
+        :return: all :any:`Domain`'s in this :any:`Strand` where :data:`Domain.state` is not `State.FIXED`
         """
-        return tuple(domain for domain in self.domains if not domain.fixed)
+        return tuple(domain for domain in self.domains if domain.state != DomainState.FIXED)
 
     @property
     def name(self) -> str:
@@ -2941,14 +3400,14 @@ class Strand(Part, JSONSerializable):
     #              in the order they appear in this :any:`Strand`.
     #     """
 
-    def address_of_domain(self, domain_idx: int) -> "StrandDomainAddress":
+    def address_of_domain(self, domain_idx: int) -> 'StrandDomainAddress':
         """Returns :any:`StrandDomainAddress` of the domain located at domain_idx
 
         :rparam domain_idx: Index of domain
         """
         return StrandDomainAddress(self, domain_idx)
 
-    def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> "StrandDomainAddress":
+    def address_of_nth_domain_occurence(self, domain_name: str, n: int, forward=True) -> 'StrandDomainAddress':
         """
         Returns :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
 
@@ -2963,7 +3422,7 @@ class Strand(Part, JSONSerializable):
             :any:`StrandDomainAddress` of the `n`'th occurence of domain named `domain_name`.
         """
         if n < 1:
-            raise ValueError("n needs to be at least 1")
+            raise ValueError('n needs to be at least 1')
         domain_names = self.domain_names_tuple()
         idx = -1
         occurences = 0
@@ -2977,18 +3436,18 @@ class Strand(Part, JSONSerializable):
                     idx = i
                     break
         if idx == -1:
-            raise ValueError(f"{self} contained less than {n} occurrences of domain {domain_name}")
+            raise ValueError(f'{self} contained less than {n} occurrences of domain {domain_name}')
 
         return StrandDomainAddress(self, idx)
 
-    def address_of_first_domain_occurence(self, domain_name: str) -> "StrandDomainAddress":
+    def address_of_first_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
         """
         Returns :any:`StrandDomainAddress` of the first occurrence of domain named domain_name
         starting from the 5' end.
         """
         return self.address_of_nth_domain_occurence(domain_name, 1)
 
-    def address_of_last_domain_occurence(self, domain_name: str) -> "StrandDomainAddress":
+    def address_of_last_domain_occurence(self, domain_name: str) -> 'StrandDomainAddress':
         """
         Returns :any:`StrandDomainAddress` of the nth occurrence of domain named domain_name
         starting from the 3' end.
@@ -3058,33 +3517,33 @@ class Strand(Part, JSONSerializable):
         """
         idx = 0
         for domain in self.domains:
-            substring = seq[idx : idx + domain.get_length()]
+            substring = seq[idx : idx + domain.length]
             domain.set_fixed_sequence(substring)
-            idx += domain.get_length()
+            idx += domain.length
 
 
 @dataclass
 class DomainPair(Part, Iterable[Domain]):
     domain1: Domain
-    "First domain"
+    'First domain'
 
     domain2: Domain
-    "Second domain"
+    'Second domain'
 
     starred1: bool = False
-    "Whether first domain is starred (not used in most constraints)"
+    'Whether first domain is starred (not used in most constraints)'
 
     starred2: bool = False
-    "Whether second domain is starred (not used in most constraints)"
+    'Whether second domain is starred (not used in most constraints)'
 
-    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+    _key: str = field(init=False, default='', repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         # make this symmetric so dict lookups work no matter the order
         if self.domain1.name > self.domain2.name:
             self.domain1, self.domain2 = self.domain2, self.domain1
             self.starred1, self.starred2 = self.starred2, self.starred1
-        self._key = f"DomainPair[{self.name}]"
+        self._key = f'DomainPair[{self.name}]'
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3092,21 +3551,21 @@ class DomainPair(Part, Iterable[Domain]):
 
     @property
     def name(self) -> str:
-        return self.domain1.get_name(self.starred1) + ", " + self.domain2.get_name(self.starred2)
+        return self.domain1.get_name(self.starred1) + ', ' + self.domain2.get_name(self.starred2)
 
     def key(self) -> str:
         return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
-        return "domain pair"
+        return 'domain pair'
 
     def individual_parts(self) -> tuple[Domain, ...]:
         return self.domain1, self.domain2
 
     @property
     def fixed(self) -> bool:
-        return self.domain1.fixed and self.domain2.fixed
+        return self.domain1.state == DomainState.FIXED and self.domain2.state == DomainState.FIXED
 
     def __iter__(self) -> Iterator[Domain]:
         yield self.domain1
@@ -3118,13 +3577,13 @@ class StrandPair(Part, Iterable[Strand]):
     strand1: Strand
     strand2: Strand
 
-    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+    _key: str = field(init=False, default='', repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         # make this symmetric so make dict lookups work
         if self.strand1.name > self.strand2.name:
             self.strand1, self.strand2 = self.strand2, self.strand1
-        self._key = f"StrandPair[{self.strand1.name}, {self.strand2.name}]"
+        self._key = f'StrandPair[{self.strand1.name}, {self.strand2.name}]'
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3132,14 +3591,14 @@ class StrandPair(Part, Iterable[Strand]):
 
     @property
     def name(self) -> str:
-        return f"{self.strand1.name}, {self.strand2.name}"
+        return f'{self.strand1.name}, {self.strand2.name}'
 
     def key(self) -> str:
         return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
-        return "strand pair"
+        return 'strand pair'
 
     def individual_parts(self) -> tuple[Strand, ...]:
         return self.strand1, self.strand2
@@ -3158,7 +3617,7 @@ class Complex(Part, Iterable[Strand]):
     strands: tuple[Strand, ...]
     """The strands in this complex."""
 
-    _key: str = field(init=False, default="", repr=False, compare=False, hash=False)
+    _key: str = field(init=False, default='', repr=False, compare=False, hash=False)
 
     def __init__(self, *args: Strand) -> None:
         """
@@ -3167,9 +3626,9 @@ class Complex(Part, Iterable[Strand]):
         """
         for strand in args:
             if not isinstance(strand, Strand):
-                raise TypeError(f"must pass Strands to constructor for complex, not {strand}")
+                raise TypeError(f'must pass Strands to constructor for complex, not {strand}')
         self.strands = tuple(args)
-        self._key = f"Complex[{self.name}]"
+        self._key = f'Complex[{self.name}]'
 
     # needed to avoid unhashable type error; see
     # https://docs.python.org/3/reference/datamodel.html#object.__hash__
@@ -3177,15 +3636,15 @@ class Complex(Part, Iterable[Strand]):
 
     @property
     def name(self) -> str:
-        strand_names = ", ".join(strand.name for strand in self.strands)
-        return f"Complex[{strand_names}]"
+        strand_names = ', '.join(strand.name for strand in self.strands)
+        return f'Complex[{strand_names}]'
 
     def key(self) -> str:
         return self._key
 
     @staticmethod
     def name_of_part_type(self) -> str:
-        return "complex"
+        return 'complex'
 
     def individual_parts(self) -> tuple[Strand, ...]:
         return self.strands
@@ -3226,7 +3685,7 @@ def _export_dummy_scadnano_design_for_idt_export(
     strands: Iterable[Strand],
 ) -> sc.Design:
     """
-    Exports a dummy scadnano design from this dsd :any:`Design`.
+    Exports a dummy scadnano design from this nuad :any:`Design`.
     Useful for reusing scadnano methods such as to_idt_bulk_input_format.
 
     :param strands:
@@ -3244,12 +3703,7 @@ def _export_dummy_scadnano_design_for_idt_export(
         sc_domains = []
         prev_end = 0
         for domain in strand.domains:
-            sc_domain = sc.Domain(
-                helix=helix_idx,
-                forward=True,
-                start=prev_end,
-                end=prev_end + domain.get_length(),
-            )
+            sc_domain = sc.Domain(helix=helix_idx, forward=True, start=prev_end, end=prev_end + domain.length)
             prev_end = sc_domain.end
             sc_domains.append(sc_domain)
         sc_strand = sc.Strand(
@@ -3282,26 +3736,26 @@ def _export_dummy_scadnano_design_for_idt_export(
     return design
 
 
-_96WELL_PLATE_ROWS: list[str] = ["A", "B", "C", "D", "E", "F", "G", "H"]
+_96WELL_PLATE_ROWS: list[str] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 _96WELL_PLATE_COLS: list[int] = list(range(1, 13))
 
 _384WELL_PLATE_ROWS: list[str] = [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "J",
-    "K",
-    "L",
-    "M",
-    "N",
-    "O",
-    "P",
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
 ]
 _384WELL_PLATE_COLS: list[int] = list(range(1, 25))
 
@@ -3332,7 +3786,7 @@ class PlateType(int, Enum):
         elif self is PlateType.wells384:
             return 384
         else:
-            raise AssertionError("unreachable")
+            raise AssertionError('unreachable')
 
     def min_wells_per_plate(self) -> int:
         """
@@ -3344,7 +3798,7 @@ class PlateType(int, Enum):
         elif self is PlateType.wells384:
             return 96
         else:
-            raise AssertionError("unreachable")
+            raise AssertionError('unreachable')
 
 
 @dataclass
@@ -3373,6 +3827,18 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    _domains_interned: Dict[str, Domain]
+
+    #################################################
+    # derived fields, so not specified in constructor
+
+    _domains: List[Domain] = field(init=False)
+    """
+    List of all :any:`Domain`'s in this :any:`Design`. (without repetitions)
+
+    Computed from :data:`Design.strands`, so not specified in constructor.
+    """
+
     domain_pools_to_domain_map: dict[DomainPool, list[Domain]] = field(init=False)
     """
     dict mapping each :any:`DomainPool` to a list of the :any:`Domain`'s in this :any:`Design` in the pool.
@@ -3394,6 +3860,14 @@ class Design(JSONSerializable):
     Computed from :data:`Design.strands`, so not specified in constructor.
     """
 
+    domain_to_affected_domains: Dict[Domain, List[Domain]] = field(init=False)
+    """
+    Dict mapping each :any:`Domain` to a list of :any:`Domain`'s in this :any:`Design` that their sequences changes 
+    by key's sequence modification.
+
+    Computed in :meth:`Design.compute_derived fields`.
+    """
+
     @property
     def domains(self) -> list[Domain]:
         """
@@ -3403,24 +3877,18 @@ class Design(JSONSerializable):
         """
         return list(self.domains_by_name.values())
 
+    @domains.setter
+    def domains(self, value: list[Domain]) -> None:
+        self._domains = value
+
     def __init__(self, strands: Iterable[Strand] = ()) -> None:
         """
         :param strands:
             the :any:`Strand`'s in this :any:`Design`
         """
         self.strands = strands if isinstance(strands, list) else list(strands)
-        self.domains_by_name = {}
-        self.check_all_subdomain_graphs_acyclic()
-        if len(self.strands) > 0:
-            for strand in self.strands:
-                for domain_in_strand in strand.domains:
-                    domains_in_tree = domain_in_strand.all_domains_in_tree(allow_fixed=True)
-                    for domain_in_tree in domains_in_tree:
-                        name = domain_in_tree.name
-                        if name not in self.domains_by_name:
-                            self.domains_by_name[name] = domain_in_tree
-
-        self.check_all_subdomain_graphs_uniquely_assignable()
+        self._domains_interned = {}
+        self.domain_to_affected_domains = {}
         self.compute_derived_fields()
 
     def compute_derived_fields(self) -> None:
@@ -3429,41 +3897,32 @@ class Design(JSONSerializable):
         the :any:`Design` was manually modified after being created, before running
         :meth:`search.search_for_dna_sequences`.
         """
-        self.strands_by_name = {strand.name: strand for strand in self.strands}
-
-        # Get domains not explicitly listed on strands that are part of domain tree.
-        # Set up quick access to domain by name, and ensure each domain name unique.
+        # Get domains not explicitly listed on strands that are part of domain directed graph.
+        # Also set up quick access to domain by name, and ensure each domain name unique.
+        self.domains_by_name = {}
+        domains = []
         for strand in self.strands:
             for domain_in_strand in strand.domains:
-                domains_in_tree = domain_in_strand.all_domains_in_tree()
-                for domain_in_tree in domains_in_tree:
-                    name = domain_in_tree.name
-                    if name in self.domains_by_name and domain_in_tree is not self.domains_by_name[name]:
+                domains_in_dag = domain_in_strand.all_domains_in_dag()
+                domains.extend(domains_in_dag)
+                for domain_in_dag in domains_in_dag:
+                    name = domain_in_dag.name
+                    if name in self.domains_by_name and domain_in_dag is not self.domains_by_name[name]:
                         raise ValueError(
-                            f"domain names must be unique, "
-                            f"but I found two different domains with name {domain_in_tree.name}\n"
-                            f"when looking at strand {strand.name} with domain {domain_in_tree},\n"
-                            f"existing domain is {self.domains_by_name[name]}"
+                            f'domain names must be unique, '
+                            f'but I found two different domains with name {domain_in_dag.name}'
                         )
-                    self.domains_by_name[name] = domain_in_tree
-                if (
-                    domain_in_strand.has_sequence()
-                    and not domain_in_strand.fixed
-                    and (len(domain_in_strand.subdomains) > 0 or domain_in_strand.parent is not None)
-                ):
-                    subdomains = domain_in_strand.subdomains
-                    parent_domain = domain_in_strand.parent
-                    # possibly some sequences need to be calculated from subdomains or parent
-                    if (parent_domain is not None and not parent_domain.has_sequence()) or not all(
-                        subdomain.has_sequence() for subdomain in subdomains
-                    ):
-                        domain_in_strand.set_sequence(domain_in_strand.sequence())
+                    self.domains_by_name[domain_in_dag.name] = domain_in_dag
 
+        self._domains = remove_duplicates(domains)
         self.strands_by_group_name = defaultdict(list)
         for strand in self.strands:
             self.strands_by_group_name[strand.group].append(strand)
 
         self.store_domain_pools()
+
+        for domain in self._domains:
+            self.domain_to_affected_domains[domain] = domain.all_domains_affected_by_sequence_change()
 
         for strand in self.strands:
             strand.compute_derived_fields()
@@ -3491,7 +3950,7 @@ class Design(JSONSerializable):
 
         dct = {
             strands_key: [strand.to_json_serializable(suppress_indent) for strand in self.strands],
-            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self.domains],
+            domains_key: [domain.to_json_serializable(suppress_indent) for domain in self._domains],
             domain_pools_key: [pool.to_json_serializable(suppress_indent) for pool in self.domain_pools()],
         }
 
@@ -3506,7 +3965,7 @@ class Design(JSONSerializable):
 
         return dct
 
-    def write_design_file(self, directory: str = ".", filename: str | None = None, extension: str = "json") -> None:
+    def write_design_file(self, directory: str = '.', filename: str | None = None, extension: str = 'json') -> None:
         """
         Write JSON file representing this :any:`Design`,
         which can be imported via the method :meth:`Design.from_design_file`,
@@ -3542,7 +4001,7 @@ class Design(JSONSerializable):
             :any:`Design` described by the JSON file with name `filename`, assuming it was created using
             :meth:`Design.write_design_file`.
         """
-        with open(filename, "r") as f:
+        with open(filename, 'r') as f:
             json_str = f.read()
         return Design.from_json(json_str)
 
@@ -3574,10 +4033,25 @@ class Design(JSONSerializable):
         pool_with_name: dict[str, DomainPool] = {pool.name: pool for pool in pools}
 
         domains_json = mandatory_field(Design, json_map, domains_key)
-        domains: list[Domain] = [
-            Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name) for domain_json in domains_json
-        ]
+        # subdomains_json = mandatory_field(Design, json_map, domain_subdomains_names_key)
+
+        domains_json = mandatory_field(Design, json_map, domains_key)
+        domains: list[Domain] = []
+        domain_to_subdomains_names: dict[Domain, List[str]] = {}
+
+        for domain_json in domains_json:
+            domain, subdomains_names = Domain.from_json_serializable(domain_json, pool_with_name=pool_with_name)
+            domains.append(domain)
+            domain_to_subdomains_names[domain] = subdomains_names
+
         domains_by_name = {domain.name: domain for domain in domains}
+
+        # add subdomains
+        for domain, subdomain_names in domain_to_subdomains_names.items():
+            for subdomain_name in subdomain_names:
+                subdomain = domains_by_name[subdomain_name]
+                domain.subdomains.append(subdomain)
+                subdomain.parents.append(domain)
 
         strands_json = mandatory_field(Design, json_map, strands_key)
         strands = [
@@ -3596,59 +4070,15 @@ class Design(JSONSerializable):
             Design.assign_modifications_to_strands(strands, strands_json, all_mods)
 
         design = Design(strands=strands)
-
+        design._domains = domains
         design.domains_by_name = domains_by_name
 
         return design
 
-    def add_domain(
-        self,
-        name: str,
-        pool: DomainPool | None = None,
-        fixed_sequence: str | None = None,
-        allow_if_exists: bool = False,
-    ) -> Domain:
-        """
-        Adds a :any:`Domain` with name `name` to this :any:`Design`, and returns it.
-
-        This is useful in combination with :meth:`Design.add_strand` for creating strands by giving domain names instead of explicit :any:`Domain` objects.
-        This way, the domains can be associated to a :any:`DomainPool` or have a fixed sequence assigned at the time of creation,
-        without needing to modify the :any:`Domain` objects after they are created by :meth:`Design.add_strand`.
-
-        :param name:
-            name of the :any:`Domain` to add. Raises exception if this domain has already been added to this :any:`Design`.
-        :param pool:
-            :any:`DomainPool` to associate with this :any:`Domain`. Exactly one of `pool` and `fixed_sequence` can be specified.
-        :param fixed_sequence:
-            fixed sequence to assign to this :any:`Domain`. Exactly one of `pool` and `fixed_sequence` can be specified.
-        :param allow_if_exists:
-            if False (default), raises exception if a :any:`Domain` with name `name` already exists in this :any:`Design` (or its complement).
-        """
-        if pool is not None and fixed_sequence is not None:
-            raise ValueError("exactly one of pool and fixed_sequence can be specified, but both were specified")
-        elif pool is None and fixed_sequence is None:
-            raise ValueError("exactly one of pool and fixed_sequence must be specified, but neither was specified")
-        name_without_star = name
-        if name_without_star.endswith("*"):
-            name_without_star = name_without_star[:-1]
-        if name_without_star in self.domains_by_name:
-            if not allow_if_exists:
-                raise ValueError(
-                    f"domain with name {name} already exists in this design: {self.domains_by_name[name_without_star]}"
-                )
-            domain = self.domains_by_name[name_without_star]
-        else:
-            domain = Domain(name=name_without_star, pool=pool)
-            self.domains_by_name[name_without_star] = domain
-
-        if fixed_sequence is not None:
-            domain.set_fixed_sequence(fixed_sequence)
-        return domain
-
     def add_strand(
         self,
-        domain_names: list[str] | None = None,
-        domains: list[Domain] | None = None,
+        domain_names: List[str] | None = None,
+        domains: List[Domain] | None = None,
         starred_domain_indices: Iterable[int] | None = None,
         group: str = default_strand_group,
         name: str | None = None,
@@ -3699,34 +4129,26 @@ class Design(JSONSerializable):
         :return:
             the :any:`Strand` that is created
         """
-        for existing_strand in self.strands:
-            if name == existing_strand.name:
-                raise ValueError(
-                    f"strand name {name} already exists for this strand:\n"
-                    f"  {existing_strand}\n"
-                    f"so it cannot be used for the new strand"
-                )
-
         if (domain_names is not None and not (domains is None and starred_domain_indices is None)) or (
             domain_names is None and not (domains is not None and starred_domain_indices is not None)
         ):
             raise ValueError(
-                "exactly one of domain_names or "
-                "domains and starred_domain_indices must be non-None\n"
-                f"domain_names: {domain_names}\n"
-                f"domains: {domains}\n"
-                f"starred_domain_indices: {starred_domain_indices}"
+                'exactly one of domain_names or '
+                'domains and starred_domain_indices must be non-None\n'
+                f'domain_names: {domain_names}\n'
+                f'domains: {domains}\n'
+                f'starred_domain_indices: {starred_domain_indices}'
+                f'{domain_names}.'
             )
 
         elif domain_names is not None:
             domains = []
             starred_domain_indices = OrderedSet()
             for idx, domain_name in enumerate(domain_names):
-                is_starred = domain_name.endswith("*")
+                is_starred = domain_name.endswith('*')
                 if is_starred:
                     domain_name = domain_name[:-1]
 
-                # domain = Domain(name) if name not in _domains_interned else _domains_interned[name]
                 domain: Domain
                 if domain_name not in self.domains_by_name:
                     domain = Domain(name=domain_name)
@@ -3747,23 +4169,140 @@ class Design(JSONSerializable):
             label=label,
             vendor_fields=vendor_fields,
         )
-        self.strands.append(strand)
 
+        for existing_strand in self.strands:
+            if strand.name == existing_strand.name:
+                raise ValueError(
+                    f'strand name {strand.name} already exists for this strand:\n'
+                    f'  {existing_strand}\n'
+                    f'so it cannot be used for the new strand\n'
+                    f'  {strand}'
+                )
+        self.strands.append(strand)
         for domain_in_strand in strand.domains:
-            domains_in_tree = domain_in_strand.all_domains_in_tree()
-            for domain in domains_in_tree:
-                if domain.name not in self.domains_by_name:
-                    self.domains.append(domain)
+            domains_in_dag = domain_in_strand.all_domains_in_dag()
+            for domain in domains_in_dag:
+                if domain not in self._domains:
+                    self._domains.append(domain)
                 name = domain.name
                 if name in self.domains_by_name and domain is not self.domains_by_name[name]:
                     raise ValueError(
-                        f"domain names must be unique, but I found two different domains with name {domain.name}"
+                        f'domain names must be unique, but I found two different domains with name {domain.name}'
                     )
-                if name not in self.domains_by_name:
-                    self.domains_by_name[domain.name] = domain
-                    self.domains.append(domain)
+                self.domains_by_name[domain.name] = domain
 
         return strand
+
+    def add_subdomains(
+        self, domain_name: str, subdomain_names_and_lengths: List[Tuple[str, int]], keep_domain_assignable: bool = False
+    ) -> None:
+        """
+        :param domain_name: name of the domain we want to add subdomains to
+        :param subdomain_names_and_lengths: list of tuples of subdomain names and their length
+        :param keep_domain_assignable:
+            This means: 1) an assertion that the domain with name `domain_name` (if it already exists)
+            is currently assignable (an exception will be raised if not), and 2) that we should keep it
+            assignable, and make the subdomains locked, rather than the default behavior of changing
+            domain.type to locked and making the subdomains assignable.
+        """
+        domain: Domain
+        if domain_name in self.domains_by_name:
+            domain = self.domains_by_name[domain_name]
+            if domain.state == DomainState.FIXED:
+                raise ValueError(f'The fixed domain {domain_name} cannot have subdomains.')
+        else:
+            domain = Domain(name=domain_name)
+            self.domains_by_name[domain_name] = domain
+
+        assert domain.state != DomainState.FIXED
+        if keep_domain_assignable:
+            if domain.state == DomainState.DEPENDENT:
+                raise ValueError(f'The dependent domain {domain_name} cannot be assignable.')
+            elif domain.state == DomainState.LOCKED:
+                raise ValueError(f'The domain {domain_name} is already locked, so cannot be made assignable.')
+            assert domain.state == DomainState.ASSIGNABLE
+
+        # If assignable or locked before, now domain is locked;
+        # what if it was dependent?
+
+        subdomains = []
+        for subdomain_name, length in subdomain_names_and_lengths:
+            subdomain: Domain
+            if subdomain_name in self.domains_by_name:
+                subdomain = self.domains_by_name[subdomain_name]
+                if subdomain.has_length() and subdomain.length != length:
+                    raise ValueError(
+                        f'The subdomain {subdomain_name} has already the length {subdomain.length}'
+                        f' which is different from the new length {length}.'
+                    )
+            else:
+                subdomain = Domain(name=subdomain_name)
+                self.domains_by_name[subdomain_name] = subdomain
+
+            subdomains.append(subdomain)
+            subdomain.length = length
+            # else:
+            #     #check_domain_pools
+            #     subdomain_pool: DomainPool | None
+            #     for pool in self.domain_pools():
+            #         if pool.length == length:
+            #             subdomain_pool = pool
+            #             break
+            #     if not subdomain_pool:
+            #         pool_name = f"pool_with_length_{length}"
+            #         subdomain_pool = DomainPool(name=pool_name, length=length)
+            #
+            #     subdomain = Domain(name=subdomain_name, pool=subdomain_pool)
+            #     self.domains_by_name[subdomain_name] = subdomain
+            #
+            # subdomains.append(subdomain)
+
+            if subdomain.state != DomainState.ASSIGNABLE:
+                # in case there is a predefined unlocked ancestor for domain:
+                if subdomain.state != DomainState.LOCKED:
+                    unlocked_ancestor = [anc for anc in domain.ancestors() if anc.state != DomainState.LOCKED]
+                    if unlocked_ancestor:
+                        raise ValueError(
+                            f'There must be exactly one unlocked subdomain in every source-to-sink path'
+                            f' in a subdomain graph, but found more in the path(s) '
+                            f'with domain {domain.name} and unlocked domains '
+                            f'{unlocked_ancestor}, {subdomain_name}'
+                        )
+                    if keep_domain_assignable:
+                        raise ValueError(
+                            f'There must be exactly one unlocked subdomain in every source-to-sink path'
+                            f' in a subdomain graph, but found more in the path(s) '
+                            f'with keeping the domain {domain.name} assignable and '
+                            f'its unlocked subdomain {subdomain_name}'
+                        )
+            elif domain.state == DomainState.LOCKED:
+                # Now we know subdomain.type is Assignable, and domain.type is Locked,
+                # Default would normally be to make each subdomain Assignable,
+                # but only if there is no unlocked ancestor; otherwise we make all subdomains Locked
+                # to maintain the rule of one unlocked domain per path.
+                unlocked_ancestor = [anc for anc in domain.ancestors() + [domain] if anc.state != DomainState.LOCKED]
+                if unlocked_ancestor:
+                    subdomain.state = DomainState.LOCKED
+                else:
+                    subdomain.state = DomainState.ASSIGNABLE
+            else:
+                # This means parent is not locked, so subdomain must be locked
+                # to enforce exactly one unlocked domain on each path.
+                if not keep_domain_assignable and domain.state == DomainState.ASSIGNABLE:
+                    domain.state = DomainState.LOCKED
+                else:
+                    subdomain.state = DomainState.LOCKED
+
+        subdomains_total_length = sum(length for _, length in subdomain_names_and_lengths)
+        if domain.has_length() and domain.length != subdomains_total_length:
+            raise ValueError(
+                f'The domain {domain.name} has length {domain.length}, '
+                f'but its subdomains total length is {subdomains_total_length}'
+            )
+        elif not domain.has_length():
+            domain.length = subdomains_total_length
+
+        domain.subdomains = list(subdomains)
 
     @staticmethod
     def assign_modifications_to_strands(
@@ -3811,7 +4350,7 @@ class Design(JSONSerializable):
             all_mods = {mod for strand in self.strands for mod in strand.modifications_int.values()}
 
         else:
-            raise AssertionError("should be unreachable")
+            raise AssertionError('should be unreachable')
 
         self._ensure_mods_unique_names(all_mods)
 
@@ -3826,14 +4365,14 @@ class Design(JSONSerializable):
             else:
                 other_mod = mods_dict[mod.id]
                 raise ValueError(
-                    f"two different modifications share the id {mod.id}; "
-                    f"one is\n  {mod}\nand the other is\n  {other_mod}"
+                    f'two different modifications share the id {mod.id}; '
+                    f'one is\n  {mod}\nand the other is\n  {other_mod}'
                 )
 
     def to_idt_bulk_input_format(
         self,
-        delimiter: str = ",",
-        domain_delimiter: str = "",
+        delimiter: str = ',',
+        domain_delimiter: str = '',
         key: KeyFunction[Strand] | None = None,
         warn_duplicate_name: bool = False,
         only_strands_with_vendor_fields: bool = False,
@@ -3862,11 +4401,11 @@ class Design(JSONSerializable):
         self,
         *,
         filename: str = None,
-        directory: str = ".",
+        directory: str = '.',
         key: KeyFunction[Strand] | None = None,
         extension: str | None = None,
-        delimiter: str = ",",
-        domain_delimiter: str = "",
+        delimiter: str = ',',
+        domain_delimiter: str = '',
         warn_duplicate_name: bool = True,
         only_strands_with_vendor_fields: bool = False,
         strands: Iterable[Strand] | None = None,
@@ -3922,14 +4461,14 @@ class Design(JSONSerializable):
             strands=strands,
         )
         if extension is None:
-            extension = "idt"
+            extension = 'idt'
         sc.write_file_same_name_as_running_python_script(contents, extension, directory, filename)
 
     def write_idt_plate_excel_file(
         self,
         *,
         filename: str = None,
-        directory: str = ".",
+        directory: str = '.',
         key: KeyFunction[Strand] | None = None,
         warn_duplicate_name: bool = False,
         only_strands_with_vendor_fields: bool = False,
@@ -4009,7 +4548,7 @@ class Design(JSONSerializable):
 
     def store_domain_pools(self) -> None:
         self.domain_pools_to_domain_map = defaultdict(list)
-        for domain in self.domains:
+        for domain in self._domains:
             if domain._pool is not None:  # noqa
                 self.domain_pools_to_domain_map[domain.pool].append(domain)
 
@@ -4026,7 +4565,7 @@ class Design(JSONSerializable):
         :return: the :any:`Domain`'s in `domain_pool`
         """
         domains_in_pool: list[Domain] = []
-        for domain in self.domains:
+        for domain in self._domains:
             if domain.pool.name == domain_pool_name:
                 domains_in_pool.append(domain)
         return domains_in_pool
@@ -4088,8 +4627,8 @@ class Design(JSONSerializable):
         :param ignored_strands:
             Strands to ignore; none are ignore if not specified.
         :param warn_existing_domain_labels:
-            If True, logs warning when dsd :any:`Domain` already has a label and so does scadnano domain,
-            since scadnano label will not be assigned to the dsd :any:`Domain`.
+            If True, logs warning when nuad :any:`Domain` already has a label and so does scadnano domain,
+            since scadnano label will not be assigned to the nuad :any:`Domain`.
         :return:
             An equivalent :any:`Design`, ready to be given constraints for DNA sequence design.
         :raises TypeError:
@@ -4098,13 +4637,13 @@ class Design(JSONSerializable):
 
         # check types
         if not isinstance(sc_design, sc.Design):
-            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+            raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
         if ignored_strands is not None:
             for ignored_strand in ignored_strands:
                 if not isinstance(ignored_strand, sc.Strand):
                     raise TypeError(
-                        "each ignored strand must be an instance of scadnano.Strand, but one is "
-                        f"{type(ignored_strand)}: {ignored_strand}"
+                        'each ignored strand must be an instance of scadnano.Strand, but one is '
+                        f'{type(ignored_strand)}: {ignored_strand}'
                     )
 
         # filter out ignored strands
@@ -4120,20 +4659,20 @@ class Design(JSONSerializable):
                 not isinstance(sc_strand.label, dict) and not hasattr(sc_strand.label, group_key)
             ):
                 logger.warning(
-                    f"Strand label {sc_strand.label} should be an object with attribute named "
+                    f'Strand label {sc_strand.label} should be an object with attribute named '
                     f'"{group_key}" (for instance a dict or namedtuple).\n'
-                    f"  The label is type {type(sc_strand.label)}. "
-                    f"In order to auto-populate StrandGroups, ensure the label has attribute "
+                    f'  The label is type {type(sc_strand.label)}. '
+                    f'In order to auto-populate StrandGroups, ensure the label has attribute '
                     f'named "{group_key}" with associated value of type str.'
                 )
             else:
                 label_value = Design.get_group_name_from_strand_label(sc_strand)
                 if not isinstance(label_value, str):
                     logger.warning(
-                        f"Strand label {sc_strand.label} has attribute named "
+                        f'Strand label {sc_strand.label} has attribute named '
                         f'"{group_key}", but its associated value is not a string.\n'
-                        f"The value is type {type(label_value)}. "
-                        f"In order to auto-populate StrandGroups, ensure the label has attribute "
+                        f'The value is type {type(label_value)}. '
+                        f'In order to auto-populate StrandGroups, ensure the label has attribute '
                         f'named "{group_key}" with associated value of type str.'
                     )
 
@@ -4163,9 +4702,9 @@ class Design(JSONSerializable):
                 # do not include strands with the same name more than once
                 if sc_strand.name in strand_names:
                     logger.debug(
-                        "In scadnano design, found duplicate instance of strand with name "
-                        f"{sc_strand.name}; skipping all but the first when creating dsd design. "
-                        f"Please ensure that this strand really is supposed to have the same name."
+                        'In scadnano design, found duplicate instance of strand with name '
+                        f'{sc_strand.name}; skipping all but the first when creating dsd design. '
+                        f'Please ensure that this strand really is supposed to have the same name.'
                     )
                     continue
 
@@ -4179,17 +4718,17 @@ class Design(JSONSerializable):
                 )
                 # assign sequence
                 if sequence is not None:
-                    for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
+                    for nuad_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
                         domain_sequence = sc_domain.dna_sequence
                         # if this is a starred domain,
                         # take the WC complement first so the dsd Domain stores the "canonical" sequence
-                        if sc_domain.name[-1] == "*":
+                        if sc_domain.name[-1] == '*':
                             domain_sequence = nv.wc(domain_sequence)
                         if sc.DNA_base_wildcard not in domain_sequence:
                             if fix_assigned_sequences:
-                                dsd_domain.set_fixed_sequence(domain_sequence)
+                                nuad_domain.set_fixed_sequence(domain_sequence)
                             else:
-                                dsd_domain.set_sequence(domain_sequence)
+                                nuad_domain.set_sequence(domain_sequence)
 
                 # set domain labels
                 for dsd_domain, sc_domain in zip(nuad_strand.domains, sc_strand.domains):
@@ -4197,8 +4736,8 @@ class Design(JSONSerializable):
                         dsd_domain.label = sc_domain.label
                     elif sc_domain.label is not None and warn_existing_domain_labels:
                         logger.warning(
-                            f"warning; dsd domain already has label {dsd_domain.label}; "
-                            f"skipping assignment of scadnano label {sc_domain.label}"
+                            f'warning; dsd domain already has label {dsd_domain.label}; '
+                            f'skipping assignment of scadnano label {sc_domain.label}'
                         )
 
                 strand_names.add(nuad_strand.name)
@@ -4275,7 +4814,7 @@ class Design(JSONSerializable):
 
         # check types
         if not isinstance(sc_design, sc.Design):
-            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+            raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
 
         # dict mapping tuples of domain names to strands that have those domains in that order
         # sc_domain_name_tuples = {strand.domain_names_tuple(): strand for strand in self.strands}
@@ -4293,11 +4832,11 @@ class Design(JSONSerializable):
                     self._assign_to_strand_with_partial_sequence(sc_strand, sc_design, sc_domain_name_tuples)
                 else:
                     logger.warning(
-                        "Skipping assignment of DNA sequence to scadnano strand with sequence "
-                        f"{sc_strand.dna_sequence}, since it has at least one domain name "
-                        f"that is None.\n"
-                        f"Make sure that this is a strand you intended to leave out of the "
-                        f"sequence design process"
+                        'Skipping assignment of DNA sequence to scadnano strand with sequence '
+                        f'{sc_strand.dna_sequence}, since it has at least one domain name '
+                        f'that is None.\n'
+                        f'Make sure that this is a strand you intended to leave out of the '
+                        f'sequence design process'
                     )
         else:
             for sc_strand in sc_strands_to_include:
@@ -4305,12 +4844,11 @@ class Design(JSONSerializable):
                     self._assign_to_strand_without_checking_existing_sequence_ignore_domains(sc_strand, sc_design)
                 else:
                     raise ValueError(
-                        """
-Cannot assign sequence to scadnano strand with existing sequence (using overwrite=False) when ignore_domains is True.
-This option is intended to allow scadnano designs with partial assignment to have only their unassigned domains
-be completed by sequences of nuad domains, but this requires that for each strand, the domains are in common
-between the scadnano and nuad designs, so the parameter ignore_domains must be set to false to enable this 
-partial assignment."""
+                        """Cannot assign sequence to scadnano strand with existing sequence (using overwrite=False) when ignore_domains is True.
+                        This option is intended to allow scadnano designs with partial assignment to have only their unassigned domains
+                        be completed by sequences of nuad domains, but this requires that for each strand, the domains are in common
+                        between the scadnano and nuad designs, so the parameter ignore_domains must be set to false to enable this 
+                        partial assignment."""
                     )
 
     def shared_strands_with_scadnano_design(
@@ -4354,20 +4892,20 @@ partial assignment."""
                         sc_strand.label = {}
                     elif not isinstance(sc_strand.label, dict):
                         raise ValueError(
-                            f"cannot assign strand group to strand {sc_strand.name} "
-                            f"because it already has a label that is not a dict. "
-                            f"It must either have label None or a dict."
+                            f'cannot assign strand group to strand {sc_strand.name} '
+                            f'because it already has a label that is not a dict. '
+                            f'It must either have label None or a dict.'
                         )
 
                     # if we get here, then sc_strand.label is a dict. Need to check whether
                     # it already has a 'group' key.
                     if group_key in sc_strand.label is not None and not overwrite:
                         raise ValueError(
-                            f"Cannot assign strand group from nuad strand to scadnano strand "
-                            f"{sc_strand.name} (through its label field) because the "
-                            f"scadnano strand already has a label with group key "
-                            f"\n{sc_strand.label[group_key]}. "
-                            f"Set overwrite to True to force an overwrite."
+                            f'Cannot assign strand group from nuad strand to scadnano strand '
+                            f'{sc_strand.name} (through its label field) because the '
+                            f'scadnano strand already has a label with group key '
+                            f'\n{sc_strand.label[group_key]}. '
+                            f'Set overwrite to True to force an overwrite.'
                         )
                     sc_strand.label[group_key] = nuad_strand.group
 
@@ -4381,7 +4919,7 @@ partial assignment."""
         Assigns :any:`VendorFields` from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
-        IDT fields of the dsd :any:`Strand` with that name.
+        IDT fields of the nuad :any:`Strand` with that name.
 
         :param sc_design:
             a scadnano design.
@@ -4400,10 +4938,10 @@ partial assignment."""
                 if nuad_strand.vendor_fields is not None:
                     if sc_strand.vendor_fields is not None and not overwrite:
                         raise ValueError(
-                            f"Cannot assign IDT fields from dsd strand to scadnano strand "
-                            f"{sc_strand.name} because the scadnano strand already has "
-                            f"IDT fields assigned:\n{sc_strand.vendor_fields}. "
-                            f"Set overwrite to True to force an overwrite."
+                            f'Cannot assign IDT fields from dsd strand to scadnano strand '
+                            f'{sc_strand.name} because the scadnano strand already has '
+                            f'IDT fields assigned:\n{sc_strand.vendor_fields}. '
+                            f'Set overwrite to True to force an overwrite.'
                         )
                     sc_strand.vendor_fields = nuad_strand.vendor_fields.to_scadnano_vendor_fields()
 
@@ -4417,7 +4955,7 @@ partial assignment."""
         Assigns :any:`modifications.Modification`'s from this :any:`Design` into `sc_design`.
 
         If multiple strands in `sc_design` share the same name, then all of them are assigned the
-        modifications of the dsd :any:`Strand` with that name.
+        modifications of the nuad :any:`Strand` with that name.
 
         :param sc_design:
             a scadnano design.
@@ -4428,7 +4966,7 @@ partial assignment."""
         :raises ValueError:
             if scadnano strand already has any modifications assigned
         """
-        print("WARNING: the method assign_modifications_to_scadnano_design has not been tested yet and may have errors")
+        print('WARNING: the method assign_modifications_to_scadnano_design has not been tested yet and may have errors')
         # filter out ignored strands
         sc_strands_to_include = [strand for strand in sc_design.strands if strand not in ignored_strands]
 
@@ -4440,8 +4978,8 @@ partial assignment."""
                     raise ValueError(
                         f"Cannot assign 5' modification from dsd strand to scadnano strand "
                         f"{sc_strand.name} because the scadnano strand already has a 5'"
-                        f"modification assigned:\n{sc_strand.modification_5p}. "
-                        f"Set overwrite to True to force an overwrite."
+                        f'modification assigned:\n{sc_strand.modification_5p}. '
+                        f'Set overwrite to True to force an overwrite.'
                     )
                 sc_strand.modification_5p = nuad_strand.modification_5p.to_scadnano_modification()
 
@@ -4450,47 +4988,47 @@ partial assignment."""
                     raise ValueError(
                         f"Cannot assign 3' modification from dsd strand to scadnano strand "
                         f"{sc_strand.name} because the scadnano strand already has a 3'"
-                        f"modification assigned:\n{sc_strand.modification_3p}. "
-                        f"Set overwrite to True to force an overwrite."
+                        f'modification assigned:\n{sc_strand.modification_3p}. '
+                        f'Set overwrite to True to force an overwrite.'
                     )
                 sc_strand.modification_3p = nuad_strand.modification_3p.to_scadnano_modification()
 
             for offset, mod_int in nuad_strand.modifications_int.items():
                 if offset in sc_strand.modifications_int is not None and not overwrite:
                     raise ValueError(
-                        f"Cannot assign internal modification from dsd strand to "
-                        f"scadnano strand {sc_strand.name} at offset {offset} "
-                        f"because the scadnano strand already has an internal "
-                        f"modification assigned at that offset:\n"
-                        f"{sc_strand.modifications_int[offset]} ."
-                        f"Set overwrite to True to force an overwrite."
+                        f'Cannot assign internal modification from dsd strand to '
+                        f'scadnano strand {sc_strand.name} at offset {offset} '
+                        f'because the scadnano strand already has an internal '
+                        f'modification assigned at that offset:\n'
+                        f'{sc_strand.modifications_int[offset]} .'
+                        f'Set overwrite to True to force an overwrite.'
                     )
                 sc_strand.modifications_int[offset] = mod_int.to_scadnano_modification()
 
     def _assign_to_strand_without_checking_existing_sequence(self, sc_strand: sc.Strand, sc_design: sc.Design) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
-            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+            raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
         if not isinstance(sc_strand, sc.Strand):
-            raise TypeError(f"sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}")
+            raise TypeError(f'sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}')
 
         sequence_list: list[str] = []
         for sc_domain in sc_strand.domains:
             domain_name = sc_domain.name
             if domain_name is None:
-                raise AssertionError("did not expect domain_name to be None")
-            starred = domain_name[-1] == "*"
+                raise AssertionError('did not expect domain_name to be None')
+            starred = domain_name[-1] == '*'
             if starred:
                 domain_name = domain_name[:-1]
             dsd_domain = self.domains_by_name.get(domain_name)
             if dsd_domain is None:
                 raise AssertionError(
-                    f"expected domain_name {domain_name} to be a key in domains_by_name "
-                    f"{list(self.domains_by_name.keys())}"
+                    f'expected domain_name {domain_name} to be a key in domains_by_name '
+                    f'{list(self.domains_by_name.keys())}'
                 )
             domain_sequence = dsd_domain.concrete_sequence(starred)
             sequence_list.append(domain_sequence)
-        strand_sequence = "".join(sequence_list)
+        strand_sequence = ''.join(sequence_list)
         sc_strand.set_dna_sequence(strand_sequence)
 
     @staticmethod
@@ -4504,9 +5042,9 @@ has a name, and the design contains a nuad strand with that name."""
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
-            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+            raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
         if not isinstance(sc_strand, sc.Strand):
-            raise TypeError(f"sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}")
+            raise TypeError(f'sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}')
 
         nuad_strand = self.get_nuad_strand_with_same_name_as(sc_strand)
         nuad_strand_sequence = nuad_strand.sequence()
@@ -4516,14 +5054,14 @@ has a name, and the design contains a nuad strand with that name."""
         if sc_strand.name is None:
             err_msg = (
                 self.err_msg_assign_scadnano_sequences_ignore_domains_prefix()
-                + f"\nBut scadnano strand {sc_strand} has no name."
+                + f'\nBut scadnano strand {sc_strand} has no name.'
             )
             raise ValueError(err_msg)
         elif sc_strand.name not in self.strands_by_name:
             err_msg = self.err_msg_assign_scadnano_sequences_ignore_domains_prefix() + (
                 f"\nBut scadnano strand '{sc_strand.name}'"
-                f"\n(details: {sc_strand})"
-                f"\nis not a name of any strand in the nuad design."
+                f'\n(details: {sc_strand})'
+                f'\nis not a name of any strand in the nuad design.'
             )
             raise ValueError(err_msg)
         strand = self.strands_by_name[sc_strand.name]
@@ -4537,9 +5075,9 @@ has a name, and the design contains a nuad strand with that name."""
     ) -> None:
         # check types
         if not isinstance(sc_design, sc.Design):
-            raise TypeError(f"sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}")
+            raise TypeError(f'sc_design must be an instance of scadnano.Design, but it is {type(sc_design)}')
         if not isinstance(sc_strand, sc.Strand):
-            raise TypeError(f"sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}")
+            raise TypeError(f'sc_strand must be an instance of scadnano.Strand, but it is {type(sc_strand)}')
 
         # sigh: we don't have a great way to track which strand in sc_design corresponds to the same
         # strand in dsd_design (self), so we collect list of domain names in sc_strand and see if there's
@@ -4549,17 +5087,17 @@ has a name, and the design contains a nuad strand with that name."""
         for sc_domain in sc_strand.domains:
             domain_name = sc_domain.name
             if domain_name is None:
-                raise AssertionError("did not expect domain_name to be None")
+                raise AssertionError('did not expect domain_name to be None')
             domain_name_list.append(domain_name)
 
         domain_names = tuple(domain_name_list)
         dsd_strand = sc_domain_name_tuples.get(domain_names)
         if dsd_strand is None:
             logger.warning(
-                "Skipping assignment of DNA sequence to scadnano strand with domains "
-                f"{'-'.join(domain_names)}.\n"
-                f"Make sure that this is a strand you intended to leave out of the "
-                f"sequence design process"
+                'Skipping assignment of DNA sequence to scadnano strand with domains '
+                f'{"-".join(domain_names)}.\n'
+                f'Make sure that this is a strand you intended to leave out of the '
+                f'sequence design process'
             )
             return
 
@@ -4567,7 +5105,7 @@ has a name, and the design contains a nuad strand with that name."""
 
         sequence_list: list[str] = []
         for sc_domain, dsd_domain, domain_name in zip(sc_strand.domains, dsd_strand.domains, domain_names):
-            starred = domain_name[-1] == "*"
+            starred = domain_name[-1] == '*'
             sc_domain_sequence = sc_domain.dna_sequence
 
             # if we're in this method, then domains of sc_strand should have a partial assignment
@@ -4585,11 +5123,11 @@ has a name, and the design contains a nuad strand with that name."""
                 dsd_domain_sequence = dsd_domain.concrete_sequence(starred)
                 if domain_sequence != dsd_domain_sequence:
                     raise AssertionError(
-                        f"\n    domain_sequence = {domain_sequence} is unequal to\n"
-                        f"dsd_domain_sequence = {dsd_domain_sequence}"
+                        f'\n    domain_sequence = {domain_sequence} is unequal to\n'
+                        f'dsd_domain_sequence = {dsd_domain_sequence}'
                     )
             sequence_list.append(domain_sequence)
-        strand_sequence = "".join(sequence_list)
+        strand_sequence = ''.join(sequence_list)
         sc_design.assign_dna(
             strand=sc_strand,
             sequence=strand_sequence,
@@ -4607,16 +5145,16 @@ has a name, and the design contains a nuad strand with that name."""
         """
         # see if self.domains needs to be initialized
         computed_derived_fields = False
-        if self.domains is None:
+        if self._domains is None:
             self.compute_derived_fields()
             computed_derived_fields = True
 
         # copy sequences
-        for domain in self.domains:
+        for domain in self._domains:
             other_domain = other.domains_by_name[domain.name]
-            if other_domain.fixed:
+            if other_domain.state == DomainState.FIXED and not other_domain.has_sequence():
                 domain.set_fixed_sequence(other_domain.sequence())
-            elif other_domain.has_sequence():
+            elif other_domain.has_sequence() and other_domain.state == DomainState.ASSIGNABLE:
                 domain.set_sequence(other_domain.sequence())
 
         # no need to compute_derived_fields if we already called it above,
@@ -4624,38 +5162,273 @@ has a name, and the design contains a nuad strand with that name."""
         if not computed_derived_fields:
             self.compute_derived_fields()
 
-    def check_all_subdomain_graphs_acyclic(self) -> None:
+    def _check_subdomain_graph_is_dag(self, subdomain_graph: nx.DiGraph) -> None:
         """
-        Check that all domain graphs (if subdomains are used) are acyclic.
+        Check that all domain graphs (if subdomains are used) are acyclic (form directed acyclic graphs).
         """
-        for strand in self.strands:
-            # Check that each base in the sequence is assigned by exactly one
-            # independent subdomain.
-            for d in cast(list[Domain], strand.domains):
-                d._check_acyclic_subdomain_graph()  # noqa
+        try:
+            cycle = nx.find_cycle(subdomain_graph, orientation='original')
+            cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
 
-    def check_all_subdomain_graphs_uniquely_assignable(self) -> None:
+            raise ValueError(
+                f'A cycle was found in the subdomain graph: {" - ".join(node.name for node in cycle_nodes)}'
+            )
+        except nx.NetworkXNoCycle:
+            pass
+
+    def _check_subdomain_graph_is_singly_connected(self, subdomain_graph: nx.DiGraph) -> None:
         """
-        Check that subdomain graphs are consistent and raise error if not.
+        Check that in all connected DAGs, there's at most one unique path from each source to every node.
         """
-        for strand in self.strands:
-            # Check that each base in the sequence is assigned by exactly one
-            # independent subdomain.
-            for d in cast(list[Domain], strand.domains):
-                d._check_acyclic_subdomain_graph()  # noqa
-                d._check_subdomain_graph_is_uniquely_assignable()  # noqa
+        source_nodes = [node for node, degree in subdomain_graph.in_degree() if degree == 0]
+        sorted_nodes = list(nx.topological_sort(subdomain_graph))
+
+        # Slobodan's algorithm
+        # use dynamic programming to count how many paths go from s to every node u;
+        # if any node u has more than two paths from s, it's an error
+        for source_node in source_nodes:
+            paths_from_source = {}
+            for node in sorted_nodes:
+                paths_from_source[node] = 0
+            paths_from_source[source_node] = 1
+            for node in sorted_nodes:
+                if paths_from_source[node] == 0:
+                    continue
+                else:
+                    for sd in subdomain_graph.neighbors(node):
+                        paths_from_source[sd] += paths_from_source[node]
+                        if paths_from_source[sd] > 1:
+                            all_paths = nx.all_simple_paths(subdomain_graph, source_node, sd)
+                            paths_str = '\n'.join(' - '.join(str(node.name) for node in path) for path in all_paths)
+
+                            raise ValueError(
+                                f'Subdomain graph is not singly connected.'
+                                f' More than one path from {source_node.name} to {sd.name}: '
+                                f'\n{paths_str}'
+                            )
+
+    def check_subdomain_graphs_legal(self) -> None:
+        """Check that all subdomain graphs are consistent and the relevant error raises if not.: being acyclic,
+         singly_connected (polytree), having exactly one assignable or dependent subdomain in source_to_sink path,
+          strands including subdomains validly, and overlapping of every subdomain in the design with a strand.
+
+        A subdomain graph's nodes are representative of subdomains and its directed edges indicate parent-subdomain relationship.
+        """
+
+        subdomain_graph = self._create_subdomain_digraph()
+
+        self._check_subdomain_graph_is_dag(subdomain_graph)
+
+        self._check_subdomain_graph_is_singly_connected(subdomain_graph)
+
+        self._check_exactly_one_unlocked_in_every_path(subdomain_graph)
+
+        self._check_strand_dag_inclusion_legal(subdomain_graph)
+
+        self._check_every_subdomain_overlap_with_a_strand(subdomain_graph)
+
+    def _traverse_source_to_sink_path(
+        self, original_source: Domain, domain: Domain, unlocked_subdomains: list[Domain]
+    ) -> list[Domain]:
+        # No need to define visited_domains, since the singly-connectedness is already verified.
+        if domain.state != DomainState.LOCKED:
+            unlocked_subdomains.append(domain)
+
+            if domain.state == DomainState.FIXED:
+                # since the fact that every subdomain of a fixed domain must also be fixed is already checked.
+                return unlocked_subdomains
+
+            for subdomain in domain.subdomains:
+                unlockeds = self._traverse_source_to_sink_path(original_source, subdomain, [])
+                if len(unlockeds) > 0:
+                    unlocked_domains_str = ', '.join(subdomain.name for subdomain in unlockeds)
+                    raise ValueError(
+                        'There must be exactly one unlocked subdomain in every source-to-sink path in a subdomain graph,'
+                        f' but found more in the path(s) with source domain {original_source.name} and '
+                        f'unlocked domains {domain.name}, {unlocked_domains_str}'
+                    )
+        else:
+            for subdomain in domain.subdomains:
+                self._traverse_source_to_sink_path(original_source, subdomain, unlocked_subdomains)
+
+        return unlocked_subdomains
+
+    def _check_exactly_one_unlocked_in_every_path(self, subdomain_graph: nx.DiGraph) -> None:
+        # first, make sure that every domain has exactly one state:
+        for domain in self._domains:
+            if domain.state is None:
+                raise ValueError(f'domain {domain.name} has no states.')
+
+        source_nodes = [node for node, degree in subdomain_graph.in_degree() if degree == 0]
+
+        for source in source_nodes:
+            unlocked_subdomains = []
+            unlocked_subdomains = self._traverse_source_to_sink_path(source, source, unlocked_subdomains)
+
+            # To check whether a path didn't have any unlocked node
+            if sum(domain.length for domain in unlocked_subdomains) != source.length:
+                unlocked_subdomains_str = ', '.join(
+                    [unlocked_subdomain.name for unlocked_subdomain in unlocked_subdomains]
+                )
+                raise ValueError(f'the unlocked domains are not enough: {unlocked_subdomains_str}.')
+
+    def check_dependency_graphs_legal(self) -> None:
+        """Check dependency graphs are consistent and the relevant error raises if not: being acyclic and
+        every dependent :any:`Domain` must be dependent on exactly one :any:`Domain`'s.
+        """
+
+        dependency_graph = self._create_dependency_digraph()
+        self._check_dependency_graph_is_dag(dependency_graph)
+        self._check_each_dependent_exactly_one_dependee(dependency_graph)
+
+    def _create_subdomain_digraph(self) -> nx.DiGraph:
+        """Create subdomain directed graph of :any:`Domain`'s"""
+
+        graph = nx.DiGraph()
+
+        for domain in self._domains:
+            graph.add_node(domain)
+            for sd in domain.subdomains:
+                if (domain, sd) not in graph.edges:
+                    graph.add_edge(domain, sd)
+            for parent in domain.parents:
+                if (parent, domain) not in graph.edges:
+                    graph.add_edge(parent, domain)
+
+        return graph
+
+    def _create_dependency_digraph(self) -> nx.DiGraph:
+        graph = nx.DiGraph()
+
+        unlocked_domains = [domain for domain in self._domains if domain.state != DomainState.LOCKED]
+
+        for unlocked_domain in unlocked_domains:
+            graph.add_node(unlocked_domain)
+            for sd in unlocked_domain.subdomains:
+                if sd.state != DomainState.FIXED:
+                    graph.add_edge(unlocked_domain, sd, color='red')
+                    self._add_red_edge_pointing_subdomains(sd, graph)
+                    unlocked_domain.locked_dependents.append(sd)
+                else:
+                    graph.add_node(sd)
+            for parent in unlocked_domain.parents:
+                if parent.state != DomainState.FIXED:
+                    graph.add_edge(unlocked_domain, parent, color='red')
+                    self._add_red_edge_pointing_parents(parent, graph)
+                    unlocked_domain.locked_dependents.append(parent)
+                else:
+                    graph.add_node(parent)
+
+            if unlocked_domain.dependents:
+                self._add_blue_edge_pointing_dependents(unlocked_domain, graph)
+
+        return graph
+
+    def _add_red_edge_pointing_subdomains(self, domain: Domain, graph: nx.DiGraph) -> None:
+        for sd in domain.subdomains:
+            graph.add_edge(domain, sd, color='red')
+            self._add_red_edge_pointing_subdomains(sd, graph)
+            domain.locked_dependents.append(sd)
+
+        if domain.dependents:
+            self._add_blue_edge_pointing_dependents(domain, graph)
+
+    def _add_red_edge_pointing_parents(self, domain: Domain, graph: nx.DiGraph) -> None:
+        for parent in domain.parents:
+            graph.add_edge(domain, parent, color='red')
+            self._add_red_edge_pointing_parents(parent, graph)
+            domain.locked_dependents.append(parent)
+        if domain.dependents:
+            self._add_blue_edge_pointing_dependents(domain, graph)
+
+    def _add_blue_edge_pointing_dependents(self, domain: Domain, graph: nx.DiGraph) -> None:
+        for dependent, _ in domain.dependents:
+            graph.add_edge(domain, dependent, color='blue')
+            if dependent.dependents:
+                self._add_blue_edge_pointing_dependents(dependent, graph)
+
+    def _check_dependency_graph_is_dag(self, dependency_graph: nx.DiGraph) -> None:
+        try:
+            cycle = nx.find_cycle(dependency_graph, orientation='original')
+            cycle_nodes = [cycle[0][0]] + [edge[1] for edge in cycle]
+
+            raise ValueError(
+                f'A cycle was found in the dependency graph: {" - ".join(node.name for node in cycle_nodes)}.'
+            )
+        except nx.NetworkXNoCycle:
+            pass
+
+    def _check_each_dependent_exactly_one_dependee(self, graph: nx.DiGraph) -> None:
+        for domain in self.domains:
+            if domain.state == DomainState.DEPENDENT:
+                dependees = []
+                for pred in graph.predecessors(domain):
+                    if graph[pred][domain].get('color') == 'blue':
+                        dependees.append(pred)
+                if len(dependees) > 1:
+                    raise ValueError(
+                        f'the dependent domain {domain.name} has more than one dependees: '
+                        f'{", ".join([dependee.name for dependee in dependees])}'
+                    )
+                if len(dependees) == 0:
+                    raise ValueError(f'the dependent domain {domain.name} has no dependees.')
 
     def check_names_unique(self) -> None:
         # domain names already checked in compute_derived_fields()
         self.check_strand_names_unique()
         self.check_domain_pool_names_unique()
 
+    def _check_strand_dag_inclusion_legal(self, graph: nx.DiGraph) -> None:
+        """This function checks that if two subdomains of a single domain are part of a strand, they appear continuously, not got disconnected by another domain's subdomain."""
+        dags = list(nx.weakly_connected_components(graph))
+        domain_to_dag_idx = {}
+
+        for i, dag in enumerate(dags):
+            for domain in dag:
+                domain_to_dag_idx[domain] = i
+
+        for strand in self.strands:
+            visited_dag_idxs = OrderedSet()
+            prev_dag_idx = -1
+            for domain in strand.domains:
+                visiting_dag_idx = domain_to_dag_idx[domain]
+                if prev_dag_idx != visiting_dag_idx:
+                    if visiting_dag_idx in visited_dag_idxs:
+                        dag_subdomains_str = ', '.join(
+                            [sd.name for sd in dags[visiting_dag_idx].intersection(set(strand.domains))]
+                        )
+                        raise ValueError(
+                            f'A strand cannot overlap with a domain discontinuously: '
+                            f'Strand {strand.name} overlaps with subdomains {dag_subdomains_str} with shared ancestor {domains_shared_ancestor(list(dags[visiting_dag_idx].intersection(set(strand.domains))))} non-consecutively'
+                        )
+                    else:
+                        if prev_dag_idx != -1:
+                            visited_dag_idxs.add(prev_dag_idx)
+                        prev_dag_idx = visiting_dag_idx
+
+    def _check_every_subdomain_overlap_with_a_strand(self, graph: nx.DiGraph):
+        overlapping_leaves = OrderedSet()
+        for strand in self.strands:
+            for domain in strand.domains:
+                overlapping_leaves.update(
+                    {leaf for leaf in nx.descendants(graph, domain) | {domain} if graph.out_degree(leaf) == 0}
+                )
+
+        graph_leaves = OrderedSet([node for node, degree in graph.out_degree() if degree == 0])
+
+        non_overlapping_subdomains = graph_leaves - overlapping_leaves
+        if non_overlapping_subdomains:
+            non_overlapping_subdomains_str = ', '.join([sd.name for sd in non_overlapping_subdomains])
+            raise ValueError(
+                f'The subdomain(s) {non_overlapping_subdomains_str} are not overlapping with any strand in the design.'
+            )
+
     def check_strand_names_unique(self) -> None:
         strands_by_name = {}
         for strand in self.strands:
             name = strand.name
             if name in strands_by_name:
-                raise ValueError(f"found two strands with name {name}:\n  {strand}\nand\n  {strands_by_name[name]}")
+                raise ValueError(f'found two strands with name {name}:\n  {strand}\nand\n  {strands_by_name[name]}')
 
     def check_domain_pool_names_unique(self) -> None:
         # self.domain_pools() already computed by compute_derived_fields()
@@ -4664,7 +5437,7 @@ has a name, and the design contains a nuad strand with that name."""
             name = pool.name
             if name in domain_pools_by_name:
                 raise ValueError(
-                    f"found two DomainPools with name {name}:\n  {pool}\nand\n  {domain_pools_by_name[name]}"
+                    f'found two DomainPools with name {name}:\n  {pool}\nand\n  {domain_pools_by_name[name]}'
                 )
             else:
                 domain_pools_by_name[pool.name] = pool
@@ -4676,7 +5449,7 @@ has a name, and the design contains a nuad strand with that name."""
 # of the various different types of evaluate and evaluate_bulk functions. Otherwise they have more
 # abstract type signatures, and we can't write something like evaluate(strand: Strand)
 # Maybe if we eventually get rid of the parts and only pass in the sequences, this will not be needed.
-DesignPart = TypeVar("DesignPart", Domain, Strand, DomainPair, StrandPair, Complex, Design)
+DesignPart = TypeVar('DesignPart', Domain, Strand, DomainPair, StrandPair, Complex, Design)
 
 
 # eq=False gives us the default object.__hash__ id-based hashing
@@ -4714,7 +5487,7 @@ class Constraint(Generic[DesignPart], ABC):
     for printing in a long text report.
     """
 
-    short_description: str = ""
+    short_description: str = ''
     """
     Very short description of the constraint suitable for compactly logging to the screen, where
     many of these short descriptions must fit onto one line, e.g., 'strand ss' or 'dom pair nupack'
@@ -4749,7 +5522,7 @@ class Constraint(Generic[DesignPart], ABC):
 
 
 def _raise_unreachable():
-    raise AssertionError("This should be unreachable")
+    raise AssertionError('This should be unreachable')
 
 
 @dataclass
@@ -4825,7 +5598,7 @@ class Result(Generic[DesignPart]):
         self.excess = excess
         if summary is None:
             if value is None:
-                raise ValueError("at least one of value or summary must be specified")
+                raise ValueError('at least one of value or summary must be specified')
             # note summary getter calculates summary from value if summary is None,
             # so no need to set it here
         else:
@@ -4835,7 +5608,7 @@ class Result(Generic[DesignPart]):
             self.unit = unit
         else:
             if unit is not None:
-                raise ValueError("units cannot be specified if value is None")
+                raise ValueError('units cannot be specified if value is None')
 
         self.score = 0.0
         self.part = None  # type:ignore
@@ -4853,9 +5626,9 @@ class Result(Generic[DesignPart]):
             # e.g., kcal/mol instead of kilocalorie / mol
             # also 2 decimal places to make numbers line up nicely
             # self.value.default_format = '.2fC~'
-            summary_str = f"{self.value:6.2f}"
+            summary_str = f'{self.value:6.2f}'
             if self.unit is not None:
-                summary_str += f" {self.unit}"
+                summary_str += f' {self.unit}'
             return str(summary_str)
         else:
             return self._summary
@@ -4894,14 +5667,14 @@ class SingularConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
 
     def __post_init__(self) -> None:
         if self.evaluate is None:
-            raise ValueError(f"_evaluate must be set for a {self.__class__.__name__}")
+            raise ValueError(f'_evaluate must be set for a {self.__class__.__name__}')
 
         if len(self.short_description) == 0:
             # self.short_description = self.description
-            object.__setattr__(self, "short_description", self.description)
+            object.__setattr__(self, 'short_description', self.description)
 
         if self.weight <= 0:
-            raise ValueError(f"weight must be positive but it is {self.weight}")
+            raise ValueError(f'weight must be positive but it is {self.weight}')
 
     def call_evaluate(
         self,
@@ -4954,8 +5727,8 @@ class BulkConstraint(Constraint[DesignPart], Generic[DesignPart], ABC):
 
 
 _no_summary_string = (
-    "No summary for this constraint. "
-    "To generate one, pass a function as the parameter named "
+    'No summary for this constraint. '
+    'To generate one, pass a function as the parameter named '
     '"summary" when creating the Constraint.'
 )
 
@@ -4982,12 +5755,12 @@ class DomainConstraint(ConstraintWithDomains[Domain], SingularConstraint[Domain]
 
     def __post_init__(self) -> None:
         if self.evaluate is None:
-            raise ValueError("_evaluate must be specified for a DomainConstraint")
+            raise ValueError('_evaluate must be specified for a DomainConstraint')
         super().__post_init__()
 
     @staticmethod
     def part_name() -> str:
-        return "domain"
+        return 'domain'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -4996,12 +5769,12 @@ class StrandConstraint(ConstraintWithStrands[Strand], SingularConstraint[Strand]
 
     def __post_init__(self) -> None:
         if self.evaluate is None:
-            raise ValueError("_evaluate must be specified for a StrandConstraint")
+            raise ValueError('_evaluate must be specified for a StrandConstraint')
         super().__post_init__()
 
     @staticmethod
     def part_name() -> str:
-        return "strand"
+        return 'strand'
 
 
 # check all pairs of domains unless one is an ancestor of another in a subdomain tree
@@ -5045,11 +5818,11 @@ class ConstraintWithDomainPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     # useful for speedy lookups during search
 
     def __post_init__(self, pairs: Iterable[tuple[Domain, Domain]] | None) -> None:
-        _check_at_most_one_parameter_specified(self.domain_pairs, pairs, "domain_pairs", "pairs")
+        _check_at_most_one_parameter_specified(self.domain_pairs, pairs, 'domain_pairs', 'pairs')
 
         if self.domain_pairs is None:
             domain_pairs = None if pairs is None else tuple(DomainPair(d1, d2) for d1, d2 in pairs)
-            object.__setattr__(self, "domain_pairs", domain_pairs)
+            object.__setattr__(self, 'domain_pairs', domain_pairs)
 
         self.domain_pairs_with = (
             create_domain_pairs_with_dict(self.domain_pairs) if self.domain_pairs is not None else {}
@@ -5078,30 +5851,48 @@ def create_domain_pairs_with_dict(domain_pairs: Sequence[DomainPair]) -> dict[Do
 
 
 def _check_at_most_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    """
+    Raise an error if both `param1` and `param2` are specified (non-None).
+
+    :param param1: first parameter's current value
+    :param param2: second parameter's current value
+    :param name1: name of `param1`, used only in the error message
+    :param name2: name of `param2`, used only in the error message
+    :raises ValueError: if both `param1` and `param2` are not None
+    """
     if param1 is not None and param2 is not None:
         raise ValueError(
-            f"must specify at most one of parameters {name1} or {name2}, "
-            f"but both are not None:\n"
-            f"{name1}: {param1}\n"
-            f"{name2}: {param2}"
+            f'must specify at most one of parameters {name1} or {name2}, '
+            f'but both are not None:\n'
+            f'{name1}: {param1}\n'
+            f'{name2}: {param2}'
         )
 
 
 def _check_at_least_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
     if param1 is None and param2 is None:
-        raise ValueError(f"must specify at least one of parameters {name1} or {name2}, but both are None")
+        raise ValueError(f'must specify at least one of parameters {name1} or {name2}, but both are None')
 
 
 def _check_exactly_one_parameter_specified(param1: Any, param2: Any, name1: str, name2: str) -> None:
+    """
+    Raise an error unless exactly one of `param1`, `param2` is specified (non-None).
+
+    :param param1: first parameter's current value
+    :param param2: second parameter's current value
+    :param name1: name of `param1`, used only in the error message
+    :param name2: name of `param2`, used only in the error message
+    :raises ValueError: if both are not None, or both are None
+    """
     if param1 is not None and param2 is not None:
         raise ValueError(
-            f"must specify exactly one of parameters {name1} or {name2}, "
-            f"but both are not None:\n"
-            f"{name1}: {param1}\n"
-            f"{name2}: {param2}"
+            f'must specify exactly one of parameters {name1} or {name2}, '
+            f'but both are not None:\n'
+            f'{name1}: {param1}\n'
+            f'{name2}: {param2}'
         )
     if param1 is None and param2 is None:
-        raise ValueError(f"must specify exactly one of parameters {name1} or {name2}, but both are None")
+        raise ValueError(f'must specify exactly one of parameters {name1} or {name2}, but both are None')
 
 
 @dataclass(eq=False)
@@ -5131,10 +5922,10 @@ class ConstraintWithStrandPairs(Constraint[DesignPart], Generic[DesignPart]):  #
     #   or it may be simplest just to remove the frozen and eq from annotation and use default id-based hash
 
     def __post_init__(self, pairs: Iterable[tuple[Strand, Strand]] | None) -> None:
-        _check_at_most_one_parameter_specified(self.strand_pairs, pairs, "strand_pairs", "pairs")
+        _check_at_most_one_parameter_specified(self.strand_pairs, pairs, 'strand_pairs', 'pairs')
         if self.strand_pairs is None:
             strand_pairs = None if pairs is None else tuple(StrandPair(s1, s2) for s1, s2 in pairs)
-            object.__setattr__(self, "strand_pairs", strand_pairs)
+            object.__setattr__(self, 'strand_pairs', strand_pairs)
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5142,11 +5933,12 @@ class DomainPairConstraint(ConstraintWithDomainPairs[DomainPair], SingularConstr
     """Constraint that applies to a pair of :any:`Domain`'s.
 
     These should be symmetric, meaning that the constraint will give the same evaluation whether its
-    evaluate method is given the pair (domain1, domain2), or the pair (domain2, domain1)."""
+    evaluate method is given the pair (domain1, domain2), or the pair (domain2, domain1).
+    """
 
     @staticmethod
     def part_name() -> str:
-        return "domain pair"
+        return 'domain pair'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5154,11 +5946,12 @@ class StrandPairConstraint(ConstraintWithStrandPairs[StrandPair], SingularConstr
     """Constraint that applies to a pair of :any:`Strand`'s.
 
     These should be symmetric, meaning that the constraint will give the same evaluation whether its
-    evaluate method is given the pair (strand1, strand2), or the pair (strand2, strand1)."""
+    evaluate method is given the pair (strand1, strand2), or the pair (strand2, strand1).
+    """
 
     @staticmethod
     def part_name() -> str:
-        return "strand pair"
+        return 'strand pair'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5177,7 +5970,7 @@ class DomainsConstraint(ConstraintWithDomains[Domain], BulkConstraint[Domain]):
 
     @staticmethod
     def part_name() -> str:
-        return "domain"
+        return 'domain'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5196,7 +5989,7 @@ class StrandsConstraint(ConstraintWithStrands[Strand], BulkConstraint[Strand]):
 
     @staticmethod
     def part_name() -> str:
-        return "strand"
+        return 'strand'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5207,7 +6000,7 @@ class DomainPairsConstraint(ConstraintWithDomainPairs[DomainPair], BulkConstrain
 
     @staticmethod
     def part_name() -> str:
-        return "domain pair"
+        return 'domain pair'
 
 
 @dataclass(eq=False)  # type: ignore
@@ -5218,7 +6011,7 @@ class StrandPairsConstraint(ConstraintWithStrandPairs[StrandPair], BulkConstrain
 
     @staticmethod
     def part_name() -> str:
-        return "strand pair"
+        return 'strand pair'
 
 
 def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = True) -> None:
@@ -5239,16 +6032,16 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
         Here is what is checked:
         - strand names and group names appear in the same order
         - domain names and pool names appear in the same order in strands with the same name
-        - :data:`Domain.fixed` matches between :any:`Domain`'s
+        - :any:`Domain.fixed` matches between :any:`Domain`'s
     """
     for idx, (strand1, strand2) in enumerate(zip(design1.strands, design2.strands)):
         if strand1.name != strand2.name:
             raise ValueError(f"strand names at position {idx} don't match: {strand1.name} and {strand2.name}")
         if strand1.group is not None and strand2.group is not None and strand1.group != strand2.group:  # noqa
             raise ValueError(
-                f"strand {strand2.name} group name does not match:"
-                f"design1 strand {strand1.name} group = {strand1.group},\n"
-                f"design2 strand {strand2.name} group = {strand2.group}"
+                f'strand {strand2.name} group name does not match:'
+                f'design1 strand {strand1.name} group = {strand1.group},\n'
+                f'design2 strand {strand2.name} group = {strand2.group}'
             )
         for domain1, domain2 in zip(strand1.domains, strand2.domains):
             if domain1.name != domain2.name:
@@ -5257,15 +6050,15 @@ def verify_designs_match(design1: Design, design2: Design, check_fixed: bool = T
                 )
             if check_fixed and domain1.fixed != domain2.fixed:
                 raise ValueError(
-                    f"domain {domain2.name} is fixed in one but not the other:\n"
-                    f"design1 domain {domain1.name} fixed = {domain1.fixed},\n"
-                    f"design2 domain {domain2.name} fixed = {domain2.fixed}"
+                    f'domain {domain2.name} is fixed in one but not the other:\n'
+                    f'design1 domain {domain1.name} fixed = {domain1.fixed},\n'
+                    f'design2 domain {domain2.name} fixed = {domain2.fixed}'
                 )
             if domain1.has_pool() and domain2.has_pool() and domain1.pool.name != domain2.pool.name:
                 raise ValueError(
-                    f"domain {domain2.name} pool name does not match:"
-                    f"design1 domain {domain1.name} pool = {domain1.pool.name},\n"
-                    f"design2 domain {domain2.name} pool = {domain2.pool.name}"
+                    f'domain {domain2.name} pool name does not match:'
+                    f'design1 domain {domain1.name} pool = {domain1.pool.name},\n'
+                    f'design2 domain {domain2.name} pool = {domain2.pool.name}'
                 )
 
 
@@ -5281,7 +6074,7 @@ def convert_threshold(threshold: float | dict[T, float], key: T) -> float:
     elif isinstance(threshold, dict):
         threshold_value = threshold[key]
     else:
-        raise ValueError(f"threshold = {threshold} must be one of float or dict, but it is {type(threshold)}")
+        raise ValueError(f'threshold = {threshold} must be one of float or dict, but it is {type(threshold)}')
     return threshold_value
 
 
@@ -5293,10 +6086,10 @@ def _check_nupack_installed() -> None:
         import nupack  # noqa
     except ModuleNotFoundError:
         raise ImportError(
-            "NUPACK 4 must be installed to create a constraint that uses NUPACK. "
-            "Installation instructions can be found at "
-            "https://github.com/UC-Davis-molecular-computing/dsd#installation and "
-            "https://piercelab-caltech.github.io/nupack-docs/start/"
+            'NUPACK 4 must be installed to create a constraint that uses NUPACK. '
+            'Installation instructions can be found at '
+            'https://github.com/UC-Davis-molecular-computing/dsd#installation and '
+            'https://piercelab-caltech.github.io/nupack-docs/start/'
         )
 
 
@@ -5309,7 +6102,7 @@ def nupack_domain_free_energy_constraint(
     score_transfer_function: Callable[[float], float] | None = None,
     parallel: bool = False,
     description: str | None = None,
-    short_description: str = "strand_ss_nupack",
+    short_description: str = 'strand_ss_nupack',
     domains: Iterable[Domain] | None = None,
 ) -> DomainConstraint:
     """
@@ -5351,10 +6144,10 @@ def nupack_domain_free_energy_constraint(
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
-        return Result(excess=excess, value=energy, unit="kcal/mol")
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if description is None:
-        description = f"NUPACK secondary structure of domain exceeds {threshold} kcal/mol"
+        description = f'NUPACK secondary structure of domain exceeds {threshold} kcal/mol'
 
     if domains is not None:
         domains = tuple(domains)
@@ -5387,7 +6180,7 @@ def forbidden_substring_strand_constraint(
     if description is None:
         description = f"'{forbidden_substring}' not allowed in strand"
     if short_description is None:
-        short_description = f"no {forbidden_substring}"
+        short_description = f'no {forbidden_substring}'
     if isinstance(forbidden_substring, str):
         forbidden_substrings = (forbidden_substring,)
     else:
@@ -5395,10 +6188,10 @@ def forbidden_substring_strand_constraint(
 
     def evaluate_forbidden_substring_strand(seqs: tuple[str, ...], _: Strand | None) -> Result:
         sequence = seqs[0]
-        result = Result(excess=0.0, summary="")
+        result = Result(excess=0.0, summary='')
         for forbidden in forbidden_substrings:
             if forbidden in sequence:
-                result.summary += f"contains {forbidden}" if result.excess < 1.0 else f", {forbidden}"
+                result.summary += f'contains {forbidden}' if result.excess < 1.0 else f', {forbidden}'
                 result.excess += 1.0
 
         return result
@@ -5423,7 +6216,7 @@ def nupack_strand_free_energy_constraint(
     score_transfer_function: Callable[[float], float] | None = None,
     parallel: bool = False,
     description: str | None = None,
-    short_description: str = "strand_ss_nupack",
+    short_description: str = 'strand_ss_nupack',
     strands: Iterable[Strand] | None = None,
 ) -> StrandConstraint:
     """
@@ -5466,10 +6259,10 @@ def nupack_strand_free_energy_constraint(
         sequence = seqs[0]
         energy = nv.free_energy_single_strand(sequence, temperature, sodium, magnesium)
         excess = max(0.0, threshold - energy)
-        return Result(excess=excess, value=energy, unit="kcal/mol")
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if description is None:
-        description = f"strand NUPACK energy >= {threshold} kcal/mol at {temperature}C"
+        description = f'strand NUPACK energy >= {threshold} kcal/mol at {temperature}C'
 
     if strands is not None:
         strands = tuple(strands)
@@ -5494,12 +6287,12 @@ def nupack_domain_pair_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "dom_pair_nupack",
+    short_description: str = 'dom_pair_nupack',
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
 ) -> DomainPairConstraint:
     """
     Returns constraint that checks given pairs of :any:`Domain`'s for excessive interaction using
-    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their Watson-Crick complements
+    NUPACK's pfunc executable. Each of the four combinations of seq1, seq2 and their reverse complements
     are compared.
 
     :param threshold:
@@ -5532,18 +6325,18 @@ def nupack_domain_pair_constraint(
 
     if description is None:
         if isinstance(threshold, Number):
-            description = f"NUPACK energy of domain pair exceeds {threshold} kcal/mol"
+            description = f'NUPACK energy of domain pair exceeds {threshold} kcal/mol'
         elif isinstance(threshold, dict):
             domain_pool_name_pair_to_threshold = {
                 (domain_pool1.name, domain_pool2.name): value
                 for (domain_pool1, domain_pool2), value in threshold.items()
             }
             description = (
-                f"NUPACK energy of domain pair exceeds threshold defined by their DomainPools "
-                f"as follows:\n{domain_pool_name_pair_to_threshold}"
+                f'NUPACK energy of domain pair exceeds threshold defined by their DomainPools '
+                f'as follows:\n{domain_pool_name_pair_to_threshold}'
             )
         else:
-            raise ValueError(f"threshold = {threshold} must be one of float or dict, but it is {type(threshold)}")
+            raise ValueError(f'threshold = {threshold} must be one of float or dict, but it is {type(threshold)}')
 
     def binding_closure(seq_pair: tuple[str, str]) -> float:
         return nv.binding(
@@ -5583,7 +6376,7 @@ def nupack_domain_pair_constraint(
         for energy, (name1, name2) in zip(energies, name_pairs):
             if name1 is not None and name2 is not None:
                 logger.debug(
-                    f"domain pair threshold: {threshold:6.2f} binding({name1}, {name2}, {temperature}) = {energy:6.2f} "
+                    f'domain pair threshold: {threshold:6.2f} binding({name1}, {name2}, {temperature}) = {energy:6.2f} '
                 )
             excess = max(0.0, (threshold - energy))
             excesses.append(excess)
@@ -5593,17 +6386,17 @@ def nupack_domain_pair_constraint(
         max_name_length = max(len(name) for name in flatten(name_pairs))
         lines_and_energies = [
             (
-                f"{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol",
+                f'{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol',
                 energy,
             )
             for (name1, name2), energy in zip(name_pairs, energies)
         ]
         lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
         lines = [line for line, _ in lines_and_energies]
-        summary = "\n  " + "\n  ".join(lines)
+        summary = '\n  ' + '\n  '.join(lines)
 
         max_excess = max(0.0, max_excess)
-        return Result(excess=max_excess, summary=summary, value=max_excess, unit="kcal/mol")
+        return Result(excess=max_excess, summary=summary, value=max_excess, unit='kcal/mol')
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -5682,15 +6475,15 @@ def nupack_strand_pair_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "NUPACK", threshold, temperature)
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description('strand', 'NUPACK', threshold, temperature)
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
-        short_descriptions = {num_matching: f"NUPACKpair{num_matching}comp" for num_matching, _ in thresholds.items()}
+        short_descriptions = {num_matching: f'NUPACKpair{num_matching}comp' for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=nupack_strand_pair_constraint_partial,
@@ -5764,15 +6557,15 @@ def rna_duplex_strand_pair_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNADuplex", threshold, temperature)
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description('strand', 'RNADuplex', threshold, temperature)
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
-        short_descriptions = {num_matching: f"RNADupPair{num_matching}comp" for num_matching, _ in thresholds.items()}
+        short_descriptions = {num_matching: f'RNADupPair{num_matching}comp' for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_duplex_strand_pair_constraint,
@@ -5790,7 +6583,7 @@ def rna_duplex_strand_pair_constraints_by_number_matching_domains(
 
 
 def _pair_default_description(part_name: str, func_name: str, threshold: float, temperature: float) -> str:
-    return f"{part_name} pair {func_name} energy >= {threshold} kcal/mol at {temperature}C"
+    return f'{part_name} pair {func_name} energy >= {threshold} kcal/mol at {temperature}C'
 
 
 def nupack_strand_pair_constraint(
@@ -5801,7 +6594,7 @@ def nupack_strand_pair_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "strand_pair_nupack",
+    short_description: str = 'strand_pair_nupack',
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
 ) -> StrandPairConstraint:
@@ -5840,13 +6633,13 @@ def nupack_strand_pair_constraint(
     _check_nupack_installed()
 
     if description is None:
-        description = _pair_default_description("strand", "NUPACK", threshold, temperature)
+        description = _pair_default_description('strand', 'NUPACK', threshold, temperature)
 
     def evaluate_nupack_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
         seq1, seq2 = seqs
         energy = nv.binding(seq1, seq2, temperature=temperature, sodium=sodium, magnesium=magnesium)
         excess = max(0.0, threshold - energy)
-        return Result(excess=excess, value=energy, unit="kcal/mol")
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     if pairs is not None:
         pairs = tuple(pairs)
@@ -5869,7 +6662,7 @@ def rna_duplex_strand_pair_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_dup_strand_pairs",
+    short_description: str = 'rna_dup_strand_pairs',
     parallel: bool = False,  # TODO: remove after figuring out Protocol
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     strands: Iterable[Strand] | None = None,
@@ -5916,7 +6709,7 @@ def rna_duplex_strand_pair_constraint(
         The :any:`StrandPairConstraint`.
     """
     if strands is not None and pairs is not None:
-        raise ValueError("Exactly one of strands or pairs can be specified, but not both.")
+        raise ValueError('Exactly one of strands or pairs can be specified, but not both.')
     gu_wobble = False  # TODO: remove after figuring out Protocol
     max_energy = 0.0  # TODO: remove after figuring out Protocol
     import RNA
@@ -5926,14 +6719,14 @@ def rna_duplex_strand_pair_constraint(
     RNA.params_load_DNA_Mathews2004()
 
     if description is None:
-        description = _pair_default_description("strand", "RNAduplex", threshold, temperature)
+        description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
     def evaluate_rna_duplex_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
         seq1, seq2 = seqs
         rna_duplex_result = RNA.duplexfold(seq1, seq2)
         energy = min(rna_duplex_result.energy, max_energy)
         excess = max(0.0, threshold - energy)
-        return Result(excess=excess, value=energy, unit="kcal/mol")
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     pairs_tuple = None
     if pairs is not None:
@@ -5974,13 +6767,13 @@ def chunker(
         `chunk_length` will be calculated from the other).
     """
     if chunk_length is None and num_chunks is None or chunk_length is not None and num_chunks is not None:
-        raise ValueError("exactly one of chunk_length or num_chunks must be None")
+        raise ValueError('exactly one of chunk_length or num_chunks must be None')
 
     if chunk_length is None:
         if num_chunks is None:
-            raise ValueError("exactly one of chunk_length or num_chunks must be None")
+            raise ValueError('exactly one of chunk_length or num_chunks must be None')
         if num_chunks < 1:
-            raise ValueError("num_chunks must be positive")
+            raise ValueError('num_chunks must be positive')
         num_items = len(sequence)
         chunk_length, remainder = divmod(num_items, num_chunks)
         if remainder > 0:
@@ -6022,22 +6815,29 @@ and make parallel processing more efficient:
         )
         count = os.cpu_count()
     if count is None:
-        logger.warning("could not determine number of physical CPU cores; defaulting to 1")
+        logger.warning('could not determine number of physical CPU cores; defaulting to 1')
         count = 1
     return count
 
 
 def _check_vienna_rna_installed() -> None:
+    """
+    Verify that ViennaRNA is installed and its executables (e.g. RNAduplex) are on the
+    PATH, by attempting a trivial RNAduplex call.
+
+    :raises ImportError: if the executable can't be found, with a message pointing to
+        installation instructions
+    """
     try:
-        nv.rna_duplex_multiple([("ACGT", "TGCA")])
+        nv.rna_duplex_multiple([('ACGT', 'TGCA')])
     except FileNotFoundError:
         raise ImportError(
             """
-Vienna RNA is not installed correctly. Please install it and ensure that 
-executables such as RNAduplex can be called from the command line. 
-Installation instructions can be found at 
-https://github.com/UC-Davis-molecular-computing/dsd#installation and 
-https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
+            Vienna RNA is not installed correctly. Please install it and ensure that 
+            executables such as RNAduplex can be called from the command line. 
+            Installation instructions can be found at 
+            https://github.com/UC-Davis-molecular-computing/dsd#installation and 
+            https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/install.html"""
         )
 
 
@@ -6047,7 +6847,7 @@ def rna_duplex_domain_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_dup_dom_pairs",
+    short_description: str = 'rna_dup_dom_pairs',
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
     domains: Iterable[Domain] | None = None,
 ) -> DomainPairsConstraint:
@@ -6081,10 +6881,10 @@ def rna_duplex_domain_pairs_constraint(
     _check_vienna_rna_installed()
 
     if pairs is not None and domains is not None:
-        raise ValueError("at most one of pairs or domains should be specified, but not both")
+        raise ValueError('at most one of pairs or domains should be specified, but not both')
 
     if description is None:
-        description = _pair_default_description("domain", "RNAduplex", threshold, temperature)
+        description = _pair_default_description('domain', 'RNAduplex', threshold, temperature)
 
     def evaluate_bulk_rna_duplex_domain_pairs(domain_pairs: Iterable[DomainPair]) -> list[Result]:
         sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
@@ -6117,18 +6917,18 @@ def rna_duplex_domain_pairs_constraint(
             max_name_length = max(len(name) for name in flatten(name_pairs))
             lines_and_energies = [
                 (
-                    f"{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol",
+                    f'{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol',
                     energy,
                 )
                 for energy, (name1, name2) in energies_and_name_pairs
             ]
             lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
             lines = [line for line, _ in lines_and_energies]
-            summary = "\n  " + "\n  ".join(lines)
+            summary = '\n  ' + '\n  '.join(lines)
             max_excess = max(0.0, max_excess)
             # Note we negate the max_excess value since
             # sorting in constraint reports is done assuming negative energies
-            result = Result(excess=max_excess, summary=summary, value=-max_excess, unit="kcal/mol")
+            result = Result(excess=max_excess, summary=summary, value=-max_excess, unit='kcal/mol')
             results.append(result)
 
         return results
@@ -6155,7 +6955,7 @@ def rna_plex_domain_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs",
+    short_description: str = 'rna_plex_dom_pairs',
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
@@ -6186,7 +6986,7 @@ def rna_plex_domain_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = _pair_default_description("domain", "RNAplex", threshold, temperature)
+        description = _pair_default_description('domain', 'RNAplex', threshold, temperature)
 
     def evaluate_bulk_rna_plex_domain_pairs(domain_pairs: Iterable[DomainPair]) -> list[Result]:
         sequence_pairs, name_pairs, domain_tuples = _all_pairs_domain_sequences_complements_names_from_domains(
@@ -6209,8 +7009,8 @@ def rna_plex_domain_pairs_constraint(
             for energy, (name1, name2) in energies_and_name_pairs:
                 if name1 is not None and name2 is not None:
                     logger.debug(
-                        f"domain pair threshold: {threshold:6.2f} "
-                        f"rna_plex({name1}, {name2}, {temperature}) = {energy:6.2f} "
+                        f'domain pair threshold: {threshold:6.2f} '
+                        f'rna_plex({name1}, {name2}, {temperature}) = {energy:6.2f} '
                     )
                 excess = max(0.0, (threshold - energy))
                 excesses.append(excess)
@@ -6219,16 +7019,16 @@ def rna_plex_domain_pairs_constraint(
             max_name_length = max(len(name) for name in flatten(name_pairs))
             lines_and_energies = [
                 (
-                    f"{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol",
+                    f'{name1:{max_name_length}}, {name2:{max_name_length}}:  {energy:6.2f} kcal/mol',
                     energy,
                 )
                 for energy, (name1, name2) in energies_and_name_pairs
             ]
             lines_and_energies.sort(key=lambda line_and_energy: line_and_energy[1])
             lines = [line for line, _ in lines_and_energies]
-            summary = "\n  " + "\n  ".join(lines)
+            summary = '\n  ' + '\n  '.join(lines)
             max_excess = max(0.0, max_excess)
-            result = Result(excess=max_excess, summary=summary, value=max_excess, unit="kcal/mol")
+            result = Result(excess=max_excess, summary=summary, value=max_excess, unit='kcal/mol')
             results.append(result)
 
         return results
@@ -6250,7 +7050,18 @@ def rna_plex_domain_pairs_constraint(
 def get_domain_pairs_from_thresholds_dict(
     thresholds: dict[tuple[Domain, bool, Domain, bool] | tuple[Domain, Domain], tuple[float, float]],
 ) -> tuple[DomainPair, ...]:
-    # gather pairs of domains referenced in `thresholds`
+    """
+    Extract the `DomainPair`s referenced by the keys of a `thresholds` dict.
+
+    Each key is either a 2-tuple `(domain1, domain2)` or a 4-tuple
+    `(domain1, starred1, domain2, starred2)`; this builds one `DomainPair` per key.
+
+    :param thresholds: map from a domain pair (see above) to an
+        `(low_threshold, high_threshold)` energy interval
+    :return: tuple of `DomainPair`s, one per key in `thresholds`
+    :raises ValueError: if a key is neither a 2-tuple nor a 4-tuple, or if both forms
+        of the same pair appear as separate keys
+    """
     domain_pairs = []
     for key, _ in thresholds.items():
         if len(key) == 2:
@@ -6259,16 +7070,16 @@ def get_domain_pairs_from_thresholds_dict(
         else:
             if len(key) != 4:
                 raise ValueError(
-                    f"key {key} in thresholds dict must have length 2, if a pair of domains, "
-                    f"or 4, if a tuple (domain1, starred1, domain2, starred2)"
+                    f'key {key} in thresholds dict must have length 2, if a pair of domains, '
+                    f'or 4, if a tuple (domain1, starred1, domain2, starred2)'
                 )
             d1, starred1, d2, starred2 = key
             if (d1, d2) in thresholds.keys():
                 raise ValueError(
-                    f"cannot have key (d1,d2) in `thresholds` if (d1, starred1, d2, starred2) "
-                    f"is also a key in `thresholds`, but I found these keys:"
-                    f"\n  {(d1, d2)}"
-                    f"\n  {key}"
+                    f'cannot have key (d1,d2) in `thresholds` if (d1, starred1, d2, starred2) '
+                    f'is also a key in `thresholds`, but I found these keys:'
+                    f'\n  {(d1, d2)}'
+                    f'\n  {key}'
                 )
         domain_pair = DomainPair(d1, d2, starred1, starred2)
         domain_pairs.append(domain_pair)
@@ -6276,7 +7087,7 @@ def get_domain_pairs_from_thresholds_dict(
     return domain_pairs
 
 
-S = TypeVar("S", str, bytes, bytearray)
+S = TypeVar('S', str, bytes, bytearray)
 
 PairsEvaluationFunction = Callable[[Sequence[tuple[S, S]], logging.Logger, float, str, float], tuple[float, ...]]
 
@@ -6289,14 +7100,32 @@ def domain_pairs_nonorthogonal_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs_nonorth",
+    short_description: str = 'rna_plex_dom_pairs_nonorth',
     max_energy: float = 0.0,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
 ) -> DomainPairsConstraint:
-    # common code for evaluating nonorthogonal domain energies using RNAduplex, RNAplex, RNAmultifold
+    """
+    Shared implementation behind the RNAduplex/RNAplex/RNAmultifold "nonorthogonal
+    domain pairs" constraints: for each domain pair with an explicit
+    `(low_threshold, high_threshold)` window in `thresholds`, compute its binding
+    energy with `evaluation_function` and penalize energies outside that window.
 
+    :param evaluation_function: batch binding-energy function (e.g. `rna_duplex_multiple`)
+    :param tool_name: name of the underlying tool, used in the default `description`
+    :param thresholds: map from a domain pair (2-tuple, or 4-tuple with starredness) to
+        its `(low_threshold, high_threshold)` energy window in kcal/mol
+    :param temperature: temperature (Celsius) at which to compute energies
+    :param weight: weight to assign the resulting constraint
+    :param score_transfer_function: function applied to the constraint's excess value
+    :param description: description of constraint; auto-generated if not given
+    :param short_description: short description of constraint suitable for logging
+    :param max_energy: passed through to `evaluation_function`
+    :param parameters_filename: ViennaRNA parameters file to use
+    :return: a `DomainPairsConstraint` penalizing domain pairs whose energy falls
+        outside their specified threshold window
+    """
     if description is None:
-        description = f"domain pair {tool_name} energies for nonorthogonal domains at {temperature}C"
+        description = f'domain pair {tool_name} energies for nonorthogonal domains at {temperature}C'
 
     domain_pairs = get_domain_pairs_from_thresholds_dict(thresholds)
 
@@ -6342,7 +7171,7 @@ def domain_pairs_nonorthogonal_constraint(
                 low_threshold, high_threshold = thresholds[(dom2, star2, dom1, star1)]
             else:
                 raise ValueError(
-                    f"could not find threshold for domain pair ({dom1.get_name(star1)}, {dom2.get_name(star2)})"
+                    f'could not find threshold for domain pair ({dom1.get_name(star1)}, {dom2.get_name(star2)})'
                 )
 
             if energy < low_threshold:
@@ -6352,8 +7181,8 @@ def domain_pairs_nonorthogonal_constraint(
             else:
                 excess = 0
 
-            summary = f"{energy:6.2f} kcal/mol; target: [{low_threshold}, {high_threshold}]"
-            result = Result(excess=excess, value=energy, unit="kcal/mol", summary=summary)
+            summary = f'{energy:6.2f} kcal/mol; target: [{low_threshold}, {high_threshold}]'
+            result = Result(excess=excess, value=energy, unit='kcal/mol', summary=summary)
             results.append(result)
 
         return results
@@ -6378,7 +7207,7 @@ def nupack_domain_pairs_nonorthogonal_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "dom_pair_nupack_nonorth",
+    short_description: str = 'dom_pair_nupack_nonorth',
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
@@ -6398,7 +7227,7 @@ def nupack_domain_pairs_nonorthogonal_constraint(
 
     return domain_pairs_nonorthogonal_constraint(
         evaluation_function=eval_func,
-        tool_name="NUPACK",
+        tool_name='NUPACK',
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6416,7 +7245,7 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs_nonorth",
+    short_description: str = 'rna_plex_dom_pairs_nonorth',
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
@@ -6481,7 +7310,7 @@ def rna_plex_domain_pairs_nonorthogonal_constraint(
 
     return domain_pairs_nonorthogonal_constraint(
         evaluation_function=nv.rna_plex_multiple,
-        tool_name="RNAplex",
+        tool_name='RNAplex',
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6499,7 +7328,7 @@ def rna_duplex_domain_pairs_nonorthogonal_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_plex_dom_pairs_nonorth",
+    short_description: str = 'rna_plex_dom_pairs_nonorth',
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
@@ -6510,7 +7339,7 @@ def rna_duplex_domain_pairs_nonorthogonal_constraint(
 
     return domain_pairs_nonorthogonal_constraint(
         evaluation_function=nv.rna_duplex_multiple,
-        tool_name="RNAduplex",
+        tool_name='RNAduplex',
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6528,7 +7357,7 @@ def rna_multifold_domain_pairs_nonorthogonal_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] = lambda x: x,
     description: str | None = None,
-    short_description: str = "rna_multifold_dom_pairs_nonorth",
+    short_description: str = 'rna_multifold_dom_pairs_nonorth',
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
     max_energy: float = 0.0,
 ) -> DomainPairsConstraint:
@@ -6541,7 +7370,7 @@ def rna_multifold_domain_pairs_nonorthogonal_constraint(
 
     return domain_pairs_nonorthogonal_constraint(
         evaluation_function=nv.rna_multifold_multiple,
-        tool_name="RNAmultifold",
+        tool_name='RNAmultifold',
         thresholds=thresholds,
         temperature=temperature,
         weight=weight,
@@ -6556,12 +7385,22 @@ def rna_multifold_domain_pairs_nonorthogonal_constraint(
 def _populate_strand_list_and_pairs(
     strands: Iterable[Strand] | None, pairs: Iterable[tuple[Strand, Strand]] | None
 ) -> tuple[list[Strand], list[tuple[Strand, Strand]]]:
-    # assert exactly one of strands or pairs is None, then populate the other since both are used below
-    # also normalize both to be a list instead of iterable
+    """
+    Given exactly one of `strands` or `pairs`, populate and return both, as lists.
+
+    If `strands` is given, `pairs` becomes all pairs of strands (including a strand
+    with itself). If `pairs` is given, `strands` becomes the deduplicated (by name)
+    list of strands appearing in any pair.
+
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :return: `(strands, pairs)`, both as lists
+    :raises ValueError: if both or neither of `strands`/`pairs` is given
+    """
     if strands is None and pairs is None:
-        raise ValueError("exactly one of strands or pairs must be specified, but neither is")
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
     elif strands is not None and pairs is not None:
-        raise ValueError("exactly one of strands or pairs must be specified, but both are")
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
     elif strands is not None:
         assert pairs is None
         if not isinstance(strands, list):
@@ -6658,7 +7497,7 @@ def strand_pairs_by_number_matching_domains(
 
 
 SPC = TypeVar(
-    "SPC",
+    'SPC',
     StrandPairConstraint,
     StrandPairsConstraint,
     covariant=True,
@@ -6683,7 +7522,7 @@ class _StrandPairsConstraintCreator(Protocol[SPC]):
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] | None = None,
         description: str | None = None,
-        short_description: str = "",
+        short_description: str = '',
         parallel: bool = False,
         pairs: Iterable[tuple[Strand, Strand]] | None = None,
     ) -> SPC: ...
@@ -6703,11 +7542,30 @@ def _strand_pairs_constraints_by_number_matching_domains(
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     ignore_missing_thresholds: bool = False,
 ) -> list[SPC]:
-    # function to share common code between
-    #   rna_duplex_strand_pairs_constraints_by_number_matching_domains
-    # and
-    #   rna_multifold_strand_pair_constraints_by_number_matching_domains
+    """
+    Shared implementation behind `rna_duplex_strand_pairs_constraints_by_number_matching_domains`
+    and `rna_multifold_strand_pair_constraints_by_number_matching_domains`: groups strand
+    pairs by how many domains they share, then builds one constraint per group via
+    `constraint_creator`, using the threshold specified for that group size.
 
+    :param constraint_creator: factory building a single constraint (type `SPC`) for one
+        group of same-matching-domain-count strand pairs
+    :param thresholds: map from number of matching domains to the energy threshold for
+        strand pairs with that many domains in common
+    :param temperature: temperature (Celsius) at which to compute energies
+    :param weight: weight to assign each resulting constraint
+    :param score_transfer_function: function applied to each constraint's excess value
+    :param descriptions: optional map from matching-domain count to a description
+    :param short_descriptions: optional map from matching-domain count to a short description
+    :param parallel: whether to evaluate constraints in parallel
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :param ignore_missing_thresholds: if False, require a threshold for every distinct
+        matching-domain count present in `pairs`
+    :return: one constraint per key in `thresholds`
+    :raises ValueError: if `thresholds`'s keys don't match the matching-domain counts
+        present in `pairs`, and `ignore_missing_thresholds` is False
+    """
     check_strand_against_itself = True
     pairs = _normalize_strands_pairs_disjoint_parameters(strands, pairs, check_strand_against_itself)
 
@@ -6729,7 +7587,7 @@ but instead the thresholds.keys() is {sorted(list(thres_keys))}"""
         pairs_with_matching_domains = pairs_by_matching_domains[num_matching_domains]
 
         description = None if descriptions is None else descriptions.get(num_matching_domains)
-        short_description = "" if short_descriptions is None else short_descriptions.get(num_matching_domains, "")
+        short_description = '' if short_descriptions is None else short_descriptions.get(num_matching_domains, '')
 
         constraint = constraint_creator(
             threshold=threshold,
@@ -6751,13 +7609,23 @@ def _normalize_domains_pairs_disjoint_parameters(
     pairs: Iterable[tuple[Domain, Domain]],
     check_domain_against_itself: bool,
 ) -> tuple[tuple[Domain, Domain], ...]:
-    # Enforce that exactly one of domains or pairs is not None, and if domains is specified,
-    # set pairs to be all pairs from domains. Return those pairs; if pairs is specified,
-    # just return it. Also normalize to return a tuple.
+    """
+    Given exactly one of `domains` or `pairs`, return the pairs to check as a tuple.
+
+    If `domains` is given, all pairs of domains are generated (including a domain with
+    itself, if `check_domain_against_itself`). If `pairs` is given, it's returned directly.
+
+    :param domains: domains to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit domain pairs to check, or None if `domains` is given instead
+    :param check_domain_against_itself: whether to pair a domain with itself when
+        generating pairs from `domains`
+    :return: tuple of domain pairs to check
+    :raises ValueError: if both or neither of `domains`/`pairs` is given
+    """
     if domains is None and pairs is None:
-        raise ValueError("exactly one of domains or pairs must be specified, but neither is")
+        raise ValueError('exactly one of domains or pairs must be specified, but neither is')
     elif domains is not None and pairs is not None:
-        raise ValueError("exactly one of domains or pairs must be specified, but both are")
+        raise ValueError('exactly one of domains or pairs must be specified, but both are')
     if domains is not None:
         assert pairs is None
         if check_domain_against_itself:
@@ -6774,13 +7642,23 @@ def _normalize_strands_pairs_disjoint_parameters(
     pairs: Iterable[tuple[Strand, Strand]] | None,
     check_strand_against_itself: bool,
 ) -> Iterable[tuple[Strand, Strand]]:
-    # Enforce that exactly one of strands or pairs is not None, and if strands is specified,
-    # set pairs to be all pairs from strands. Return those pairs; if pairs is specified,
-    # just return it. Also normalize to return a tuple.
+    """
+    Given exactly one of `strands` or `pairs`, return the pairs to check as a tuple.
+
+    If `strands` is given, all pairs of strands are generated (including a strand with
+    itself, if `check_strand_against_itself`). If `pairs` is given, it's returned directly.
+
+    :param strands: strands to check pairwise, or None if `pairs` is given instead
+    :param pairs: explicit strand pairs to check, or None if `strands` is given instead
+    :param check_strand_against_itself: whether to pair a strand with itself when
+        generating pairs from `strands`
+    :return: tuple of strand pairs to check
+    :raises ValueError: if both or neither of `strands`/`pairs` is given
+    """
     if strands is None and pairs is None:
-        raise ValueError("exactly one of strands or pairs must be specified, but neither is")
+        raise ValueError('exactly one of strands or pairs must be specified, but neither is')
     elif strands is not None and pairs is not None:
-        raise ValueError("exactly one of strands or pairs must be specified, but both are")
+        raise ValueError('exactly one of strands or pairs must be specified, but both are')
     if strands is not None:
         assert pairs is None
         if check_strand_against_itself:
@@ -6813,17 +7691,15 @@ def rna_multifold_strand_pair_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNAmultifold", threshold, temperature)
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description('strand', 'RNAmultifold', threshold, temperature)
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
-        short_descriptions = {
-            num_matching: f"RNAmfPair{num_matching}comp" for num_matching, _ in thresholds.items()
-        }
+        short_descriptions = {num_matching: f'RNAmfPair{num_matching}comp' for num_matching, _ in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=rna_multifold_strand_pair_constraint,
@@ -6902,16 +7778,16 @@ def rna_duplex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNAduplex", threshold, temperature)
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description('strand', 'RNAduplex', threshold, temperature)
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
         short_descriptions = {
-            num_matching: f"RNAdup{num_matching}comp" for num_matching, threshold in thresholds.items()
+            num_matching: f'RNAdup{num_matching}comp' for num_matching, threshold in thresholds.items()
         }
 
     return _strand_pairs_constraints_by_number_matching_domains(
@@ -6991,16 +7867,16 @@ def rna_plex_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                _pair_default_description("strand", "RNAplex", threshold, temperature)
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                _pair_default_description('strand', 'RNAplex', threshold, temperature)
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
         short_descriptions = {
-            num_matching: f"RNAdup{num_matching}comp" for num_matching, threshold in thresholds.items()
+            num_matching: f'RNAdup{num_matching}comp' for num_matching, threshold in thresholds.items()
         }
 
     return _strand_pairs_constraints_by_number_matching_domains(
@@ -7207,6 +8083,27 @@ def update_diagonal(
     prev_prev_larger: bool,
     gc_double: bool,
 ) -> np.ndarray:
+    """
+    Compute one anti-diagonal of the longest-complementary-subsequence dynamic-programming
+    table from the previous two anti-diagonals, as part of the "anti-diagonal" algorithm
+    used by `longest_complementary_subsequences`.
+
+    :param arr1: 2D array of sequences (rows) as integer base codes, 5' --> 3'
+    :param arr2: 2D array of sequences (rows) as integer base codes, 3' --> 5' (already
+        reversed and WC-complemented by the caller)
+    :param diag_prev: the anti-diagonal immediately before the one being computed
+    :param diag_prev_prev: the anti-diagonal two before the one being computed;
+        overwritten in place and returned as the new current diagonal
+    :param eq_idxs: scratch boolean array, reused across calls, for base-match positions
+    :param gc_idxs: scratch boolean array, reused across calls, for matching G-C positions
+        (only used if `gc_double`)
+    :param i: index of the anti-diagonal being computed
+    :param prev_prev_larger: whether `diag_prev_prev` has one more entry than `diag_prev`
+        (alternates each step, as diagonal lengths alternate while sweeping the DP table)
+    :param gc_double: whether to score a G-C match as 2 instead of 1
+    :return: the newly computed diagonal (same array object as `diag_prev_prev`, now
+        overwritten, returned for readability)
+    """
     s1len = arr1.shape[1]
     s2len = arr2.shape[1]
     assert s1len == s2len  # for now, assume same length, but should be relaxed
@@ -7267,6 +8164,16 @@ def update_diagonal(
 
 
 def lcs(seqs1: Sequence[str], seqs2: Sequence[str], gc_double: bool) -> list[int]:
+    """
+    Compute, for each pair `(seqs1[i], seqs2[i])`, the length of the longest
+    complementary (Watson-Crick) subsequence between the two.
+
+    :param seqs1: DNA sequences, oriented 5' --> 3'
+    :param seqs2: DNA sequences, oriented 5' --> 3' (reversed internally so the search
+        aligns them for complementary, rather than plain, subsequence matching)
+    :param gc_double: whether to score a G-C complementary pair as 2 instead of 1
+    :return: list of longest-complementary-subsequence lengths, one per pair
+    """
     arr1 = nn.seqs2arr(seqs1)
     arr2 = nn.seqs2arr(seqs2)
     arr2 = np.flip(arr2, axis=1)
@@ -7285,7 +8192,7 @@ def lcs_domain_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "lcs domain pairs",
+    short_description: str = 'lcs domain pairs',
     domains: Iterable[Domain] | None = None,
     pairs: Iterable[tuple[Domain, Domain]] | None = None,
     check_domain_against_itself: bool = True,
@@ -7319,7 +8226,7 @@ def lcs_domain_pairs_constraint(
         interaction due to having long complementary subsequences.
     """
     if description is None:
-        description = f"Longest complementary subsequence between domains is > {threshold}"
+        description = f'Longest complementary subsequence between domains is > {threshold}'
 
     def evaluate_bulk_lcs_domain_pairs(pairs_: Iterable[DomainPair]) -> list[Result]:
         seqs1 = [pair.domain1.sequence() for pair in pairs_]
@@ -7357,7 +8264,7 @@ def lcs_strand_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "lcs strand pairs",
+    short_description: str = 'lcs strand pairs',
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     check_strand_against_itself: bool = True,
     gc_double: bool = True,
@@ -7389,7 +8296,7 @@ def lcs_strand_pairs_constraint(
         interaction due to having long complementary subsequences.
     """
     if description is None:
-        description = f"Longest complementary subsequence between strands is > {threshold}"
+        description = f'Longest complementary subsequence between strands is > {threshold}'
 
     def evaluate_bulk_lcs_strand_pairs(strand_pairs: Iterable[StrandPair]) -> list[Result]:
         # import time
@@ -7446,18 +8353,18 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
     strands: Iterable[Strand] | None = None,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     gc_double: bool = True,
-    parameters_filename: str = "",
+    parameters_filename: str = '',
     ignore_missing_thresholds: bool = False,
 ) -> list[StrandPairsConstraint]:
     """
     TODO
     """
-    if parameters_filename != "":
+    if parameters_filename != '':
         raise ValueError(
-            "should not specify parameters_filename when calling "
-            "lcs_strand_pairs_constraints_by_number_matching_domains; "
-            "it is only listed as a parameter for technical reasons relating to code reuse "
-            "with other constraints that use that parameter"
+            'should not specify parameters_filename when calling '
+            'lcs_strand_pairs_constraints_by_number_matching_domains; '
+            'it is only listed as a parameter for technical reasons relating to code reuse '
+            'with other constraints that use that parameter'
         )
 
     def lcs_strand_pairs_constraint_with_dummy_parameters(
@@ -7467,7 +8374,7 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
         weight: float = 1.0,
         score_transfer_function: Callable[[float], float] | None = None,
         description: str | None = None,
-        short_description: str = "lcs strand pairs",
+        short_description: str = 'lcs strand pairs',
         parallel: bool = False,
         pairs: Iterable[tuple[Strand, Strand]] | None = None,
     ) -> StrandPairsConstraint:
@@ -7487,15 +8394,15 @@ def lcs_strand_pairs_constraints_by_number_matching_domains(
     if descriptions is None:
         descriptions = {
             num_matching: (
-                f"Longest complementary subsequence between strands is > {threshold}"
-                + f" for strands with {num_matching} complementary "
-                f"{'domain' if num_matching == 1 else 'domains'}"
+                f'Longest complementary subsequence between strands is > {threshold}'
+                + f' for strands with {num_matching} complementary '
+                f'{"domain" if num_matching == 1 else "domains"}'
             )
             for num_matching, threshold in thresholds.items()
         }
 
     if short_descriptions is None:
-        short_descriptions = {num_matching: f"LCS{num_matching}comp" for num_matching, threshold in thresholds.items()}
+        short_descriptions = {num_matching: f'LCS{num_matching}comp' for num_matching, threshold in thresholds.items()}
 
     return _strand_pairs_constraints_by_number_matching_domains(
         constraint_creator=lcs_strand_pairs_constraint_with_dummy_parameters,
@@ -7519,7 +8426,7 @@ def rna_duplex_strand_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_dup_strand_pairs",
+    short_description: str = 'rna_dup_strand_pairs',
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
@@ -7561,7 +8468,7 @@ def rna_duplex_strand_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = _pair_default_description("strand", "RNAduplex", threshold, temperature)
+        description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
     num_cores = max(cpu_count(), 1)
 
@@ -7584,7 +8491,7 @@ def rna_duplex_strand_pairs_constraint(
         results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            result = Result(excess=excess, value=energy, unit="kcal/mol")
+            result = Result(excess=excess, value=energy, unit='kcal/mol')
             results.append(result)
         return results
 
@@ -7609,7 +8516,7 @@ def rna_plex_strand_pairs_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_plex_strand_pairs",
+    short_description: str = 'rna_plex_strand_pairs',
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     parameters_filename: str = nv.default_vienna_rna_parameter_filename,
@@ -7649,7 +8556,7 @@ def rna_plex_strand_pairs_constraint(
     _check_vienna_rna_installed()
 
     if description is None:
-        description = _pair_default_description("strand", "RNAduplex", threshold, temperature)
+        description = _pair_default_description('strand', 'RNAduplex', threshold, temperature)
 
     num_cores = max(cpu_count(), 1)
 
@@ -7672,7 +8579,7 @@ def rna_plex_strand_pairs_constraint(
         results = []
         for pair, energy in zip(strand_pairs, energies):
             excess = threshold - energy
-            result = Result(excess=excess, value=energy, unit="kcal/mol")
+            result = Result(excess=excess, value=energy, unit='kcal/mol')
             results.append(result)
         return results
 
@@ -7701,6 +8608,17 @@ def energy_excess_domains(
     domain1: Domain,
     domain2: Domain,
 ) -> float:
+    """
+    Like `energy_excess`, but looks up the threshold from a per-domain-pool-pair dict
+    if `threshold` isn't already a single number.
+
+    :param energy: computed binding energy between `domain1` and `domain2`
+    :param threshold: either a single threshold to use for every pair, or a map from
+        `(domain1.pool, domain2.pool)` to the threshold for that pair of pools
+    :param domain1: first domain in the pair (used only to look up its pool, if needed)
+    :param domain2: second domain in the pair (used only to look up its pool, if needed)
+    :return: `threshold - energy` (positive means the energy is violating the threshold)
+    """
     threshold_value = 0.0  # noqa
     if isinstance(threshold, Number):
         threshold_value = threshold
@@ -7717,7 +8635,7 @@ def rna_multifold_strand_pair_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "rna_multifold_strand_pair",
+    short_description: str = 'rna_multifold_strand_pair',
     parallel: bool = False,
     pairs: Iterable[tuple[Strand, Strand]] | None = None,
     strands: Iterable[Strand] | None = None,
@@ -7753,7 +8671,7 @@ def rna_multifold_strand_pair_constraint(
         The :any:`StrandPairConstraint`.
     """
     if strands is not None and pairs is not None:
-        raise ValueError("Exactly one of strands or pairs can be specified, but not both.")
+        raise ValueError('Exactly one of strands or pairs can be specified, but not both.')
     gu_wobble = False
     max_energy = 0.0
     import RNA
@@ -7763,21 +8681,20 @@ def rna_multifold_strand_pair_constraint(
     RNA.params_load_DNA_Mathews2004()
 
     if description is None:
-        description = _pair_default_description("strand", "RNAmultifold", threshold, temperature)
+        description = _pair_default_description('strand', 'RNAmultifold', threshold, temperature)
 
     def evaluate_rna_multifold_strand_pair(seqs: tuple[str, ...], _: StrandPair | None) -> Result:
         seq1, seq2 = seqs
-        fc = RNA.fold_compound(seq1 + "&" + seq2)
+        fc = RNA.fold_compound(seq1 + '&' + seq2)
         _, energy = fc.pf()
         energy = min(energy, max_energy)
         excess = max(0.0, threshold - energy)
-        return Result(excess=excess, value=energy, unit="kcal/mol")
+        return Result(excess=excess, value=energy, unit='kcal/mol')
 
     pairs_tuple = None
     if pairs is not None:
         assert strands is None
         pairs_tuple = tuple(pairs)
-
     if strands is not None:
         assert pairs_tuple is None
         pairs_tuple = tuple(itertools.combinations_with_replacement(tuple(strands), 2))
@@ -7859,13 +8776,21 @@ class ComplexConstraint(ConstraintWithComplexes[Complex], SingularConstraint[Com
     """
 
     def part_name(self) -> str:
-        return "complex"
+        return 'complex'
 
 
 def _alter_scores_by_transfer(
     sets_excesses: list[tuple[OrderedSet[Domain], float]],
     transfer_callback: Callable[[float], float],
 ) -> list[tuple[OrderedSet[Domain], float]]:
+    """
+    Apply a score-transfer function to a list of (domain-set, excess) pairs, clamping
+    negative excess (a satisfied constraint) to a weight of 0.
+
+    :param sets_excesses: list of (domain set, excess) pairs
+    :param transfer_callback: function mapping a non-negative excess to a weight
+    :return: list of (domain set, weight) pairs, weight 0 wherever excess was negative
+    """
     sets_weights: list[tuple[OrderedSet[Domain], float]] = []
     for set_, excess in sets_excesses:
         if excess < 0:
@@ -7884,7 +8809,7 @@ class ComplexesConstraint(ConstraintWithComplexes[Iterable[Complex]], BulkConstr
     """
 
     def part_name(self) -> str:
-        return "complex"
+        return 'complex'
 
 
 class _AdjacentDuplexType(Enum):
@@ -8602,10 +9527,10 @@ class StrandDomainAddress:
         return False
 
     def __str__(self) -> str:
-        return f"{{strand: {self.strand}, domain_idx: {self.domain_idx}}}"
+        return f'{{strand: {self.strand}, domain_idx: {self.domain_idx}}}'
 
     def __repr__(self) -> str:
-        return self.__str__() + f" hash: {self.__hash__()}"
+        return self.__str__() + f' hash: {self.__hash__()}'
 
 
 def _exterior_base_type_of_domain_3p_end(
@@ -8702,7 +9627,7 @@ def _exterior_base_type_of_domain_3p_end(
                         domain_next_to_interior_base_pair = (
                             domain_addr.neighbor_5p() is not None and complementary_addr.neighbor_3p() is not None
                         )
-                        if domain.get_length() == 2 and not domain_next_to_interior_base_pair:
+                        if domain.length == 2 and not domain_next_to_interior_base_pair:
                             #   domain_addr == adjacent_5n_addr        adjacent_addr
                             #     |                                       |
                             #    [--###-------------------------------------#
@@ -9242,7 +10167,7 @@ def _get_addr_to_starting_base_pair_idx(
     for strand in strand_complex:
         for domain_idx, domain in enumerate(strand.domains):
             addr_to_starting_base_pair_idx[StrandDomainAddress(strand, domain_idx)] = domain_base_index
-            domain_base_index += domain.get_length()
+            domain_base_index += domain.length
 
     return addr_to_starting_base_pair_idx
 
@@ -9302,7 +10227,7 @@ def _leafify_strand(
     new_strand: Strand = Strand(
         domains=new_domains,
         starred_domain_indices=new_starred_domain_indices,
-        name=f"leafifed {strand.name}",
+        name=f'leafifed {strand.name}',
     )
     for idx, new_idxs in addr_translation_table_without_strand.items():
         new_addrs = [StrandDomainAddress(new_strand, new_idx) for new_idx in new_idxs]
@@ -9346,9 +10271,10 @@ def _get_base_pair_domain_endpoints_to_check(
             for idx in range(len(new_addr1_list)):
                 new_nonimplicit_base_pairs.append((new_addr1_list[idx], new_addr2_list[idx]))
 
-    return __get_base_pair_domain_endpoints_to_check(
-        leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
-    )
+    # return __get_base_pair_domain_endpoints_to_check(
+    #     leafify_strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs
+    # )
+    return __get_base_pair_domain_endpoints_to_check(strand_complex, nonimplicit_base_pairs=new_nonimplicit_base_pairs)
 
 
 def __get_base_pair_domain_endpoints_to_check(
@@ -9362,7 +10288,7 @@ def __get_base_pair_domain_endpoints_to_check(
         set of base pairs that cannot be inferred (usually due to competition), defaults to None
     :type nonimplicit_base_pairs: Iterable[BoundDomains], optional
     :raises ValueError: If there are multiple instances of the same strand in a complex
-    :raises ValueError: If competitive domains are not specificed in nonimplicit_base_pairs
+    :raises ValueError: If competitive domains are not specified in nonimplicit_base_pairs
     :raises ValueError: If address given in nonimplicit_base_pairs is not found
     :return: set of all the _BasePairDomainEndpoint to check
     :rtype: set[_BasePairDomainEndpoint]
@@ -9380,7 +10306,7 @@ def __get_base_pair_domain_endpoints_to_check(
             d1 = addr1.strand.domains[addr1.domain_idx]
             d2 = addr2.strand.domains[addr2.domain_idx]
             if d1 is not d2:
-                print("WARNING: a base pair is specified between two different domain objects")
+                print('WARNING: a base pair is specified between two different domain objects')
             nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=False))
             nonimplicit_base_pairs_domain_names.add(d1.get_name(starred=True))
             nonimplicit_base_pairs_domain_names.add(d2.get_name(starred=False))
@@ -9402,10 +10328,10 @@ def __get_base_pair_domain_endpoints_to_check(
     for strand in strand_complex:
         if strand in seen_strands:
             raise ValueError(
-                "Multiple instances of a strand in a complex is not allowed."
-                " Please make a separate Strand object with the"
-                " same Domain objects in the same order"
-                " but a different strand name"
+                'Multiple instances of a strand in a complex is not allowed.'
+                ' Please make a separate Strand object with the'
+                ' same Domain objects in the same order'
+                ' but a different strand name'
             )
         seen_strands.add(strand)
         for idx, domain in enumerate(strand.domains):
@@ -9420,11 +10346,13 @@ def __get_base_pair_domain_endpoints_to_check(
         if domain_name_complement in domain_counts and domain_counts[domain_name_complement] > 1:
             assert domain_name not in nonimplicit_base_pairs_domain_names
             raise ValueError(
-                f"Multiple instances of domain in a complex is not allowed "
-                f"when its complement is also in the complex. "
-                f"Violating domain: {domain_name_complement}"
+                f'Multiple instances of domain in a complex is not allowed '
+                f'when its complement is also in the complex. '
+                f'Violating domain: {domain_name_complement}'
             )
     # End Input Validation #
+    addr_translation_table: Dict[StrandDomainAddress, List[StrandDomainAddress]] = {}
+    strand_complex = Complex(*[_leafify_strand(strand, addr_translation_table) for strand in strand_complex])
 
     addr_to_starting_base_pair_idx: dict[StrandDomainAddress, int] = _get_addr_to_starting_base_pair_idx(strand_complex)
     all_bound_domain_addresses.update(
@@ -9435,21 +10363,21 @@ def __get_base_pair_domain_endpoints_to_check(
     base_pair_domain_endpoints_to_check: set[_BasePairDomainEndpoint] = set()
 
     for domain_addr, comple_addr in all_bound_domain_addresses.items():
-        domain_base_length = domain_addr.domain().get_length()
-        assert domain_base_length == comple_addr.domain().get_length()
+        domain_base_length = domain_addr.domain().length
+        assert domain_base_length == comple_addr.domain().length
 
         if domain_addr not in addr_to_starting_base_pair_idx:
             if domain_addr.domain().name in nonimplicit_base_pairs_domain_names:
-                raise ValueError(f"StrandDomainAddress {domain_addr} is not found in given complex")
+                raise ValueError(f'StrandDomainAddress {domain_addr} is not found in given complex')
             else:
-                print(f"StrandDomainAddress {domain_addr} is not found in given complex")
+                print(f'StrandDomainAddress {domain_addr} is not found in given complex')
                 assert False
 
         if comple_addr not in addr_to_starting_base_pair_idx:
             if comple_addr.domain().name in nonimplicit_base_pairs_domain_names:
-                raise ValueError(f"StrandDomainAddress {comple_addr} is not found in given complex")
+                raise ValueError(f'StrandDomainAddress {comple_addr} is not found in given complex')
             else:
-                print(f"StrandDomainAddress {comple_addr} is not found in given complex")
+                print(f'StrandDomainAddress {comple_addr} is not found in given complex')
                 assert False
 
         domain_5p = addr_to_starting_base_pair_idx[domain_addr]
@@ -9511,7 +10439,7 @@ def nupack_complex_base_pair_probability_constraint(
     weight: float = 1.0,
     score_transfer_function: Callable[[float], float] | None = None,
     description: str | None = None,
-    short_description: str = "ComplexBPProbs",
+    short_description: str = 'ComplexBPProbs',
     parallel: bool = False,
 ) -> ComplexConstraint:
     """Returns constraint that checks given base pair probabilities in tuples of :any:`Strand`'s
@@ -9636,18 +10564,18 @@ def nupack_complex_base_pair_probability_constraint(
 
     # Start Input Validation
     if len(strand_complexes) == 0:
-        raise ValueError("strand_complexes list cannot be empty.")
+        raise ValueError('strand_complexes list cannot be empty.')
 
     strand_complex_template = strand_complexes[0]
 
     if not isinstance(strand_complex_template, Complex):
         raise ValueError(
-            "First element in strand_complexes was not a Complex of Strands. Please provide a Complex of Strands."
+            'First element in strand_complexes was not a Complex of Strands. Please provide a Complex of Strands.'
         )
 
     for strand in strand_complex_template:
         if type(strand) is not Strand:
-            raise ValueError(f"Complex at index 0 contained non-Strand object: {type(strand)}")
+            raise ValueError(f'Complex at index 0 contained non-Strand object: {type(strand)}')
 
     for strand_complex in strand_complexes:
         for strand in strand_complex:
@@ -9665,37 +10593,37 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
         strand_complex = strand_complexes[idx]
         if not isinstance(strand_complex, Complex):
             raise ValueError(
-                f"Element {strand_complex} at index {idx} is not a Complex of Strands. "
-                f"Please provide a Complex of Strands."
+                f'Element {strand_complex} at index {idx} is not a Complex of Strands. '
+                f'Please provide a Complex of Strands.'
             )
         if len(strand_complex) != len(strand_complex_template):
             raise ValueError(
-                f"Inconsistent complex structures: Complex at index {idx} contained {len(strand_complex)} "
-                f"strands, but complex at index 0 contained {len(strand_complex_template)} strands."
+                f'Inconsistent complex structures: Complex at index {idx} contained {len(strand_complex)} '
+                f'strands, but complex at index 0 contained {len(strand_complex_template)} strands.'
             )
         for s in range(len(strand_complex)):
             other_strand: Strand = strand_complex[s]
             template_strand: Strand = strand_complex_template[s]
             if type(other_strand) is not Strand:
                 raise ValueError(
-                    f"Complex at index {idx} contained non-Strand object at index {s}: {type(other_strand)}"
+                    f'Complex at index {idx} contained non-Strand object at index {s}: {type(other_strand)}'
                 )
             if len(other_strand.domains) != len(template_strand.domains):
                 raise ValueError(
-                    f"Strand {other_strand} (index {s} of strand_complexes at index {idx}) does not match "
-                    f"the provided template ({template_strand}). "
-                    f"Strand {other_strand} contains {len(other_strand.domains)} domains but template "
-                    f"strand {template_strand} contains {len(template_strand.domains)} domains."
+                    f'Strand {other_strand} (index {s} of strand_complexes at index {idx}) does not match '
+                    f'the provided template ({template_strand}). '
+                    f'Strand {other_strand} contains {len(other_strand.domains)} domains but template '
+                    f'strand {template_strand} contains {len(template_strand.domains)} domains.'
                 )
             for d in range(1, len(other_strand.domains)):
-                domain_length: int = other_strand.domains[d].get_length()
-                template_domain_length: int = template_strand.domains[d].get_length()
+                domain_length: int = other_strand.domains[d].length
+                template_domain_length: int = template_strand.domains[d].length
                 if domain_length != template_domain_length:
                     raise ValueError(
-                        f"Strand {other_strand} (the strand at index {s} of the complex located at index "
-                        f"{idx} of strand_complexes) does not match the "
-                        f"provided template ({template_strand}): domain at index {d} is length "
-                        f"{domain_length}, but expected {template_domain_length}."
+                        f'Strand {other_strand} (the strand at index {s} of the complex located at index '
+                        f'{idx} of strand_complexes) does not match the '
+                        f'provided template ({template_strand}): domain at index {d} is length '
+                        f'{domain_length}, but expected {template_domain_length}.'
                     )
 
     base_pair_domain_endpoints_to_check = _get_base_pair_domain_endpoints_to_check(
@@ -9714,7 +10642,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
     # End populating base_pair_probs
 
     if description is None:
-        description = "Base pair probability of complex"
+        description = 'Base pair probability of complex'
 
     def evaluate_nupack_complex_base_pair_probability(seqs: tuple[str, ...], strand_complex_: Complex) -> Result:
         assert len(seqs) == len(strand_complex)
@@ -9727,7 +10655,7 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
             err_sq += e**2
         # summary
         if len(bps) == 0:
-            summary = "\tAll base pairs satisfy thresholds."
+            summary = '\tAll base pairs satisfy thresholds.'
         else:
             summary_list = []
             for bp in bps:
@@ -9736,9 +10664,9 @@ to have a fixed DNA sequence by calling domain.set_fixed_sequence."""
                 p = bp.base_pairing_probability
                 t = bp.base_pair_type
                 summary_list.append(
-                    f"\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])"
+                    f'\t{i},{j}: {math.floor(100 * p)}% (<{round(100 * base_type_probability_threshold[t])}% [{t}])'
                 )
-            summary = "\n".join(summary_list)
+            summary = '\n'.join(summary_list)
 
         return Result(excess=err_sq, summary=summary, value=err_sq)
 

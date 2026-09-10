@@ -30,6 +30,7 @@ project = 'nuad: NUcleic Acid Designer'
 copyright = '2020, David Doty and Damien Woods'
 author = 'David Doty and Damien Woods'
 
+
 # this is ugly, but appears to be standard practice:
 # https://stackoverflow.com/questions/17583443/what-is-the-correct-way-to-share-package-version-with-setup-py-and-the-package/17626524#17626524
 def extract_version(filename: str):
@@ -69,8 +70,8 @@ extensions = [
     # 'sphinxcontrib.napoleon', # found this online but 'sphinx.ext.napoleon' seems to work
 ]
 
-autodoc_typehints = "description"
-autodoc_mock_imports = ["nupack"]
+autodoc_typehints = 'description'
+autodoc_mock_imports = ['nupack']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -85,7 +86,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-html_theme = "sphinx_rtd_theme"
+html_theme = 'sphinx_rtd_theme'
 # html_theme = 'alabaster'
 # html_theme = "classic"
 
@@ -109,17 +110,22 @@ autodoc_member_order = 'bysource'
 
 length_limit = 50
 
+
 # below is for documenting __init__ with automodule
 # https://stackoverflow.com/questions/5599254/how-to-use-sphinxs-autodoc-to-document-a-classs-init-self-method
 def skip(app, what, name, obj, would_skip, options):
-    if name == "__init__":
+    if name == '__init__':
         return False
     return would_skip
 
+
 def setup(app):
-    app.connect("autodoc-skip-member", skip)
+    app.connect('autodoc-skip-member', skip)
+
+
 #
 # autoclass_content = 'both'
+
 
 def add_directive_header(self, sig):
     auto.ModuleLevelDocumenter.add_directive_header(self, sig)
@@ -130,17 +136,16 @@ def add_directive_header(self, sig):
 
             # PATCH: truncate the value if longer than length_limit characters
             if len(objrepr) > length_limit:
-                objrepr = objrepr[:length_limit] + "..."
+                objrepr = objrepr[:length_limit] + '...'
 
         except ValueError:
             pass
         else:
-            self.add_line(u'   :annotation: = ' + objrepr, '<autodoc>')
+            self.add_line('   :annotation: = ' + objrepr, '<autodoc>')
     elif self.options.annotation is auto.SUPPRESS:
         pass
     else:
-        self.add_line(u'   :annotation: %s' % self.options.annotation,
-                      '<autodoc>')
+        self.add_line('   :annotation: %s' % self.options.annotation, '<autodoc>')
 
 
 auto.DataDocumenter.add_directive_header = add_directive_header

@@ -1,0 +1,70 @@
+[build-system]
+requires = ['setuptools>=77']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'nuad'
+description = 'nuad stands for "NUcleic Acid Designer". Enables one to specify constraints on a DNA (or RNA) nanostructure made from synthetic DNA/RNA and then attempts to find concrete DNA sequences that satisfy the constraints.'
+readme = { file = 'README.md', content-type = 'text/markdown; variant=GFM' }
+requires-python = '>=3.10'
+license = 'MIT'
+license-files = ['LICENSE']
+authors = [{ name = 'David Doty', email = 'doty@ucdavis.edu' }]
+dynamic = ['version']
+
+dependencies = [
+    'matplotlib',
+    'networkx',
+    'numpy',
+    'openpyxl',
+    'ordered_set',
+    'pathos',
+    'psutil',
+    'scadnano',
+    'scipy',
+    'tabulate',
+    'tqdm',
+    'viennarna',
+]
+
+[project.optional-dependencies]
+# NUPACK is NOT on PyPI -- it ships as a licensed wheel from https://nupack.org.
+# So `pip install nuad[nupack]` only resolves if that wheel is reachable, e.g.
+#     pip install 'nuad[nupack]' -f /path/to/nupack/package
+# nuad imports nupack lazily (every `import nupack` is inside a function), so
+# everything except the NUPACK-backed constraints works without it. It is an extra
+# rather than a hard dependency because listing it in `dependencies` made
+# `pip install nuad` itself unresolvable.
+nupack = ['nupack']
+test = ['pytest']
+doc = ['sphinx', 'sphinx_rtd_theme']
+
+[project.urls]
+Homepage = 'https://github.com/UC-Davis-molecular-computing/nuad'
+
+[tool.setuptools]
+packages = ['nuad']
+
+[tool.setuptools.package-data]
+nuad = ['nupack_viennaRNA_parameter_files/*.par']
+
+[tool.setuptools.dynamic]
+version = { attr = 'nuad.__version__.version' }
+
+[tool.ruff]
+# target-version is deliberately not set: ruff infers it from requires-python above,
+# so the minimum supported Python is declared in exactly one place.
+line-length = 120
+
+[tool.ruff.format]
+# Use single quotes for strings.
+quote-style = 'single'
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = 'space'
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = 'auto'

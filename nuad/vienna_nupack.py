@@ -24,14 +24,17 @@ from multiprocessing.pool import ThreadPool
 from typing import Iterable, List, Sequence, TypeVar, cast
 
 import numpy as np
+import RNA
+
+RNA.params_load_DNA_Mathews2004()
 
 import nuad.constraints as nc
 
-os_is_windows = sys.platform == "win32"
+os_is_windows = sys.platform == 'win32'
 
-parameter_set_directory = "nupack_viennaRNA_parameter_files"
+parameter_set_directory = 'nupack_viennaRNA_parameter_files'
 
-default_vienna_rna_parameter_filename = "dna_mathews1999.par"  # closer to nupack than dna_mathews2004.par
+default_vienna_rna_parameter_filename = 'dna_mathews1999.par'  # closer to nupack than dna_mathews2004.par
 # default_vienna_rna_parameter_filename = 'dna_mathews2004.par'
 
 default_temperature = 37
@@ -68,7 +71,7 @@ def calculate_strand_association_penalty(temperature: float, num_seqs: int) -> f
     return adjust * (num_seqs - 1)
 
 
-S = TypeVar("S", str, bytes, bytearray)
+S = TypeVar('S', str, bytes, bytearray)
 
 
 def pfunc(
@@ -121,14 +124,14 @@ def pfunc(
         from nupack import pfunc as nupack_pfunc  # type: ignore
     except ModuleNotFoundError:
         raise ImportError(
-            "NUPACK 4 must be installed to use pfunc. Installation instructions can be found at "
-            "https://docs.nupack.org/start/#installation-requirements."
+            'NUPACK 4 must be installed to use pfunc. Installation instructions can be found at '
+            'https://docs.nupack.org/start/#installation-requirements.'
         )
 
     # expensive to create a Model, so don't create the same one twice
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
-        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna")
+        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
@@ -197,7 +200,7 @@ except ModuleNotFoundError as e:
 
 
 def nupack_complex_base_pair_probabilities(
-    strand_complex: "nc.Complex",  # circular import causes problems
+    strand_complex: 'nc.Complex',  # circular import causes problems
     temperature: float = default_temperature,
     sodium: float = default_sodium,
     magnesium: float = default_magnesium,
@@ -234,14 +237,14 @@ def nupack_complex_base_pair_probabilities(
         from nupack import complex_analysis as nupack_complex_analysis
     except ModuleNotFoundError:
         raise ImportError(
-            "NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. "
-            "Installation instructions can be found at "
-            "https://piercelab-caltech.github.io/nupack-docs/start/."
+            'NUPACK 4 must be installed to use nupack_complex_base_pair_probabilities. '
+            'Installation instructions can be found at '
+            'https://piercelab-caltech.github.io/nupack-docs/start/.'
         )
 
     param = (temperature, sodium, magnesium)
     if param not in _cached_nupack_models:
-        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material="dna")
+        model = Model(celsius=temperature, sodium=sodium, magnesium=magnesium, material='dna')
         _cached_nupack_models[param] = model
     else:
         model = _cached_nupack_models[param]
@@ -251,7 +254,7 @@ def nupack_complex_base_pair_probabilities(
     nupack_complex_set = NupackComplexSet(
         nupack_strands, complexes=NupackSetSpec(max_size=0, include=(nupack_complex,))
     )
-    nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=["pairs"], model=model)
+    nupack_complex_analysis_result = nupack_complex_analysis(nupack_complex_set, compute=['pairs'], model=model)
     pairs: NupackPairMatrix = nupack_complex_analysis_result[nupack_complex].pairs
     nupack_complex_result: np.ndarray = pairs.to_array()
     return nupack_complex_result
@@ -278,7 +281,7 @@ def call_subprocess(command_strs: List[str], user_input: str) -> tuple[str, str]
     # solves the problem for python3.6. For python3.7 (but not 3.6) one can use text=True
     # XXX: Then why are none of those keyword arguments being used here??
     process: sub.Popen | None = None
-    command_strs = (["wsl.exe", "-e"] if os_is_windows else []) + command_strs
+    command_strs = (['wsl.exe', '-e'] if os_is_windows else []) + command_strs
 
     try:
         with sub.Popen(command_strs, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.PIPE) as process:
@@ -374,7 +377,7 @@ def rna_duplex_multiple(
     if progress_bar:
         from tqdm.auto import tqdm
 
-        pairs = tqdm(pairs, desc="Calculating duplex energies", unit="pair")  # type: ignore
+        pairs = tqdm(pairs, desc='Calculating duplex energies', unit='pair')  # type: ignore
     for seq1, seq2 in pairs:
         result = RNA.duplexfold(seq1, seq2)
         energy = min(result.energy, max_energy)
@@ -429,34 +432,34 @@ def rna_duplex_multiple_deprecated(
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
     command_strs: List[str] = [
-        "RNAduplex",
-        "-P",
+        'RNAduplex',
+        '-P',
         full_parameters_filename,
-        "-T",
+        '-T',
         str(temperature),
-        "--noGU",
-        "−−noconv",
+        '--noGU',
+        '−−noconv',
     ]
 
     # DNA sequences to type after RNAduplex starts up
-    user_input = "\n".join(f"{seq1}\n{seq2}" for seq1, seq2 in pairs) + "\n@\n"
+    user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
 
     output, error = call_subprocess(command_strs, user_input)
 
-    if error.strip() != "":
-        logger.warning("error from RNAduplex: ", error)
+    if error.strip() != '':
+        logger.warning('error from RNAduplex: ', error)
         # if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
         #     raise ValueError('I will ignore errors about "stacking enthalpies not symmetric", but this '
         #                      'is a different error that I don\'t know how to handle. Exiting...'
         #                      f'\nerror:\n{error}')
 
-    lines = [line for line in output.split("\n") if line.strip() != ""]
+    lines = [line for line in output.split('\n') if line.strip() != '']
     if len(lines) != len(pairs):
-        raise ValueError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}")
+        raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
 
     energies = []
     for line in lines:
-        energy = float(line.split(":")[1].split("(")[1].split(")")[0])
+        energy = float(line.split(':')[1].split('(')[1].split(')')[0])
         energy = min(energy, max_energy)
         energies.append(energy)
 
@@ -564,40 +567,40 @@ def rna_plex_multiple(
         full_parameters_filename = _fix_filename_windows(full_parameters_filename)
 
     command_strs: List[str] = [
-        "RNAplex",
-        "-P",
+        'RNAplex',
+        '-P',
         full_parameters_filename,
-        "-T",
+        '-T',
         str(temperature),
-        "-f",
-        "1",
+        '-f',
+        '1',
     ]
 
     # DNA sequences to type after RNAplex starts up
-    user_input = "\n".join(f"{seq1}\n{seq2}" for seq1, seq2 in pairs) + "\n@\n"
+    user_input = '\n'.join(f'{seq1}\n{seq2}' for seq1, seq2 in pairs) + '\n@\n'
 
     output, error = call_subprocess(command_strs, user_input)
 
-    if error.strip() != "":
-        logger.warning("error from RNAplex: ", error)
-        if error.split("\n")[0] != "WARNING: stacking enthalpies not symmetric":
+    if error.strip() != '':
+        logger.warning('error from RNAplex: ', error)
+        if error.split('\n')[0] != 'WARNING: stacking enthalpies not symmetric':
             raise ValueError(
                 'I will ignore errors about "stacking enthalpies not symmetric", but this '
                 "is a different error that I don't know how to handle. Exiting..."
-                f"\nerror:\n{error}"
+                f'\nerror:\n{error}'
             )
 
     # with open('output/rna_plex_multiple_input.txt', 'w') as f:
     #     f.write(user_input)
     # with open('output/rna_plex_multiple_output.txt', 'w') as f:
     #     f.write(output)
-    lines = [line for line in output.split("\n") if line.strip() != ""]
+    lines = [line for line in output.split('\n') if line.strip() != '']
     if len(lines) != len(pairs):
-        raise ValueError(f"lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}")
+        raise ValueError(f'lengths do not match: #lines:{len(lines) - 1} #seqpairs:{len(pairs)}')
 
     energies = []
     for line in lines:
-        energy = float(line.split(":")[1].split("(")[1].split(")")[0])
+        energy = float(line.split(':')[1].split('(')[1].split(')')[0])
         energy = min(energy, max_energy)
         energies.append(energy)
 
@@ -715,9 +718,9 @@ def _fix_filename_windows(parameters_filename: str) -> str:
     #  absolute paths. But we need to pass off the computation to wsl.exe (Windows Subsystem for Linux),
     #  which expects Linux-style paths (and has no idea what to do with 'C:\'). So we manually translate
     #  the absolute path. But this is fugly, and we should be not using absolute paths in this way.
-    for drive in ["C", "c", "D", "d", "E", "e", "F", "f"]:
-        parameters_filename = parameters_filename.replace(f"{drive}:\\", f"/mnt/{drive.lower()}/")
-    parameters_filename = parameters_filename.replace("\\", "/")
+    for drive in ['C', 'c', 'D', 'd', 'E', 'e', 'F', 'f']:
+        parameters_filename = parameters_filename.replace(f'{drive}:\\', f'/mnt/{drive.lower()}/')
+    parameters_filename = parameters_filename.replace('\\', '/')
     return parameters_filename
 
 
@@ -755,7 +758,7 @@ def rna_multifold(
     RNA.cvar.noGU = not gu_wobble
     load_params_viennarna()
 
-    fc = RNA.fold_compound("&".join(seqs))
+    fc = RNA.fold_compound('&'.join(seqs))
     _, energy = fc.pf()
     return min(energy, max_energy)
 
@@ -780,12 +783,11 @@ def rna_multifold_multiple(
     del logger, parameters_filename  # unused, kept for signature parity
 
     return tuple(
-        rna_multifold(seqs, temperature=temperature, max_energy=max_energy, gu_wobble=gu_wobble)
-        for seqs in seq_tuples
+        rna_multifold(seqs, temperature=temperature, max_energy=max_energy, gu_wobble=gu_wobble) for seqs in seq_tuples
     )
 
 
-_rctable = str.maketrans("ACGTacgt", "TGCAtgca")
+_rctable = str.maketrans('ACGTacgt', 'TGCAtgca')
 
 
 def wc(seq: str) -> str:
@@ -824,7 +826,6 @@ def binding_complement(
     subtract_indv: bool = True,
 ) -> float:
     """Computes the complex free energy of a strand with its perfect Watson-Crick complement.
-
     NUPACK 4 must be installed. Installation instructions can be found at
     https://piercelab-caltech.github.io/nupack-docs/start/.
     """
@@ -865,9 +866,9 @@ def binding(
     )
 
 
-def random_dna_seq(length: int, bases: Sequence = "ACTG") -> str:
+def random_dna_seq(length: int, bases: Sequence = 'ACTG') -> str:
     """Chooses a random DNA sequence."""
-    return "".join(random.choices(population=bases, k=length))
+    return ''.join(random.choices(population=bases, k=length))
 
 
 LOG_ENERGY = False
@@ -875,7 +876,7 @@ LOG_ENERGY = False
 
 def log_energy(energy: float) -> None:
     if LOG_ENERGY:
-        print(f"{energy:.1f}")
+        print(f'{energy:.1f}')
 
 
 global_thread_pool = ThreadPool()
@@ -1055,7 +1056,7 @@ def domain_pairwise_concatenated_no_sec_struct(
         return True
 
 
-_binaryGCTable = str.maketrans("ACTG", "0101")
+_binaryGCTable = str.maketrans('ACTG', '0101')
 
 
 def domain_concatenated_no_4gc(seq: str, seqs: Sequence[str]) -> bool:
@@ -1063,24 +1064,24 @@ def domain_concatenated_no_4gc(seq: str, seqs: Sequence[str]) -> bool:
     for altseq in seqs:
         catseq = altseq + seq + altseq
         strength = catseq.translate(_binaryGCTable)
-        if "1111" in strength:
+        if '1111' in strength:
             return False
     return True
 
 
 def domain_no_4gc(seq: str) -> bool:
     """prevent {G,C}^4"""
-    return "1111" not in seq.translate(_binaryGCTable)
+    return '1111' not in seq.translate(_binaryGCTable)
 
 
 def domain_concatenated_no_4g_or_4c(seq: str, seqs: Sequence[str]) -> bool:
     """prevent G^4 and C^4 under concatenation"""
     for altseq in seqs:
         catseq = altseq + seq + altseq
-        if "GGGG" in catseq:
+        if 'GGGG' in catseq:
             #             print '|GGGG# seq: %s altseq: %s|' % (seq,altseq)
             return False
-        if "CCCC" in catseq:
+        if 'CCCC' in catseq:
             #             print '|CCCC# seq: %s altseq: %s|' % (seq,altseq)
             return False
     return True
